@@ -123,7 +123,7 @@ export default function App() {
 
       <StatusRow status={radioStatus} />
 
-      <MessageInput transmitting={transmitting} contacts={contacts} onSend={handleSend} />
+      <MessageInput transmitting={transmitting} contacts={contacts} myCallsign={operator?.callsign ?? ''} onSend={handleSend} />
     </div>
   );
 }

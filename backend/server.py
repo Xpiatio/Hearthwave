@@ -25,6 +25,7 @@ WebSocket message types (server → client):
 from __future__ import annotations
 
 import asyncio
+import collections
 import datetime
 import logging
 from contextlib import asynccontextmanager
@@ -75,6 +76,8 @@ _background_tasks: list[asyncio.Task] = []
 _audio_level: int = 0
 _radio_error: bool = False
 _channel_clear: bool = True
+_LEVEL_WINDOW_SIZE = 150
+_level_window: collections.deque = collections.deque(maxlen=_LEVEL_WINDOW_SIZE)
 
 # FCC ID-rule state — asyncio-only (both writers are asyncio tasks; no cross-thread writes)
 _last_id_time: datetime.datetime | None = None
@@ -127,6 +130,7 @@ _manager = ConnectionManager()
 def _on_stt_audio_level(level: int) -> None:
     global _audio_level
     _audio_level = level
+    _level_window.append(level)
 
 
 def _on_stt_status(msg: str) -> None:
@@ -264,11 +268,19 @@ async def _tx_pump() -> None:
 # Status helper
 # ---------------------------------------------------------------------------
 
+def _volume_ok() -> bool:
+    if _radio_error:
+        return False
+    if len(_level_window) < _LEVEL_WINDOW_SIZE // 2:
+        return True  # not enough data yet — assume ok
+    return (sum(_level_window) / len(_level_window)) > 2
+
+
 def _build_status() -> dict:
     return {
         "type": "status",
         "radio_connected": _stt_worker is not None and not _radio_error,
-        "volume_ok": not _radio_error,
+        "volume_ok": _volume_ok(),
         "channel_clear": _channel_clear,
     }
 
@@ -325,6 +337,7 @@ async def _lifespan(app: FastAPI):
     global _stt_out_queue, _tx_queue, _tts_event_queue, _background_tasks
     global _audio_level, _radio_error, _channel_clear, _last_id_time, _has_transmitted
     global _speaker_embedder, _voiceprint_store, _unknown_clusterer, _recent_embeddings
+    global _level_window
 
     # --- startup -----------------------------------------------------------
     _config = ServerConfig.load()
@@ -346,6 +359,7 @@ async def _lifespan(app: FastAPI):
     _channel_clear = True
     _last_id_time = None
     _has_transmitted = False
+    _level_window = collections.deque(maxlen=_LEVEL_WINDOW_SIZE)
 
     # Speaker ID setup — optional; continues without it if model or deps are missing.
     _recent_embeddings = {}
@@ -413,6 +427,7 @@ async def _lifespan(app: FastAPI):
     _voiceprint_store = None
     _unknown_clusterer = None
     _recent_embeddings = {}
+    _level_window.clear()
     _log.info("Radio-TTY server stopped.")
 
 

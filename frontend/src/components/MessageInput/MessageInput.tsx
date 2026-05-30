@@ -5,20 +5,24 @@ import './MessageInput.css';
 interface Props {
   transmitting: boolean;
   contacts: Contact[];
+  myCallsign: string;
   onSend: (text: string, targetCall: string, targetName: string) => void;
 }
 
-export function MessageInput({ transmitting, contacts, onSend }: Props) {
+export function MessageInput({ transmitting, contacts, myCallsign, onSend }: Props) {
   const [draft, setDraft] = useState('');
   const [targetCallsign, setTargetCallsign] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const filteredContacts = contacts.filter((c) => c.callsign !== myCallsign);
+
   function handleSend() {
     const text = draft.trim();
     if (!text || transmitting) return;
-    const contact = contacts.find((c) => c.callsign === targetCallsign);
+    const contact = filteredContacts.find((c) => c.callsign === targetCallsign);
     onSend(text, contact ? contact.callsign : 'ALL', contact ? contact.name : '');
     setDraft('');
+    setTargetCallsign('');
     textareaRef.current?.focus();
   }
 
@@ -31,7 +35,7 @@ export function MessageInput({ transmitting, contacts, onSend }: Props) {
     }
   }
 
-  const selectedContact = contacts.find((c) => c.callsign === targetCallsign);
+  const selectedContact = filteredContacts.find((c) => c.callsign === targetCallsign);
 
   return (
     <div className="message-input-wrapper">
@@ -47,25 +51,27 @@ export function MessageInput({ transmitting, contacts, onSend }: Props) {
       )}
 
       <div className="message-input-area">
-        <div className="message-target-row">
-          <label htmlFor="message-target-select" className="message-target-label">
-            To:
-          </label>
-          <select
-            id="message-target-select"
-            className="message-target-select"
-            value={targetCallsign}
-            onChange={(e) => setTargetCallsign(e.target.value)}
-            disabled={transmitting}
-          >
-            <option value="">ALL — Broadcast</option>
-            {contacts.map((c) => (
-              <option key={c.callsign} value={c.callsign}>
-                {c.callsign}{c.name ? ` — ${c.name}` : ''}
-              </option>
-            ))}
-          </select>
-        </div>
+        {filteredContacts.length > 0 && (
+          <div className="message-target-row">
+            <label htmlFor="message-target-select" className="message-target-label">
+              To:
+            </label>
+            <select
+              id="message-target-select"
+              className="message-target-select"
+              value={targetCallsign}
+              onChange={(e) => setTargetCallsign(e.target.value)}
+              disabled={transmitting}
+            >
+              <option value="">ALL — Broadcast</option>
+              {filteredContacts.map((c) => (
+                <option key={c.callsign} value={c.callsign}>
+                  {c.callsign}{c.name ? ` — ${c.name}` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {selectedContact && (
           <div className="message-target-badge" aria-live="polite">
