@@ -14,3 +14,4 @@ pyserial
 # onnxruntime-directml, etc.) are installed at Docker build time when a GPU
 # target is selected.  Keep the CPU package here as the baseline.
 onnxruntime
+speechbrain
