@@ -549,7 +549,7 @@ export default function App() {
             onSend={handleSend}
             onStandaloneId={() => {
               if (!operator) { setShowModal(true); return; }
-              send({ type: 'standalone_id' });
+              send({ type: 'standalone_id', operator: operator.operatorName, callsign: operator.callsign, location: operator.location });
             }}
           />
         )}

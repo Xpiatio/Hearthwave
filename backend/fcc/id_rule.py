@@ -1,5 +1,6 @@
 from backend.constants import SERVICE_FRS, SERVICE_GMRS
 from backend.text.callsigns import callsign_to_nato
+from backend.text.locations import expand_trailing_state
 
 ID_INTERVAL_SECONDS = 15 * 60  # FCC Part 95: identify at least every 15 minutes when in use.
 
@@ -65,7 +66,7 @@ def format_standalone_id(my_call, my_name, my_location, now):
     so the 15-minute rule resets on a standalone ID send.
     """
     nato_call = callsign_to_nato(my_call)
-    location = (my_location or "").strip()
+    location = expand_trailing_state((my_location or "").strip())
     if location:
         spoken_text = f"This is {my_call}, {nato_call}. {my_name} from {location}."
     else:

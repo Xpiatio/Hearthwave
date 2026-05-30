@@ -21,9 +21,6 @@ WebSocket message types (client → server):
     set_spectro_config — {"type": "set_spectro_config", "colormap"?: str,
                           "freq_range"?: "voice" | "full",
                           "time_window_s"?: int}
-    enroll_speaker    — {"type": "enroll_speaker", "callsign": str, "name"?: str,
-                          "utterance_id"?: str, "cluster_label"?: str}
-    reset_speaker     — {"type": "reset_speaker", "callsign": str, "name"?: str}
     set_monitor       — {"type": "set_monitor", "enabled": bool}
     clear_attendance  — {"type": "clear_attendance"}
     list_journals     — {"type": "list_journals"}
@@ -37,8 +34,7 @@ WebSocket message types (server → client):
                           "monitor_enabled": bool, ...}
     contacts          — {"type": "contacts", "contacts": [...]}
     rx_message        — {"type": "rx_message", "utterance_id": str, "text": str,
-                          "partial": bool, "speaker_callsign"?: str,
-                          "speaker_name"?: str, "cluster_label"?: str}
+                          "partial": bool}
     tx_status         — {"type": "tx_status", "status": "transmitting" | "idle"}
     monitor_status    — {"type": "monitor_status", "enabled": bool}
     prompt_token      — {"type": "prompt_token", "tokens": [str], "original_text": str,
@@ -52,9 +48,6 @@ WebSocket message types (server → client):
                           "license_city": str, "gmrs_callsign": str, "ham_callsign": str}
     verify_all_complete — {"type": "verify_all_complete"}
     online_status     — {"type": "online_status", "online": bool}
-    speaker_enrolled  — {"type": "speaker_enrolled", "callsign": str, "name": str,
-                          "sample_count": int}
-    speaker_reset     — {"type": "speaker_reset", "callsign": str}
     session_attendance — {"type": "session_attendance", "stations": [...]}
     journals          — {"type": "journals", "journals": [...]}
     journal_result    — {"type": "journal_result", "title": str, "summary": str,
@@ -120,13 +113,6 @@ _stt_worker: STTWorker | None = None
 _synthesizer: TTSSynthesizer | None = None
 _monitor: "Any | None" = None  # AudioMonitor, lazy-imported
 _spectro: SpectroTask | None = None
-
-# Speaker ID singletons
-_speaker_embedder: Any = None
-_voiceprint_store: Any = None
-_unknown_clusterer: Any = None
-_recent_embeddings: dict[str, Any] = {}
-_RECENT_EMBEDDINGS_MAX = 20
 
 # Attendance tracker — module-level so it persists across reconnects
 _attendance: AttendanceTracker = AttendanceTracker()
@@ -302,35 +288,13 @@ async def _on_auto_add_result(
 
 async def _rx_pump() -> None:
     """Drain the STT output queue and broadcast rx_message frames."""
-    global _stt_out_queue, _recent_embeddings, _vad_active
+    global _stt_out_queue, _vad_active
     while True:
         try:
             result = await _stt_out_queue.get()
             utterance_id = result.get("utterance_id")
             partial = result.get("partial", False)
-            embedding = result.get("embedding")
             _vad_active = bool(partial)
-
-            speaker_callsign: str | None = None
-            speaker_name: str | None = None
-            cluster_label: str | None = None
-
-            if embedding is not None and not partial:
-                if utterance_id is not None:
-                    _recent_embeddings[utterance_id] = embedding
-                    if len(_recent_embeddings) > _RECENT_EMBEDDINGS_MAX:
-                        oldest = next(iter(_recent_embeddings))
-                        del _recent_embeddings[oldest]
-
-                if _voiceprint_store is not None:
-                    callsign, name, _score = _voiceprint_store.best_match(
-                        embedding, _config.speaker_match_threshold if _config else 0.75
-                    )
-                    if callsign is not None:
-                        speaker_callsign = callsign
-                        speaker_name = name
-                    elif _unknown_clusterer is not None:
-                        cluster_label = _unknown_clusterer.assign(embedding)
 
             raw_text = result.get("text", "")
             display_text = (
@@ -344,9 +308,6 @@ async def _rx_pump() -> None:
                 "utterance_id": utterance_id,
                 "text": display_text,
                 "partial": partial,
-                "speaker_callsign": speaker_callsign,
-                "speaker_name": speaker_name,
-                "cluster_label": cluster_label,
             })
 
             # Callsign detection and attendance use the original unmasked text.
@@ -429,9 +390,11 @@ async def _tx_pump() -> None:
 
             if payload.get("_standalone_id"):
                 # "This is" button — NATO-phonetic station ID, resets ID timer.
-                text, _last_id_time = format_standalone_id(
-                    _config.callsign, _config.name, _config.location, now
-                )
+                my_call = payload.get("callsign") or _config.callsign
+                my_name = payload.get("operator") or _config.name
+                my_loc  = payload.get("location") if payload.get("location") is not None else _config.location
+                text, _last_id_time = format_standalone_id(my_call, my_name, my_loc, now)
+                text = spell_digits_in_callsigns(text)
                 _has_transmitted = True
 
             elif payload.get("_pre_formatted") or is_preview:
@@ -448,8 +411,8 @@ async def _tx_pump() -> None:
                     processed,
                     target_call=payload.get("target_call") or "ALL",
                     target_name=payload.get("target_name") or "",
-                    my_call=_config.callsign,
-                    my_name=_config.name,
+                    my_call=payload.get("callsign") or _config.callsign,
+                    my_name=payload.get("operator") or _config.name,
                     last_id_time=_last_id_time,
                     now=now,
                     service=normalize_service(_config.radio_service),
@@ -579,7 +542,6 @@ async def _lifespan(app: FastAPI):
     global _config, _contacts_store, _stt_worker, _synthesizer, _monitor
     global _stt_out_queue, _tx_queue, _tts_event_queue, _background_tasks
     global _audio_level, _radio_error, _channel_clear, _last_id_time, _has_transmitted
-    global _speaker_embedder, _voiceprint_store, _unknown_clusterer, _recent_embeddings
     global _level_window, _attendance, _spectro, _monitor_chunk_cb
     global _pending_stations, _auto_add_tasks
 
@@ -608,30 +570,6 @@ async def _lifespan(app: FastAPI):
     _pending_stations = {}
     _auto_add_tasks = {}
     _invalidate_online()  # force fresh probe on startup
-
-    # Speaker ID — optional; continues without it if model or deps are missing.
-    _recent_embeddings = {}
-    try:
-        from backend.speaker.embedder import SpeakerEmbedder
-        from backend.speaker.voiceprints import VoiceprintStore
-        from backend.speaker.clusterer import UnknownClusterer
-
-        _speaker_embedder = SpeakerEmbedder()
-        if _speaker_embedder.available:
-            _log.info("Speaker model found; speaker ID enabled.")
-        else:
-            _log.warning(
-                "Speaker model not found at '%s'; speaker ID disabled.",
-                _speaker_embedder.model_dir,
-            )
-            _speaker_embedder = None
-        _voiceprint_store = VoiceprintStore(_config.voiceprints_dir)
-        _unknown_clusterer = UnknownClusterer()
-    except Exception as exc:
-        _log.warning("Speaker ID unavailable: %s", exc)
-        _speaker_embedder = None
-        _voiceprint_store = None
-        _unknown_clusterer = None
 
     _monitor_chunk_cb = None
     if _config.monitor_enabled:
@@ -664,7 +602,6 @@ async def _lifespan(app: FastAPI):
         whisper_model=_config.whisper_model,
         vad_threshold=_config.vad_threshold,
         system_monitor_sink=_config.system_monitor_sink,
-        speaker_embedder=_speaker_embedder,
         on_audio_level=_on_stt_audio_level,
         on_audio_chunk=_audio_chunk_fanout,
         on_capture_event=_on_stt_capture_event,
@@ -706,10 +643,6 @@ async def _lifespan(app: FastAPI):
         _monitor.stop()
         _monitor = None
 
-    _speaker_embedder = None
-    _voiceprint_store = None
-    _unknown_clusterer = None
-    _recent_embeddings = {}
     _level_window.clear()
     _log.info("Radio-TTY server stopped.")
 
@@ -806,65 +739,6 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                     await _manager.broadcast({"type": "contacts", "contacts": updated})
                 except ValueError as exc:
                     await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
-
-            elif msg_type == "enroll_speaker":
-                callsign = (data.get("callsign") or "").strip()
-                if not callsign:
-                    await _manager.send_to(ws, {
-                        "type": "error",
-                        "detail": "enroll_speaker requires a non-empty 'callsign' field.",
-                    })
-                    continue
-                if _voiceprint_store is None:
-                    await _manager.send_to(ws, {
-                        "type": "error",
-                        "detail": "Speaker ID not available.",
-                    })
-                    continue
-                name = (data.get("name") or "").strip()
-                utterance_id = data.get("utterance_id")
-                cluster_label = data.get("cluster_label")
-                embeddings_to_enroll: list[Any] = []
-                if utterance_id and utterance_id in _recent_embeddings:
-                    embeddings_to_enroll = [_recent_embeddings[utterance_id]]
-                elif cluster_label and _unknown_clusterer is not None:
-                    embeddings_to_enroll = _unknown_clusterer.pop_cluster(cluster_label)
-                if not embeddings_to_enroll:
-                    await _manager.send_to(ws, {
-                        "type": "error",
-                        "detail": "No embedding found for the given utterance_id or cluster_label.",
-                    })
-                    continue
-                for emb in embeddings_to_enroll:
-                    _voiceprint_store.enroll(callsign, name, emb)
-                sample_count = _voiceprint_store.sample_count(callsign, name)
-                await _manager.broadcast({
-                    "type": "speaker_enrolled",
-                    "callsign": callsign,
-                    "name": name,
-                    "sample_count": sample_count,
-                })
-
-            elif msg_type == "reset_speaker":
-                callsign = (data.get("callsign") or "").strip()
-                if not callsign:
-                    await _manager.send_to(ws, {
-                        "type": "error",
-                        "detail": "reset_speaker requires a non-empty 'callsign' field.",
-                    })
-                    continue
-                if _voiceprint_store is None:
-                    await _manager.send_to(ws, {
-                        "type": "error",
-                        "detail": "Speaker ID not available.",
-                    })
-                    continue
-                name = (data.get("name") or "").strip()
-                _voiceprint_store.reset_contact(callsign, name)
-                await _manager.broadcast({
-                    "type": "speaker_reset",
-                    "callsign": callsign,
-                })
 
             elif msg_type == "set_monitor":
                 global _monitor, _monitor_chunk_cb
@@ -977,7 +851,12 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                     })
                     continue
                 await _manager.broadcast({"type": "tx_status", "status": "transmitting"})
-                await _tx_queue.put({"_standalone_id": True})
+                await _tx_queue.put({
+                    "_standalone_id": True,
+                    "operator": (data.get("operator") or "").strip(),
+                    "callsign": (data.get("callsign") or "").strip(),
+                    "location": (data.get("location") or "").strip(),
+                })
 
             elif msg_type == "voice_preview":
                 # Synthesize a test phrase locally (no PTT keying) so the
