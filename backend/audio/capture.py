@@ -149,6 +149,8 @@ class ParecSource:
     """
 
     def __init__(self, sample_rate, chunk_samples):
+        import time
+
         parec_bin = shutil.which("parec")
         if not parec_bin:
             raise FileNotFoundError("parec binary not on PATH")
@@ -161,6 +163,12 @@ class ParecSource:
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
         )
+        # parec exits immediately when no PulseAudio/PipeWire server is
+        # reachable (e.g. inside a Docker container without a PA socket
+        # mounted). Detect this early so the caller can fall back.
+        time.sleep(0.15)
+        if self.proc.poll() is not None:
+            raise IOError("parec exited — PulseAudio/PipeWire not reachable")
 
     def read(self) -> np.ndarray:
         buf = self.proc.stdout.read(self.bytes_per_chunk)
@@ -267,6 +275,6 @@ def open_input_source(
     if input_device is None:
         try:
             return ParecSource(sample_rate, chunk_samples)
-        except FileNotFoundError:
+        except (FileNotFoundError, IOError):
             pass
     return PortAudioSource(sample_rate, chunk_samples, device=input_device)

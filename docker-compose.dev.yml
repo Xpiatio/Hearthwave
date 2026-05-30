@@ -16,6 +16,8 @@ services:
     build:
       dockerfile: Dockerfile.dev
     command: npm run dev -- --host 0.0.0.0 --port 5173
+    environment:
+      - BACKEND_URL=http://backend:8765
     volumes:
       - ./frontend:/app
       - /app/node_modules
