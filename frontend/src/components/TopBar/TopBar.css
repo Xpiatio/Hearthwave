@@ -1,0 +1,79 @@
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--color-surface);
+  border-bottom: 2px solid var(--color-text);
+  padding: 0 1rem;
+  min-height: 64px;
+  gap: 1rem;
+}
+
+.topbar-left,
+.topbar-right {
+  flex: 0 0 auto;
+}
+
+.topbar-center {
+  flex: 1 1 auto;
+  text-align: center;
+  font-size: 1.125rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.topbar-status-label {
+  color: var(--color-text);
+}
+
+.topbar-status-value {
+  font-weight: 700;
+}
+
+.topbar-status--ready {
+  color: var(--color-accent);
+}
+
+.topbar-status--offline {
+  color: var(--color-amber);
+}
+
+.topbar-btn {
+  min-height: 48px;
+  min-width: 48px;
+  padding: 0 1.25rem;
+  font-size: 1rem;
+  font-weight: 700;
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  border: 2px solid var(--color-text);
+  border-radius: 6px;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.topbar-btn:hover {
+  background-color: var(--color-text);
+  color: var(--color-bg);
+}
+
+.topbar-btn:focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.topbar-voice-btn--on {
+  background-color: var(--color-accent);
+  color: var(--color-bg);
+  border-color: var(--color-accent);
+}
+
+.topbar-voice-btn--on:hover {
+  filter: brightness(1.15);
+  background-color: var(--color-accent);
+  color: var(--color-bg);
+}

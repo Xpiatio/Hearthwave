@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+websockets
+sounddevice==0.5.5
+soundfile==0.13.1
+piper-tts
+faster-whisper
+silero-vad>=5.0
+noisereduce
+numpy
+scipy
+pyserial
+# ONNX runtime for Piper inference; GPU-specific variants (onnxruntime-gpu,
+# onnxruntime-directml, etc.) are installed at Docker build time when a GPU
+# target is selected.  Keep the CPU package here as the baseline.
+onnxruntime

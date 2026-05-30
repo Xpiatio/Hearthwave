@@ -1,0 +1,32 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        COMPUTE_BACKEND: cpu
+    volumes:
+      - ./data:/data
+      - ./Voices:/app/Voices:ro
+      - ./Models:/app/Models:ro
+    devices:
+      - /dev/snd:/dev/snd
+    restart: unless-stopped
+    networks:
+      - radio
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - radio
+
+networks:
+  radio:
+    driver: bridge
