@@ -4,26 +4,40 @@ Wires together: STTWorker, TTSSynthesizer, ContactsStore, ConnectionManager.
 All clients receive broadcasts; TX messages are queued to the audio pipeline.
 
 WebSocket message types (client → server):
-    tx_message      — {"type": "tx_message", "callsign": str, "text": str}
-    add_contact     — {"type": "add_contact", "callsign": str, ...contact fields...}
-    enroll_speaker  — {"type": "enroll_speaker", "callsign": str, "name"?: str,
-                        "utterance_id"?: str, "cluster_label"?: str}
-    reset_speaker   — {"type": "reset_speaker", "callsign": str, "name"?: str}
-    set_monitor     — {"type": "set_monitor", "enabled": bool}
+    tx_message        — {"type": "tx_message", "callsign": str, "text": str}
+    add_contact       — {"type": "add_contact", "callsign": str, ...contact fields...}
+    enroll_speaker    — {"type": "enroll_speaker", "callsign": str, "name"?: str,
+                          "utterance_id"?: str, "cluster_label"?: str}
+    reset_speaker     — {"type": "reset_speaker", "callsign": str, "name"?: str}
+    set_monitor       — {"type": "set_monitor", "enabled": bool}
+    clear_attendance  — {"type": "clear_attendance"}
+    list_journals     — {"type": "list_journals"}
+    generate_journal  — {"type": "generate_journal", "transcript": str, "callsigns": [str]}
+    save_journal      — {"type": "save_journal", "title": str, "summary": str,
+                          "callsigns_locations": [...], "transcript": str}
+    delete_journal    — {"type": "delete_journal", "file_path": str}
 
 WebSocket message types (server → client):
-    status           — {"type": "status", "radio_connected": bool,
-                         "monitor_enabled": bool, ...}
-    contacts         — {"type": "contacts", "contacts": [...]}
-    rx_message       — {"type": "rx_message", "utterance_id": str, "text": str,
-                         "partial": bool, "speaker_callsign"?: str,
-                         "speaker_name"?: str, "cluster_label"?: str}
-    tx_status        — {"type": "tx_status", "status": "transmitting" | "idle"}
-    monitor_status   — {"type": "monitor_status", "enabled": bool}
-    speaker_enrolled — {"type": "speaker_enrolled", "callsign": str, "name": str,
-                         "sample_count": int}
-    speaker_reset    — {"type": "speaker_reset", "callsign": str}
-    error            — {"type": "error", "detail": str}
+    status            — {"type": "status", "radio_connected": bool,
+                          "monitor_enabled": bool, ...}
+    contacts          — {"type": "contacts", "contacts": [...]}
+    rx_message        — {"type": "rx_message", "utterance_id": str, "text": str,
+                          "partial": bool, "speaker_callsign"?: str,
+                          "speaker_name"?: str, "cluster_label"?: str}
+    tx_status         — {"type": "tx_status", "status": "transmitting" | "idle"}
+    monitor_status    — {"type": "monitor_status", "enabled": bool}
+    speaker_enrolled  — {"type": "speaker_enrolled", "callsign": str, "name": str,
+                          "sample_count": int}
+    speaker_reset     — {"type": "speaker_reset", "callsign": str}
+    session_attendance — {"type": "session_attendance", "stations": [...]}
+    journals          — {"type": "journals", "journals": [...]}
+    journal_result    — {"type": "journal_result", "title": str, "summary": str,
+                          "callsigns_locations": [...]}
+    journal_error     — {"type": "journal_error", "detail": str}
+    journal_saved     — {"type": "journal_saved", "path": str}
+    journal_deleted   — {"type": "journal_deleted", "file_path": str}
+    spectrogram_row   — {"type": "spectrogram_row", "row": [int, ...]}
+    error             — {"type": "error", "detail": str}
 """
 from __future__ import annotations
 
@@ -36,6 +50,9 @@ from typing import Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
+from backend.ai.gemini_client import GeminiError
+from backend.ai.gemini_client import generate_journal as _gemini_generate
+from backend.audio.spectro_task import SpectroTask
 from backend.config import ServerConfig
 from backend.constants import normalize_service
 from backend.fcc.id_rule import (
@@ -44,9 +61,12 @@ from backend.fcc.id_rule import (
     format_standalone_id,
 )
 from backend.hw_detect import detect as detect_compute
+from backend.persistence.attendance import AttendanceTracker, build_attendance_rows
 from backend.persistence.contacts import ContactsStore
+from backend.persistence.journal import delete_journal, load_journals, save_journal
 from backend.ptt.factory import make_ptt
 from backend.stt.worker import STTWorker
+from backend.text.callsigns import detect_callsigns
 from backend.tts.synthesizer import TTSSynthesizer
 
 _log = logging.getLogger(__name__)
@@ -60,6 +80,7 @@ _contacts_store: ContactsStore | None = None
 _stt_worker: STTWorker | None = None
 _synthesizer: TTSSynthesizer | None = None
 _monitor: "Any | None" = None  # AudioMonitor, lazy-imported
+_spectro: SpectroTask | None = None
 
 # Speaker ID singletons
 _speaker_embedder: Any = None
@@ -67,6 +88,12 @@ _voiceprint_store: Any = None
 _unknown_clusterer: Any = None
 _recent_embeddings: dict[str, Any] = {}
 _RECENT_EMBEDDINGS_MAX = 20
+
+# Attendance tracker — module-level so it persists across reconnects
+_attendance: AttendanceTracker = AttendanceTracker()
+
+# Monitor passthrough callback — updated by set_monitor handler
+_monitor_chunk_cb = None
 
 # Queues
 _stt_out_queue: asyncio.Queue = asyncio.Queue()
@@ -105,7 +132,7 @@ class ConnectionManager:
         self._clients.discard(ws)
 
     async def broadcast(self, msg: dict) -> None:
-        """Send *msg* to every connected client.  Silently drops dead sockets."""
+        """Send msg to every connected client. Silently drops dead sockets."""
         dead: list[WebSocket] = []
         for ws in list(self._clients):
             try:
@@ -116,7 +143,7 @@ class ConnectionManager:
             self._clients.discard(ws)
 
     async def send_to(self, ws: WebSocket, msg: dict) -> None:
-        """Send *msg* to a single client."""
+        """Send msg to a single client."""
         try:
             await ws.send_json(msg)
         except Exception as exc:
@@ -155,6 +182,24 @@ def _on_stt_capture_event(event: str) -> None:
         _channel_clear = False
     elif event == "squelch_closed":
         _channel_clear = True
+
+
+def _audio_chunk_fanout(chunk) -> None:
+    """Fan out audio chunks to both the monitor and the spectrogram task."""
+    if _monitor_chunk_cb is not None:
+        _monitor_chunk_cb(chunk)
+    if _spectro is not None:
+        _spectro.push_chunk(chunk)
+
+
+# ---------------------------------------------------------------------------
+# Attendance helpers
+# ---------------------------------------------------------------------------
+
+def _build_attendance_payload() -> dict:
+    contacts = _contacts_store.get_all() if _contacts_store else []
+    rows = build_attendance_rows(_attendance.callsigns(), contacts)
+    return {"type": "session_attendance", "stations": rows}
 
 
 # ---------------------------------------------------------------------------
@@ -201,6 +246,15 @@ async def _rx_pump() -> None:
                 "speaker_name": speaker_name,
                 "cluster_label": cluster_label,
             })
+
+            # Record callsigns detected in finalised transcriptions.
+            if not partial:
+                text = result.get("text", "")
+                detected = detect_callsigns(text)
+                changed = any(_attendance.record(cs) for cs in detected)
+                if changed:
+                    await _manager.broadcast(_build_attendance_payload())
+
         except asyncio.CancelledError:
             break
         except Exception as exc:
@@ -233,7 +287,6 @@ async def _tx_pump() -> None:
             raw_text = payload.get("text", "")
 
             if payload.get("_pre_formatted"):
-                # Station-ID messages from _id_rule_pump are already formatted.
                 text = raw_text
             else:
                 now = datetime.datetime.now(datetime.timezone.utc)
@@ -255,7 +308,6 @@ async def _tx_pump() -> None:
 
             await _synthesizer.synthesize(voice, text, ptt, length_scale=length_scale)
 
-            # Drain TTS events so the queue doesn't grow unbounded.
             while not _tts_event_queue.empty():
                 _tts_event_queue.get_nowait()
 
@@ -276,7 +328,7 @@ def _volume_ok() -> bool:
     if _radio_error:
         return False
     if len(_level_window) < _LEVEL_WINDOW_SIZE // 2:
-        return True  # not enough data yet — assume ok
+        return True
     return (sum(_level_window) / len(_level_window)) > 2
 
 
@@ -303,11 +355,7 @@ async def _status_pump() -> None:
 
 
 async def _id_rule_pump() -> None:
-    """Fire a standalone station ID when FCC Part 95 requires one.
-
-    Checks every 60 s: if the station has transmitted since the last ID and
-    the ID interval has elapsed, synthesizes a standalone ID via _tx_queue.
-    """
+    """Fire a standalone station ID when FCC Part 95 requires one."""
     global _last_id_time, _has_transmitted
     while True:
         try:
@@ -342,7 +390,7 @@ async def _lifespan(app: FastAPI):
     global _stt_out_queue, _tx_queue, _tts_event_queue, _background_tasks
     global _audio_level, _radio_error, _channel_clear, _last_id_time, _has_transmitted
     global _speaker_embedder, _voiceprint_store, _unknown_clusterer, _recent_embeddings
-    global _level_window
+    global _level_window, _attendance, _spectro, _monitor_chunk_cb
 
     # --- startup -----------------------------------------------------------
     _config = ServerConfig.load()
@@ -358,15 +406,16 @@ async def _lifespan(app: FastAPI):
     _tx_queue = asyncio.Queue()
     _tts_event_queue = asyncio.Queue()
 
-    # Reset signal-quality and FCC ID state on each startup.
+    # Reset transient state on each startup.
     _audio_level = 0
     _radio_error = False
     _channel_clear = True
     _last_id_time = None
     _has_transmitted = False
     _level_window = collections.deque(maxlen=_LEVEL_WINDOW_SIZE)
+    _attendance.clear()
 
-    # Speaker ID setup — optional; continues without it if model or deps are missing.
+    # Speaker ID — optional; continues without it if model or deps are missing.
     _recent_embeddings = {}
     try:
         from backend.speaker.embedder import SpeakerEmbedder
@@ -377,7 +426,10 @@ async def _lifespan(app: FastAPI):
         if _speaker_embedder.available:
             _log.info("Speaker model found; speaker ID enabled.")
         else:
-            _log.warning("Speaker model not found at '%s'; speaker ID disabled.", _speaker_embedder.model_dir)
+            _log.warning(
+                "Speaker model not found at '%s'; speaker ID disabled.",
+                _speaker_embedder.model_dir,
+            )
             _speaker_embedder = None
         _voiceprint_store = VoiceprintStore(_config.voiceprints_dir)
         _unknown_clusterer = UnknownClusterer()
@@ -387,7 +439,7 @@ async def _lifespan(app: FastAPI):
         _voiceprint_store = None
         _unknown_clusterer = None
 
-    monitor_chunk_cb = None
+    _monitor_chunk_cb = None
     if _config.monitor_enabled:
         in_dev = _config.input_device if _config.input_device != -1 else None
         out_dev = _config.output_device if _config.output_device != -1 else None
@@ -399,11 +451,13 @@ async def _lifespan(app: FastAPI):
                 _monitor = AudioMonitor()
                 _monitor.set_passthrough(_config.monitor_passthrough)
                 _monitor.start(device=out_dev)
-                monitor_chunk_cb = _monitor.push
+                _monitor_chunk_cb = _monitor.push
                 _log.info("Audio monitor started on output device %s.", out_dev)
             except Exception as exc:
                 _log.warning("Audio monitor failed to open output device: %s", exc)
                 _monitor = None
+
+    _spectro = SpectroTask(broadcast_fn=_manager.broadcast)
 
     _stt_worker = STTWorker(
         out_queue=_stt_out_queue,
@@ -413,7 +467,7 @@ async def _lifespan(app: FastAPI):
         system_monitor_sink=_config.system_monitor_sink,
         speaker_embedder=_speaker_embedder,
         on_audio_level=_on_stt_audio_level,
-        on_audio_chunk=monitor_chunk_cb,
+        on_audio_chunk=_audio_chunk_fanout,
         on_capture_event=_on_stt_capture_event,
         on_status=_on_stt_status,
         on_error=_on_stt_error,
@@ -431,6 +485,7 @@ async def _lifespan(app: FastAPI):
         asyncio.create_task(_tx_pump(), name="tx-pump"),
         asyncio.create_task(_status_pump(), name="status-pump"),
         asyncio.create_task(_id_rule_pump(), name="id-rule-pump"),
+        asyncio.create_task(_spectro.run(), name="spectro-pump"),
     ]
     _log.info("Radio-TTY server ready.")
 
@@ -485,13 +540,14 @@ async def websocket_endpoint(ws: WebSocket) -> None:
     _manager.add(ws)
     _log.info("Client connected: %s", ws.client)
 
-    # Send initial state to the newly connected client
+    # Send initial state to the newly connected client.
     await _manager.send_to(ws, _build_status())
     if _contacts_store is not None:
         await _manager.send_to(ws, {
             "type": "contacts",
             "contacts": _contacts_store.get_all(),
         })
+    await _manager.send_to(ws, _build_attendance_payload())
 
     try:
         while True:
@@ -591,7 +647,7 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                 })
 
             elif msg_type == "set_monitor":
-                global _monitor
+                global _monitor, _monitor_chunk_cb
                 enabled = bool(data.get("enabled", False))
                 if enabled:
                     if _monitor is None or not _monitor.is_active:
@@ -610,8 +666,7 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                                 if _config:
                                     _monitor.set_passthrough(_config.monitor_passthrough)
                             _monitor.start(device=out_dev)
-                            if _stt_worker is not None:
-                                _stt_worker._on_audio_chunk = _monitor.push
+                            _monitor_chunk_cb = _monitor.push
                         except Exception as exc:
                             _log.warning("Audio monitor failed to start: %s", exc)
                             await _manager.send_to(ws, {
@@ -622,9 +677,76 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                 else:
                     if _monitor is not None:
                         _monitor.stop()
-                    if _stt_worker is not None:
-                        _stt_worker._on_audio_chunk = None
+                    _monitor_chunk_cb = None
                 await _manager.broadcast({"type": "monitor_status", "enabled": enabled})
+
+            elif msg_type == "clear_attendance":
+                _attendance.clear()
+                await _manager.broadcast(_build_attendance_payload())
+
+            elif msg_type == "list_journals":
+                if _config is None:
+                    await _manager.send_to(ws, {"type": "journals", "journals": []})
+                    continue
+                journals = load_journals(_config.journals_dir)
+                await _manager.send_to(ws, {"type": "journals", "journals": journals})
+
+            elif msg_type == "generate_journal":
+                if _config is None or not _config.gemini_api_key:
+                    await _manager.send_to(ws, {
+                        "type": "journal_error",
+                        "detail": "Gemini API key not configured in config.json (gemini_api_key).",
+                    })
+                    continue
+                transcript = (data.get("transcript") or "").strip()
+                if not transcript:
+                    await _manager.send_to(ws, {
+                        "type": "journal_error",
+                        "detail": "transcript is required.",
+                    })
+                    continue
+                callsigns = data.get("callsigns") or []
+                timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                try:
+                    result = await asyncio.to_thread(
+                        _gemini_generate, _config.gemini_api_key, transcript, callsigns, timestamp
+                    )
+                    await _manager.send_to(ws, {"type": "journal_result", **result})
+                except GeminiError as exc:
+                    await _manager.send_to(ws, {"type": "journal_error", "detail": str(exc)})
+
+            elif msg_type == "save_journal":
+                if _config is None:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Server not ready."})
+                    continue
+                title = (data.get("title") or "").strip()
+                summary = (data.get("summary") or "").strip()
+                callsigns_locations = data.get("callsigns_locations") or []
+                transcript = (data.get("transcript") or "").strip()
+                try:
+                    path = save_journal(
+                        title, summary, callsigns_locations, transcript, _config.journals_dir
+                    )
+                    await _manager.send_to(ws, {"type": "journal_saved", "path": path})
+                except Exception as exc:
+                    await _manager.send_to(ws, {
+                        "type": "error",
+                        "detail": f"Failed to save journal: {exc}",
+                    })
+
+            elif msg_type == "delete_journal":
+                if _config is None:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Server not ready."})
+                    continue
+                file_path = (data.get("file_path") or "").strip()
+                try:
+                    delete_journal(file_path, _config.journals_dir)
+                    await _manager.send_to(ws, {
+                        "type": "journal_deleted",
+                        "file_path": file_path,
+                    })
+                except (ValueError, OSError) as exc:
+                    await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
 
             else:
                 _log.debug("Unknown message type from client: %r", msg_type)

@@ -138,6 +138,17 @@ class ServerConfig(dict):
     def speaker_match_threshold(self) -> float:
         return float(self.get("speaker_match_threshold", 0.75))
 
+    # ---- AI / journals ---------------------------------------------------
+
+    @property
+    def gemini_api_key(self) -> str:
+        return self.get("gemini_api_key", "")
+
+    @property
+    def journals_dir(self) -> Path:
+        raw = self.get("journals_dir")
+        return Path(raw) if raw else Path("/data/journals")
+
     # ---- persistence (contacts) ------------------------------------------
 
     @property

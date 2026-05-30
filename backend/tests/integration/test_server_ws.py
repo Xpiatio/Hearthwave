@@ -75,8 +75,8 @@ def listen_only_client(tmp_path):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _drain_initial(ws, count: int = 2):
-    """Consume the status + contacts frames every new connection receives."""
+def _drain_initial(ws, count: int = 3):
+    """Consume the status + contacts + session_attendance frames every new connection receives."""
     return [ws.receive_json() for _ in range(count)]
 
 

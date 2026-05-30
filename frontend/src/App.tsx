@@ -1,13 +1,26 @@
 import { useState, useCallback, useRef } from 'react';
 import { useOperator } from './hooks/useOperator';
 import { useWebSocket } from './hooks/useWebSocket';
-import type { WsMessage, StatusMsg, TxMessagePayload, Contact } from './types/ws';
+import type {
+  WsMessage,
+  StatusMsg,
+  TxMessagePayload,
+  Contact,
+  AttendanceStation,
+  JournalEntry,
+} from './types/ws';
 import { OperatorModal } from './components/OperatorModal/OperatorModal';
 import { TopBar } from './components/TopBar/TopBar';
 import { ChatDisplay } from './components/ChatDisplay/ChatDisplay';
 import type { ChatEntry } from './components/ChatDisplay/ChatDisplay';
 import { StatusRow } from './components/StatusRow/StatusRow';
 import { MessageInput } from './components/MessageInput/MessageInput';
+import type { MessageInputHandle } from './components/MessageInput/MessageInput';
+import { AttendancePanel } from './components/AttendancePanel/AttendancePanel';
+import { JournalPanel } from './components/JournalPanel/JournalPanel';
+import { Spectrogram } from './components/Spectrogram/Spectrogram';
+import type { SpectrogramHandle } from './components/Spectrogram/Spectrogram';
+import { QuickMessages } from './components/QuickMessages/QuickMessages';
 import './App.css';
 
 let entryCounter = 0;
@@ -27,6 +40,12 @@ function speakerLabel(callsign: string | null, name: string | null, cluster: str
   return undefined;
 }
 
+interface JournalResultDraft {
+  title: string;
+  summary: string;
+  callsigns_locations: Array<{ callsign: string; location: string }>;
+}
+
 export default function App() {
   const { operator, setOperator } = useOperator();
   const [showModal, setShowModal] = useState(operator === null);
@@ -36,6 +55,21 @@ export default function App() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const inProgressRef = useRef<Map<string, string>>(new Map());
   const sendRef = useRef<(p: unknown) => void>(() => {});
+  const messageInputRef = useRef<MessageInputHandle>(null);
+  const spectroRef = useRef<SpectrogramHandle>(null);
+
+  // Panel visibility
+  const [showAttendance, setShowAttendance] = useState(false);
+  const [showJournal, setShowJournal] = useState(false);
+
+  // Attendance
+  const [attendanceStations, setAttendanceStations] = useState<AttendanceStation[]>([]);
+
+  // Journals
+  const [journals, setJournals] = useState<JournalEntry[]>([]);
+  const [journalResult, setJournalResult] = useState<JournalResultDraft | null>(null);
+  const [journalGenerating, setJournalGenerating] = useState(false);
+  const [journalError, setJournalError] = useState<string | null>(null);
 
   const handleWsMessage = useCallback((msg: WsMessage) => {
     switch (msg.type) {
@@ -109,7 +143,7 @@ export default function App() {
         break;
 
       case 'tx_status':
-        setTransmitting(msg.state === 'transmitting');
+        setTransmitting(msg.status === 'transmitting');
         break;
 
       case 'system_msg':
@@ -144,6 +178,42 @@ export default function App() {
       case 'speaker_reset':
         console.log(`Speaker reset: ${msg.callsign}`);
         break;
+
+      case 'session_attendance':
+        setAttendanceStations(msg.stations);
+        break;
+
+      case 'journals':
+        setJournals(msg.journals);
+        break;
+
+      case 'journal_result':
+        setJournalResult({
+          title: msg.title,
+          summary: msg.summary,
+          callsigns_locations: msg.callsigns_locations,
+        });
+        setJournalGenerating(false);
+        setJournalError(null);
+        break;
+
+      case 'journal_error':
+        setJournalError(msg.detail);
+        setJournalGenerating(false);
+        break;
+
+      case 'journal_saved':
+        // Refresh journal list after save
+        sendRef.current({ type: 'list_journals' });
+        break;
+
+      case 'journal_deleted':
+        setJournals((prev) => prev.filter((j) => j._file !== msg.file_path));
+        break;
+
+      case 'spectrogram_row':
+        spectroRef.current?.pushRow(msg.row);
+        break;
     }
   }, []);
 
@@ -164,7 +234,6 @@ export default function App() {
       target_name: targetName,
     };
     send(payload);
-    // Optimistically show outbound message
     setMessages((prev) => [
       ...prev,
       {
@@ -176,6 +245,13 @@ export default function App() {
       },
     ]);
   }
+
+  // Derived: RX texts and callsigns from current chat for journal generation
+  const rxMessages = messages.filter((m) => m.kind === 'rx' && !m.partial);
+  const rxTexts = rxMessages.map((m) => (m.sender ? `[${m.sender}] ${m.text}` : m.text));
+  const rxCallsigns = [...new Set(
+    rxMessages.map((m) => m.sender).filter(Boolean) as string[]
+  )];
 
   const stationStatus = connected ? 'READY' : 'OFFLINE';
 
@@ -196,13 +272,62 @@ export default function App() {
         stationStatus={stationStatus}
         connected={connected}
         onChangeOperator={() => setShowModal(true)}
+        showAttendance={showAttendance}
+        onToggleAttendance={() => setShowAttendance((v) => !v)}
+        showJournal={showJournal}
+        onToggleJournal={() => {
+          setShowJournal((v) => !v);
+        }}
       />
+
+      {showAttendance && (
+        <AttendancePanel
+          stations={attendanceStations}
+          onClear={() => send({ type: 'clear_attendance' })}
+        />
+      )}
+
+      {showJournal && (
+        <JournalPanel
+          journals={journals}
+          pendingResult={journalResult}
+          generating={journalGenerating}
+          journalError={journalError}
+          rxTexts={rxTexts}
+          rxCallsigns={rxCallsigns}
+          onListJournals={() => send({ type: 'list_journals' })}
+          onGenerate={(transcript, callsigns) => {
+            setJournalGenerating(true);
+            setJournalError(null);
+            setJournalResult(null);
+            send({ type: 'generate_journal', transcript, callsigns });
+          }}
+          onSave={(title, summary, callsigns_locations, transcript) => {
+            send({ type: 'save_journal', title, summary, callsigns_locations, transcript });
+          }}
+          onDelete={(file_path) => send({ type: 'delete_journal', file_path })}
+          onDismissResult={() => setJournalResult(null)}
+        />
+      )}
 
       <ChatDisplay entries={messages} />
 
+      <Spectrogram ref={spectroRef} />
+
       <StatusRow status={radioStatus} />
 
-      <MessageInput transmitting={transmitting} contacts={contacts} myCallsign={operator?.callsign ?? ''} onSend={handleSend} />
+      <QuickMessages
+        operatorName={operator?.operatorName ?? ''}
+        onSelect={(text) => messageInputRef.current?.setText(text)}
+      />
+
+      <MessageInput
+        ref={messageInputRef}
+        transmitting={transmitting}
+        contacts={contacts}
+        myCallsign={operator?.callsign ?? ''}
+        onSend={handleSend}
+      />
     </div>
   );
 }

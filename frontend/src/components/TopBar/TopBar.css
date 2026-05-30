@@ -77,3 +77,8 @@
   background-color: var(--color-accent);
   color: var(--color-bg);
 }
+
+.topbar-btn--active {
+  background-color: var(--color-text);
+  color: var(--color-bg);
+}
