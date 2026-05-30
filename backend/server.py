@@ -690,6 +690,7 @@ async def health() -> dict:
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket) -> None:
+    global _stt_worker, _stt_listening
     await ws.accept()
     _manager.add(ws)
     _log.info("Client connected: %s", ws.client)
@@ -996,7 +997,6 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                 await _manager.broadcast(_build_status())
 
             elif msg_type == "set_stt_listening":
-                global _stt_listening
                 _stt_listening = bool(data.get("listening", True))
                 if _stt_worker is not None:
                     if _stt_listening:
@@ -1028,7 +1028,6 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                 })
 
             elif msg_type == "set_input_device":
-                global _stt_worker
                 if _config is None:
                     await _manager.send_to(ws, {"type": "error", "detail": "Config not loaded."})
                     continue
