@@ -90,6 +90,14 @@ class SystemMonitorSource:
         if sink:
             cmd.append(f"--device={sink}.monitor")
         self._proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        import time
+        time.sleep(0.15)
+        if self._proc.poll() is not None:
+            self._proc = None
+            raise IOError(
+                "parec exited immediately — PulseAudio/PipeWire not reachable "
+                "or sink not found. Is PULSE_SERVER set in the container?"
+            )
 
     def _open_windows(self, sink: str) -> None:
         if not hasattr(sd, "WasapiSettings"):

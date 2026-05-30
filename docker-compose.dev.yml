@@ -9,8 +9,10 @@ services:
       - ./backend:/app/backend
       - ./Voices:/app/Voices:ro
       - ./Models:/app/Models:ro
+      - ${XDG_RUNTIME_DIR:-/run/user/1000}/pulse:/run/pulse:ro
     environment:
       - RADIO_TTY_CONFIG=/data/config.json
+      - PULSE_SERVER=unix:/run/pulse/native
 
   frontend:
     build:

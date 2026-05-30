@@ -9,6 +9,9 @@ services:
       - ./data:/data
       - ./Voices:/app/Voices:ro
       - ./Models:/app/Models:ro
+      - ${XDG_RUNTIME_DIR:-/run/user/1000}/pulse:/run/pulse:ro
+    environment:
+      - PULSE_SERVER=unix:/run/pulse/native
     devices:
       - /dev/snd:/dev/snd
     restart: unless-stopped
