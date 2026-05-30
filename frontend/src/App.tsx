@@ -1,4 +1,8 @@
 import { useState, useCallback, useRef, useMemo } from 'react';
+import { DndContext } from '@dnd-kit/core';
+import type { DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
+import { DraggablePanel } from './components/DraggablePanel/DraggablePanel';
 import { ThemeProvider, CssBaseline, Box } from '@mui/material';
 import { makeTheme } from './theme';
 import { useOperator } from './hooks/useOperator';
@@ -81,6 +85,11 @@ export default function App() {
   const [showContacts, setShowContacts] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
+
+  // Panel order (persisted)
+  const [panelOrder, setPanelOrder] = useState<string[]>(
+    () => JSON.parse(localStorage.getItem('radio_tty_panel_order') ?? '["config","attendance","journal"]')
+  );
 
   // Theme
   const [darkMode, setDarkMode] = useState(
@@ -469,6 +478,19 @@ export default function App() {
     rxMessages.map((m) => m.sender).filter(Boolean) as string[]
   )];
 
+  function handlePanelDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      setPanelOrder((prev) => {
+        const oldIndex = prev.indexOf(String(active.id));
+        const newIndex = prev.indexOf(String(over.id));
+        const next = arrayMove(prev, oldIndex, newIndex);
+        localStorage.setItem('radio_tty_panel_order', JSON.stringify(next));
+        return next;
+      });
+    }
+  }
+
   const stationStatus = connected ? 'READY' : 'OFFLINE';
   const showCallsignChips = serviceMode === 'GMRS';
 
@@ -519,56 +541,73 @@ export default function App() {
           onClearChat={handleClearChat}
         />
 
-        {showConfig && (
-          <ConfigPanel
-            filterProfanity={filterProfanity}
-            fuzzyCallsign={fuzzyCallsign}
-            inputDevice={inputDevice}
-            systemMonitorSink={systemMonitorSink}
-            inputDevices={inputDevices}
-            monitorSinks={monitorSinks}
-            spectroColormap={spectroColormap}
-            spectroFreqRange={spectroFreqRange}
-            spectroTimeWindowS={spectroTimeWindowS}
-            onToggleProfanity={handleToggleProfanity}
-            onToggleFuzzy={handleToggleFuzzy}
-            onInputDeviceChange={handleInputDeviceChange}
-            onVoiceTest={handleVoiceTest}
-            onSpectroColormapChange={handleSpectroColormapChange}
-            onSpectroFreqRangeChange={handleSpectroFreqRangeChange}
-            onSpectroTimeWindowChange={handleSpectroTimeWindowChange}
-          />
-        )}
-
-        {showAttendance && (
-          <AttendancePanel
-            stations={attendanceStations}
-            onClear={() => send({ type: 'clear_attendance' })}
-          />
-        )}
-
-        {showJournal && (
-          <JournalPanel
-            journals={journals}
-            pendingResult={journalResult}
-            generating={journalGenerating}
-            journalError={journalError}
-            rxTexts={rxTexts}
-            rxCallsigns={rxCallsigns}
-            onListJournals={() => send({ type: 'list_journals' })}
-            onGenerate={(transcript, callsigns) => {
-              setJournalGenerating(true);
-              setJournalError(null);
-              setJournalResult(null);
-              send({ type: 'generate_journal', transcript, callsigns });
-            }}
-            onSave={(title, summary, callsigns_locations, transcript) => {
-              send({ type: 'save_journal', title, summary, callsigns_locations, transcript });
-            }}
-            onDelete={(file_path) => send({ type: 'delete_journal', file_path })}
-            onDismissResult={() => setJournalResult(null)}
-          />
-        )}
+        <DndContext onDragEnd={handlePanelDragEnd}>
+          <SortableContext items={panelOrder} strategy={verticalListSortingStrategy}>
+            {panelOrder.map((id) => {
+              if (id === 'config' && showConfig) {
+                return (
+                  <DraggablePanel key="config" id="config">
+                    <ConfigPanel
+                      filterProfanity={filterProfanity}
+                      fuzzyCallsign={fuzzyCallsign}
+                      inputDevice={inputDevice}
+                      systemMonitorSink={systemMonitorSink}
+                      inputDevices={inputDevices}
+                      monitorSinks={monitorSinks}
+                      spectroColormap={spectroColormap}
+                      spectroFreqRange={spectroFreqRange}
+                      spectroTimeWindowS={spectroTimeWindowS}
+                      onToggleProfanity={handleToggleProfanity}
+                      onToggleFuzzy={handleToggleFuzzy}
+                      onInputDeviceChange={handleInputDeviceChange}
+                      onVoiceTest={handleVoiceTest}
+                      onSpectroColormapChange={handleSpectroColormapChange}
+                      onSpectroFreqRangeChange={handleSpectroFreqRangeChange}
+                      onSpectroTimeWindowChange={handleSpectroTimeWindowChange}
+                    />
+                  </DraggablePanel>
+                );
+              }
+              if (id === 'attendance' && showAttendance) {
+                return (
+                  <DraggablePanel key="attendance" id="attendance">
+                    <AttendancePanel
+                      stations={attendanceStations}
+                      onClear={() => send({ type: 'clear_attendance' })}
+                    />
+                  </DraggablePanel>
+                );
+              }
+              if (id === 'journal' && showJournal) {
+                return (
+                  <DraggablePanel key="journal" id="journal">
+                    <JournalPanel
+                      journals={journals}
+                      pendingResult={journalResult}
+                      generating={journalGenerating}
+                      journalError={journalError}
+                      rxTexts={rxTexts}
+                      rxCallsigns={rxCallsigns}
+                      onListJournals={() => send({ type: 'list_journals' })}
+                      onGenerate={(transcript, callsigns) => {
+                        setJournalGenerating(true);
+                        setJournalError(null);
+                        setJournalResult(null);
+                        send({ type: 'generate_journal', transcript, callsigns });
+                      }}
+                      onSave={(title, summary, callsigns_locations, transcript) => {
+                        send({ type: 'save_journal', title, summary, callsigns_locations, transcript });
+                      }}
+                      onDelete={(file_path) => send({ type: 'delete_journal', file_path })}
+                      onDismissResult={() => setJournalResult(null)}
+                    />
+                  </DraggablePanel>
+                );
+              }
+              return null;
+            })}
+          </SortableContext>
+        </DndContext>
 
         <PendingStationsBar
           stations={pendingStations}
