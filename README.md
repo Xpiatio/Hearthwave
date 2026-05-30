@@ -2,7 +2,7 @@
 
 A web-based TTY/TDD radio communication system for GMRS and amateur radio operators. Multiple household members can operate from their own tablets, phones, or browsers simultaneously — no software installation required on client devices.
 
-Radio-TTY is a fork of [GMRS-TTY](https://github.com/original/gmrs-tty) that replaces the desktop PySide6 UI with a browser-based React frontend communicating over WebSocket.
+Radio-TTY is a fork of GMRS-TTY that replaces the desktop PySide6 UI with a browser-based React frontend communicating over WebSocket.
 
 ---
 
@@ -77,7 +77,7 @@ Voices and the speaker model must be copied from an existing install or obtained
 
 ```bash
 # Clone and enter the repo
-git clone <repo-url> Radio-TTY && cd Radio-TTY
+git clone https://github.com/Xpiatio/Radio-TTY.git && cd Radio-TTY
 
 # Place models (see Requirements above)
 
