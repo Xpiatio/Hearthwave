@@ -11,6 +11,8 @@ import type {
   AttendanceStation,
   JournalEntry,
   FccLookupResultMsg,
+  InputDeviceOption,
+  MonitorSinkOption,
 } from './types/ws';
 import { OperatorModal } from './components/OperatorModal/OperatorModal';
 import { TopBar } from './components/TopBar/TopBar';
@@ -115,7 +117,10 @@ export default function App() {
   const [serviceMode, setServiceMode] = useState('GMRS');
   const [filterProfanity, setFilterProfanity] = useState(true);
   const [fuzzyCallsign, setFuzzyCallsign] = useState(false);
-  const [systemMonitorSink, setSystemMonitorSinkLocal] = useState('');
+  const [inputDevice, setInputDevice] = useState<string | number>(-1);
+  const [systemMonitorSink, setSystemMonitorSink] = useState('');
+  const [inputDevices, setInputDevices] = useState<InputDeviceOption[]>([]);
+  const [monitorSinks, setMonitorSinks] = useState<MonitorSinkOption[]>([]);
   const [spectroColormap, setSpectroColormap] = useState<'viridis' | 'grayscale'>('viridis');
   const [spectroFreqRange, setSpectroFreqRange] = useState<'voice' | 'full'>('full');
   const [spectroTimeWindowS, setSpectroTimeWindowS] = useState(30);
@@ -203,6 +208,8 @@ export default function App() {
         if (msg.service_mode !== undefined) setServiceMode(msg.service_mode);
         if (msg.filter_profanity !== undefined) setFilterProfanity(msg.filter_profanity);
         if (msg.fuzzy_callsign !== undefined) setFuzzyCallsign(msg.fuzzy_callsign);
+        if (msg.input_device !== undefined) setInputDevice(msg.input_device);
+        if (msg.system_monitor_sink !== undefined) setSystemMonitorSink(msg.system_monitor_sink);
         if (msg.spectro_colormap === 'viridis' || msg.spectro_colormap === 'grayscale')
           setSpectroColormap(msg.spectro_colormap);
         if (msg.spectro_freq_range === 'voice' || msg.spectro_freq_range === 'full')
@@ -327,6 +334,13 @@ export default function App() {
         setIsOnline(msg.online);
         break;
 
+      case 'input_devices':
+        setInputDevices(msg.devices);
+        setMonitorSinks(msg.monitor_sinks);
+        setInputDevice(msg.current_input_device);
+        setSystemMonitorSink(msg.current_monitor_sink);
+        break;
+
       case 'contact_auto_added':
         break;
 
@@ -342,6 +356,13 @@ export default function App() {
 
   const { send, connected } = useWebSocket({ onMessage: handleWsMessage });
   sendRef.current = send;
+
+  // Request input device list whenever the socket connects (or reconnects).
+  const [prevConnected, setPrevConnected] = useState(false);
+  if (connected !== prevConnected) {
+    setPrevConnected(connected);
+    if (connected) send({ type: 'list_input_devices' });
+  }
 
   function handleSend(text: string, targetCall: string, targetName: string) {
     if (!operator) {
@@ -390,9 +411,10 @@ export default function App() {
     send({ type: 'set_config', fuzzy_callsign: !fuzzyCallsign });
   }
 
-  function handleSinkChange(sink: string) {
-    setSystemMonitorSinkLocal(sink);
-    send({ type: 'set_config', system_monitor_sink: sink });
+  function handleInputDeviceChange(device: string | number, sink: string) {
+    setInputDevice(device);
+    setSystemMonitorSink(sink);
+    send({ type: 'set_input_device', input_device: device, system_monitor_sink: sink });
   }
 
   function handleVoiceTest() {
@@ -501,13 +523,16 @@ export default function App() {
           <ConfigPanel
             filterProfanity={filterProfanity}
             fuzzyCallsign={fuzzyCallsign}
+            inputDevice={inputDevice}
             systemMonitorSink={systemMonitorSink}
+            inputDevices={inputDevices}
+            monitorSinks={monitorSinks}
             spectroColormap={spectroColormap}
             spectroFreqRange={spectroFreqRange}
             spectroTimeWindowS={spectroTimeWindowS}
             onToggleProfanity={handleToggleProfanity}
             onToggleFuzzy={handleToggleFuzzy}
-            onSinkChange={handleSinkChange}
+            onInputDeviceChange={handleInputDeviceChange}
             onVoiceTest={handleVoiceTest}
             onSpectroColormapChange={handleSpectroColormapChange}
             onSpectroFreqRangeChange={handleSpectroFreqRangeChange}

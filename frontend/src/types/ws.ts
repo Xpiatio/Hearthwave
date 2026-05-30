@@ -49,6 +49,8 @@ export interface StatusMsg {
   spectro_colormap?: string;
   spectro_freq_range?: string;
   spectro_time_window_s?: number;
+  input_device?: string | number;
+  system_monitor_sink?: string;
   // Admin-editable identity fields
   station_callsign?: string;
   station_name?: string;
@@ -175,6 +177,24 @@ export interface SpectrogramRowMsg {
   squelch?: boolean;
 }
 
+export interface InputDeviceOption {
+  label: string;
+  id: string | number;
+}
+
+export interface MonitorSinkOption {
+  label: string;
+  sink_id: string;
+}
+
+export interface InputDevicesMsg {
+  type: 'input_devices';
+  devices: InputDeviceOption[];
+  monitor_sinks: MonitorSinkOption[];
+  current_input_device: string | number;
+  current_monitor_sink: string;
+}
+
 export type WsMessage =
   | RxMessageMsg
   | StatusMsg
@@ -195,7 +215,8 @@ export type WsMessage =
   | FccLookupResultMsg
   | VerifyAllCompleteMsg
   | OnlineStatusMsg
-  | SpectrogramRowMsg;
+  | SpectrogramRowMsg
+  | InputDevicesMsg;
 
 export interface TxMessagePayload {
   type: 'tx_message';
