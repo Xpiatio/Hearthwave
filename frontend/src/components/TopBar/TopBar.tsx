@@ -8,7 +8,7 @@ import {
 } from '@mui/material';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
-import PhoneAndroidIcon from '@mui/icons-material/PhoneAndroid';
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 
 interface Props {
   stationStatus: string;
@@ -25,12 +25,13 @@ interface Props {
   onToggleContacts: () => void;
   showConfig: boolean;
   onToggleConfig: () => void;
+  showAdmin: boolean;
+  onToggleAdmin: () => void;
   darkMode: boolean;
   onToggleDark: () => void;
-  touchMode: boolean;
-  onToggleTouch: () => void;
   onToggleServiceMode: () => void;
   onToggleListenOnly: () => void;
+  onClearChat: () => void;
 }
 
 export function TopBar({
@@ -48,12 +49,13 @@ export function TopBar({
   onToggleContacts,
   showConfig,
   onToggleConfig,
+  showAdmin,
+  onToggleAdmin,
   darkMode,
   onToggleDark,
-  touchMode,
-  onToggleTouch,
   onToggleServiceMode,
   onToggleListenOnly,
+  onClearChat,
 }: Props) {
   return (
     <AppBar position="static" color="default" elevation={0}
@@ -106,6 +108,16 @@ export function TopBar({
           CONFIG
         </Button>
 
+        <Button
+          variant={showAdmin ? 'contained' : 'outlined'}
+          size="small"
+          onClick={onToggleAdmin}
+          aria-pressed={showAdmin}
+          aria-label="Open admin settings"
+        >
+          ADMIN
+        </Button>
+
         {/* Center: station status + online dot */}
         <Box sx={{ flex: 1, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }} aria-live="polite" aria-atomic="true">
           <Box component="span" sx={{ typography: 'body1', fontWeight: 600 }}>
@@ -139,7 +151,7 @@ export function TopBar({
           )}
         </Box>
 
-        {/* Right: service mode, listen-only, theme, touch */}
+        {/* Right: service mode, listen-only, clear chat, theme */}
         <Tooltip title={`Radio service: click to switch to ${serviceMode === 'GMRS' ? 'FRS' : 'GMRS'}`}>
           <Button
             variant="outlined"
@@ -165,6 +177,16 @@ export function TopBar({
           </Button>
         </Tooltip>
 
+        <Tooltip title="Clear chat log">
+          <IconButton
+            onClick={onClearChat}
+            aria-label="Clear chat log"
+            size="small"
+          >
+            <DeleteSweepIcon />
+          </IconButton>
+        </Tooltip>
+
         <Tooltip title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}>
           <IconButton
             onClick={onToggleDark}
@@ -172,18 +194,6 @@ export function TopBar({
             size="small"
           >
             {darkMode ? <Brightness7Icon /> : <Brightness4Icon />}
-          </IconButton>
-        </Tooltip>
-
-        <Tooltip title={touchMode ? 'Exit touch mode' : 'Enable touch mode'}>
-          <IconButton
-            onClick={onToggleTouch}
-            color={touchMode ? 'primary' : 'default'}
-            aria-label={touchMode ? 'Exit touch mode' : 'Enable touch mode'}
-            aria-pressed={touchMode}
-            size="small"
-          >
-            <PhoneAndroidIcon />
           </IconButton>
         </Tooltip>
       </Toolbar>

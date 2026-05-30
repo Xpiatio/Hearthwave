@@ -4,7 +4,7 @@ import { createTheme } from '@mui/material/styles';
 // Light: dark colors on white for ≥4.5:1 contrast
 // Dark: light colors on #1F2937 for ≥4.5:1 contrast
 
-export function makeTheme(dark: boolean, touch: boolean) {
+export function makeTheme(dark: boolean) {
   return createTheme({
     palette: {
       mode: dark ? 'dark' : 'light',
@@ -35,28 +35,28 @@ export function makeTheme(dark: boolean, touch: boolean) {
       htmlFontSize: 16,
       fontFamily:
         "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-      body1: { fontSize: '1.125rem' },   // 18px
-      body2: { fontSize: '1rem' },       // 16px
+      body1: { fontSize: '1.125rem' },
+      body2: { fontSize: '1rem' },
     },
     components: {
       MuiButton: {
         styleOverrides: {
           root: {
-            minHeight: touch ? 64 : 48,
+            minHeight: 48,
             fontWeight: 700,
             letterSpacing: '0.04em',
           },
           sizeLarge: {
-            minHeight: touch ? 80 : 56,
-            fontSize: touch ? '1.125rem' : '1rem',
+            minHeight: 56,
+            fontSize: '1rem',
           },
         },
       },
       MuiIconButton: {
         styleOverrides: {
           root: {
-            minHeight: touch ? 56 : 44,
-            minWidth: touch ? 56 : 44,
+            minHeight: 44,
+            minWidth: 44,
           },
         },
       },
