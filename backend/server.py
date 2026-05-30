@@ -9,14 +9,17 @@ WebSocket message types (client → server):
     enroll_speaker  — {"type": "enroll_speaker", "callsign": str, "name"?: str,
                         "utterance_id"?: str, "cluster_label"?: str}
     reset_speaker   — {"type": "reset_speaker", "callsign": str, "name"?: str}
+    set_monitor     — {"type": "set_monitor", "enabled": bool}
 
 WebSocket message types (server → client):
-    status           — {"type": "status", "radio_connected": bool, ...}
+    status           — {"type": "status", "radio_connected": bool,
+                         "monitor_enabled": bool, ...}
     contacts         — {"type": "contacts", "contacts": [...]}
     rx_message       — {"type": "rx_message", "utterance_id": str, "text": str,
                          "partial": bool, "speaker_callsign"?: str,
                          "speaker_name"?: str, "cluster_label"?: str}
     tx_status        — {"type": "tx_status", "status": "transmitting" | "idle"}
+    monitor_status   — {"type": "monitor_status", "enabled": bool}
     speaker_enrolled — {"type": "speaker_enrolled", "callsign": str, "name": str,
                          "sample_count": int}
     speaker_reset    — {"type": "speaker_reset", "callsign": str}
@@ -56,6 +59,7 @@ _config: ServerConfig | None = None
 _contacts_store: ContactsStore | None = None
 _stt_worker: STTWorker | None = None
 _synthesizer: TTSSynthesizer | None = None
+_monitor: "Any | None" = None  # AudioMonitor, lazy-imported
 
 # Speaker ID singletons
 _speaker_embedder: Any = None
@@ -282,6 +286,7 @@ def _build_status() -> dict:
         "radio_connected": _stt_worker is not None and not _radio_error,
         "volume_ok": _volume_ok(),
         "channel_clear": _channel_clear,
+        "monitor_enabled": _monitor is not None and _monitor.is_active,
     }
 
 
@@ -333,7 +338,7 @@ async def _id_rule_pump() -> None:
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     """Startup / shutdown wiring."""
-    global _config, _contacts_store, _stt_worker, _synthesizer
+    global _config, _contacts_store, _stt_worker, _synthesizer, _monitor
     global _stt_out_queue, _tx_queue, _tts_event_queue, _background_tasks
     global _audio_level, _radio_error, _channel_clear, _last_id_time, _has_transmitted
     global _speaker_embedder, _voiceprint_store, _unknown_clusterer, _recent_embeddings
@@ -382,6 +387,24 @@ async def _lifespan(app: FastAPI):
         _voiceprint_store = None
         _unknown_clusterer = None
 
+    monitor_chunk_cb = None
+    if _config.monitor_enabled:
+        in_dev = _config.input_device if _config.input_device != -1 else None
+        out_dev = _config.output_device if _config.output_device != -1 else None
+        if in_dev == out_dev and in_dev is not None:
+            _log.warning("Monitor skipped: input and output device are the same (would feedback).")
+        else:
+            try:
+                from backend.audio.monitor import AudioMonitor
+                _monitor = AudioMonitor()
+                _monitor.set_passthrough(_config.monitor_passthrough)
+                _monitor.start(device=out_dev)
+                monitor_chunk_cb = _monitor.push
+                _log.info("Audio monitor started on output device %s.", out_dev)
+            except Exception as exc:
+                _log.warning("Audio monitor failed to open output device: %s", exc)
+                _monitor = None
+
     _stt_worker = STTWorker(
         out_queue=_stt_out_queue,
         input_device=_config.input_device if _config.input_device != -1 else None,
@@ -390,6 +413,7 @@ async def _lifespan(app: FastAPI):
         system_monitor_sink=_config.system_monitor_sink,
         speaker_embedder=_speaker_embedder,
         on_audio_level=_on_stt_audio_level,
+        on_audio_chunk=monitor_chunk_cb,
         on_capture_event=_on_stt_capture_event,
         on_status=_on_stt_status,
         on_error=_on_stt_error,
@@ -422,6 +446,10 @@ async def _lifespan(app: FastAPI):
     if _stt_worker is not None:
         _stt_worker.stop()
         await _stt_worker.join()
+
+    if _monitor is not None:
+        _monitor.stop()
+        _monitor = None
 
     _speaker_embedder = None
     _voiceprint_store = None
@@ -561,6 +589,42 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                     "type": "speaker_reset",
                     "callsign": callsign,
                 })
+
+            elif msg_type == "set_monitor":
+                global _monitor
+                enabled = bool(data.get("enabled", False))
+                if enabled:
+                    if _monitor is None or not _monitor.is_active:
+                        out_dev = _config.output_device if _config and _config.output_device != -1 else None
+                        in_dev = _config.input_device if _config and _config.input_device != -1 else None
+                        if in_dev == out_dev and in_dev is not None:
+                            await _manager.send_to(ws, {
+                                "type": "error",
+                                "detail": "Monitor skipped: input and output device are the same.",
+                            })
+                            continue
+                        try:
+                            if _monitor is None:
+                                from backend.audio.monitor import AudioMonitor
+                                _monitor = AudioMonitor()
+                                if _config:
+                                    _monitor.set_passthrough(_config.monitor_passthrough)
+                            _monitor.start(device=out_dev)
+                            if _stt_worker is not None:
+                                _stt_worker._on_audio_chunk = _monitor.push
+                        except Exception as exc:
+                            _log.warning("Audio monitor failed to start: %s", exc)
+                            await _manager.send_to(ws, {
+                                "type": "error",
+                                "detail": f"Monitor failed to start: {exc}",
+                            })
+                            continue
+                else:
+                    if _monitor is not None:
+                        _monitor.stop()
+                    if _stt_worker is not None:
+                        _stt_worker._on_audio_chunk = None
+                await _manager.broadcast({"type": "monitor_status", "enabled": enabled})
 
             else:
                 _log.debug("Unknown message type from client: %r", msg_type)

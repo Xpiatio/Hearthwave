@@ -10,6 +10,23 @@ export interface RxMessageMsg {
   from: string;
   callsign: string;
   text: string;
+  utterance_id: string;
+  partial: boolean;
+  speaker_callsign: string | null;
+  speaker_name: string | null;
+  cluster_label: string | null;
+}
+
+export interface SpeakerEnrolledMsg {
+  type: 'speaker_enrolled';
+  callsign: string;
+  name: string;
+  sample_count: number;
+}
+
+export interface SpeakerResetMsg {
+  type: 'speaker_reset';
+  callsign: string;
 }
 
 export interface StatusMsg {
@@ -39,7 +56,9 @@ export type WsMessage =
   | StatusMsg
   | ContactsMsg
   | TxStatusMsg
-  | SystemMsgMsg;
+  | SystemMsgMsg
+  | SpeakerEnrolledMsg
+  | SpeakerResetMsg;
 
 export interface TxMessagePayload {
   type: 'tx_message';

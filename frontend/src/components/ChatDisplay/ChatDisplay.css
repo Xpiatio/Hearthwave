@@ -69,3 +69,34 @@
 .chat-entry--system .chat-entry-text {
   color: var(--color-amber);
 }
+
+.chat-entry-speaker {
+  font-size: 0.9375rem;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+.chat-entry--partial .chat-entry-text {
+  opacity: 0.7;
+}
+
+.chat-entry-partial-indicator {
+  opacity: 0.5;
+}
+
+.chat-entry-enroll-btn {
+  font-size: 0.875rem;
+  padding: 0.1rem 0.4rem;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  cursor: pointer;
+  opacity: 0.55;
+  color: inherit;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+.chat-entry-enroll-btn:hover {
+  opacity: 0.9;
+}

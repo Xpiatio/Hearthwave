@@ -103,6 +103,7 @@ class TestWebSocketConnection:
             assert "radio_connected" in msg
             assert "channel_clear" in msg
             assert "volume_ok" in msg
+            assert "monitor_enabled" in msg
 
     def test_radio_connected_reflects_mock_stt_healthy(self, client):
         with client.websocket_connect("/ws") as ws:
