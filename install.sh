@@ -27,6 +27,7 @@ sudo apt-get install -y --no-install-recommends \
     libsndfile1 \
     espeak-ng \
     espeak-ng-data \
+    pulseaudio-utils \
     curl \
     ca-certificates
 
@@ -77,22 +78,29 @@ fi
 
 # ── 6. Data directory ────────────────────────────────────────────────────────
 
+mkdir -p data/voiceprints data/journals
+
 if [ ! -f data/config.json ]; then
     echo "==> Copying seed config..."
-    mkdir -p data/voiceprints
-    cp data/config.json.example data/config.json 2>/dev/null || true
+    if [ -f data/config.json.example ]; then
+        cp data/config.json.example data/config.json
+    else
+        echo "  (no data/config.json.example found — you must create data/config.json manually)"
+        echo "  Minimum required fields: callsign, voice"
+    fi
 fi
-mkdir -p data/voiceprints
 
 # ── 7. Validate ──────────────────────────────────────────────────────────────
 
 echo ""
 echo "==> Validating install..."
-python -c "import sounddevice; print('  sounddevice OK')"
-python -c "import soundfile; print('  soundfile    OK')"
+python -c "import sounddevice; print('  sounddevice    OK')"
+python -c "import soundfile; print('  soundfile      OK')"
 python -c "import faster_whisper; print('  faster-whisper OK')"
-python -c "import piper; print('  piper-tts    OK')"
-python -c "import silero_vad; print('  silero-vad   OK')"
+python -c "import piper; print('  piper-tts      OK')"
+python -c "import silero_vad; print('  silero-vad     OK')"
+python -c "import numpy; print('  numpy          OK')"
+python -c "import huggingface_hub; print('  huggingface_hub OK')"
 
 echo ""
 echo "Done. To start the server:"

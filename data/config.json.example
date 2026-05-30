@@ -1,0 +1,42 @@
+{
+    "callsign": "N0CALL",
+    "name": "",
+    "location": "",
+
+    "radio_service": "GMRS",
+
+    "voice": "ryan-high",
+    "tts_length_scale": 1.0,
+
+    "input_device": -1,
+    "output_device": -1,
+    "system_monitor_sink": "",
+    "monitor_enabled": false,
+    "monitor_passthrough": false,
+
+    "whisper_model": "small.en",
+    "vad_threshold": 0.5,
+
+    "ptt_mode": "manual",
+    "ptt_serial_port": "",
+    "ptt_serial_line": "RTS",
+
+    "filter_profanity": true,
+    "fuzzy_callsign": false,
+    "listen_only": false,
+
+    "attendance": {
+        "enabled": false
+    },
+
+    "spectro_colormap": "viridis",
+    "spectro_freq_range": "full",
+    "spectro_time_window_s": 30,
+
+    "gemini_api_key": "",
+    "journals_dir": "/data/journals",
+    "contacts_file": "/data/contacts.json",
+
+    "host": "0.0.0.0",
+    "port": 8765
+}

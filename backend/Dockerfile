@@ -42,8 +42,8 @@ WORKDIR /app
 # Copy backend source
 COPY backend/ /app/backend/
 
-# Mount point for persistent data (contacts.json, config.json)
-RUN mkdir -p /data
+# Mount point for persistent data
+RUN mkdir -p /data/voiceprints /data/journals
 
 EXPOSE 8765
 
