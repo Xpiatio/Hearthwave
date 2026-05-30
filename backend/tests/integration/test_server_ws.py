@@ -1,0 +1,234 @@
+"""Integration tests for the Radio-TTY WebSocket server.
+
+Uses Starlette's in-process TestClient — no audio hardware or real ML models
+required.  STTWorker and TTSSynthesizer are mocked so the suite covers the
+WebSocket protocol and server orchestration logic only.
+
+Running:
+    cd /mnt/storage/Repos/Radio-TTY
+    python -m pytest backend/tests/integration/ -v
+"""
+from __future__ import annotations
+
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from starlette.testclient import TestClient
+
+from backend.config import ServerConfig
+from backend.server import app
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+def _minimal_cfg(tmp_path: Path, *, listen_only: bool = False) -> ServerConfig:
+    contacts_file = tmp_path / "contacts.json"
+    contacts_file.write_text("[]")
+    return ServerConfig({
+        "callsign": "W5TST",
+        "name": "Test Op",
+        "location": "Test City",
+        "voice": "fake_voice",
+        "contacts_file": str(contacts_file),
+        "listen_only": listen_only,
+    })
+
+
+def _make_mocks():
+    mock_stt = MagicMock()
+    mock_stt.join = AsyncMock()
+    mock_tts = MagicMock()
+    mock_tts.synthesize = AsyncMock(return_value=None)
+    return mock_stt, mock_tts
+
+
+@pytest.fixture
+def client(tmp_path):
+    cfg = _minimal_cfg(tmp_path)
+    mock_stt, mock_tts = _make_mocks()
+    with (
+        patch("backend.server.ServerConfig.load", return_value=cfg),
+        patch("backend.server.STTWorker", return_value=mock_stt),
+        patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+    ):
+        with TestClient(app) as tc:
+            yield tc
+
+
+@pytest.fixture
+def listen_only_client(tmp_path):
+    cfg = _minimal_cfg(tmp_path, listen_only=True)
+    mock_stt, mock_tts = _make_mocks()
+    with (
+        patch("backend.server.ServerConfig.load", return_value=cfg),
+        patch("backend.server.STTWorker", return_value=mock_stt),
+        patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+    ):
+        with TestClient(app) as tc:
+            yield tc
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _drain_initial(ws, count: int = 2):
+    """Consume the status + contacts frames every new connection receives."""
+    return [ws.receive_json() for _ in range(count)]
+
+
+# ---------------------------------------------------------------------------
+# HTTP health endpoint
+# ---------------------------------------------------------------------------
+
+class TestHealth:
+    def test_returns_ok(self, client):
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        assert resp.json() == {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# WebSocket — initial connection frames
+# ---------------------------------------------------------------------------
+
+class TestWebSocketConnection:
+    def test_initial_message_is_status(self, client):
+        with client.websocket_connect("/ws") as ws:
+            msg = ws.receive_json()
+            assert msg["type"] == "status"
+            assert "radio_connected" in msg
+            assert "channel_clear" in msg
+            assert "volume_ok" in msg
+
+    def test_radio_connected_reflects_mock_stt_healthy(self, client):
+        with client.websocket_connect("/ws") as ws:
+            msg = ws.receive_json()
+            # STTWorker is running (mock, no error) → connected = True
+            assert msg["radio_connected"] is True
+
+    def test_second_message_is_contacts_list(self, client):
+        with client.websocket_connect("/ws") as ws:
+            ws.receive_json()  # status
+            msg = ws.receive_json()
+            assert msg["type"] == "contacts"
+            assert isinstance(msg["contacts"], list)
+
+    def test_initial_contacts_list_is_empty(self, client):
+        with client.websocket_connect("/ws") as ws:
+            ws.receive_json()  # status
+            msg = ws.receive_json()
+            assert msg["contacts"] == []
+
+
+# ---------------------------------------------------------------------------
+# tx_message — validation
+# ---------------------------------------------------------------------------
+
+class TestTxMessageValidation:
+    def test_missing_callsign_field_returns_error(self, client):
+        with client.websocket_connect("/ws") as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "tx_message", "text": "hello"})
+            msg = ws.receive_json()
+            assert msg["type"] == "error"
+            assert "callsign" in msg["detail"].lower()
+
+    def test_whitespace_only_callsign_returns_error(self, client):
+        with client.websocket_connect("/ws") as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "tx_message", "callsign": "   ", "text": "hello"})
+            msg = ws.receive_json()
+            assert msg["type"] == "error"
+
+    def test_listen_only_mode_rejects_tx(self, listen_only_client):
+        with listen_only_client.websocket_connect("/ws") as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "tx_message", "callsign": "W5TST", "text": "hello"})
+            msg = ws.receive_json()
+            assert msg["type"] == "error"
+            assert "listen" in msg["detail"].lower()
+
+
+# ---------------------------------------------------------------------------
+# tx_message — happy path
+# ---------------------------------------------------------------------------
+
+class TestTxMessageFlow:
+    def test_valid_tx_broadcasts_transmitting_then_idle(self, client):
+        with client.websocket_connect("/ws") as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "tx_message", "callsign": "W5TST", "text": "hello"})
+            msg1 = ws.receive_json()
+            assert msg1 == {"type": "tx_status", "status": "transmitting"}
+            msg2 = ws.receive_json()
+            assert msg2 == {"type": "tx_status", "status": "idle"}
+
+    def test_tx_broadcast_reaches_second_client(self, client):
+        with (
+            client.websocket_connect("/ws") as ws1,
+            client.websocket_connect("/ws") as ws2,
+        ):
+            _drain_initial(ws1)
+            _drain_initial(ws2)
+            ws1.send_json({"type": "tx_message", "callsign": "W5TST", "text": "hello"})
+            # Both clients should see the transmitting broadcast.
+            msg1 = ws1.receive_json()
+            msg2 = ws2.receive_json()
+            assert msg1["type"] == "tx_status"
+            assert msg1["status"] == "transmitting"
+            assert msg2["type"] == "tx_status"
+            assert msg2["status"] == "transmitting"
+
+
+# ---------------------------------------------------------------------------
+# add_contact
+# ---------------------------------------------------------------------------
+
+class TestAddContact:
+    def test_valid_contact_is_broadcast_to_client(self, client):
+        with client.websocket_connect("/ws") as ws:
+            _drain_initial(ws)
+            ws.send_json({
+                "type": "add_contact",
+                "callsign": "W9FOO",
+                "name": "Foo Operator",
+            })
+            msg = ws.receive_json()
+            assert msg["type"] == "contacts"
+            callsigns = [c["callsign"] for c in msg["contacts"]]
+            assert "W9FOO" in callsigns
+
+    def test_callsign_is_uppercased_in_store(self, client):
+        with client.websocket_connect("/ws") as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "add_contact", "callsign": "w9foo", "name": "Lower"})
+            msg = ws.receive_json()
+            assert msg["type"] == "contacts"
+            callsigns = [c["callsign"] for c in msg["contacts"]]
+            assert "W9FOO" in callsigns
+
+    def test_add_contact_without_callsign_returns_error(self, client):
+        with client.websocket_connect("/ws") as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "add_contact", "name": "No Callsign"})
+            msg = ws.receive_json()
+            assert msg["type"] == "error"
+
+    def test_add_contact_broadcast_reaches_second_client(self, client):
+        with (
+            client.websocket_connect("/ws") as ws1,
+            client.websocket_connect("/ws") as ws2,
+        ):
+            _drain_initial(ws1)
+            _drain_initial(ws2)
+            ws1.send_json({"type": "add_contact", "callsign": "W9BAR", "name": "Bar"})
+            msg1 = ws1.receive_json()
+            msg2 = ws2.receive_json()
+            assert msg1["type"] == "contacts"
+            assert msg2["type"] == "contacts"
+            assert any(c["callsign"] == "W9BAR" for c in msg1["contacts"])
+            assert any(c["callsign"] == "W9BAR" for c in msg2["contacts"])
