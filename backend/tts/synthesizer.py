@@ -130,9 +130,25 @@ class TTSSynthesizer:
 
     def _play_blocking(self, audio: np.ndarray, sample_rate: int) -> None:
         """Block until sounddevice finishes playing the audio buffer."""
-        sd.play(
-            audio,
-            samplerate=sample_rate,
-            device=self.output_device,
-        )
+        import math
+
+        try:
+            dev_idx = (
+                self.output_device
+                if self.output_device is not None
+                else sd.default.device[1]
+            )
+            native_rate = int(sd.query_devices(dev_idx)["default_samplerate"])
+        except Exception:
+            native_rate = sample_rate
+
+        if native_rate != sample_rate:
+            from scipy.signal import resample_poly
+            gcd = math.gcd(sample_rate, native_rate)
+            up = native_rate // gcd
+            down = sample_rate // gcd
+            resampled = resample_poly(audio.astype(np.float32), up, down)
+            audio = np.clip(resampled, -32768, 32767).astype(np.int16)
+
+        sd.play(audio, samplerate=native_rate, device=self.output_device)
         sd.wait()
