@@ -31,6 +31,8 @@ interface Props {
   onToggleDark: () => void;
   onToggleServiceMode: () => void;
   onToggleListenOnly: () => void;
+  sttListening: boolean;
+  onToggleSttListening: () => void;
   onClearChat: () => void;
 }
 
@@ -55,6 +57,8 @@ export function TopBar({
   onToggleDark,
   onToggleServiceMode,
   onToggleListenOnly,
+  sttListening,
+  onToggleSttListening,
   onClearChat,
 }: Props) {
   return (
@@ -161,6 +165,19 @@ export function TopBar({
             sx={{ fontFamily: 'monospace', fontWeight: 700, minWidth: 56 }}
           >
             {serviceMode}
+          </Button>
+        </Tooltip>
+
+        <Tooltip title={sttListening ? 'STT active — click to stop listening' : 'STT stopped — click to start listening'}>
+          <Button
+            variant={sttListening ? 'contained' : 'outlined'}
+            color={sttListening ? 'success' : 'inherit'}
+            size="small"
+            onClick={onToggleSttListening}
+            aria-pressed={sttListening}
+            aria-label={sttListening ? 'Listening active — click to stop' : 'Listening stopped — click to start'}
+          >
+            {sttListening ? 'LISTENING' : 'LISTEN'}
           </Button>
         </Tooltip>
 

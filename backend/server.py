@@ -135,6 +135,7 @@ _audio_level: int = 0
 _radio_error: bool = False
 _channel_clear: bool = True
 _vad_active: bool = False
+_stt_listening: bool = True
 _LEVEL_WINDOW_SIZE = 150
 _level_window: collections.deque = collections.deque(maxlen=_LEVEL_WINDOW_SIZE)
 
@@ -445,7 +446,7 @@ async def _tx_pump() -> None:
             _log.error("TX synthesis error: %s", exc)
             await _manager.broadcast({"type": "error", "detail": f"TX error: {exc}"})
         finally:
-            if not is_preview and _stt_worker is not None:
+            if not is_preview and _stt_worker is not None and _stt_listening:
                 _stt_worker.resume()
             if not is_preview:
                 await _manager.broadcast({"type": "tx_status", "status": "idle"})
@@ -471,6 +472,7 @@ def _build_status() -> dict:
         "channel_clear": _channel_clear,
         "monitor_enabled": _monitor is not None and _monitor.is_active,
         "listen_only": bool(_config and _config.listen_only),
+        "stt_listening": _stt_listening,
         "service_mode": (_config.radio_service if _config else "GMRS") or "GMRS",
         "filter_profanity": bool(_config and _config.filter_profanity),
         "fuzzy_callsign": bool(_config and _config.fuzzy_callsign),
@@ -980,6 +982,16 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                     continue
                 _config["listen_only"] = bool(data.get("listen_only", False))
                 _config.save()
+                await _manager.broadcast(_build_status())
+
+            elif msg_type == "set_stt_listening":
+                global _stt_listening
+                _stt_listening = bool(data.get("listening", True))
+                if _stt_worker is not None:
+                    if _stt_listening:
+                        _stt_worker.resume()
+                    else:
+                        _stt_worker.pause()
                 await _manager.broadcast(_build_status())
 
             elif msg_type == "set_config":

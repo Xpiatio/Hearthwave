@@ -111,6 +111,7 @@ export default function App() {
 
   // Config (synced from server status message)
   const [listenOnly, setListenOnly] = useState(false);
+  const [sttListening, setSttListening] = useState(true);
   const [serviceMode, setServiceMode] = useState('GMRS');
   const [filterProfanity, setFilterProfanity] = useState(true);
   const [fuzzyCallsign, setFuzzyCallsign] = useState(false);
@@ -198,6 +199,7 @@ export default function App() {
       case 'status':
         setRadioStatus(msg);
         if (msg.listen_only !== undefined) setListenOnly(msg.listen_only);
+        if (msg.stt_listening !== undefined) setSttListening(msg.stt_listening);
         if (msg.service_mode !== undefined) setServiceMode(msg.service_mode);
         if (msg.filter_profanity !== undefined) setFilterProfanity(msg.filter_profanity);
         if (msg.fuzzy_callsign !== undefined) setFuzzyCallsign(msg.fuzzy_callsign);
@@ -376,6 +378,10 @@ export default function App() {
     send({ type: 'set_listen_only', listen_only: !listenOnly });
   }
 
+  function handleToggleSttListening() {
+    send({ type: 'set_stt_listening', listening: !sttListening });
+  }
+
   function handleToggleProfanity() {
     send({ type: 'set_config', filter_profanity: !filterProfanity });
   }
@@ -486,6 +492,8 @@ export default function App() {
           onToggleDark={handleToggleDark}
           onToggleServiceMode={handleToggleServiceMode}
           onToggleListenOnly={handleToggleListenOnly}
+          sttListening={sttListening}
+          onToggleSttListening={handleToggleSttListening}
           onClearChat={handleClearChat}
         />
 
@@ -558,10 +566,12 @@ export default function App() {
 
         <StatusRow status={radioStatus} />
 
-        <QuickMessages
-          operatorName={operator?.operatorName ?? ''}
-          onSelect={(text) => messageInputRef.current?.setText(text)}
-        />
+        {!listenOnly && (
+          <QuickMessages
+            operatorName={operator?.operatorName ?? ''}
+            onSelect={(text) => messageInputRef.current?.setText(text)}
+          />
+        )}
 
         {!listenOnly && (
           <MessageInput

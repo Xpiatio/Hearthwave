@@ -42,6 +42,7 @@ export interface StatusMsg {
   channel_clear: boolean;
   monitor_enabled?: boolean;
   listen_only?: boolean;
+  stt_listening?: boolean;
   service_mode?: string;
   filter_profanity?: boolean;
   fuzzy_callsign?: boolean;
