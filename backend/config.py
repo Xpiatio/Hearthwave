@@ -127,17 +127,6 @@ class ServerConfig(dict):
     def attendance_enabled(self, value: bool) -> None:
         self["attendance"] = {"enabled": value}
 
-    # ---- speaker ID ------------------------------------------------------
-
-    @property
-    def voiceprints_dir(self) -> Path:
-        raw = self.get("voiceprints_dir")
-        return Path(raw) if raw else Path("/data/voiceprints")
-
-    @property
-    def speaker_match_threshold(self) -> float:
-        return float(self.get("speaker_match_threshold", 0.75))
-
     # ---- AI / journals ---------------------------------------------------
 
     @property

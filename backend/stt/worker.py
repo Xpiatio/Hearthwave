@@ -96,7 +96,6 @@ class STTWorker:
         vad_threshold: float = 0.5,
         model_cache: "ModelCache | None" = None,
         system_monitor_sink: str = "",
-        speaker_embedder=None,
         # Optional event callbacks — all called from the worker thread;
         # implementations must be thread-safe (e.g. loop.call_soon_threadsafe).
         on_audio_level: "Callable[[int], None] | None" = None,
@@ -112,7 +111,6 @@ class STTWorker:
         self.whisper_model_path = os.path.join(self.MODELS_STT_DIR, whisper_model)
         self.vad_threshold = float(vad_threshold)
         self._model_cache: ModelCache | None = model_cache
-        self._speaker_embedder = speaker_embedder
 
         self._on_audio_level = on_audio_level
         self._on_audio_chunk = on_audio_chunk
@@ -178,9 +176,7 @@ class STTWorker:
     # Private helpers — emit helpers bridge thread → asyncio queue/callbacks
     # ------------------------------------------------------------------
 
-    def _emit_result(
-        self, utterance_id: int, text: str, partial: bool, embedding=None
-    ) -> None:
+    def _emit_result(self, utterance_id: int, text: str, partial: bool) -> None:
         """Push a transcription result onto the asyncio queue from the worker thread."""
         if self._loop is None:
             return
@@ -190,7 +186,6 @@ class STTWorker:
                 "utterance_id": str(utterance_id),
                 "text": text,
                 "partial": partial,
-                "embedding": embedding,
             },
         )
 
@@ -274,7 +269,7 @@ class STTWorker:
         transcribe_queue: queue.Queue = queue.Queue()
         transcribe_thread = threading.Thread(
             target=self._transcription_loop,
-            args=(transcribe_queue, transcriber, bandpass_sos, self._speaker_embedder),
+            args=(transcribe_queue, transcriber, bandpass_sos),
             daemon=True,
         )
         transcribe_thread.start()
@@ -350,7 +345,6 @@ class STTWorker:
         transcribe_queue: queue.Queue,
         transcriber: WhisperTranscriber,
         bandpass_sos,
-        speaker_embedder=None,
     ) -> None:
         """Drain the segmentation queue on a background thread so the capture
         loop never blocks on Whisper. Items are (utterance_id, audio, is_final);
@@ -368,9 +362,6 @@ class STTWorker:
                 normalize_rms(denoised)
                 text = transcriber.transcribe(denoised)
                 if text:
-                    embedding = None
-                    if is_final and speaker_embedder is not None:
-                        embedding = speaker_embedder.embed(denoised, self.SAMPLE_RATE)
-                    self._emit_result(uid, text, not is_final, embedding=embedding)
+                    self._emit_result(uid, text, not is_final)
             except Exception as e:
                 self._emit_error(f"Transcription error: {e}")
