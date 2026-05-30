@@ -1,16 +1,23 @@
-import { Box, Paper, Typography, FormControlLabel, Switch, Button, TextField, Divider, ToggleButtonGroup, ToggleButton } from '@mui/material';
+import {
+  Box, Paper, Typography, FormControlLabel, Switch, Button, Divider,
+  ToggleButtonGroup, ToggleButton, FormControl, InputLabel, Select, MenuItem,
+} from '@mui/material';
 import MicIcon from '@mui/icons-material/Mic';
+import type { InputDeviceOption, MonitorSinkOption } from '../../types/ws';
 
 interface Props {
   filterProfanity: boolean;
   fuzzyCallsign: boolean;
+  inputDevice: string | number;
   systemMonitorSink: string;
+  inputDevices: InputDeviceOption[];
+  monitorSinks: MonitorSinkOption[];
   spectroColormap: 'viridis' | 'grayscale';
   spectroFreqRange: 'voice' | 'full';
   spectroTimeWindowS: number;
   onToggleProfanity: () => void;
   onToggleFuzzy: () => void;
-  onSinkChange: (sink: string) => void;
+  onInputDeviceChange: (device: string | number, sink: string) => void;
   onVoiceTest: () => void;
   onSpectroColormapChange: (cm: 'viridis' | 'grayscale') => void;
   onSpectroFreqRangeChange: (range: 'voice' | 'full') => void;
@@ -20,18 +27,31 @@ interface Props {
 export function ConfigPanel({
   filterProfanity,
   fuzzyCallsign,
+  inputDevice,
   systemMonitorSink,
+  inputDevices,
+  monitorSinks,
   spectroColormap,
   spectroFreqRange,
   spectroTimeWindowS,
   onToggleProfanity,
   onToggleFuzzy,
-  onSinkChange,
+  onInputDeviceChange,
   onVoiceTest,
   onSpectroColormapChange,
   onSpectroFreqRangeChange,
   onSpectroTimeWindowChange,
 }: Props) {
+  const isLoopback = inputDevice === 'system_monitor';
+
+  // Fallback options when the backend hasn't responded yet
+  const deviceOptions: InputDeviceOption[] = inputDevices.length > 0
+    ? inputDevices
+    : [
+        { label: 'System Default (microphone)', id: -1 },
+        { label: 'System Audio Output (loopback)', id: 'system_monitor' },
+      ];
+
   return (
     <Paper
       elevation={0}
@@ -75,15 +95,44 @@ export function ConfigPanel({
 
         <Divider orientation="vertical" flexItem />
 
-        <TextField
-          label="System Audio Sink"
-          size="small"
-          value={systemMonitorSink}
-          onChange={(e) => onSinkChange(e.target.value)}
-          placeholder="e.g. alsa_output.pci-0000_00_1f.3.analog-stereo"
-          sx={{ minWidth: 260 }}
-          slotProps={{ htmlInput: { style: { fontFamily: 'monospace', fontSize: '0.8rem' } } }}
-        />
+        {/* Audio input source */}
+        <FormControl size="small" sx={{ minWidth: 240 }}>
+          <InputLabel id="input-device-label">Audio Input</InputLabel>
+          <Select
+            labelId="input-device-label"
+            label="Audio Input"
+            value={String(inputDevice)}
+            onChange={(e) => {
+              const val = e.target.value;
+              const id = val === 'system_monitor' ? 'system_monitor' : Number(val);
+              onInputDeviceChange(id, id === 'system_monitor' ? systemMonitorSink : '');
+            }}
+          >
+            {deviceOptions.map((dev) => (
+              <MenuItem key={String(dev.id)} value={String(dev.id)}>
+                {dev.label}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        {isLoopback && monitorSinks.length > 0 && (
+          <FormControl size="small" sx={{ minWidth: 200 }}>
+            <InputLabel id="monitor-sink-label">Output Sink</InputLabel>
+            <Select
+              labelId="monitor-sink-label"
+              label="Output Sink"
+              value={systemMonitorSink}
+              onChange={(e) => onInputDeviceChange('system_monitor', e.target.value)}
+            >
+              {monitorSinks.map((s) => (
+                <MenuItem key={s.sink_id} value={s.sink_id}>
+                  {s.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
 
         <Divider orientation="vertical" flexItem />
 

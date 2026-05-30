@@ -16,8 +16,11 @@ WebSocket message types (client → server):
     delete_contact    — {"type": "delete_contact", "callsign": str}
     set_service_mode  — {"type": "set_service_mode", "service": "GMRS" | "FRS"}
     set_listen_only   — {"type": "set_listen_only", "listen_only": bool}
+    list_input_devices — {"type": "list_input_devices"}
+    set_input_device  — {"type": "set_input_device", "input_device": "system_monitor"|int|-1,
+                          "system_monitor_sink"?: str}
     set_config        — {"type": "set_config", "filter_profanity"?: bool,
-                          "fuzzy_callsign"?: bool, "system_monitor_sink"?: str}
+                          "fuzzy_callsign"?: bool}
     set_spectro_config — {"type": "set_spectro_config", "colormap"?: str,
                           "freq_range"?: "voice" | "full",
                           "time_window_s"?: int}
@@ -50,6 +53,11 @@ WebSocket message types (server → client):
                           "license_city": str, "gmrs_callsign": str, "ham_callsign": str}
     verify_all_complete — {"type": "verify_all_complete"}
     online_status     — {"type": "online_status", "online": bool}
+    input_devices     — {"type": "input_devices",
+                          "devices": [{"label": str, "id": str|int},...],
+                          "monitor_sinks": [{"label": str, "sink_id": str},...],
+                          "current_input_device": str|int,
+                          "current_monitor_sink": str}
     session_attendance — {"type": "session_attendance", "stations": [...]}
     journals          — {"type": "journals", "journals": [...]}
     journal_result    — {"type": "journal_result", "title": str, "summary": str,
@@ -74,6 +82,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 from backend.ai.gemini_client import GeminiError
 from backend.ai.gemini_client import generate_journal as _gemini_generate
+from backend.audio.capture import enumerate_monitor_sources
 from backend.audio.spectro_task import SpectroTask
 from backend.config import ServerConfig
 from backend.constants import normalize_service, utc_now_iso
@@ -485,6 +494,8 @@ def _build_status() -> dict:
         "station_location": (_config.location if _config else ""),
         "gemini_api_key_set": bool(_config and _config.gemini_api_key),
         "journals_dir": str(_config.journals_dir) if _config else "/data/journals",
+        "input_device": (_config.input_device if _config else -1),
+        "system_monitor_sink": (_config.system_monitor_sink if _config else ""),
     }
 
 
@@ -994,11 +1005,62 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                         _stt_worker.pause()
                 await _manager.broadcast(_build_status())
 
+            elif msg_type == "list_input_devices":
+                import sounddevice as sd
+                devices = [{"label": "System Default (microphone)", "id": -1}]
+                try:
+                    for i, dev in enumerate(sd.query_devices()):
+                        if dev.get("max_input_channels", 0) > 0:
+                            devices.append({"label": dev["name"], "id": i})
+                except Exception:
+                    pass
+                devices.append({"label": "System Audio Output (loopback)", "id": "system_monitor"})
+                monitor_sinks = [
+                    {"label": label, "sink_id": sink_id}
+                    for label, sink_id in enumerate_monitor_sources()
+                ]
+                await _manager.send_to(ws, {
+                    "type": "input_devices",
+                    "devices": devices,
+                    "monitor_sinks": monitor_sinks,
+                    "current_input_device": _config.input_device if _config else -1,
+                    "current_monitor_sink": _config.system_monitor_sink if _config else "",
+                })
+
+            elif msg_type == "set_input_device":
+                global _stt_worker
+                if _config is None:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Config not loaded."})
+                    continue
+                new_device = data.get("input_device", -1)
+                new_sink = str(data.get("system_monitor_sink") or "").strip()
+                _config["input_device"] = new_device
+                _config["system_monitor_sink"] = new_sink
+                _config.save()
+                # Restart STT worker with new audio source.
+                if _stt_worker is not None:
+                    _stt_worker.stop()
+                    await _stt_worker.join()
+                _stt_worker = STTWorker(
+                    out_queue=_stt_out_queue,
+                    input_device=new_device if new_device not in (-1, None) else None,
+                    whisper_model=_config.whisper_model,
+                    vad_threshold=_config.vad_threshold,
+                    system_monitor_sink=new_sink,
+                    on_audio_level=_on_stt_audio_level,
+                    on_audio_chunk=_audio_chunk_fanout,
+                    on_capture_event=_on_stt_capture_event,
+                    on_status=_on_stt_status,
+                    on_error=_on_stt_error,
+                )
+                _stt_worker.start()
+                await _manager.broadcast(_build_status())
+
             elif msg_type == "set_config":
                 if _config is None:
                     await _manager.send_to(ws, {"type": "error", "detail": "Config not loaded."})
                     continue
-                allowed_keys = {"filter_profanity", "fuzzy_callsign", "system_monitor_sink"}
+                allowed_keys = {"filter_profanity", "fuzzy_callsign"}
                 for key in allowed_keys:
                     if key in data:
                         _config[key] = data[key]
