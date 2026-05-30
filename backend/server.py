@@ -4,15 +4,23 @@ Wires together: STTWorker, TTSSynthesizer, ContactsStore, ConnectionManager.
 All clients receive broadcasts; TX messages are queued to the audio pipeline.
 
 WebSocket message types (client → server):
-    tx_message   — {"type": "tx_message", "callsign": str, "text": str}
-    add_contact  — {"type": "add_contact", "callsign": str, ...contact fields...}
+    tx_message      — {"type": "tx_message", "callsign": str, "text": str}
+    add_contact     — {"type": "add_contact", "callsign": str, ...contact fields...}
+    enroll_speaker  — {"type": "enroll_speaker", "callsign": str, "name"?: str,
+                        "utterance_id"?: str, "cluster_label"?: str}
+    reset_speaker   — {"type": "reset_speaker", "callsign": str, "name"?: str}
 
 WebSocket message types (server → client):
-    status       — {"type": "status", "radio_connected": bool, ...}
-    contacts     — {"type": "contacts", "contacts": [...]}
-    rx_message   — {"type": "rx_message", "utterance_id": str, "text": str, "partial": bool}
-    tx_status    — {"type": "tx_status", "status": "transmitting" | "idle"}
-    error        — {"type": "error", "detail": str}
+    status           — {"type": "status", "radio_connected": bool, ...}
+    contacts         — {"type": "contacts", "contacts": [...]}
+    rx_message       — {"type": "rx_message", "utterance_id": str, "text": str,
+                         "partial": bool, "speaker_callsign"?: str,
+                         "speaker_name"?: str, "cluster_label"?: str}
+    tx_status        — {"type": "tx_status", "status": "transmitting" | "idle"}
+    speaker_enrolled — {"type": "speaker_enrolled", "callsign": str, "name": str,
+                         "sample_count": int}
+    speaker_reset    — {"type": "speaker_reset", "callsign": str}
+    error            — {"type": "error", "detail": str}
 """
 from __future__ import annotations
 
@@ -47,6 +55,13 @@ _config: ServerConfig | None = None
 _contacts_store: ContactsStore | None = None
 _stt_worker: STTWorker | None = None
 _synthesizer: TTSSynthesizer | None = None
+
+# Speaker ID singletons
+_speaker_embedder: Any = None
+_voiceprint_store: Any = None
+_unknown_clusterer: Any = None
+_recent_embeddings: dict[str, Any] = {}
+_RECENT_EMBEDDINGS_MAX = 20
 
 # Queues
 _stt_out_queue: asyncio.Queue = asyncio.Queue()
@@ -140,15 +155,43 @@ def _on_stt_capture_event(event: str) -> None:
 
 async def _rx_pump() -> None:
     """Drain the STT output queue and broadcast rx_message frames."""
-    global _stt_out_queue
+    global _stt_out_queue, _recent_embeddings
     while True:
         try:
             result = await _stt_out_queue.get()
+            utterance_id = result.get("utterance_id")
+            partial = result.get("partial", False)
+            embedding = result.get("embedding")
+
+            speaker_callsign: str | None = None
+            speaker_name: str | None = None
+            cluster_label: str | None = None
+
+            if embedding is not None and not partial:
+                if utterance_id is not None:
+                    _recent_embeddings[utterance_id] = embedding
+                    if len(_recent_embeddings) > _RECENT_EMBEDDINGS_MAX:
+                        oldest = next(iter(_recent_embeddings))
+                        del _recent_embeddings[oldest]
+
+                if _voiceprint_store is not None:
+                    callsign, name, _score = _voiceprint_store.best_match(
+                        embedding, _config.speaker_match_threshold if _config else 0.75
+                    )
+                    if callsign is not None:
+                        speaker_callsign = callsign
+                        speaker_name = name
+                    elif _unknown_clusterer is not None:
+                        cluster_label = _unknown_clusterer.assign(embedding)
+
             await _manager.broadcast({
                 "type": "rx_message",
-                "utterance_id": result.get("utterance_id"),
+                "utterance_id": utterance_id,
                 "text": result.get("text", ""),
-                "partial": result.get("partial", False),
+                "partial": partial,
+                "speaker_callsign": speaker_callsign,
+                "speaker_name": speaker_name,
+                "cluster_label": cluster_label,
             })
         except asyncio.CancelledError:
             break
@@ -281,6 +324,7 @@ async def _lifespan(app: FastAPI):
     global _config, _contacts_store, _stt_worker, _synthesizer
     global _stt_out_queue, _tx_queue, _tts_event_queue, _background_tasks
     global _audio_level, _radio_error, _channel_clear, _last_id_time, _has_transmitted
+    global _speaker_embedder, _voiceprint_store, _unknown_clusterer, _recent_embeddings
 
     # --- startup -----------------------------------------------------------
     _config = ServerConfig.load()
@@ -303,12 +347,34 @@ async def _lifespan(app: FastAPI):
     _last_id_time = None
     _has_transmitted = False
 
+    # Speaker ID setup — optional; continues without it if model or deps are missing.
+    _recent_embeddings = {}
+    try:
+        from backend.speaker.embedder import SpeakerEmbedder
+        from backend.speaker.voiceprints import VoiceprintStore
+        from backend.speaker.clusterer import UnknownClusterer
+
+        _speaker_embedder = SpeakerEmbedder()
+        if _speaker_embedder.available:
+            _log.info("Speaker model found; speaker ID enabled.")
+        else:
+            _log.warning("Speaker model not found at '%s'; speaker ID disabled.", _speaker_embedder.model_dir)
+            _speaker_embedder = None
+        _voiceprint_store = VoiceprintStore(_config.voiceprints_dir)
+        _unknown_clusterer = UnknownClusterer()
+    except Exception as exc:
+        _log.warning("Speaker ID unavailable: %s", exc)
+        _speaker_embedder = None
+        _voiceprint_store = None
+        _unknown_clusterer = None
+
     _stt_worker = STTWorker(
         out_queue=_stt_out_queue,
         input_device=_config.input_device if _config.input_device != -1 else None,
         whisper_model=_config.whisper_model,
         vad_threshold=_config.vad_threshold,
         system_monitor_sink=_config.system_monitor_sink,
+        speaker_embedder=_speaker_embedder,
         on_audio_level=_on_stt_audio_level,
         on_capture_event=_on_stt_capture_event,
         on_status=_on_stt_status,
@@ -342,6 +408,11 @@ async def _lifespan(app: FastAPI):
     if _stt_worker is not None:
         _stt_worker.stop()
         await _stt_worker.join()
+
+    _speaker_embedder = None
+    _voiceprint_store = None
+    _unknown_clusterer = None
+    _recent_embeddings = {}
     _log.info("Radio-TTY server stopped.")
 
 
@@ -416,6 +487,65 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                     await _manager.broadcast({"type": "contacts", "contacts": updated})
                 except ValueError as exc:
                     await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
+
+            elif msg_type == "enroll_speaker":
+                callsign = (data.get("callsign") or "").strip()
+                if not callsign:
+                    await _manager.send_to(ws, {
+                        "type": "error",
+                        "detail": "enroll_speaker requires a non-empty 'callsign' field.",
+                    })
+                    continue
+                if _voiceprint_store is None:
+                    await _manager.send_to(ws, {
+                        "type": "error",
+                        "detail": "Speaker ID not available.",
+                    })
+                    continue
+                name = (data.get("name") or "").strip()
+                utterance_id = data.get("utterance_id")
+                cluster_label = data.get("cluster_label")
+                embeddings_to_enroll: list[Any] = []
+                if utterance_id and utterance_id in _recent_embeddings:
+                    embeddings_to_enroll = [_recent_embeddings[utterance_id]]
+                elif cluster_label and _unknown_clusterer is not None:
+                    embeddings_to_enroll = _unknown_clusterer.pop_cluster(cluster_label)
+                if not embeddings_to_enroll:
+                    await _manager.send_to(ws, {
+                        "type": "error",
+                        "detail": "No embedding found for the given utterance_id or cluster_label.",
+                    })
+                    continue
+                for emb in embeddings_to_enroll:
+                    _voiceprint_store.enroll(callsign, name, emb)
+                sample_count = _voiceprint_store.sample_count(callsign, name)
+                await _manager.broadcast({
+                    "type": "speaker_enrolled",
+                    "callsign": callsign,
+                    "name": name,
+                    "sample_count": sample_count,
+                })
+
+            elif msg_type == "reset_speaker":
+                callsign = (data.get("callsign") or "").strip()
+                if not callsign:
+                    await _manager.send_to(ws, {
+                        "type": "error",
+                        "detail": "reset_speaker requires a non-empty 'callsign' field.",
+                    })
+                    continue
+                if _voiceprint_store is None:
+                    await _manager.send_to(ws, {
+                        "type": "error",
+                        "detail": "Speaker ID not available.",
+                    })
+                    continue
+                name = (data.get("name") or "").strip()
+                _voiceprint_store.reset_contact(callsign, name)
+                await _manager.broadcast({
+                    "type": "speaker_reset",
+                    "callsign": callsign,
+                })
 
             else:
                 _log.debug("Unknown message type from client: %r", msg_type)
