@@ -31,6 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libsndfile1 \
         espeak-ng \
         espeak-ng-data \
+        pulseaudio-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy installed packages from builder

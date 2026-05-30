@@ -188,13 +188,35 @@ class PortAudioSource:
     Used when the operator has selected an explicit input device (e.g., a
     USB sound card / Signalink / Digirig), or when parec isn't available
     on the host (Windows, headless Linux without PulseAudio/PipeWire).
+
+    Captures at the device's native sample rate and resamples to the
+    requested rate when they differ (e.g. 48 kHz hardware → 16 kHz STT).
     """
 
-    def __init__(self, sample_rate, chunk_samples, device=None):
+    def __init__(self, sample_rate: int, chunk_samples: int, device=None):
+        import math
+
         self.sample_rate = sample_rate
         self.chunk_samples = chunk_samples
+
+        # Discover the device's native rate.
+        try:
+            dev_idx = device if device is not None else sd.default.device[0]
+            native_rate = int(sd.query_devices(dev_idx)["default_samplerate"])
+        except Exception:
+            native_rate = sample_rate
+
+        gcd = math.gcd(sample_rate, native_rate)
+        self._up = sample_rate // gcd
+        self._down = native_rate // gcd
+        self._do_resample = native_rate != sample_rate
+        # How many native-rate frames we need to produce exactly chunk_samples
+        # after resampling.  round() keeps the ratio exact for common pairs
+        # (48000→16000 = 3:1, 44100→16000 rounds to 1411 native frames).
+        self._native_chunks = round(chunk_samples * native_rate / sample_rate)
+
         self.stream = sd.InputStream(
-            samplerate=sample_rate,
+            samplerate=native_rate,
             channels=1,
             dtype="float32",
             device=device,
@@ -202,8 +224,17 @@ class PortAudioSource:
         self.stream.start()
 
     def read(self) -> np.ndarray:
-        data, _ = self.stream.read(self.chunk_samples)
-        return data[:, 0].copy()
+        data, _ = self.stream.read(self._native_chunks)
+        chunk = data[:, 0].copy()
+        if self._do_resample:
+            from scipy.signal import resample_poly
+            chunk = resample_poly(chunk, self._up, self._down).astype(np.float32)
+            # Trim or zero-pad to guarantee exactly chunk_samples frames.
+            if len(chunk) > self.chunk_samples:
+                chunk = chunk[: self.chunk_samples]
+            elif len(chunk) < self.chunk_samples:
+                chunk = np.pad(chunk, (0, self.chunk_samples - len(chunk)))
+        return chunk
 
     def close(self) -> None:
         try:
