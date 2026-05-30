@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useOperator } from './hooks/useOperator';
 import { useWebSocket } from './hooks/useWebSocket';
-import type { WsMessage, StatusMsg, TxMessagePayload } from './types/ws';
+import type { WsMessage, StatusMsg, TxMessagePayload, Contact } from './types/ws';
 import { OperatorModal } from './components/OperatorModal/OperatorModal';
 import { TopBar } from './components/TopBar/TopBar';
 import { ChatDisplay } from './components/ChatDisplay/ChatDisplay';
@@ -26,6 +26,7 @@ export default function App() {
   const [messages, setMessages] = useState<ChatEntry[]>([]);
   const [radioStatus, setRadioStatus] = useState<StatusMsg | null>(null);
   const [transmitting, setTransmitting] = useState(false);
+  const [contacts, setContacts] = useState<Contact[]>([]);
 
   const handleWsMessage = useCallback((msg: WsMessage) => {
     switch (msg.type) {
@@ -63,14 +64,14 @@ export default function App() {
         break;
 
       case 'contacts':
-        // Contacts stored for future use; not rendered in chat
+        setContacts(msg.contacts);
         break;
     }
   }, []);
 
   const { send, connected } = useWebSocket({ onMessage: handleWsMessage });
 
-  function handleSend(text: string) {
+  function handleSend(text: string, targetCall: string, targetName: string) {
     if (!operator) {
       setShowModal(true);
       return;
@@ -80,6 +81,8 @@ export default function App() {
       text,
       operator: operator.operatorName,
       callsign: operator.callsign,
+      target_call: targetCall,
+      target_name: targetName,
     };
     send(payload);
     // Optimistically show outbound message
@@ -120,7 +123,7 @@ export default function App() {
 
       <StatusRow status={radioStatus} />
 
-      <MessageInput transmitting={transmitting} onSend={handleSend} />
+      <MessageInput transmitting={transmitting} contacts={contacts} onSend={handleSend} />
     </div>
   );
 }

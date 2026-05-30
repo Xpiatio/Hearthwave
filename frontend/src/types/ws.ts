@@ -46,4 +46,6 @@ export interface TxMessagePayload {
   text: string;
   operator: string;
   callsign: string;
+  target_call?: string;
+  target_name?: string;
 }

@@ -1,26 +1,28 @@
 import { useState, useRef } from 'react';
+import type { Contact } from '../../types/ws';
 import './MessageInput.css';
 
 interface Props {
   transmitting: boolean;
-  onSend: (text: string) => void;
+  contacts: Contact[];
+  onSend: (text: string, targetCall: string, targetName: string) => void;
 }
 
-export function MessageInput({ transmitting, onSend }: Props) {
+export function MessageInput({ transmitting, contacts, onSend }: Props) {
   const [draft, setDraft] = useState('');
+  const [targetCallsign, setTargetCallsign] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   function handleSend() {
     const text = draft.trim();
     if (!text || transmitting) return;
-    onSend(text);
+    const contact = contacts.find((c) => c.callsign === targetCallsign);
+    onSend(text, contact ? contact.callsign : 'ALL', contact ? contact.name : '');
     setDraft('');
     textareaRef.current?.focus();
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    // Ctrl+Enter or Cmd+Enter sends on desktop; plain Enter on touchscreen
-    // Use shift+Enter for newline on physical keyboards
     if (e.key === 'Enter' && !e.shiftKey && (e.ctrlKey || e.metaKey || e.nativeEvent.isComposing === false)) {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
@@ -28,6 +30,8 @@ export function MessageInput({ transmitting, onSend }: Props) {
       }
     }
   }
+
+  const selectedContact = contacts.find((c) => c.callsign === targetCallsign);
 
   return (
     <div className="message-input-wrapper">
@@ -43,6 +47,34 @@ export function MessageInput({ transmitting, onSend }: Props) {
       )}
 
       <div className="message-input-area">
+        <div className="message-target-row">
+          <label htmlFor="message-target-select" className="message-target-label">
+            To:
+          </label>
+          <select
+            id="message-target-select"
+            className="message-target-select"
+            value={targetCallsign}
+            onChange={(e) => setTargetCallsign(e.target.value)}
+            disabled={transmitting}
+          >
+            <option value="">ALL — Broadcast</option>
+            {contacts.map((c) => (
+              <option key={c.callsign} value={c.callsign}>
+                {c.callsign}{c.name ? ` — ${c.name}` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {selectedContact && (
+          <div className="message-target-badge" aria-live="polite">
+            Calling {selectedContact.callsign}
+            {selectedContact.name ? ` (${selectedContact.name})` : ''}
+            {selectedContact.location ? ` · ${selectedContact.location}` : ''}
+          </div>
+        )}
+
         <label htmlFor="message-textarea" className="message-input-label">
           Type Your Message Below:
         </label>
