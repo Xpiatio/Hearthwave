@@ -48,6 +48,12 @@ export interface StatusMsg {
   spectro_colormap?: string;
   spectro_freq_range?: string;
   spectro_time_window_s?: number;
+  // Admin-editable identity fields
+  station_callsign?: string;
+  station_name?: string;
+  station_location?: string;
+  gemini_api_key_set?: boolean;
+  journals_dir?: string;
 }
 
 export interface ContactsMsg {

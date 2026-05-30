@@ -27,6 +27,7 @@ import { QuickMessages } from './components/QuickMessages/QuickMessages';
 import { ContactsDialog } from './components/ContactsDialog/ContactsDialog';
 import { PendingStationsBar } from './components/PendingStationsBar/PendingStationsBar';
 import { ConfigPanel } from './components/ConfigPanel/ConfigPanel';
+import { AdminPanel } from './components/AdminPanel/AdminPanel';
 import './App.css';
 
 let entryCounter = 0;
@@ -77,26 +78,17 @@ export default function App() {
   const [showJournal, setShowJournal] = useState(false);
   const [showContacts, setShowContacts] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
 
   // Theme
   const [darkMode, setDarkMode] = useState(
     () => localStorage.getItem('radio_tty_dark_mode') === 'true'
   );
-  const [touchMode, setTouchMode] = useState(
-    () => localStorage.getItem('radio_tty_touch_mode') === 'true'
-  );
-  const theme = useMemo(() => makeTheme(darkMode, touchMode), [darkMode, touchMode]);
+  const theme = useMemo(() => makeTheme(darkMode), [darkMode]);
 
   function handleToggleDark() {
     setDarkMode((v) => {
       localStorage.setItem('radio_tty_dark_mode', String(!v));
-      return !v;
-    });
-  }
-
-  function handleToggleTouch() {
-    setTouchMode((v) => {
-      localStorage.setItem('radio_tty_touch_mode', String(!v));
       return !v;
     });
   }
@@ -126,6 +118,15 @@ export default function App() {
   const [spectroColormap, setSpectroColormap] = useState<'viridis' | 'grayscale'>('viridis');
   const [spectroFreqRange, setSpectroFreqRange] = useState<'voice' | 'full'>('full');
   const [spectroTimeWindowS, setSpectroTimeWindowS] = useState(30);
+
+  // Admin config (synced from server status message)
+  const [adminConfig, setAdminConfig] = useState({
+    stationCallsign: 'N0CALL',
+    stationName: '',
+    stationLocation: '',
+    geminiApiKeySet: false,
+    journalsDir: '/data/journals',
+  });
 
   const handleWsMessage = useCallback((msg: WsMessage) => {
     switch (msg.type) {
@@ -205,6 +206,13 @@ export default function App() {
         if (msg.spectro_freq_range === 'voice' || msg.spectro_freq_range === 'full')
           setSpectroFreqRange(msg.spectro_freq_range);
         if (msg.spectro_time_window_s !== undefined) setSpectroTimeWindowS(msg.spectro_time_window_s);
+        setAdminConfig((prev) => ({
+          stationCallsign: msg.station_callsign ?? prev.stationCallsign,
+          stationName: msg.station_name ?? prev.stationName,
+          stationLocation: msg.station_location ?? prev.stationLocation,
+          geminiApiKeySet: msg.gemini_api_key_set ?? prev.geminiApiKeySet,
+          journalsDir: msg.journals_dir ?? prev.journalsDir,
+        }));
         break;
 
       case 'tx_status':
@@ -400,6 +408,20 @@ export default function App() {
     send({ type: 'set_spectro_config', time_window_s: s });
   }
 
+  function handleAdminSave(values: {
+    callsign: string;
+    name: string;
+    location: string;
+    gemini_api_key: string;
+    journals_dir: string;
+  }) {
+    send({ type: 'set_admin_config', ...values });
+  }
+
+  function handleClearChat() {
+    setMessages([]);
+  }
+
   // Add pending station → open contacts dialog pre-filled
   function handleAddPending(station: PendingStation) {
     setPendingPrefilledCallsign(station.callsign);
@@ -458,12 +480,13 @@ export default function App() {
           }}
           showConfig={showConfig}
           onToggleConfig={() => setShowConfig((v) => !v)}
+          showAdmin={showAdmin}
+          onToggleAdmin={() => setShowAdmin((v) => !v)}
           darkMode={darkMode}
           onToggleDark={handleToggleDark}
-          touchMode={touchMode}
-          onToggleTouch={handleToggleTouch}
           onToggleServiceMode={handleToggleServiceMode}
           onToggleListenOnly={handleToggleListenOnly}
+          onClearChat={handleClearChat}
         />
 
         {showConfig && (
@@ -563,6 +586,13 @@ export default function App() {
           verifyAllComplete={verifyAllComplete}
           onSend={send}
           onVerifyAllDismiss={() => setVerifyAllComplete(false)}
+        />
+
+        <AdminPanel
+          open={showAdmin}
+          onClose={() => setShowAdmin(false)}
+          config={adminConfig}
+          onSave={handleAdminSave}
         />
       </Box>
     </ThemeProvider>

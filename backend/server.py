@@ -21,6 +21,8 @@ WebSocket message types (client → server):
     set_spectro_config — {"type": "set_spectro_config", "colormap"?: str,
                           "freq_range"?: "voice" | "full",
                           "time_window_s"?: int}
+    set_admin_config  — {"type": "set_admin_config", "callsign"?: str, "name"?: str,
+                          "location"?: str, "gemini_api_key"?: str, "journals_dir"?: str}
     set_monitor       — {"type": "set_monitor", "enabled": bool}
     clear_attendance  — {"type": "clear_attendance"}
     list_journals     — {"type": "list_journals"}
@@ -475,6 +477,12 @@ def _build_status() -> dict:
         "spectro_colormap": (_config.spectro_colormap if _config else "viridis"),
         "spectro_freq_range": (_config.spectro_freq_range if _config else "full"),
         "spectro_time_window_s": (_config.spectro_time_window_s if _config else 30),
+        # Admin-editable identity fields
+        "station_callsign": (_config.callsign if _config else "N0CALL"),
+        "station_name": (_config.name if _config else ""),
+        "station_location": (_config.location if _config else ""),
+        "gemini_api_key_set": bool(_config and _config.gemini_api_key),
+        "journals_dir": str(_config.journals_dir) if _config else "/data/journals",
     }
 
 
@@ -998,6 +1006,27 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                         _spectro.set_freq_range(freq_range)
                 if "time_window_s" in data:
                     _config["spectro_time_window_s"] = int(data["time_window_s"])
+                _config.save()
+                await _manager.broadcast(_build_status())
+
+            elif msg_type == "set_admin_config":
+                if _config is None:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Config not loaded."})
+                    continue
+                if "callsign" in data:
+                    _config["callsign"] = str(data["callsign"]).strip().upper() or "N0CALL"
+                if "name" in data:
+                    _config["name"] = str(data["name"]).strip()
+                if "location" in data:
+                    _config["location"] = str(data["location"]).strip()
+                if "gemini_api_key" in data:
+                    key = str(data["gemini_api_key"]).strip()
+                    if key:
+                        _config["gemini_api_key"] = key
+                if "journals_dir" in data:
+                    jdir = str(data["journals_dir"]).strip()
+                    if jdir:
+                        _config["journals_dir"] = jdir
                 _config.save()
                 await _manager.broadcast(_build_status())
 
