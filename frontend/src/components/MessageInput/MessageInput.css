@@ -21,6 +21,50 @@
   text-align: center;
 }
 
+/* Target selector row */
+.message-target-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.message-target-label {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.message-target-select {
+  flex: 1;
+  font-size: 1rem;
+  font-family: inherit;
+  padding: 0.4rem 0.6rem;
+  border: 2px solid var(--color-text);
+  border-radius: 4px;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.message-target-select:focus {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.message-target-select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.message-target-badge {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-accent);
+  padding: 0.2rem 0;
+  letter-spacing: 0.02em;
+}
+
 /* Label + textarea block */
 .message-input-area {
   display: flex;
