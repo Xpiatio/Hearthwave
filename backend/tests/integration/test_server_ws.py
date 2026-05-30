@@ -75,8 +75,9 @@ def listen_only_client(tmp_path):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _drain_initial(ws, count: int = 3):
-    """Consume the status + contacts + session_attendance frames every new connection receives."""
+def _drain_initial(ws, count: int = 4):
+    """Consume the status + contacts + session_attendance + pending_stations frames
+    every new connection receives."""
     return [ws.receive_json() for _ in range(count)]
 
 
@@ -167,6 +168,34 @@ class TestTxMessageFlow:
             assert msg1 == {"type": "tx_status", "status": "transmitting"}
             msg2 = ws.receive_json()
             assert msg2 == {"type": "tx_status", "status": "idle"}
+
+    def test_stt_worker_paused_during_tx_and_resumed_after(self, tmp_path):
+        """STTWorker.pause() must be called before synthesis and .resume()
+        after, so the radio receiver doesn't transcribe TTS audio that bleeds
+        back through the radio while transmitting."""
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        pause_order = []
+        mock_stt.pause.side_effect = lambda: pause_order.append("pause")
+        mock_tts.synthesize.side_effect = (
+            lambda *a, **kw: pause_order.append("synth") or MagicMock()
+        )
+        mock_stt.resume.side_effect = lambda: pause_order.append("resume")
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.make_ptt", return_value=MagicMock()),
+            patch("piper.PiperVoice"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect("/ws") as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "tx_message", "callsign": "W5TST", "text": "hello"})
+                    ws.receive_json()  # transmitting
+                    ws.receive_json()  # idle
+        assert pause_order.index("pause") < pause_order.index("synth")
+        assert pause_order.index("synth") < pause_order.index("resume")
 
     def test_tx_broadcast_reaches_second_client(self, client):
         with (

@@ -1,6 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Button,
+  Box,
+} from '@mui/material';
 import type { Operator } from '../../hooks/useOperator';
-import './OperatorModal.css';
 
 interface Props {
   initial: Operator | null;
@@ -24,83 +32,79 @@ export function OperatorModal({ initial, onSave, onClose }: Props) {
     onSave({ operatorName: operatorName.trim(), callsign: callsign.trim(), location: location.trim() });
   }
 
-  function handleBackdropClick(e: React.MouseEvent<HTMLDivElement>) {
-    if (e.target === e.currentTarget && onClose) {
-      onClose();
-    }
-  }
+  const canSave = operatorName.trim().length > 0 && callsign.trim().length > 0;
 
   return (
-    <div
-      className="operator-modal-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="operator-modal-title"
-      onClick={handleBackdropClick}
+    <Dialog
+      open
+      fullWidth
+      maxWidth="sm"
+      aria-labelledby="operator-dialog-title"
+      onClose={(_event, reason) => {
+        if (reason === 'backdropClick' || reason === 'escapeKeyDown') {
+          if (onClose) onClose();
+        }
+      }}
     >
-      <div className="operator-modal-panel">
-        <h2 id="operator-modal-title" className="operator-modal-title">
-          Operator Profile
-        </h2>
+      <DialogTitle id="operator-dialog-title">Operator Profile</DialogTitle>
 
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="operator-modal-field">
-            <label htmlFor="op-name" className="operator-modal-label">
-              Operator Name <span aria-hidden="true">*</span>
-            </label>
-            <input
-              id="op-name"
-              ref={firstInputRef}
-              type="text"
-              className="operator-modal-input"
-              value={operatorName}
-              onChange={(e) => setOperatorName(e.target.value)}
-              required
-              autoComplete="name"
-              placeholder="e.g. Grandma"
-            />
-          </div>
+      <DialogContent>
+        <Box
+          component="form"
+          id="operator-form"
+          onSubmit={handleSubmit}
+          noValidate
+          sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 0.5 }}
+        >
+          <TextField
+            inputRef={firstInputRef}
+            id="op-name"
+            label="Operator Name *"
+            value={operatorName}
+            onChange={(e) => setOperatorName(e.target.value)}
+            required
+            autoComplete="name"
+            placeholder="e.g. Grandma"
+            fullWidth
+          />
+          <TextField
+            id="op-callsign"
+            label="FCC Call Sign *"
+            value={callsign}
+            onChange={(e) => setCallsign(e.target.value.toUpperCase())}
+            required
+            autoComplete="off"
+            placeholder="e.g. WRFN123"
+            fullWidth
+            slotProps={{ htmlInput: { style: { textTransform: 'uppercase' } } }}
+          />
+          <TextField
+            id="op-location"
+            label="Location"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            autoComplete="off"
+            placeholder="e.g. Home Base"
+            fullWidth
+          />
+        </Box>
+      </DialogContent>
 
-          <div className="operator-modal-field">
-            <label htmlFor="op-callsign" className="operator-modal-label">
-              FCC Call Sign <span aria-hidden="true">*</span>
-            </label>
-            <input
-              id="op-callsign"
-              type="text"
-              className="operator-modal-input"
-              value={callsign}
-              onChange={(e) => setCallsign(e.target.value.toUpperCase())}
-              required
-              autoComplete="off"
-              placeholder="e.g. WRFN123"
-            />
-          </div>
-
-          <div className="operator-modal-field">
-            <label htmlFor="op-location" className="operator-modal-label">
-              Location
-            </label>
-            <input
-              id="op-location"
-              type="text"
-              className="operator-modal-input"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              autoComplete="off"
-              placeholder="e.g. Home Base"
-            />
-          </div>
-
-          <button
-            type="submit"
-            className="operator-modal-save-btn"
-            disabled={!operatorName.trim() || !callsign.trim()}
-          >
-            Save Profile
-          </button>
-        </form>
-      </div>
-    </div>
+      <DialogActions>
+        {onClose && (
+          <Button onClick={onClose} color="inherit">
+            Cancel
+          </Button>
+        )}
+        <Button
+          type="submit"
+          form="operator-form"
+          variant="contained"
+          disabled={!canSave}
+        >
+          Save Profile
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }

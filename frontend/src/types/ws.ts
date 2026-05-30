@@ -1,7 +1,13 @@
 export interface Contact {
-  name: string;
   callsign: string;
+  name?: string;
   location?: string;
+  gmrs_callsign?: string;
+  ham_callsign?: string;
+  verified?: boolean;
+  verified_at?: string;
+  fcc_name?: string;
+  fcc_location?: string;
 }
 
 export interface RxMessageMsg {
@@ -34,6 +40,14 @@ export interface StatusMsg {
   radio_connected: boolean;
   volume_ok: boolean;
   channel_clear: boolean;
+  monitor_enabled?: boolean;
+  listen_only?: boolean;
+  service_mode?: string;
+  filter_profanity?: boolean;
+  fuzzy_callsign?: boolean;
+  spectro_colormap?: string;
+  spectro_freq_range?: string;
+  spectro_time_window_s?: number;
 }
 
 export interface ContactsMsg {
@@ -103,10 +117,55 @@ export interface JournalDeletedMsg {
   file_path: string;
 }
 
+// FCC & callsign features (server → client)
+export interface PendingStationsMsg {
+  type: 'pending_stations';
+  stations: Array<{ callsign: string; name: string; location: string }>;
+}
+
+export interface ContactAutoAddedMsg {
+  type: 'contact_auto_added';
+  callsign: string;
+  name: string;
+}
+
+export interface FccLookupResultMsg {
+  type: 'fcc_lookup_result';
+  callsign: string;
+  status: string;
+  license_name: string;
+  license_location: string;
+  license_city: string;
+  gmrs_callsign: string;
+  ham_callsign: string;
+}
+
+export interface VerifyAllCompleteMsg {
+  type: 'verify_all_complete';
+}
+
+export interface OnlineStatusMsg {
+  type: 'online_status';
+  online: boolean;
+}
+
+// Placeholder token prompt (server → client)
+export interface PromptTokenMsg {
+  type: 'prompt_token';
+  tokens: string[];
+  original_text: string;
+  target_call: string;
+  target_name: string;
+  operator: string;
+  callsign: string;
+}
+
 // Spectrogram
 export interface SpectrogramRowMsg {
   type: 'spectrogram_row';
   row: number[];
+  vad?: boolean;
+  squelch?: boolean;
 }
 
 export type WsMessage =
@@ -123,6 +182,12 @@ export type WsMessage =
   | JournalErrorMsg
   | JournalSavedMsg
   | JournalDeletedMsg
+  | PromptTokenMsg
+  | PendingStationsMsg
+  | ContactAutoAddedMsg
+  | FccLookupResultMsg
+  | VerifyAllCompleteMsg
+  | OnlineStatusMsg
   | SpectrogramRowMsg;
 
 export interface TxMessagePayload {

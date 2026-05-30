@@ -37,5 +37,15 @@ def invalidate():
     _cache["checked_at"] = 0.0
 
 
+def is_online_cached() -> bool | None:
+    """Return the most-recently-cached online verdict without probing.
+
+    Returns None when no probe has run yet. Use this when you need the
+    online state instantly (e.g. on client connect) and can tolerate a
+    brief period of unknowing at startup.
+    """
+    return _cache["value"]
+
+
 def reset_cache():
     invalidate()

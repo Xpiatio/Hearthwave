@@ -1,4 +1,12 @@
-import './StatusRow.css';
+import { Box, Paper, Typography } from '@mui/material';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import CancelIcon from '@mui/icons-material/Cancel';
+import HelpOutlinedIcon from '@mui/icons-material/HelpOutlined';
+import VolumeUpIcon from '@mui/icons-material/VolumeUp';
+import VolumeOffIcon from '@mui/icons-material/VolumeOff';
+import WifiIcon from '@mui/icons-material/Wifi';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import type { ElementType } from 'react';
 import type { StatusMsg } from '../../types/ws';
 
 interface Props {
@@ -6,22 +14,22 @@ interface Props {
 }
 
 interface Tile {
-  icon: string;
+  Icon: ElementType;
   label: string;
-  ok: boolean | null;
+  state: 'ok' | 'error' | 'unknown';
   ariaLabel: string;
 }
 
 export function StatusRow({ status }: Props) {
   const tiles: Tile[] = [
     {
-      icon: status === null ? '❓' : status.radio_connected ? '✅' : '❌',
+      Icon: status === null ? HelpOutlinedIcon : status.radio_connected ? CheckCircleIcon : CancelIcon,
       label: status === null
         ? 'Radio Cable: Checking...'
         : status.radio_connected
           ? 'Radio Cable Connected'
           : 'Radio Cable Disconnected',
-      ok: status === null ? null : status.radio_connected,
+      state: status === null ? 'unknown' : status.radio_connected ? 'ok' : 'error',
       ariaLabel: status === null
         ? 'Radio cable status: checking'
         : status.radio_connected
@@ -29,13 +37,13 @@ export function StatusRow({ status }: Props) {
           : 'Radio cable: disconnected',
     },
     {
-      icon: status === null ? '❓' : status.volume_ok ? '🔊' : '🔇',
+      Icon: status === null ? HelpOutlinedIcon : status.volume_ok ? VolumeUpIcon : VolumeOffIcon,
       label: status === null
         ? 'Radio Volume: Checking...'
         : status.volume_ok
           ? 'Radio Volume is Perfect'
           : 'Radio Volume Needs Adjustment',
-      ok: status === null ? null : status.volume_ok,
+      state: status === null ? 'unknown' : status.volume_ok ? 'ok' : 'error',
       ariaLabel: status === null
         ? 'Radio volume status: checking'
         : status.volume_ok
@@ -43,13 +51,13 @@ export function StatusRow({ status }: Props) {
           : 'Radio volume: needs adjustment',
     },
     {
-      icon: status === null ? '❓' : status.channel_clear ? '📡' : '⚠️',
+      Icon: status === null ? HelpOutlinedIcon : status.channel_clear ? WifiIcon : WarningAmberIcon,
       label: status === null
         ? 'Channel: Checking...'
         : status.channel_clear
           ? 'Channel: Clear'
           : 'Channel: Busy',
-      ok: status === null ? null : status.channel_clear,
+      state: status === null ? 'unknown' : status.channel_clear ? 'ok' : 'error',
       ariaLabel: status === null
         ? 'Channel status: checking'
         : status.channel_clear
@@ -58,18 +66,51 @@ export function StatusRow({ status }: Props) {
     },
   ];
 
+  const borderColor: Record<Tile['state'], string> = {
+    ok: 'success.main',
+    error: 'error.main',
+    unknown: 'text.disabled',
+  };
+
+  const iconColor: Record<Tile['state'], 'success' | 'error' | 'disabled'> = {
+    ok: 'success',
+    error: 'error',
+    unknown: 'disabled',
+  };
+
   return (
-    <div className="status-row" role="status" aria-label="Radio hardware status">
+    <Box
+      sx={{ display: 'flex', gap: 1, px: 1, py: 0.75, bgcolor: 'background.paper' }}
+      role="status"
+      aria-label="Radio hardware status"
+    >
       {tiles.map((tile) => (
-        <div
+        <Paper
           key={tile.ariaLabel}
-          className={`status-tile ${tile.ok === true ? 'status-tile--ok' : tile.ok === false ? 'status-tile--error' : 'status-tile--unknown'}`}
+          elevation={0}
+          variant="outlined"
           aria-label={tile.ariaLabel}
+          sx={{
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            px: 1.5,
+            py: 1,
+            borderLeftWidth: 3,
+            borderLeftColor: borderColor[tile.state],
+            borderRadius: 1,
+          }}
         >
-          <span className="status-tile-icon" aria-hidden="true">{tile.icon}</span>
-          <span className="status-tile-label">{tile.label}</span>
-        </div>
+          <tile.Icon fontSize="small" color={iconColor[tile.state]} aria-hidden="true" />
+          <Typography
+            variant="body2"
+            sx={{ fontWeight: 600, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
+          >
+            {tile.label}
+          </Typography>
+        </Paper>
       ))}
-    </div>
+    </Box>
   );
 }

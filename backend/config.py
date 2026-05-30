@@ -149,6 +149,20 @@ class ServerConfig(dict):
         raw = self.get("journals_dir")
         return Path(raw) if raw else Path("/data/journals")
 
+    # ---- spectrogram -----------------------------------------------------
+
+    @property
+    def spectro_colormap(self) -> str:
+        return self.get("spectro_colormap", "viridis")
+
+    @property
+    def spectro_freq_range(self) -> str:
+        return self.get("spectro_freq_range", "full")
+
+    @property
+    def spectro_time_window_s(self) -> int:
+        return int(self.get("spectro_time_window_s", 30))
+
     # ---- persistence (contacts) ------------------------------------------
 
     @property

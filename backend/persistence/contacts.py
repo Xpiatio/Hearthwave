@@ -204,7 +204,7 @@ class ContactsStore:
             with open(self._path, "r", encoding="utf-8") as fh:
                 data = json.load(fh)
             if isinstance(data, list):
-                return data
+                return deduplicate_ham_cross_references(data)
             _log.warning("contacts.json did not contain a list; starting empty")
             return []
         except (json.JSONDecodeError, OSError) as exc:
@@ -282,3 +282,20 @@ class ContactsStore:
                 self._save()
                 return list(self._contacts)
         raise KeyError(f"No contact with callsign {cs!r}")
+
+    def delete_contact(self, callsign: str) -> list[dict]:
+        """Remove the contact identified by *callsign*.
+
+        Raises ``KeyError`` if no matching contact exists.
+        Persists atomically. Returns the updated list.
+        """
+        cs = normalize_callsign(callsign)
+        before = len(self._contacts)
+        self._contacts = [
+            c for c in self._contacts
+            if normalize_callsign(c.get("callsign", "")) != cs
+        ]
+        if len(self._contacts) == before:
+            raise KeyError(f"No contact with callsign {cs!r}")
+        self._save()
+        return list(self._contacts)

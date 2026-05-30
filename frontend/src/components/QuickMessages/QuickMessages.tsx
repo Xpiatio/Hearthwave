@@ -1,5 +1,21 @@
 import { useState, useEffect } from 'react';
-import './QuickMessages.css';
+import {
+  Box,
+  Button,
+  IconButton,
+  Typography,
+  TextField,
+  List,
+  ListItem,
+  ListItemText,
+  Tooltip,
+  Paper,
+} from '@mui/material';
+import SettingsIcon from '@mui/icons-material/Settings';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import DeleteIcon from '@mui/icons-material/Delete';
+import CheckIcon from '@mui/icons-material/Check';
 
 const STORAGE_KEY = 'radio_tty_quick_messages';
 const DEFAULTS = ['Standing by', 'QSL', 'Copy that', 'QSY to channel {N}', 'Good signal'];
@@ -69,61 +85,108 @@ export function QuickMessages({ operatorName, onSelect }: Props) {
     });
   }
 
+  if (editing) {
+    return (
+      <Paper square elevation={0} sx={{ borderTop: 1, borderColor: 'divider', p: 1 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>QUICK MESSAGES</Typography>
+          <Button
+            size="small"
+            variant="contained"
+            startIcon={<CheckIcon />}
+            onClick={() => setEditing(false)}
+          >
+            DONE
+          </Button>
+        </Box>
+
+        <List dense disablePadding>
+          {phrases.map((p, i) => (
+            <ListItem
+              key={i}
+              disablePadding
+              sx={{ gap: 0.5 }}
+              secondaryAction={
+                <Box sx={{ display: 'flex', gap: 0.25 }}>
+                  <IconButton size="small" onClick={() => handleMoveUp(i)} disabled={i === 0}
+                    aria-label="Move up">
+                    <ArrowUpwardIcon fontSize="small" />
+                  </IconButton>
+                  <IconButton size="small" onClick={() => handleMoveDown(i)}
+                    disabled={i === phrases.length - 1} aria-label="Move down">
+                    <ArrowDownwardIcon fontSize="small" />
+                  </IconButton>
+                  <IconButton size="small" onClick={() => handleRemove(i)} color="error"
+                    aria-label="Remove">
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Box>
+              }
+            >
+              <ListItemText
+                primary={p}
+                slotProps={{ primary: { variant: 'body2' } }}
+                sx={{ pr: 13 }}
+              />
+            </ListItem>
+          ))}
+        </List>
+
+        <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+          <TextField
+            size="small"
+            fullWidth
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+            placeholder="New phrase… use {Name} for operator name"
+            label="Add phrase"
+          />
+          <Button variant="outlined" onClick={handleAdd} disabled={!draft.trim()}>
+            ADD
+          </Button>
+        </Box>
+      </Paper>
+    );
+  }
+
   return (
-    <div className="quick-messages">
-      {editing ? (
-        <div className="quick-messages-editor">
-          <div className="quick-editor-header">
-            <span className="quick-editor-title">QUICK MESSAGES</span>
-            <button className="quick-editor-done" onClick={() => setEditing(false)}>DONE</button>
-          </div>
-          <ul className="quick-editor-list">
-            {phrases.map((p, i) => (
-              <li key={i} className="quick-editor-item">
-                <span className="quick-editor-text">{p}</span>
-                <div className="quick-editor-controls">
-                  <button onClick={() => handleMoveUp(i)} disabled={i === 0} aria-label="Move up">↑</button>
-                  <button onClick={() => handleMoveDown(i)} disabled={i === phrases.length - 1} aria-label="Move down">↓</button>
-                  <button onClick={() => handleRemove(i)} aria-label="Remove">✕</button>
-                </div>
-              </li>
-            ))}
-          </ul>
-          <div className="quick-editor-add">
-            <input
-              className="quick-editor-input"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-              placeholder="New phrase… use {Name} for operator name"
-            />
-            <button className="quick-editor-add-btn" onClick={handleAdd} disabled={!draft.trim()}>ADD</button>
-          </div>
-        </div>
-      ) : (
-        <div className="quick-messages-bar">
-          <div className="quick-buttons-scroll">
-            {phrases.map((p, i) => (
-              <button
-                key={i}
-                className="quick-phrase-btn"
-                onClick={() => handleSelect(p)}
-                title={p}
-              >
-                {p.replace(/{Name}/gi, operatorName || 'Operator')}
-              </button>
-            ))}
-          </div>
-          <button
-            className="quick-settings-btn"
+    <Paper square elevation={0} sx={{ borderTop: 1, borderColor: 'divider', px: 1, py: 0.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            flex: 1,
+            gap: 0.5,
+            overflowX: 'auto',
+            pb: 0.25,
+            '&::-webkit-scrollbar': { height: 4 },
+          }}
+        >
+          {phrases.map((p, i) => (
+            <Button
+              key={i}
+              size="small"
+              variant="outlined"
+              onClick={() => handleSelect(p)}
+              title={p}
+              sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+            >
+              {p.replace(/{Name}/gi, operatorName || 'Operator')}
+            </Button>
+          ))}
+        </Box>
+
+        <Tooltip title="Edit quick messages">
+          <IconButton
+            size="small"
             onClick={() => setEditing(true)}
             aria-label="Edit quick messages"
-            title="Edit quick messages"
           >
-            ⚙
-          </button>
-        </div>
-      )}
-    </div>
+            <SettingsIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Box>
+    </Paper>
   );
 }

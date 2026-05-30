@@ -26,9 +26,34 @@ sudo apt-get install -y --no-install-recommends \
     libportaudio2 \
     libsndfile1 \
     espeak-ng \
-    espeak-ng-data
+    espeak-ng-data \
+    curl \
+    ca-certificates
 
-# ── 2. Python virtual environment ───────────────────────────────────────────
+# Node.js 20 (LTS) via NodeSource — skip if already at v18+.
+NODE_MAJOR=$(node --version 2>/dev/null | grep -oP '(?<=v)\d+' || echo 0)
+if [ "$NODE_MAJOR" -lt 18 ]; then
+    echo "==> Installing Node.js 20 (LTS)..."
+    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+    sudo apt-get install -y nodejs
+else
+    echo "==> Node.js $(node --version) already installed, skipping."
+fi
+
+# ── 2. Frontend dependencies ─────────────────────────────────────────────────
+
+echo "==> Installing frontend npm packages (MUI, React, Vite, …)..."
+(cd frontend && npm ci)
+
+# ── 3. Docker image cache (optional but speeds up first `docker compose up`) ──
+
+if command -v docker &>/dev/null; then
+    echo "==> Pulling Docker base images..."
+    docker compose pull --quiet 2>/dev/null || true
+    docker compose -f docker-compose.yml -f docker-compose.dev.yml pull --quiet 2>/dev/null || true
+fi
+
+# ── 4. Python virtual environment ───────────────────────────────────────────
 
 echo "==> Creating Python venv at .venv/ ..."
 python3 -m venv .venv
@@ -38,7 +63,7 @@ echo "==> Installing Python packages (this will take a few minutes)..."
 pip install --upgrade pip --quiet
 pip install -r backend/requirements.txt
 
-# ── 3. Models ────────────────────────────────────────────────────────────────
+# ── 5. Models ────────────────────────────────────────────────────────────────
 
 if $MODELS; then
     echo "==> Downloading Whisper STT model (small.en, ~464 MB)..."
@@ -50,7 +75,7 @@ if $MODELS; then
     echo "      or downloaded separately — see bootstrap_models.py --help."
 fi
 
-# ── 4. Data directory ────────────────────────────────────────────────────────
+# ── 6. Data directory ────────────────────────────────────────────────────────
 
 if [ ! -f data/config.json ]; then
     echo "==> Copying seed config..."
@@ -59,7 +84,7 @@ if [ ! -f data/config.json ]; then
 fi
 mkdir -p data/voiceprints
 
-# ── 5. Validate ──────────────────────────────────────────────────────────────
+# ── 7. Validate ──────────────────────────────────────────────────────────────
 
 echo ""
 echo "==> Validating install..."

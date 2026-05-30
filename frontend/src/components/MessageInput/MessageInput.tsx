@@ -1,6 +1,17 @@
 import { useState, useRef, forwardRef, useImperativeHandle } from 'react';
+import {
+  Box,
+  Paper,
+  TextField,
+  Button,
+  Alert,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Typography,
+} from '@mui/material';
 import type { Contact } from '../../types/ws';
-import './MessageInput.css';
 
 export interface MessageInputHandle {
   setText: (text: string) => void;
@@ -11,10 +22,11 @@ interface Props {
   contacts: Contact[];
   myCallsign: string;
   onSend: (text: string, targetCall: string, targetName: string) => void;
+  onStandaloneId?: () => void;
 }
 
 export const MessageInput = forwardRef<MessageInputHandle, Props>(
-  ({ transmitting, contacts, myCallsign, onSend }, ref) => {
+  ({ transmitting, contacts, myCallsign, onSend, onStandaloneId }, ref) => {
     const [draft, setDraft] = useState('');
     const [targetCallsign, setTargetCallsign] = useState('');
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -27,99 +39,107 @@ export const MessageInput = forwardRef<MessageInputHandle, Props>(
     }));
 
     const filteredContacts = contacts.filter((c) => c.callsign !== myCallsign);
+    const selectedContact = filteredContacts.find((c) => c.callsign === targetCallsign);
 
     function handleSend() {
       const text = draft.trim();
       if (!text || transmitting) return;
-      const contact = filteredContacts.find((c) => c.callsign === targetCallsign);
-      onSend(text, contact ? contact.callsign : 'ALL', contact ? contact.name : '');
+      onSend(
+        text,
+        selectedContact ? selectedContact.callsign : 'ALL',
+        selectedContact ? (selectedContact.name ?? '') : '',
+      );
       setDraft('');
       setTargetCallsign('');
       textareaRef.current?.focus();
     }
 
-    function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-      if (e.key === 'Enter' && !e.shiftKey && (e.ctrlKey || e.metaKey || e.nativeEvent.isComposing === false)) {
-        if (e.ctrlKey || e.metaKey) {
-          e.preventDefault();
-          handleSend();
-        }
+    function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        handleSend();
       }
     }
 
-    const selectedContact = filteredContacts.find((c) => c.callsign === targetCallsign);
-
     return (
-      <div className="message-input-wrapper">
+      <Paper elevation={3} square sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
         {transmitting && (
-          <div
-            className="transmitting-banner"
-            role="alert"
-            aria-live="assertive"
-          >
-            <span aria-hidden="true">⚠️</span>
-            <span> SENDING MESSAGE NOW... PLEASE WAIT</span>
-          </div>
+          <Alert severity="warning" role="alert" aria-live="assertive" icon={false}>
+            SENDING MESSAGE NOW… PLEASE WAIT
+          </Alert>
         )}
 
-        <div className="message-input-area">
-          {filteredContacts.length > 0 && (
-            <div className="message-target-row">
-              <label htmlFor="message-target-select" className="message-target-label">
-                To:
-              </label>
-              <select
-                id="message-target-select"
-                className="message-target-select"
-                value={targetCallsign}
-                onChange={(e) => setTargetCallsign(e.target.value)}
-                disabled={transmitting}
-              >
-                <option value="">ALL — Broadcast</option>
-                {filteredContacts.map((c) => (
-                  <option key={c.callsign} value={c.callsign}>
-                    {c.callsign}{c.name ? ` — ${c.name}` : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
+        {filteredContacts.length > 0 && (
+          <FormControl size="small" fullWidth>
+            <InputLabel id="target-label">To</InputLabel>
+            <Select
+              labelId="target-label"
+              label="To"
+              value={targetCallsign}
+              onChange={(e) => setTargetCallsign(e.target.value)}
+              disabled={transmitting}
+            >
+              <MenuItem value="">ALL — Broadcast</MenuItem>
+              {filteredContacts.map((c) => (
+                <MenuItem key={c.callsign} value={c.callsign}>
+                  {c.callsign}{c.name ? ` — ${c.name}` : ''}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
+
+        {selectedContact && (
+          <Typography variant="body2" color="text.secondary" aria-live="polite">
+            Calling {selectedContact.callsign}
+            {selectedContact.name ? ` (${selectedContact.name})` : ''}
+            {selectedContact.location ? ` · ${selectedContact.location}` : ''}
+          </Typography>
+        )}
+
+        <TextField
+          inputRef={textareaRef}
+          label="Type Your Message Below"
+          multiline
+          rows={2}
+          fullWidth
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={handleKeyDown}
+          disabled={transmitting}
+          placeholder={transmitting ? '' : 'Enter your message here… (Ctrl+Enter to send)'}
+          slotProps={{
+            htmlInput: {
+              'aria-label': 'Message text — press Ctrl+Enter or use the Send button to transmit',
+            },
+          }}
+        />
+
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant="contained"
+            size="large"
+            fullWidth
+            onClick={handleSend}
+            disabled={transmitting || !draft.trim()}
+            aria-label="Press to send message over radio"
+          >
+            PRESS TO SEND MESSAGE
+          </Button>
+          {onStandaloneId && (
+            <Button
+              variant="outlined"
+              size="large"
+              onClick={onStandaloneId}
+              disabled={transmitting}
+              aria-label="Transmit standalone station identification"
+              sx={{ whiteSpace: 'nowrap' }}
+            >
+              THIS IS
+            </Button>
           )}
-
-          {selectedContact && (
-            <div className="message-target-badge" aria-live="polite">
-              Calling {selectedContact.callsign}
-              {selectedContact.name ? ` (${selectedContact.name})` : ''}
-              {selectedContact.location ? ` · ${selectedContact.location}` : ''}
-            </div>
-          )}
-
-          <label htmlFor="message-textarea" className="message-input-label">
-            Type Your Message Below:
-          </label>
-          <textarea
-            id="message-textarea"
-            ref={textareaRef}
-            className="message-input-textarea"
-            rows={2}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={transmitting}
-            aria-disabled={transmitting}
-            placeholder={transmitting ? '' : 'Enter your message here...'}
-            aria-label="Message text — press Ctrl+Enter or use the Send button to transmit"
-          />
-        </div>
-
-        <button
-          className="message-send-btn"
-          onClick={handleSend}
-          disabled={transmitting || !draft.trim()}
-          aria-label="Press to send message over radio"
-        >
-          PRESS TO SEND MESSAGE
-        </button>
-      </div>
+        </Box>
+      </Paper>
     );
   }
 );

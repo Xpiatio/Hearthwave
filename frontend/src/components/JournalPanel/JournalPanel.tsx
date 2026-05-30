@@ -1,6 +1,29 @@
 import { useState, useEffect } from 'react';
+import {
+  Box,
+  Paper,
+  Typography,
+  Button,
+  IconButton,
+  Alert,
+  TextField,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
+  TableContainer,
+  Table,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableCell,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+} from '@mui/material';
+import DeleteIcon from '@mui/icons-material/Delete';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import type { JournalEntry } from '../../types/ws';
-import './JournalPanel.css';
 
 interface JournalResultDraft {
   title: string;
@@ -20,6 +43,29 @@ interface Props {
   onSave: (title: string, summary: string, callsigns_locations: Array<{ callsign: string; location: string }>, transcript: string) => void;
   onDelete: (file_path: string) => void;
   onDismissResult: () => void;
+}
+
+function CallsignsTable({ rows }: { rows: Array<{ callsign: string; location: string }> }) {
+  return (
+    <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell sx={{ fontWeight: 700 }}>Callsign</TableCell>
+            <TableCell sx={{ fontWeight: 700 }}>Location</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.map((cl) => (
+            <TableRow key={cl.callsign}>
+              <TableCell>{cl.callsign}</TableCell>
+              <TableCell>{cl.location}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
 }
 
 export function JournalPanel({
@@ -52,18 +98,12 @@ export function JournalPanel({
   }, [pendingResult]);
 
   function handleGenerate() {
-    const transcript = rxTexts.join('\n');
-    onGenerate(transcript, rxCallsigns);
+    onGenerate(rxTexts.join('\n'), rxCallsigns);
   }
 
   function handleSave() {
     if (!pendingResult) return;
-    onSave(
-      editTitle,
-      editSummary,
-      pendingResult.callsigns_locations,
-      rxTexts.join('\n'),
-    );
+    onSave(editTitle, editSummary, pendingResult.callsigns_locations, rxTexts.join('\n'));
     onDismissResult();
   }
 
@@ -77,121 +117,158 @@ export function JournalPanel({
     }
   }
 
-  const transcript = rxTexts.join('\n');
-  const hasSession = transcript.trim().length > 0;
+  const hasSession = rxTexts.join('\n').trim().length > 0;
 
   return (
-    <div className="journal-panel">
-      <div className="journal-left">
-        <div className="journal-left-header">JOURNALS</div>
-        {journals.length === 0 ? (
-          <p className="journal-empty">No saved journals.</p>
-        ) : (
-          <ul className="journal-list">
-            {journals.map((j) => (
-              <li
-                key={j._file}
-                className={`journal-list-item ${selected?._file === j._file ? 'journal-list-item--active' : ''}`}
-                onClick={() => { setSelected(j); onDismissResult(); }}
-              >
-                <span className="journal-item-date">{j.exported_at.slice(0, 10)}</span>
-                <span className="journal-item-title">{j.title || '(untitled)'}</span>
-                <button
-                  className={`journal-delete-btn ${confirmDelete === j._file ? 'journal-delete-btn--confirm' : ''}`}
-                  onClick={(e) => { e.stopPropagation(); handleDelete(j._file); }}
-                  title={confirmDelete === j._file ? 'Click again to confirm delete' : 'Delete entry'}
-                >
-                  {confirmDelete === j._file ? 'CONFIRM' : '✕'}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+    <Paper
+      square
+      elevation={0}
+      sx={{
+        display: 'flex',
+        borderBottom: 1,
+        borderColor: 'divider',
+        maxHeight: 360,
+        overflow: 'hidden',
+      }}
+    >
+      {/* Left: journal list + generate button */}
+      <Box
+        sx={{
+          width: 240,
+          borderRight: 1,
+          borderColor: 'divider',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          flexShrink: 0,
+        }}
+      >
+        <Box sx={{ px: 1.5, py: 1, borderBottom: 1, borderColor: 'divider' }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>JOURNALS</Typography>
+        </Box>
 
-        <div className="journal-generate-area">
-          {journalError && <p className="journal-error">{journalError}</p>}
-          <button
-            className="journal-generate-btn"
+        <Box sx={{ flex: 1, overflowY: 'auto' }}>
+          {journals.length === 0 ? (
+            <Typography variant="body2" sx={{ color: 'text.secondary', p: 1.5, fontStyle: 'italic' }}>
+              No saved journals.
+            </Typography>
+          ) : (
+            <List dense disablePadding>
+              {journals.map((j) => (
+                <ListItem
+                  key={j._file}
+                  disablePadding
+                  secondaryAction={
+                    <IconButton
+                      edge="end"
+                      size="small"
+                      onClick={(e) => { e.stopPropagation(); handleDelete(j._file); }}
+                      color={confirmDelete === j._file ? 'error' : 'default'}
+                      title={confirmDelete === j._file ? 'Click again to confirm' : 'Delete'}
+                      aria-label={confirmDelete === j._file ? 'Confirm delete' : 'Delete journal'}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  }
+                >
+                  <ListItemButton
+                    selected={selected?._file === j._file}
+                    onClick={() => { setSelected(j); onDismissResult(); }}
+                    sx={{ pr: 5 }}
+                  >
+                    <ListItemText
+                      primary={j.title || '(untitled)'}
+                      secondary={j.exported_at.slice(0, 10)}
+                      slotProps={{
+                        primary: {
+                          variant: 'body2',
+                          sx: {
+                            overflow: 'hidden',
+                            whiteSpace: 'nowrap',
+                            textOverflow: 'ellipsis',
+                            fontWeight: selected?._file === j._file ? 700 : 400,
+                          },
+                        },
+                        secondary: { variant: 'caption' },
+                      }}
+                    />
+                  </ListItemButton>
+                </ListItem>
+              ))}
+            </List>
+          )}
+        </Box>
+
+        <Box sx={{ p: 1, borderTop: 1, borderColor: 'divider' }}>
+          {journalError && (
+            <Alert severity="error" sx={{ mb: 1, fontSize: '0.8125rem' }}>{journalError}</Alert>
+          )}
+          <Button
+            fullWidth
+            variant="contained"
+            size="small"
             onClick={handleGenerate}
             disabled={generating || !hasSession}
             title={!hasSession ? 'No received messages to summarise' : ''}
           >
-            {generating ? 'GENERATING...' : 'GENERATE FROM SESSION'}
-          </button>
-        </div>
-      </div>
+            {generating ? 'GENERATING…' : 'GENERATE FROM SESSION'}
+          </Button>
+        </Box>
+      </Box>
 
-      <div className="journal-right">
+      {/* Right: draft or selected journal detail */}
+      <Box sx={{ flex: 1, overflowY: 'auto', p: 2 }}>
         {pendingResult ? (
-          <div className="journal-draft">
-            <div className="journal-draft-header">AI DRAFT — REVIEW AND SAVE</div>
-            <label className="journal-field-label">Title</label>
-            <input
-              className="journal-title-input"
-              value={editTitle}
-              onChange={(e) => setEditTitle(e.target.value)}
-            />
-            <label className="journal-field-label">Summary</label>
-            <textarea
-              className="journal-summary-textarea"
-              value={editSummary}
-              onChange={(e) => setEditSummary(e.target.value)}
-              rows={8}
-            />
+          <Box>
+            <Typography variant="h6" sx={{ mb: 2 }}>AI DRAFT — REVIEW AND SAVE</Typography>
+            <TextField label="Title" fullWidth value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)} sx={{ mb: 2 }} />
+            <TextField label="Summary" fullWidth multiline rows={5} value={editSummary}
+              onChange={(e) => setEditSummary(e.target.value)} sx={{ mb: 2 }} />
             {pendingResult.callsigns_locations.length > 0 && (
-              <>
-                <label className="journal-field-label">Callsigns</label>
-                <table className="journal-callsigns-table">
-                  <thead><tr><th>Callsign</th><th>Location</th></tr></thead>
-                  <tbody>
-                    {pendingResult.callsigns_locations.map((cl) => (
-                      <tr key={cl.callsign}>
-                        <td>{cl.callsign}</td>
-                        <td>{cl.location}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </>
+              <CallsignsTable rows={pendingResult.callsigns_locations} />
             )}
-            <div className="journal-draft-actions">
-              <button className="journal-save-btn" onClick={handleSave} disabled={!editTitle.trim()}>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button variant="contained" onClick={handleSave} disabled={!editTitle.trim()}>
                 SAVE JOURNAL
-              </button>
-              <button className="journal-discard-btn" onClick={onDismissResult}>
+              </Button>
+              <Button variant="outlined" color="warning" onClick={onDismissResult}>
                 DISCARD
-              </button>
-            </div>
-          </div>
+              </Button>
+            </Box>
+          </Box>
         ) : selected ? (
-          <div className="journal-detail">
-            <div className="journal-detail-date">{selected.exported_at}</div>
-            <h2 className="journal-detail-title">{selected.title || '(untitled)'}</h2>
+          <Box>
+            <Typography variant="caption" color="text.secondary">{selected.exported_at}</Typography>
+            <Typography variant="h5" sx={{ mt: 0.5, mb: 2 }}>
+              {selected.title || '(untitled)'}
+            </Typography>
             {selected.callsigns_locations.length > 0 && (
-              <table className="journal-callsigns-table">
-                <thead><tr><th>Callsign</th><th>Location</th></tr></thead>
-                <tbody>
-                  {selected.callsigns_locations.map((cl) => (
-                    <tr key={cl.callsign}>
-                      <td>{cl.callsign}</td>
-                      <td>{cl.location}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <CallsignsTable rows={selected.callsigns_locations} />
             )}
-            <p className="journal-detail-summary">{selected.summary}</p>
+            <Typography variant="body1" sx={{ mb: 2 }}>{selected.summary}</Typography>
             {selected.transcript && (
-              <details className="journal-transcript">
-                <summary>Session transcript</summary>
-                <pre>{selected.transcript}</pre>
-              </details>
+              <Accordion>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                  <Typography variant="body2">Session transcript</Typography>
+                </AccordionSummary>
+                <AccordionDetails>
+                  <Box
+                    component="pre"
+                    sx={{ fontSize: '0.875rem', overflowX: 'auto', whiteSpace: 'pre-wrap', m: 0 }}
+                  >
+                    {selected.transcript}
+                  </Box>
+                </AccordionDetails>
+              </Accordion>
             )}
-          </div>
+          </Box>
         ) : (
-          <p className="journal-placeholder">Select a journal or generate a new one.</p>
+          <Typography sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
+            Select a journal or generate a new one.
+          </Typography>
         )}
-      </div>
-    </div>
+      </Box>
+    </Paper>
   );
 }
