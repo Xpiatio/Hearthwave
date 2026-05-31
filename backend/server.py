@@ -644,7 +644,7 @@ async def _lifespan(app: FastAPI):
             _log.info("No users found — first-run setup required via browser.")
 
     # Wire auth routes with the live stores.
-    auth_routes.init(_users_store, _token_store)
+    auth_routes.init(_users_store, _token_store, _config)
 
     _stt_out_queue = asyncio.Queue()
     _tx_queue = asyncio.Queue()

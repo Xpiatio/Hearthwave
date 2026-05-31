@@ -21,12 +21,14 @@ router = APIRouter()
 # Populated by server.py via init() after singletons are ready.
 _users_store = None
 _token_store = None
+_config = None
 
 
-def init(users_store, token_store) -> None:
-    global _users_store, _token_store
+def init(users_store, token_store, config=None) -> None:
+    global _users_store, _token_store, _config
     _users_store = users_store
     _token_store = token_store
+    _config = config
 
 
 def _require_token(authorization: str | None) -> str:
@@ -86,6 +88,16 @@ async def setup(body: SetupRequest):
         location=body.location.strip(),
         is_admin=True,
     )
+
+    # Seed station config with whatever the first admin provided so that
+    # Admin Settings reflects those values immediately after setup.
+    if _config is not None:
+        if body.callsign.strip():
+            _config["callsign"] = body.callsign.strip().upper()
+        if body.location.strip():
+            _config["location"] = body.location.strip()
+        _config.save()
+
     token = _token_store.create(user["id"])
     return {"token": token, "profile": _safe(user)}
 
