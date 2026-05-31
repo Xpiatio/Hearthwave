@@ -39,7 +39,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     # audio group GID 29 is standard on Debian/Ubuntu — required for /dev/snd access
     && groupadd -g 29 audio 2>/dev/null || true \
-    && useradd -r -u 1000 -G audio -d /app -s /sbin/nologin appuser
+    && useradd -u 1000 -G audio -d /app -s /sbin/nologin -M appuser
 
 COPY --from=builder /install /usr/local
 
