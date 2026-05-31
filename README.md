@@ -90,22 +90,13 @@ nano data/config.json   # set callsign, audio devices, voice
 docker compose up --build
 ```
 
-On first startup, a default **Admin** account is created automatically. The password is printed to the backend container logs:
+Open `http://<host-ip>` from any browser on the network. On first startup, the **Setup** screen appears in the browser — enter your name, a password, and optional station info to create the admin account. You are signed in automatically once you submit.
 
-```
-*** Radio-TTY: Admin account created. ***
-    Display name : Admin
-    Password     : <generated-password>
-    Set RADIO_TTY_ADMIN_PASS env var to use a fixed password on restart.
-```
-
-To set a fixed admin password, add to your environment or `docker-compose.yml`:
+**Headless / unattended deployment:** Set `RADIO_TTY_ADMIN_PASS` to skip the browser setup and create the admin account at startup instead:
 ```yaml
 environment:
   - RADIO_TTY_ADMIN_PASS=your-password-here
 ```
-
-Open `http://<host-ip>` from any browser on the network and sign in as Admin.
 
 **Development start** (frontend on :5173 with hot reload):
 ```bash
@@ -192,8 +183,8 @@ cd frontend && npm ci && npm run build
 
 ## First-time setup
 
-1. Open `http://<host-ip>` — the login screen appears.
-2. Sign in as **Admin** using the password from the startup logs (or `RADIO_TTY_ADMIN_PASS`).
+1. Open `http://<host-ip>` — the **Setup** screen appears (only on first launch when no accounts exist).
+2. Enter your display name, a password, and optionally your operator name, call sign, and location. Click **Create Account** — you are signed in immediately as admin.
 3. Open **ADMIN → Users** to create accounts for each family member.
 4. Each person signs in from their own browser or device and sets their personal preferences.
 
@@ -249,7 +240,7 @@ Each user account stores these settings independently. They are managed through 
 
 | Variable | Description |
 |----------|-------------|
-| `RADIO_TTY_ADMIN_PASS` | Admin password on bootstrap (if not set, a random password is printed to stdout) |
+| `RADIO_TTY_ADMIN_PASS` | If set and no users exist, creates an "Admin" account with this password at startup (headless deployments). Without it, the browser Setup screen handles first-run account creation. |
 | `RADIO_TTY_CONFIG` | Path to `config.json` (default: `/data/config.json`) |
 | `RADIO_TTY_USERS` | Path to `users.json` (default: `/data/users.json`) |
 | `RADIO_TTY_TOKENS` | Path to `tokens.json` (default: `/data/tokens.json`) |
@@ -263,7 +254,7 @@ Radio-TTY/
 ├── backend/
 │   ├── server.py               # FastAPI app + WebSocket router
 │   ├── config.py               # ServerConfig typed wrapper
-│   ├── auth_routes.py          # /auth/login, /auth/logout, /auth/me, /auth/profiles
+│   ├── auth_routes.py          # /auth/setup-status, /auth/setup, /auth/login, /auth/logout, /auth/me, /auth/profiles
 │   ├── audio/
 │   │   ├── capture.py          # PulseAudio loopback / sounddevice input
 │   │   ├── squelch.py          # SquelchDetector with pre-trigger ring buffer
@@ -300,6 +291,7 @@ Radio-TTY/
 │       │   ├── useAuth.ts      # Login/logout, token management
 │       │   └── useWebSocket.ts # WS connection with token auth + backoff reconnect
 │       ├── components/
+│       │   ├── SetupScreen/    # First-run admin account creation form
 │       │   ├── LoginScreen/    # Profile picker + password form
 │       │   ├── AccountMenu/    # Profile chip — edit, change password, sign out
 │       │   ├── UsersPanel/     # Admin user management

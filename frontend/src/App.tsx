@@ -20,6 +20,7 @@ import type {
   UserProfile,
 } from './types/ws';
 import { LoginScreen } from './components/LoginScreen/LoginScreen';
+import { SetupScreen } from './components/SetupScreen/SetupScreen';
 import { TopBar } from './components/TopBar/TopBar';
 import { ChatDisplay } from './components/ChatDisplay/ChatDisplay';
 import type { ChatEntry } from './components/ChatDisplay/ChatDisplay';
@@ -68,7 +69,7 @@ interface PendingStation {
 }
 
 export default function App() {
-  const { token, profile, setProfile, loading: authLoading, login, logout } = useAuth();
+  const { token, profile, setProfile, loading: authLoading, setupNeeded, setup, login, logout } = useAuth();
 
   const [messages, setMessages] = useState<ChatEntry[]>([]);
   const [radioStatus, setRadioStatus] = useState<StatusMsg | null>(null);
@@ -557,6 +558,16 @@ export default function App() {
         <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <CircularProgress />
         </Box>
+      </ThemeProvider>
+    );
+  }
+
+  // First-run: no users exist yet — collect admin profile before anything else.
+  if (setupNeeded) {
+    return (
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <SetupScreen onSetup={setup} />
       </ThemeProvider>
     );
   }
