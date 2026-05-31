@@ -94,6 +94,66 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 
 Open `http://<host-ip>` from any browser on the network.
 
+### Option C — Portainer
+
+If you manage containers via [Portainer](https://www.portainer.io/), use its **Stacks** feature. Because Portainer's web editor has no access to the source directory, images must be built locally first and the compose file must use absolute paths.
+
+**1. Build the images (run once on the host):**
+
+```bash
+cd /path/to/Radio-TTY
+docker compose build
+```
+
+This produces two local images: `radio-tty-backend` and `radio-tty-frontend`.
+
+**2. In Portainer: Stacks → Add stack → Web editor**, paste the following (replace `/path/to/Radio-TTY` with your actual repo path):
+
+```yaml
+services:
+  backend:
+    image: radio-tty-backend
+    volumes:
+      - /path/to/Radio-TTY/data:/data
+      - /path/to/Radio-TTY/Voices:/app/Voices:ro
+      - /path/to/Radio-TTY/Models:/app/Models:ro
+      - /run/user/1000/pulse:/run/pulse:ro
+    environment:
+      - PULSE_SERVER=unix:/run/pulse/native
+    devices:
+      - /dev/snd:/dev/snd
+    restart: unless-stopped
+    networks:
+      - radio
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8765/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  frontend:
+    image: radio-tty-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - radio
+
+networks:
+  radio:
+    driver: bridge
+```
+
+**After source changes:** run `docker compose build` on the host, then in Portainer open the stack → **Update the stack** → Deploy.
+
+> **Note:** The PulseAudio socket path `/run/user/1000/pulse` assumes UID 1000. Adjust if your user has a different UID (`id -u`).
+
+---
+
 ### Option B — Native install
 
 ```bash
