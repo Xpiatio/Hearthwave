@@ -262,6 +262,19 @@ export default function App() {
         setTransmitting(msg.status === 'transmitting');
         break;
 
+      case 'tx_echo':
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: nextId(),
+            timestamp: formatTime(msg.ts),
+            kind: 'tx',
+            sender: msg.callsign,
+            text: msg.text,
+          },
+        ]);
+        break;
+
       case 'system_msg':
         setMessages((prev) => [
           ...prev,
@@ -311,16 +324,6 @@ export default function App() {
             target_call: msg.target_call,
             target_name: msg.target_name,
           });
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: nextId(),
-              timestamp: formatTime(),
-              kind: 'tx',
-              sender: msg.callsign,
-              text: resolvedText,
-            },
-          ]);
         }
         break;
       }
@@ -424,16 +427,6 @@ export default function App() {
       target_name: targetName,
     };
     send(payload);
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: nextId(),
-        timestamp: formatTime(),
-        kind: 'tx',
-        sender: effectiveCallsign,
-        text,
-      },
-    ]);
   }
 
   function handleToggleServiceMode() {

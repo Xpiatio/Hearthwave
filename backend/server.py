@@ -445,6 +445,7 @@ async def _tx_pump() -> None:
             raw_text = payload.get("text", "")
             now = datetime.datetime.now(datetime.timezone.utc)
 
+            chat_text: str | None = None
             if payload.get("_standalone_id"):
                 # "This is" button — NATO-phonetic station ID, resets ID timer.
                 my_call = payload.get("callsign") or _config.callsign
@@ -453,6 +454,7 @@ async def _tx_pump() -> None:
                 text, _last_id_time = format_standalone_id(my_call, my_name, my_loc, now)
                 text = spell_digits_in_callsigns(text)
                 _has_transmitted = True
+                chat_text = "Station ID"
 
             elif payload.get("_pre_formatted") or is_preview:
                 # Pre-formatted text (auto-ID pump, voice preview) — no processing.
@@ -477,6 +479,16 @@ async def _tx_pump() -> None:
                 _has_transmitted = True
                 # Space-isolate digits in callsigns so TTS reads them individually.
                 text = spell_digits_in_callsigns(text)
+                chat_text = raw_text
+
+            if not is_preview and chat_text is not None:
+                await _manager.broadcast({
+                    "type": "tx_echo",
+                    "ts": now.isoformat(),
+                    "callsign": payload.get("callsign") or _config.callsign,
+                    "operator": payload.get("operator") or _config.name,
+                    "text": chat_text,
+                })
 
             # Pause STT before keying so the radio receiver doesn't
             # transcribe TTS audio bleeding back through the radio.
