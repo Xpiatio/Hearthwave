@@ -20,9 +20,10 @@ export function useWebSocket({ onMessage, token, onOpen }: UseWebSocketOptions) 
   const tokenRef = useRef(token);
   const unmountedRef = useRef(false);
 
-  useEffect(() => { onMessageRef.current = onMessage; });
-  useEffect(() => { onOpenRef.current = onOpen; });
-  useEffect(() => { tokenRef.current = token; });
+  // Keep callback refs current without re-triggering connect effect
+  useEffect(() => { onMessageRef.current = onMessage; }, [onMessage]);
+  useEffect(() => { onOpenRef.current = onOpen; }, [onOpen]);
+  useEffect(() => { tokenRef.current = token; }, [token]);
 
   const connect = useCallback(() => {
     if (unmountedRef.current || !tokenRef.current) return;

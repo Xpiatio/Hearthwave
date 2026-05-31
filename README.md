@@ -30,7 +30,7 @@ FastAPI Backend  ──►  PulseAudio / sounddevice
 ## Features
 
 - **Multi-user accounts** — named family member profiles, each with their own password and per-user preferences
-- **Per-user settings** — dark mode, panel order, profanity filter, listen-only, and spectrogram display are per-account and sync across devices
+- **Per-user settings** — dark mode, panel order, profanity filter, listen-only, spectrogram display, and TTS voice are per-account and sync across devices
 - **Public family journal** — publish session logs to `/journal`, a no-login static page (last 10 entries, ADA-compliant)
 - Real-time spectrogram with VAD and squelch indicators
 - Speech-to-text receive using Whisper (`small.en` model)
@@ -205,7 +205,8 @@ Created from `data/config.json.example` on first install. Station-wide settings 
 | `name` | `""` | Station name |
 | `location` | `""` | Station location |
 | `radio_service` | `""` | `"GMRS"` or `"FRS"` |
-| `voice` | `""` | Piper voice name (e.g. `"ryan-high"`) |
+| `voice` | `""` | Station-default Piper voice path (e.g. `"/Voices/en_US-ryan-high.onnx"`); used when a user has no personal voice set |
+| `voices_dir` | *(derived)* | Directory to scan for `.onnx` voice files; defaults to the parent directory of `voice` or `/Voices` |
 | `tts_length_scale` | `1.0` | TTS speed (lower = faster) |
 | `input_device` | `-1` | Audio input device index (-1 = default) |
 | `output_device` | `-1` | Audio output device index (-1 = default) |
@@ -236,6 +237,7 @@ Each user account stores these settings independently. They are managed through 
 | `listen_only` | `false` | Disable TX for this user |
 | `spectro_colormap` | `"viridis"` | `"viridis"` or `"grayscale"` |
 | `spectro_time_window_s` | `30` | Spectrogram scroll window in seconds |
+| `tts_voice` | `""` | Piper voice for this user's transmissions (`""` = use station default) |
 
 ### Environment variables
 

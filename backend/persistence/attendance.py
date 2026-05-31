@@ -54,7 +54,7 @@ class AttendanceTracker:
         return len(self._order)
 
 
-def build_attendance_rows(callsigns: Iterable[str], contacts) -> list[dict]:
+def build_attendance_rows(callsigns: Iterable[str], contacts: list[dict]) -> list[dict]:
     """Join callsigns against the contact list, returning one row per callsign.
 
     Each row has: callsign, name, location, gmrs, ham.

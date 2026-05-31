@@ -1,5 +1,7 @@
 import uvicorn
+from backend.config import ServerConfig
 from backend.server import app
 
 if __name__ == "__main__":
-    uvicorn.run("backend.server:app", host="0.0.0.0", port=8765, reload=False)
+    _cfg = ServerConfig.load()
+    uvicorn.run("backend.server:app", host=_cfg.host, port=_cfg.port, reload=False)

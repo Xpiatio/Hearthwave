@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Paper,
@@ -89,9 +89,16 @@ export function JournalPanel({
   const [editSummary, setEditSummary] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmPublish, setConfirmPublish] = useState<string | null>(null);
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     onListJournals();
+  }, [onListJournals]);
+
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -125,10 +132,12 @@ export function JournalPanel({
     if (confirmPublish === file) {
       onPublish(file);
       setConfirmPublish(null);
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
     } else {
       setConfirmPublish(file);
       // Auto-cancel confirm state after 4 seconds if user doesn't click again
-      setTimeout(() => setConfirmPublish((cur) => cur === file ? null : cur), 4000);
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+      resetTimerRef.current = setTimeout(() => setConfirmPublish((cur) => cur === file ? null : cur), 4000);
     }
   }
 
