@@ -454,7 +454,7 @@ async def _tx_pump() -> None:
                 text, _last_id_time = format_standalone_id(my_call, my_name, my_loc, now)
                 text = spell_digits_in_callsigns(text)
                 _has_transmitted = True
-                chat_text = "Station ID"
+                chat_text = text
 
             elif payload.get("_pre_formatted") or is_preview:
                 # Pre-formatted text (auto-ID pump, voice preview) — no processing.
@@ -1317,7 +1317,7 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                     continue
                 allowed = {"dark_mode", "panel_order", "filter_profanity", "listen_only",
                            "spectro_colormap", "spectro_time_window_s", "tts_voice"}
-                updates = {k: v for k, v in data.items() if k in allowed}
+                updates = {k: v for k, v in data.get("prefs", data).items() if k in allowed}
                 if updates:
                     state.prefs.update(updates)
                     try:
