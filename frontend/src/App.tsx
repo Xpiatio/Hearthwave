@@ -269,7 +269,7 @@ export default function App() {
             id: nextId(),
             timestamp: formatTime(msg.ts),
             kind: 'tx',
-            sender: msg.callsign,
+            sender: msg.display_name || msg.operator || msg.callsign,
             text: msg.text,
           },
         ]);

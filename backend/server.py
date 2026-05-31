@@ -487,6 +487,7 @@ async def _tx_pump() -> None:
                     "ts": now.isoformat(),
                     "callsign": payload.get("callsign") or _config.callsign,
                     "operator": payload.get("operator") or _config.name,
+                    "display_name": payload.get("_display_name") or "",
                     "text": chat_text,
                 })
 
@@ -938,10 +939,14 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                     })
                     continue
 
+                _tx_sender_display = (
+                    (_users_store.get_public_one(state.user_id) or {}).get("display_name") or ""
+                ) if _users_store else ""
                 await _tx_queue.put({
                     **data,
                     "_filter_profanity": state.prefs.get("filter_profanity", True),
                     "_voice_name": state.prefs.get("tts_voice") or None,
+                    "_display_name": _tx_sender_display,
                 })
                 await _manager.broadcast({"type": "tx_status", "status": "transmitting"})
 
