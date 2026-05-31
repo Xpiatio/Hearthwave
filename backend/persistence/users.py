@@ -10,13 +10,13 @@ config. Uses RADIO_TTY_ADMIN_PASS env var or prints a random password to stdout.
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 import os
 import secrets
-import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+from backend.persistence._utils import atomic_json_write
 
 _log = logging.getLogger(__name__)
 
@@ -75,18 +75,13 @@ class UsersStore:
             return []
 
     def _save(self) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=str(self._path.parent), suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                json.dump(self._users, fh, indent=4, ensure_ascii=False)
-            os.replace(tmp, self._path)
-        except Exception:
-            try:
-                os.unlink(tmp)
-            except OSError:
-                pass
-            raise
+        atomic_json_write(self._path, self._users)
+
+    def _find_index(self, user_id: str) -> int:
+        for i, u in enumerate(self._users):
+            if u.get("id") == user_id:
+                return i
+        raise KeyError(f"No user with id {user_id!r}")
 
     def _make_id(self, display_name: str) -> str:
         """Generate a URL-safe ID from display_name, ensuring uniqueness."""
@@ -116,6 +111,12 @@ class UsersStore:
     def get(self, user_id: str) -> dict | None:
         for u in self._users:
             if u.get("id") == user_id:
+                return dict(u)
+        return None
+
+    def get_by_display_name(self, display_name: str) -> dict | None:
+        for u in self._users:
+            if u.get("display_name") == display_name:
                 return dict(u)
         return None
 
@@ -165,107 +166,91 @@ class UsersStore:
 
     def update_prefs(self, user_id: str, prefs: dict) -> dict:
         """Merge *prefs* into the user's saved prefs; persist atomically."""
-        for i, u in enumerate(self._users):
-            if u.get("id") == user_id:
-                merged = {**DEFAULT_PREFS, **u.get("prefs", {}), **prefs}
-                self._users[i] = {**self._users[i], "prefs": merged}
-                self._save()
-                return dict(self._users[i])
-        raise KeyError(f"No user with id {user_id!r}")
+        i = self._find_index(user_id)
+        merged = {**DEFAULT_PREFS, **self._users[i].get("prefs", {}), **prefs}
+        self._users[i] = {**self._users[i], "prefs": merged}
+        self._save()
+        return dict(self._users[i])
 
     def update_profile(self, user_id: str, updates: dict) -> dict:
         """Update identity fields on a profile (not password — use change_password)."""
         allowed = {"display_name", "avatar_emoji", "operator_name", "callsign", "location", "is_admin"}
-        for i, u in enumerate(self._users):
-            if u.get("id") == user_id:
-                merged = dict(self._users[i])
-                for k in allowed:
-                    if k in updates:
-                        merged[k] = updates[k]
-                self._users[i] = merged
-                self._save()
-                return dict(merged)
-        raise KeyError(f"No user with id {user_id!r}")
+        i = self._find_index(user_id)
+        merged = dict(self._users[i])
+        for k in allowed:
+            if k in updates:
+                merged[k] = updates[k]
+        self._users[i] = merged
+        self._save()
+        return dict(merged)
 
     def change_password(self, user_id: str, new_password: str) -> None:
-        for i, u in enumerate(self._users):
-            if u.get("id") == user_id:
-                salt_hex = secrets.token_hex(32)
-                self._users[i]["password_salt"] = salt_hex
-                self._users[i]["password_hash"] = _hash_password(new_password, salt_hex)
-                self._users[i]["failed_attempts"] = 0
-                self._users[i]["locked_until"] = None
-                self._save()
-                return
-        raise KeyError(f"No user with id {user_id!r}")
+        i = self._find_index(user_id)
+        salt_hex = secrets.token_hex(32)
+        self._users[i]["password_salt"] = salt_hex
+        self._users[i]["password_hash"] = _hash_password(new_password, salt_hex)
+        self._users[i]["failed_attempts"] = 0
+        self._users[i]["locked_until"] = None
+        self._save()
 
     def delete(self, user_id: str) -> None:
-        before = len(self._users)
+        self._find_index(user_id)  # raises KeyError if not found
         self._users = [u for u in self._users if u.get("id") != user_id]
-        if len(self._users) == before:
-            raise KeyError(f"No user with id {user_id!r}")
         self._save()
 
     def is_locked(self, user_id: str) -> bool:
-        u = self.get(user_id)
-        if not u:
+        try:
+            i = self._find_index(user_id)
+        except KeyError:
             return False
+        u = self._users[i]
         locked_until = u.get("locked_until")
         if not locked_until:
             return False
         try:
             expiry = datetime.fromisoformat(locked_until)
         except (ValueError, TypeError):
-            # Malformed stored date — clear it and treat as not locked.
             expiry = datetime.now(timezone.utc)
         if datetime.now(timezone.utc) >= expiry:
-            # Lock expired — clear it
-            for i, uu in enumerate(self._users):
-                if uu.get("id") == user_id:
-                    self._users[i]["locked_until"] = None
-                    self._users[i]["failed_attempts"] = 0
-                    self._save()
-                    break
+            self._users[i]["locked_until"] = None
+            self._users[i]["failed_attempts"] = 0
+            self._save()
             return False
         return True
 
     def locked_until_str(self, user_id: str) -> str | None:
-        u = self.get(user_id)
-        return u.get("locked_until") if u else None
+        try:
+            i = self._find_index(user_id)
+            return self._users[i].get("locked_until")
+        except KeyError:
+            return None
 
     def verify_password(self, user_id: str, password: str) -> bool:
         """Check password; manage attempt counter and lockout. Returns True on success."""
         if self.is_locked(user_id):
             return False
-        u = self.get(user_id)
-        if not u:
+        try:
+            i = self._find_index(user_id)
+        except KeyError:
             return False
+        u = self._users[i]
         pw_hash = _hash_password(password, u.get("password_salt", ""))
         ok = secrets.compare_digest(pw_hash, u.get("password_hash", ""))
-        for i, uu in enumerate(self._users):
-            if uu.get("id") != user_id:
-                continue
-            if ok:
-                self._users[i]["failed_attempts"] = 0
-                self._users[i]["locked_until"] = None
-            else:
-                attempts = self._users[i].get("failed_attempts", 0) + 1
-                self._users[i]["failed_attempts"] = attempts
-                if attempts >= LOCKOUT_MAX_ATTEMPTS:
-                    expiry = datetime.now(timezone.utc) + timedelta(minutes=LOCKOUT_DURATION_MINUTES)
-                    self._users[i]["locked_until"] = expiry.isoformat()
-                    _log.warning(
-                        "Account %s locked after %d failed attempts.", user_id, attempts
-                    )
-            self._save()
-            break
+        if ok:
+            self._users[i]["failed_attempts"] = 0
+            self._users[i]["locked_until"] = None
+        else:
+            attempts = self._users[i].get("failed_attempts", 0) + 1
+            self._users[i]["failed_attempts"] = attempts
+            if attempts >= LOCKOUT_MAX_ATTEMPTS:
+                expiry = datetime.now(timezone.utc) + timedelta(minutes=LOCKOUT_DURATION_MINUTES)
+                self._users[i]["locked_until"] = expiry.isoformat()
+                _log.warning("Account %s locked after %d failed attempts.", user_id, attempts)
+        self._save()
         return ok
 
     def reset_lockout(self, user_id: str) -> None:
-        for i, u in enumerate(self._users):
-            if u.get("id") == user_id:
-                self._users[i]["failed_attempts"] = 0
-                self._users[i]["locked_until"] = None
-                self._save()
-                return
-        raise KeyError(f"No user with id {user_id!r}")
+        i = self._find_index(user_id)
+        self._users[i]["failed_attempts"] = 0
+        self._users[i]["locked_until"] = None
+        self._save()

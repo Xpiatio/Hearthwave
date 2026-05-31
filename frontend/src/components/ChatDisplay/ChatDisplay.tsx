@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Typography, Button, Fab, Chip, Tooltip } from '@mui/material';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import type { Contact } from '../../types/ws';
@@ -12,13 +12,13 @@ export interface ChatEntry {
   speaker?: string;
   partial?: boolean;
   cluster_label?: string | null;
-  onEnrollCluster?: (clusterLabel: string, callsign: string) => void;
 }
 
 interface Props {
   entries: ChatEntry[];
   contacts: Contact[];
   showCallsignChips: boolean;
+  onEnrollCluster?: (clusterLabel: string, callsign: string) => void;
 }
 
 // Matches GMRS modern (WSLZ233), GMRS legacy (KAE1234), and US amateur (K1ABC, KD9XYZ)
@@ -133,13 +133,13 @@ function MessageText({
   );
 }
 
-export function ChatDisplay({ entries, contacts, showCallsignChips }: Props) {
+export function ChatDisplay({ entries, contacts, showCallsignChips, onEnrollCluster }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
 
-  const callsignIdx = buildCallsignIndex(contacts);
+  const callsignIdx = useMemo(() => buildCallsignIndex(contacts), [contacts]);
 
   function handleScroll() {
     const el = containerRef.current;
@@ -259,7 +259,7 @@ export function ChatDisplay({ entries, contacts, showCallsignChips }: Props) {
               <Typography component="span" sx={{ opacity: 0.5, color: KIND_COLOR[entry.kind] }}> …</Typography>
             )}
 
-            {entry.cluster_label && !entry.partial && entry.onEnrollCluster && (
+            {entry.cluster_label && !entry.partial && onEnrollCluster && (
               <Button
                 size="small"
                 variant="outlined"
@@ -267,7 +267,7 @@ export function ChatDisplay({ entries, contacts, showCallsignChips }: Props) {
                 onClick={() => {
                   const callsign = window.prompt(`Assign ${entry.cluster_label} to callsign:`);
                   if (callsign?.trim()) {
-                    entry.onEnrollCluster!(entry.cluster_label!, callsign.trim().toUpperCase());
+                    onEnrollCluster(entry.cluster_label!, callsign.trim().toUpperCase());
                   }
                 }}
               >

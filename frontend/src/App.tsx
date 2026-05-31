@@ -193,9 +193,6 @@ export default function App() {
                       partial: false,
                       speaker,
                       cluster_label: msg.cluster_label,
-                      onEnrollCluster: msg.cluster_label
-                        ? (cl: string, cs: string) => sendRef.current({ type: 'enroll_speaker', callsign: cs, cluster_label: cl })
-                        : undefined,
                     }
                   : e
               );
@@ -210,9 +207,6 @@ export default function App() {
                 text: msg.text,
                 speaker,
                 cluster_label: msg.cluster_label,
-                onEnrollCluster: msg.cluster_label
-                  ? (cl: string, cs: string) => sendRef.current({ type: 'enroll_speaker', callsign: cs, cluster_label: cl })
-                  : undefined,
               },
             ];
           });
@@ -402,16 +396,22 @@ export default function App() {
     }
   }, [setProfile]);
 
+  const handleWsOpen = useCallback(() => {
+    // Request input device list whenever the socket connects or reconnects.
+    sendRef.current({ type: 'list_input_devices' });
+    sendRef.current({ type: 'list_profiles' });
+  }, []);
+
   const { send, connected } = useWebSocket({
     onMessage: handleWsMessage,
     token,
-    onOpen: () => {
-      // Request input device list whenever the socket connects or reconnects.
-      sendRef.current({ type: 'list_input_devices' });
-      sendRef.current({ type: 'list_profiles' });
-    },
+    onOpen: handleWsOpen,
   });
   sendRef.current = send;
+
+  const handleEnrollCluster = useCallback((clusterLabel: string, callsign: string) => {
+    sendRef.current({ type: 'enroll_speaker', callsign, cluster_label: clusterLabel });
+  }, []);
 
   function handleSend(text: string, targetCall: string, targetName: string) {
     if (!profile) return;
@@ -419,7 +419,7 @@ export default function App() {
       type: 'tx_message',
       text,
       operator: profile.operator_name,
-      callsign: profile.callsign || adminConfig.stationCallsign,
+      callsign: effectiveCallsign,
       target_call: targetCall,
       target_name: targetName,
     };
@@ -430,7 +430,7 @@ export default function App() {
         id: nextId(),
         timestamp: formatTime(),
         kind: 'tx',
-        sender: profile.callsign || adminConfig.stationCallsign,
+        sender: effectiveCallsign,
         text,
       },
     ]);
@@ -543,11 +543,18 @@ export default function App() {
     await logout();
   }
 
-  const rxMessages = messages.filter((m) => m.kind === 'rx' && !m.partial);
-  const rxTexts = rxMessages.map((m) => (m.sender ? `[${m.sender}] ${m.text}` : m.text));
-  const rxCallsigns = [...new Set(
-    rxMessages.map((m) => m.sender).filter(Boolean) as string[]
-  )];
+  const rxMessages = useMemo(
+    () => messages.filter((m) => m.kind === 'rx' && !m.partial),
+    [messages]
+  );
+  const rxTexts = useMemo(
+    () => rxMessages.map((m) => (m.sender ? `[${m.sender}] ${m.text}` : m.text)),
+    [rxMessages]
+  );
+  const rxCallsigns = useMemo(
+    () => [...new Set(rxMessages.map((m) => m.sender).filter(Boolean) as string[])],
+    [rxMessages]
+  );
 
   function handlePanelDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -563,6 +570,43 @@ export default function App() {
     }
   }
 
+  const handleListJournals = useCallback(() => {
+    send({ type: 'list_journals' });
+  }, [send]);
+
+  const handleGenerate = useCallback((transcript: string, callsigns: string[]) => {
+    setJournalGenerating(true);
+    setJournalError(null);
+    setJournalResult(null);
+    send({ type: 'generate_journal', transcript, callsigns });
+  }, [send]);
+
+  const handleSaveJournal = useCallback((
+    title: string,
+    summary: string,
+    callsigns_locations: Array<{ callsign: string; location: string }>,
+    transcript: string,
+  ) => {
+    send({ type: 'save_journal', title, summary, callsigns_locations, transcript });
+  }, [send]);
+
+  const handleDeleteJournal = useCallback((file_path: string) => {
+    send({ type: 'delete_journal', file_path });
+  }, [send]);
+
+  const handlePublishJournal = useCallback((file_path: string) => {
+    send({ type: 'publish_journal', file_path });
+  }, [send]);
+
+  const handleDismissJournalResult = useCallback(() => {
+    setJournalResult(null);
+  }, []);
+
+  const handleClearAttendance = useCallback(() => {
+    send({ type: 'clear_attendance' });
+  }, [send]);
+
+  const effectiveCallsign = profile?.callsign || adminConfig.stationCallsign;
   const stationStatus = connected ? 'READY' : 'OFFLINE';
   const showCallsignChips = serviceMode === 'GMRS';
 
@@ -672,7 +716,7 @@ export default function App() {
                   <DraggablePanel key="attendance" id="attendance">
                     <AttendancePanel
                       stations={attendanceStations}
-                      onClear={() => send({ type: 'clear_attendance' })}
+                      onClear={handleClearAttendance}
                     />
                   </DraggablePanel>
                 );
@@ -687,19 +731,12 @@ export default function App() {
                       journalError={journalError}
                       rxTexts={rxTexts}
                       rxCallsigns={rxCallsigns}
-                      onListJournals={() => send({ type: 'list_journals' })}
-                      onGenerate={(transcript, callsigns) => {
-                        setJournalGenerating(true);
-                        setJournalError(null);
-                        setJournalResult(null);
-                        send({ type: 'generate_journal', transcript, callsigns });
-                      }}
-                      onSave={(title, summary, callsigns_locations, transcript) => {
-                        send({ type: 'save_journal', title, summary, callsigns_locations, transcript });
-                      }}
-                      onDelete={(file_path) => send({ type: 'delete_journal', file_path })}
-                      onPublish={(file_path) => send({ type: 'publish_journal', file_path })}
-                      onDismissResult={() => setJournalResult(null)}
+                      onListJournals={handleListJournals}
+                      onGenerate={handleGenerate}
+                      onSave={handleSaveJournal}
+                      onDelete={handleDeleteJournal}
+                      onPublish={handlePublishJournal}
+                      onDismissResult={handleDismissJournalResult}
                     />
                   </DraggablePanel>
                 );
@@ -720,6 +757,7 @@ export default function App() {
           entries={messages}
           contacts={contacts}
           showCallsignChips={showCallsignChips}
+          onEnrollCluster={handleEnrollCluster}
         />
 
         <Spectrogram
@@ -742,13 +780,13 @@ export default function App() {
             ref={messageInputRef}
             transmitting={transmitting}
             contacts={contacts}
-            myCallsign={profile.callsign || adminConfig.stationCallsign}
+            myCallsign={effectiveCallsign}
             onSend={handleSend}
             onStandaloneId={() => {
               send({
                 type: 'standalone_id',
                 operator: profile.operator_name,
-                callsign: profile.callsign || adminConfig.stationCallsign,
+                callsign: effectiveCallsign,
                 location: profile.location,
               });
             }}

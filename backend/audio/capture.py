@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import math
 import shutil
 import subprocess
 import sys
+import time
 from typing import Protocol, runtime_checkable
 
 import numpy as np
 import sounddevice as sd
+from scipy.signal import resample_poly
 
 
 @runtime_checkable
@@ -90,7 +93,6 @@ class SystemMonitorSource:
         if sink:
             cmd.append(f"--device={sink}.monitor")
         self._proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-        import time
         time.sleep(0.15)
         if self._proc.poll() is not None:
             self._proc = None
@@ -157,8 +159,6 @@ class ParecSource:
     """
 
     def __init__(self, sample_rate, chunk_samples):
-        import time
-
         parec_bin = shutil.which("parec")
         if not parec_bin:
             raise FileNotFoundError("parec binary not on PATH")
@@ -180,11 +180,14 @@ class ParecSource:
 
     def read(self) -> np.ndarray:
         buf = self.proc.stdout.read(self.bytes_per_chunk)
-        while len(buf) < self.bytes_per_chunk:
-            more = self.proc.stdout.read(self.bytes_per_chunk - len(buf))
-            if not more:
-                raise IOError("parec stdout closed unexpectedly")
-            buf = buf + more
+        if len(buf) < self.bytes_per_chunk:
+            chunks = [buf]
+            while len(buf) < self.bytes_per_chunk:
+                more = self.proc.stdout.read(self.bytes_per_chunk - len(buf))
+                if not more:
+                    raise IOError("parec stdout closed unexpectedly")
+                chunks.append(more)
+                buf = b"".join(chunks)
         return np.frombuffer(buf, dtype=np.int16).astype(np.float32) / 32768.0
 
     def close(self) -> None:
@@ -210,8 +213,6 @@ class PortAudioSource:
     """
 
     def __init__(self, sample_rate: int, chunk_samples: int, device=None):
-        import math
-
         self.sample_rate = sample_rate
         self.chunk_samples = chunk_samples
 
@@ -243,7 +244,6 @@ class PortAudioSource:
         data, _ = self.stream.read(self._native_chunks)
         chunk = data[:, 0].copy()
         if self._do_resample:
-            from scipy.signal import resample_poly
             chunk = resample_poly(chunk, self._up, self._down).astype(np.float32)
             # Trim or zero-pad to guarantee exactly chunk_samples frames.
             if len(chunk) > self.chunk_samples:

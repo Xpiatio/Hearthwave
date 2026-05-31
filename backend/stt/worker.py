@@ -25,6 +25,7 @@ import os
 import queue
 import threading
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable
 
 import numpy as np
@@ -86,7 +87,7 @@ class STTWorker:
     ROLLING_SEGMENT_S = 5.0
     CUT_WINDOW_S = 0.5
 
-    MODELS_STT_DIR = os.path.join("Models", "STT")
+    _MODELS_DIR = Path(__file__).resolve().parent.parent / "Models" / "STT"
 
     def __init__(
         self,
@@ -108,7 +109,7 @@ class STTWorker:
         self.input_device = input_device if input_device not in (None, -1) else None
         self.system_monitor_sink = system_monitor_sink or ""
         self.whisper_model_name = whisper_model
-        self.whisper_model_path = os.path.join(self.MODELS_STT_DIR, whisper_model)
+        self.whisper_model_path = str(self._MODELS_DIR / whisper_model)
         self.vad_threshold = float(vad_threshold)
         self._model_cache: ModelCache | None = model_cache
 
@@ -228,7 +229,7 @@ class STTWorker:
             return
 
         try:
-            if self._model_cache is None:
+            if self._model_cache is None or self._model_cache.model_name != self.whisper_model_name:
                 self._emit_status(f"Loading Whisper model from {self.whisper_model_path}...")
                 whisper = WhisperTranscriber.load(self.whisper_model_path)
                 vad_model = load_vad_model()

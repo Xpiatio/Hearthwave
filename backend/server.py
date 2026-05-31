@@ -118,6 +118,8 @@ from backend.text.profanity import mask_profanity
 from backend.text.placeholders import find_placeholders
 from backend.tts.synthesizer import TTSSynthesizer
 
+import sounddevice as sd
+
 _log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -145,7 +147,7 @@ _tx_queue: asyncio.Queue = asyncio.Queue()
 _tts_event_queue: asyncio.Queue = asyncio.Queue()
 
 # Background tasks — kept alive so they are not GC'd mid-run
-_background_tasks: list[asyncio.Task] = []
+_background_tasks: set[asyncio.Task] = set()
 
 # Signal-quality state — written by STT worker callbacks (GIL-safe int/bool assignments)
 _audio_level: int = 0
@@ -167,6 +169,17 @@ _pending_stations: dict[str, dict] = {}
 
 # In-flight auto-add FCC lookup tasks — keyed by callsign to prevent duplicate lookups.
 _auto_add_tasks: dict[str, asyncio.Task] = {}
+
+# Voice model cache — loaded once per voice path, reused across TX calls.
+_voice_cache: dict[str, Any] = {}
+
+
+def _load_voice(voice_name: str):
+    """Return a cached PiperVoice, loading it on first use."""
+    if voice_name not in _voice_cache:
+        from piper import PiperVoice  # noqa: PLC0415
+        _voice_cache[voice_name] = PiperVoice.load(voice_name)
+    return _voice_cache[voice_name]
 
 
 # ---------------------------------------------------------------------------
@@ -201,8 +214,9 @@ class ConnectionManager:
         for ws in list(self._clients):
             try:
                 await ws.send_json(msg)
-            except Exception:
+            except Exception as _exc:
                 dead.append(ws)
+                _log.debug("broadcast cleanup: %s", _exc)
         for ws in dead:
             self._clients.pop(ws, None)
 
@@ -213,8 +227,9 @@ class ConnectionManager:
             text = filtered_text if state.prefs.get("filter_profanity", True) else raw_text
             try:
                 await ws.send_json({**base_msg, "text": text})
-            except Exception:
+            except Exception as _exc:
                 dead.append(ws)
+                _log.debug("broadcast cleanup: %s", _exc)
         for ws in dead:
             self._clients.pop(ws, None)
 
@@ -336,7 +351,7 @@ async def _on_auto_add_result(
 
 async def _rx_pump() -> None:
     """Drain the STT output queue and broadcast rx_message frames."""
-    global _stt_out_queue, _vad_active
+    global _vad_active
     while True:
         try:
             result = await _stt_out_queue.get()
@@ -405,7 +420,8 @@ async def _rx_pump() -> None:
 
 async def _tx_pump() -> None:
     """Drain tx_queue; apply text pipeline, FCC formatting, synthesize, play."""
-    global _config, _synthesizer, _tx_queue, _tts_event_queue, _last_id_time, _has_transmitted
+    global _last_id_time, _has_transmitted
+    from backend.ptt.manual import ManualPTT
 
     while True:
         try:
@@ -419,8 +435,6 @@ async def _tx_pump() -> None:
 
         is_preview = bool(payload.get("_voice_preview"))
         try:
-            from piper import PiperVoice  # lazy import — heavy on first call
-
             voice_name = payload.get("_voice_name") or _config.voice
             if not voice_name:
                 _log.warning("No TTS voice configured; skipping TX synthesis.")
@@ -469,16 +483,20 @@ async def _tx_pump() -> None:
             if not is_preview and _stt_worker is not None:
                 _stt_worker.pause()
 
-            voice = PiperVoice.load(voice_name)
+            voice = await asyncio.get_running_loop().run_in_executor(
+                None, _load_voice, voice_name
+            )
             # Voice preview uses ManualPTT so no radio keying occurs.
-            from backend.ptt.manual import ManualPTT
             ptt = ManualPTT() if is_preview else make_ptt(_config)
             length_scale = _config.tts_length_scale
 
             await _synthesizer.synthesize(voice, text, ptt, length_scale=length_scale)
 
-            while not _tts_event_queue.empty():
-                _tts_event_queue.get_nowait()
+            while True:
+                try:
+                    _tts_event_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
 
         except asyncio.CancelledError:
             break
@@ -686,6 +704,7 @@ async def _lifespan(app: FastAPI):
     _attendance.clear()
     _pending_stations = {}
     _auto_add_tasks = {}
+    _voice_cache.clear()
     _invalidate_online()  # force fresh probe on startup
 
     _monitor_chunk_cb = None
@@ -733,14 +752,14 @@ async def _lifespan(app: FastAPI):
         output_device=_config.output_device if _config.output_device != -1 else None,
     )
 
-    _background_tasks = [
+    _background_tasks = {
         asyncio.create_task(_rx_pump(), name="rx-pump"),
         asyncio.create_task(_tx_pump(), name="tx-pump"),
         asyncio.create_task(_status_pump(), name="status-pump"),
         asyncio.create_task(_id_rule_pump(), name="id-rule-pump"),
         asyncio.create_task(_spectro.run(), name="spectro-pump"),
         asyncio.create_task(_online_status_pump(), name="online-status-pump"),
-    ]
+    }
     _log.info("Radio-TTY server ready.")
 
     yield
@@ -784,6 +803,59 @@ async def health() -> dict:
 # ---------------------------------------------------------------------------
 # WebSocket endpoint
 # ---------------------------------------------------------------------------
+
+async def _ws_handle_set_admin_config(ws: WebSocket, data: dict, state: "ConnectionState") -> None:
+    if _config is None:
+        await _manager.send_to(ws, {"type": "error", "detail": "Config not loaded."})
+        return
+    if "callsign" in data:
+        _config["callsign"] = str(data["callsign"]).strip().upper() or "N0CALL"
+    if "name" in data:
+        _config["name"] = str(data["name"]).strip()
+    if "location" in data:
+        _config["location"] = str(data["location"]).strip()
+    if "gemini_api_key" in data:
+        key = str(data["gemini_api_key"]).strip()
+        if key:
+            _config["gemini_api_key"] = key
+    if "journals_dir" in data:
+        jdir = str(data["journals_dir"]).strip()
+        if jdir:
+            _config["journals_dir"] = jdir
+    _config.save()
+    await _manager.broadcast(_build_status())
+
+
+async def _ws_handle_fcc_lookup(ws: WebSocket, data: dict, state: "ConnectionState") -> None:
+    # Single callsign lookup for the Add/Edit contact dialog.
+    cs = normalize_callsign(data.get("callsign", ""))
+    name = (data.get("name") or "").strip()
+    if not cs:
+        await _manager.send_to(ws, {
+            "type": "error",
+            "detail": "fcc_lookup requires a non-empty 'callsign' field.",
+        })
+        return
+    result = await asyncio.to_thread(verify_callsign, cs, name)
+    await _manager.send_to(ws, {
+        "type": "fcc_lookup_result",
+        "callsign": cs,
+        "status": result.status,
+        "license_name": result.license_name,
+        "license_location": result.license_location,
+        "license_city": result.license_city,
+        "gmrs_callsign": result.gmrs_callsign,
+        "ham_callsign": result.ham_callsign,
+    })
+
+
+async def _check_listen_only(ws: WebSocket, state: "ConnectionState") -> bool:
+    """Return True (and send error) if the user is in listen-only mode."""
+    if state.prefs.get("listen_only", False):
+        await _manager.send_to(ws, {"type": "error", "detail": "You are in listen-only mode; TX disabled."})
+        return True
+    return False
+
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=None)) -> None:
@@ -835,11 +907,7 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                     })
                     continue
 
-                if state.prefs.get("listen_only", False):
-                    await _manager.send_to(ws, {
-                        "type": "error",
-                        "detail": "You are in listen-only mode; TX disabled.",
-                    })
+                if await _check_listen_only(ws, state):
                     continue
 
                 # If the message text contains unresolved {Token} placeholders,
@@ -1001,11 +1069,7 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
 
             elif msg_type == "standalone_id":
                 # "This is" button — transmit a NATO-phonetic station ID.
-                if state.prefs.get("listen_only", False):
-                    await _manager.send_to(ws, {
-                        "type": "error",
-                        "detail": "You are in listen-only mode; TX disabled.",
-                    })
+                if await _check_listen_only(ws, state):
                     continue
                 await _manager.broadcast({"type": "tx_status", "status": "transmitting"})
                 await _tx_queue.put({
@@ -1031,26 +1095,7 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                 await _tx_queue.put({"text": preview_text, "_voice_preview": True, "_voice_name": preview_voice})
 
             elif msg_type == "fcc_lookup":
-                # Single callsign lookup for the Add/Edit contact dialog.
-                cs = normalize_callsign(data.get("callsign", ""))
-                name = (data.get("name") or "").strip()
-                if not cs:
-                    await _manager.send_to(ws, {
-                        "type": "error",
-                        "detail": "fcc_lookup requires a non-empty 'callsign' field.",
-                    })
-                    continue
-                result = await asyncio.to_thread(verify_callsign, cs, name)
-                await _manager.send_to(ws, {
-                    "type": "fcc_lookup_result",
-                    "callsign": cs,
-                    "status": result.status,
-                    "license_name": result.license_name,
-                    "license_location": result.license_location,
-                    "license_city": result.license_city,
-                    "gmrs_callsign": result.gmrs_callsign,
-                    "ham_callsign": result.ham_callsign,
-                })
+                await _ws_handle_fcc_lookup(ws, data, state)
 
             elif msg_type == "verify_all":
                 # Batch-verify all unverified contacts against the FCC API.
@@ -1060,7 +1105,7 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                         "detail": "Contacts store not ready.",
                     })
                     continue
-                if not is_online():
+                if not await asyncio.to_thread(is_online):
                     await _manager.send_to(ws, {
                         "type": "error",
                         "detail": "Cannot verify: offline.",
@@ -1092,7 +1137,9 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                         })
                     await _manager.send_to(ws, {"type": "verify_all_complete"})
 
-                asyncio.create_task(_do_verify_all())
+                task = asyncio.create_task(_do_verify_all())
+                _background_tasks.add(task)
+                task.add_done_callback(_background_tasks.discard)
 
             elif msg_type == "dismiss_pending":
                 # Remove a single pending-station pill (operator chose not to add).
@@ -1150,7 +1197,6 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                 await _manager.broadcast(_build_status())
 
             elif msg_type == "list_input_devices":
-                import sounddevice as sd
                 devices = [{"label": "System Default (microphone)", "id": -1}]
                 try:
                     for i, dev in enumerate(sd.query_devices()):
@@ -1247,25 +1293,7 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                 if not state.is_admin:
                     await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
                     continue
-                if _config is None:
-                    await _manager.send_to(ws, {"type": "error", "detail": "Config not loaded."})
-                    continue
-                if "callsign" in data:
-                    _config["callsign"] = str(data["callsign"]).strip().upper() or "N0CALL"
-                if "name" in data:
-                    _config["name"] = str(data["name"]).strip()
-                if "location" in data:
-                    _config["location"] = str(data["location"]).strip()
-                if "gemini_api_key" in data:
-                    key = str(data["gemini_api_key"]).strip()
-                    if key:
-                        _config["gemini_api_key"] = key
-                if "journals_dir" in data:
-                    jdir = str(data["journals_dir"]).strip()
-                    if jdir:
-                        _config["journals_dir"] = jdir
-                _config.save()
-                await _manager.broadcast(_build_status())
+                await _ws_handle_set_admin_config(ws, data, state)
 
             elif msg_type == "save_user_prefs":
                 if _users_store is None:

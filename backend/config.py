@@ -134,7 +134,9 @@ class ServerConfig(dict):
 
     @attendance_enabled.setter
     def attendance_enabled(self, value: bool) -> None:
-        self["attendance"] = {"enabled": value}
+        existing = dict(self.get("attendance") or {})
+        existing["enabled"] = value
+        self["attendance"] = existing
 
     # ---- AI / journals ---------------------------------------------------
 
@@ -188,7 +190,7 @@ class ServerConfig(dict):
     def port(self) -> int:
         return int(self.get("port", 8765))
 
-    # ---- persistence ---------------------------------------------------------
+    # ---- serialization ---------------------------------------------------------
 
     @classmethod
     def load(cls, path: Path = CONFIG_FILE) -> "ServerConfig":
