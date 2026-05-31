@@ -3,7 +3,7 @@ import { DndContext } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { DraggablePanel } from './components/DraggablePanel/DraggablePanel';
-import { ThemeProvider, CssBaseline, Box, CircularProgress } from '@mui/material';
+import { ThemeProvider, CssBaseline, Box, CircularProgress, Snackbar, Alert } from '@mui/material';
 import { makeTheme } from './theme';
 import { useAuth } from './hooks/useAuth';
 import { useWebSocket } from './hooks/useWebSocket';
@@ -112,6 +112,9 @@ export default function App() {
   const [journalResult, setJournalResult] = useState<JournalResultDraft | null>(null);
   const [journalGenerating, setJournalGenerating] = useState(false);
   const [journalError, setJournalError] = useState<string | null>(null);
+
+  // Publish snackbar
+  const [publishSnack, setPublishSnack] = useState<string | null>(null);
 
   // FCC / Callsigns
   const [pendingStations, setPendingStations] = useState<PendingStation[]>([]);
@@ -348,6 +351,10 @@ export default function App() {
 
       case 'journal_saved':
         sendRef.current({ type: 'list_journals' });
+        break;
+
+      case 'journal_published':
+        setPublishSnack(`"${msg.title}" published to /journal`);
         break;
 
       case 'journal_deleted':
@@ -661,6 +668,7 @@ export default function App() {
                         send({ type: 'save_journal', title, summary, callsigns_locations, transcript });
                       }}
                       onDelete={(file_path) => send({ type: 'delete_journal', file_path })}
+                      onPublish={(file_path) => send({ type: 'publish_journal', file_path })}
                       onDismissResult={() => setJournalResult(null)}
                     />
                   </DraggablePanel>
@@ -744,6 +752,21 @@ export default function App() {
             />
           )}
         </AdminPanel>
+
+        <Snackbar
+          open={publishSnack !== null}
+          autoHideDuration={5000}
+          onClose={() => setPublishSnack(null)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        >
+          <Alert
+            onClose={() => setPublishSnack(null)}
+            severity="success"
+            sx={{ width: '100%' }}
+          >
+            {publishSnack}
+          </Alert>
+        </Snackbar>
       </Box>
     </ThemeProvider>
   );

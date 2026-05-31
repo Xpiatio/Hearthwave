@@ -126,6 +126,11 @@ export interface JournalDeletedMsg {
   file_path: string;
 }
 
+export interface JournalPublishedMsg {
+  type: 'journal_published';
+  title: string;
+}
+
 // FCC & callsign features (server → client)
 export interface PendingStationsMsg {
   type: 'pending_stations';
@@ -250,7 +255,8 @@ export type WsMessage =
   | SpectrogramRowMsg
   | InputDevicesMsg
   | UserProfileMsg
-  | ProfilesMsg;
+  | ProfilesMsg
+  | JournalPublishedMsg;
 
 export interface TxMessagePayload {
   type: 'tx_message';

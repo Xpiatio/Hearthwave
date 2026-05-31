@@ -106,7 +106,7 @@ from backend.persistence.contacts import (
     known_callsigns,
     normalize_callsign,
 )
-from backend.persistence.journal import delete_journal, load_journals, save_journal
+from backend.persistence.journal import delete_journal, load_journals, publish_journal, save_journal
 from backend.persistence.tokens import TokenStore
 from backend.persistence.users import DEFAULT_PREFS, UsersStore
 from backend.ptt.factory import make_ptt
@@ -960,6 +960,24 @@ async def websocket_endpoint(ws: WebSocket, token: str = Query(...)) -> None:
                     await _manager.send_to(ws, {
                         "type": "journal_deleted",
                         "file_path": file_path,
+                    })
+                except (ValueError, OSError) as exc:
+                    await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
+
+            elif msg_type == "publish_journal":
+                if _config is None:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Server not ready."})
+                    continue
+                file_path = (data.get("file_path") or "").strip()
+                display_name = (
+                    (_users_store.get_public_one(state.user_id) or {}).get("display_name")
+                    or state.user_id
+                ) if _users_store else state.user_id
+                try:
+                    entry = publish_journal(file_path, display_name, _config.journals_dir)
+                    await _manager.send_to(ws, {
+                        "type": "journal_published",
+                        "title": entry["title"],
                     })
                 except (ValueError, OSError) as exc:
                     await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
