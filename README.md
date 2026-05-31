@@ -185,6 +185,7 @@ cd frontend && npm ci && npm run build
 
 1. Open `http://<host-ip>` — the **Setup** screen appears (only on first launch when no accounts exist).
 2. Enter your display name, a password, and optionally your operator name, call sign, and location. Click **Create Account** — you are signed in immediately as admin.
+   - The call sign and location you enter here are saved to your personal profile **and** written to the station config (`config.json`) as the station defaults. You can adjust them independently later — your profile under **Account → Edit Profile**, and the station defaults under **ADMIN → Station Identity**.
 3. Open **ADMIN → Users** to create accounts for each family member.
 4. Each person signs in from their own browser or device and sets their personal preferences.
 
