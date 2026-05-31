@@ -6,7 +6,7 @@ This manual covers day-to-day operation of Radio-TTY. For installation and serve
 
 ## Table of contents
 
-1. [Getting started](#1-getting-started)
+1. [Signing in](#1-signing-in)
 2. [The interface](#2-the-interface)
 3. [Receiving transmissions (RX)](#3-receiving-transmissions-rx)
 4. [Sending a message (TX)](#4-sending-a-message-tx)
@@ -16,109 +16,120 @@ This manual covers day-to-day operation of Radio-TTY. For installation and serve
 8. [Spectrogram](#8-spectrogram)
 9. [Session attendance](#9-session-attendance)
 10. [Journals](#10-journals)
-11. [Settings](#11-settings)
-12. [Text shortcuts reference](#12-text-shortcuts-reference)
+11. [Family journal (public page)](#11-family-journal-public-page)
+12. [Settings](#12-settings)
+13. [Your account](#13-your-account)
+14. [Admin — managing users](#14-admin--managing-users)
+15. [Text shortcuts reference](#15-text-shortcuts-reference)
 
 ---
 
-## 1. Getting started
+## 1. Signing in
 
-Open your browser and navigate to the Radio-TTY host address — typically `http://192.168.x.x` or a hostname your administrator provides. No login is required.
+Open your browser and navigate to the Radio-TTY host address — typically `http://192.168.x.x` or a hostname your administrator provides.
 
-**First-time setup:**
+The **login screen** appears automatically. Select your name from the profile list, enter your password, and click **Sign In**.
 
-1. When prompted, enter your **operator name** (your first name or handle). This is stored locally in your browser and pre-fills the callsign field on every message you send.
-2. Enter your **callsign** in the callsign field at the bottom of the screen. This appears on all outgoing messages and is used for FCC identification.
-3. Your name and callsign persist across sessions in your browser. Other operators on different devices each have their own settings.
+- Each family member has their own account with a unique password.
+- Your preferences (dark mode, profanity filter, listen-only mode, etc.) are stored in your account and follow you across all devices — phone, tablet, laptop.
+- If you enter the wrong password three times, your account is locked for 15 minutes. Contact your administrator to unlock it sooner.
 
-If the server is unreachable, the status bar shows **Disconnected** in red. Refresh the page or contact the station administrator.
+**First time?** Your administrator creates your account and gives you your initial password. You can change it any time via the account menu (see [Your account](#13-your-account)).
+
+If the server is unreachable, the status bar shows **OFFLINE** in amber. Refresh the page or contact your administrator.
 
 ---
 
 ## 2. The interface
 
 ```
-┌────────────────────────────────────────────────────────┐
-│  Radio-TTY        [service badge]  [online dot]  ☀ 📱 │  ← Top bar
-├────────────────────────────────────────────────────────┤
-│  [Pending stations bar — amber chips, hidden when empty]│
-├────────────────────────────────────────────────────────┤
-│                                                        │
-│                   Chat display                         │
-│                                                        │
-│  WQZX999 > Hello this is Bravo                        │
-│  KD9ABC  > Good morning                               │
-│                                                        │
-│                                         [▼ scroll FAB] │
-├─────────────────────────┬──────────────────────────────┤
-│    Spectrogram          │   Contacts / Attendance /    │
-│                         │   Config / Journals tabs     │
-├────────────────────────────────────────────────────────┤
-│  Callsign [________] Name [________]                   │
-│  [THIS IS]  Message [_____________________] [SEND]     │
-└────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│ [👤 Dad ▾]  STATIONS  JOURNAL  CONTACTS  CONFIG  ADMIN       │  ← Top bar
+│                  STATION STATUS: READY  ●                    │
+│         [GMRS]  [LISTENING]  [TX ENABLED]  [🗑]  [☀]        │
+├──────────────────────────────────────────────────────────────┤
+│  [Pending stations bar — amber chips, hidden when empty]     │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│                     Chat display                             │
+│                                                              │
+│  WQZX999 — Dave  >  Hello this is Bravo                     │
+│  KD9ABC  — Mom   >  Good morning                            │
+│                                                              │
+├──────────────────────────────────────────────────────────────┤
+│                    Spectrogram                               │
+├──────────────────────────────────────────────────────────────┤
+│  Status: Radio connected · Volume OK · Channel clear         │
+├──────────────────────────────────────────────────────────────┤
+│  [THIS IS]  Message [_________________________] [SEND ↵]     │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-**Top bar icons:**
-- **Service badge** — shows GMRS or FRS; tap to switch service mode
-- **Online dot** — green = internet available (FCC lookup enabled), gray = offline
+**Top bar — left side:**
+- **Account chip** (e.g. *👤 Dad*) — your name; click to edit your profile, change your password, or sign out
+- **STATIONS** — toggle the session attendance panel
+- **JOURNAL** — toggle the journals panel
+- **CONTACTS** — open the shared contacts list
+- **CONFIG** — toggle personal settings panel
+- **ADMIN** — station settings and user management (admin accounts only)
+
+**Top bar — right side:**
+- **GMRS / FRS badge** — current service mode; click to toggle
+- **LISTENING / LISTEN** — STT active; click to pause automatic transcription
+- **TX ENABLED / LISTEN ONLY** — transmit status; click to toggle listen-only for your account
+- **Trash icon** — clear the chat log
 - **Sun/moon icon** — toggle dark/light mode
-- **Phone icon** — toggle touch mode (larger buttons for tablet/touchscreen use)
 
 ---
 
 ## 3. Receiving transmissions (RX)
 
-Received audio is automatically transcribed by Whisper and displayed in the chat area. You do not need to do anything — transcription runs continuously in the background.
+Received audio is automatically transcribed by Whisper and displayed in the chat area. Transcription runs continuously in the background.
 
-**Partial transcripts** appear in gray as the system processes audio in real time. The final transcript replaces them once the transmission ends.
+**Partial transcripts** appear while the system processes audio in real time. The final transcript replaces them once the transmission ends.
 
-**Callsign highlighting:** Recognized callsigns in received text appear as amber chips. Hover or tap a chip to see FCC verification status and contact details.
+**Callsign highlighting:** Recognized callsigns appear as amber chips. Hover or tap a chip for FCC verification status and contact details.
 
-**The scroll button (▼)** appears in the bottom-right of the chat area when you have scrolled up to read history. Tap it to jump back to the latest message. The chat auto-scrolls when you are already at the bottom.
+**Profanity filter:** If your profanity filter is enabled (see [Settings](#12-settings)), profanity is masked in received text with asterisks. Other users with the filter off see the unmasked text. This is a per-account setting.
 
 ---
 
 ## 4. Sending a message (TX)
 
-1. Confirm your **Callsign** and **Name** fields are filled in at the bottom of the screen.
-2. Type your message in the message box.
-3. Press **Enter** or tap **SEND**.
+1. Type your message in the message box at the bottom of the screen.
+2. Press **Enter** or tap **SEND**.
 
 The system will:
-- Expand any TTY abbreviations and Q-signals (see [Text shortcuts reference](#12-text-shortcuts-reference))
-- Apply a profanity filter if enabled
-- Wrap the message with your callsign per FCC rules
+- Expand TTY abbreviations and Q-signals (see [Text shortcuts reference](#15-text-shortcuts-reference))
+- Apply your profanity filter if enabled
+- Wrap the message with the station callsign per FCC rules
 - Synthesize speech using the configured Piper voice
 - Key the radio via PTT and transmit
 
-The status bar shows **Transmitting** (red) while the radio is keyed and returns to **Idle** when done.
+The status bar shows **Transmitting** while the radio is keyed and returns to **Idle** when done.
 
-**Targeting a specific station:** If the contacts list is open and you select a contact, the target callsign and name are pre-filled for you. The outgoing message will be addressed to that station.
+**Targeting a specific station:** Open Contacts, select a contact, and their callsign and name pre-fill the target fields. The outgoing message will be addressed to that station.
 
-**Placeholder tokens:** You can include `{1}`, `{2}`, etc. in your message as fill-in-the-blank slots. When you send, the system prompts you to fill in each slot before transmitting. Useful for templates like: `Heading to {1} — ETA {2} minutes`.
+**Placeholder tokens:** Include `{1}`, `{2}`, etc. as fill-in-the-blank slots. When you send, the system prompts you to fill in each before transmitting. Useful for templates: `Heading to {1} — ETA {2} minutes`.
 
-**Voice preview:** You can hear how your message will sound before transmitting. Open the Config panel and use the **Voice Test** button.
+**Voice preview:** Open the Config panel and use the **Voice Test** button to hear the TTS voice without keying the radio.
 
-**Listen-only mode:** When enabled (via Settings), all TX controls are disabled. The radio can still receive.
+**Listen-only mode:** When active, all TX controls are hidden. Your setting does not affect other users — each person controls their own TX access independently.
 
 ---
 
 ## 5. Station identification (FCC ID)
 
-GMRS regulations require your station to identify with your callsign at least every 15 minutes.
+GMRS regulations require your station to identify with the callsign at least every 15 minutes. Radio-TTY handles this automatically — every outgoing message is wrapped with the station callsign and the timer resets.
 
-Radio-TTY handles this automatically — every outgoing message is wrapped with your callsign. The 15-minute timer resets on each transmission.
-
-**Manual "THIS IS" ID:** Tap the **THIS IS** button to send a standalone identification in NATO phonetics (e.g., *"This is Whiskey Quebec Zulu X-Ray 9 9 9"*). Use this when required by net control or at the start of a session. The 15-minute timer resets when you send a THIS IS ID.
+**Manual "THIS IS" ID:** Tap the **THIS IS** button to send a standalone identification in NATO phonetics (e.g., *"This is Whiskey Quebec Zulu X-Ray 9 9 9"*). Use this at the start of a session or when required by net control.
 
 ---
 
 ## 6. Contacts
 
-The **Contacts** tab shows your shared station contact list. All operators on all connected devices see the same list.
+The **Contacts** panel shows the shared station contact list. All users on all devices see the same list.
 
-**Contact fields:**
 | Field | Description |
 |-------|-------------|
 | Callsign | Primary callsign |
@@ -129,107 +140,167 @@ The **Contacts** tab shows your shared station contact list. All operators on al
 | Verified | FCC verification status (✓ = verified) |
 
 **Adding a contact:**
-1. Click **Add** in the Contacts tab.
-2. Fill in the callsign at minimum.
-3. Click **FCC Look Up** to auto-fill name, location, and verification status from the FCC database (requires internet).
+1. Click **Add** in the Contacts panel.
+2. Enter the callsign at minimum.
+3. Click **FCC Look Up** to auto-fill name and location from the FCC database (requires internet).
 4. Click **Save**.
 
-**Editing or deleting:** Click the row to open the edit dialog.
+**Editing / deleting:** Click a row to open the edit dialog.
 
-**Verify All:** Click **Verify All** to run an FCC database check on every contact in the list. Verification results are saved automatically.
+**Verify All:** Runs an FCC database check on every contact in the list.
 
-**Sort by suffix:** Click **Sort by Suffix** to sort the list by the numeric/letter suffix of the callsign rather than alphabetically — useful for GMRS family callsigns that share a prefix.
-
-**Import / Export:** Use the Import (JSON or CSV) and Export buttons to move contacts between systems or make a backup.
+**Sort by suffix:** Sorts by the numeric suffix — useful for GMRS family callsigns that share a prefix.
 
 ---
 
 ## 7. Pending stations
 
-When the system detects an unrecognized callsign in a received transmission, it appears as an **amber chip** in the Pending Stations bar below the top bar.
+When an unrecognized callsign is detected in a received transmission, it appears as an **amber chip** in the bar below the top bar.
 
-- **Click a chip** to open the Add Contact dialog pre-filled with whatever info was extracted from the transcript (callsign, name, location).
-- **Right-click a chip** (or tap the × on the chip) to dismiss it without adding.
-- **Dismiss All** clears the entire pending bar.
+- **Click a chip** to open Add Contact pre-filled with the extracted callsign, name, and location.
+- **Tap × on a chip** to dismiss without adding.
+- **Dismiss All** clears the entire bar.
 
-If internet is available and a name was detected, the system automatically runs an FCC lookup in the background and may add the contact automatically. A notification appears in chat when this happens.
+If internet is available and a name was detected, the system runs an FCC lookup automatically and may add the contact on its own. A notification appears in chat when this happens.
 
 ---
 
 ## 8. Spectrogram
 
-The spectrogram panel shows a real-time waterfall display of incoming audio.
+The spectrogram shows a real-time waterfall of incoming audio.
 
-**Color indicators on the left edge:**
-- **Amber stripe** — squelch is open (audio is above the noise floor)
-- **White stripe** — VAD (voice activity detection) is active; speech is being segmented
+**Left-edge indicators:**
+- **Amber stripe** — squelch is open (audio above the noise floor)
+- **White stripe** — VAD active; speech is being segmented
 
 **Configuring the spectrogram** (Config tab):
+
 | Setting | Options | Description |
 |---------|---------|-------------|
-| Colormap | Viridis / Grayscale | Color scheme |
-| Freq Range | Voice / Full | Voice = 300–3400 Hz, Full = 0–8 kHz |
-| Time Window | 10s / 30s / 60s | How much history is visible |
+| Colormap | Viridis / Grayscale | Color scheme (per-user) |
+| Freq Range | Voice / Full | Voice = 300–3400 Hz, Full = 0–8 kHz (station-wide) |
+| Time Window | 10s / 30s / 60s | History visible (per-user) |
 
 ---
 
 ## 9. Session attendance
 
-The **Attendance** tab tracks which stations have been heard during the current session. Each row shows the callsign, name, and last-heard time.
+The **Stations** panel tracks which callsigns have been heard during the current session.
 
 **Clear attendance:** Resets the list for a new session or net.
 
-Attendance data is in-memory only and is not persisted between server restarts.
+Attendance is in-memory only and resets when the server restarts.
 
 ---
 
 ## 10. Journals
 
-The **Journals** tab lets you generate and save AI-written summaries of radio sessions. This feature requires a Google Gemini API key configured by your administrator.
+The **Journals** panel lets you generate and save AI-written session summaries. Requires a Google Gemini API key configured by your administrator.
 
 **Generating a journal:**
-1. At the end of a session, open the Journals tab.
-2. Click **Generate Journal**. The system sends the session transcript and detected callsigns to Gemini.
-3. Review the generated title and summary.
-4. Click **Save** to write it to the journals directory on the server.
+1. Open the Journals panel at the end of a session.
+2. Click **GENERATE FROM SESSION**. The system sends the transcript and detected callsigns to Gemini.
+3. Review and edit the title and summary.
+4. Click **SAVE JOURNAL** to persist it on the server.
 
-**Viewing past journals:** Saved journals appear in the list. Click one to read or delete it.
+**Viewing saved journals:** Saved journals appear in the list on the left. Click one to read it.
+
+**Deleting a journal:** Click the **delete icon** (🗑) next to a journal. Click once to arm the delete, click again to confirm.
+
+**Publishing to the family journal:** Click the **publish icon** (⬆) next to a saved journal to post it to the public family journal page. Click once to arm, click again to confirm. A snackbar confirms publication and shows the URL (`/journal`). See [Family journal](#11-family-journal-public-page).
 
 ---
 
-## 11. Settings
+## 11. Family journal (public page)
 
-Open the **Config** tab to access runtime settings. Changes take effect immediately and are saved to the server.
+The family journal at `/journal` is a public page — no login required. It shows the most recent published session logs and can be bookmarked and shared with anyone.
 
-### Audio
+**URL:** `http://<your-host>/journal`
+
+**What's shown:** Each published entry displays the session date, who published it, the AI-generated summary, and the list of stations on the air. Raw transcripts are not included.
+
+**Capacity:** The page always shows the 10 most recently published journals. Publishing an 11th entry automatically removes the oldest.
+
+**Accessibility:** The page is designed to meet WCAG 2.1 AA standards — it works with screen readers, keyboard navigation, and automatically adapts to your browser's dark mode setting. No JavaScript is required.
+
+---
+
+## 12. Settings
+
+Open the **Config** panel (CONFIG button in the top bar) to manage your personal settings. All changes take effect immediately and are saved to your account.
+
+### Audio (station-wide, admin)
 | Setting | Description |
 |---------|-------------|
 | Input device | Which microphone/audio interface the server listens on |
-| System Audio Loopback | Capture audio from a PulseAudio sink (for radios connected via virtual cable) |
-| Monitor | Enable/disable audio passthrough monitoring |
+| System audio loopback | Capture from a PulseAudio sink (for radios on virtual cable) |
 
-### Radio & content
+### Radio & content (per-user)
 | Setting | Description |
 |---------|-------------|
-| Service mode | GMRS or FRS — affects callsign UI display |
-| Listen-only mode | Disables all TX; receive only |
-| Profanity filter | Masks profanity in both sent and received text |
-| Fuzzy callsign matching | Attempts to match near-misses like "KILO DELTA 9" to known callsigns |
+| Profanity filter | Masks profanity in your sent and received text (other users unaffected) |
+| Listen-only mode | Disables TX for your account only |
+| Fuzzy callsign matching | Station-wide; attempts to match near-misses to known callsigns |
 
 ### Voice
 | Setting | Description |
 |---------|-------------|
-| Voice Test | Preview the current TTS voice using typed text without keying the radio |
+| Voice Test | Preview the TTS voice without keying the radio |
 
-### Spectrogram
-See [Spectrogram](#8-spectrogram) above.
+### Spectrogram (per-user)
+| Setting | Description |
+|---------|-------------|
+| Colormap | Viridis or Grayscale |
+| Time window | How much history is visible |
 
-### Station identity (admin)
-The **callsign**, **name**, **location**, **Gemini API key**, and **journals directory** are set here. These are server-wide settings — all operators see the same values. Changes are persisted to `config.json`.
+> Frequency range is a station-wide setting controlled by an admin.
+
+### Station identity (admin only)
+The **callsign**, **name**, **location**, **Gemini API key**, and **journals directory** are set in the **Admin** panel. These are shared by all users. Changes are persisted to `config.json`.
 
 ---
 
-## 12. Text shortcuts reference
+## 13. Your account
+
+Click your **name chip** in the top-left of the top bar to open the account menu.
+
+### Edit profile
+Change your **operator name** (shown in TX messages), **call sign**, **location**, and **avatar emoji**. These affect how your transmissions are identified.
+
+### Change password
+Enter a new password (minimum 8 characters). You must confirm it. Your current sessions remain active after a password change.
+
+### Sign out
+Ends your session on this device. Your preferences are saved and will be restored when you sign in again, even on a different device.
+
+> **Tip:** Signing out does not affect other users or the radio. The station continues to receive and the other family members stay connected.
+
+---
+
+## 14. Admin — managing users
+
+Admin accounts have access to the **ADMIN** button in the top bar. The Admin panel has two sections: station settings and user accounts.
+
+### User accounts
+
+The **User Accounts** table lists all family member accounts.
+
+**Creating a new account:**
+1. Click **New User**.
+2. Choose an avatar emoji, enter the display name, operator name, call sign, and location.
+3. Set a password (minimum 8 characters, confirmed).
+4. Check **Admin** if this person should be able to change station settings.
+5. Click **Create**.
+
+**Resetting a lockout:** If someone is locked out after too many wrong passwords, click the **unlock icon** (🔓) next to their name. They can sign in immediately.
+
+**Deleting an account:** Click the **delete icon** (🗑) next to a user. You cannot delete your own account.
+
+> **Security note:** For public internet access, put a TLS reverse proxy (nginx, Caddy) in front of the app. Passwords are hashed with PBKDF2-SHA256 (260,000 iterations, per-user salt) but session tokens travel in plaintext over HTTP without TLS.
+
+---
+
+## 15. Text shortcuts reference
 
 Radio-TTY automatically expands common TTY, Q-signal, and CW abbreviations before transmitting.
 
@@ -271,14 +342,15 @@ Radio-TTY automatically expands common TTY, Q-signal, and CW abbreviations befor
 
 Callsigns in outgoing messages are automatically spelled in NATO phonetics when transmitted via TTS. For example, `KD9ABC` is spoken as *"Kilo Delta 9 Alpha Bravo Charlie"*.
 
-You do not need to type phonetics manually — type the callsign normally and the system handles the rest.
+You do not need to type phonetics manually.
 
 ---
 
 ## Tips
 
-- **Multiple operators:** Each person opens Radio-TTY in their own browser and sets their own callsign and name. All clients see the same chat in real time.
-- **Tablet/touchscreen:** Enable Touch Mode (phone icon in the top bar) for larger buttons.
-- **Dark environments:** Enable Dark Mode (sun/moon icon in the top bar).
-- **Slow/noisy transcription:** The VAD threshold can be adjusted in `config.json` (`vad_threshold`). Lower values (e.g. 0.3) are more sensitive; higher (e.g. 0.7) require stronger signal.
+- **Multiple users:** Each family member signs into their own account. All clients see the same chat in real time, but each person's profanity filter, listen-only mode, and display preferences are independent.
+- **Across devices:** Your settings follow you. Sign in on your phone and get the same preferences as your tablet.
+- **Dark environments:** Click the sun/moon icon in the top bar, or your browser's dark mode preference is respected automatically on the public `/journal` page.
+- **Slow or noisy transcription:** The VAD threshold can be adjusted in `config.json` (`vad_threshold`). Lower values (e.g. 0.3) are more sensitive; higher (e.g. 0.7) require a stronger signal.
 - **FCC lookups not working:** The online indicator (dot in the top bar) shows internet connectivity. If it is gray, FCC verification is unavailable until connectivity is restored.
+- **Session locked out?** Wait 15 minutes or ask an admin to use **Admin → Users → Reset lockout**.
