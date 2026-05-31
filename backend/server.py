@@ -1317,7 +1317,7 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                     continue
                 allowed = {"dark_mode", "panel_order", "filter_profanity", "listen_only",
                            "spectro_colormap", "spectro_time_window_s", "tts_voice"}
-                updates = {k: v for k, v in data.items() if k in allowed}
+                updates = {k: v for k, v in data.get("prefs", data).items() if k in allowed}
                 if updates:
                     state.prefs.update(updates)
                     try:
