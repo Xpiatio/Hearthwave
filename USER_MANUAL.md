@@ -28,13 +28,25 @@ This manual covers day-to-day operation of Radio-TTY. For installation and serve
 
 Open your browser and navigate to the Radio-TTY host address — typically `http://192.168.x.x` or a hostname your administrator provides.
 
+### First launch — Setup screen
+
+If no accounts exist yet, the **Setup** screen appears instead of the login screen. This happens once, the very first time Radio-TTY is used.
+
+1. Enter your **display name** and choose a **password** (minimum 8 characters, confirmed).
+2. Optionally fill in **operator name**, **call sign**, and **location** — these can be changed later.
+3. Click **Create Account**. Your admin account is created and you are signed in automatically.
+
+After setup, go to **ADMIN → Users** to create accounts for other family members.
+
+### Returning users — Login screen
+
 The **login screen** appears automatically. Select your name from the profile list, enter your password, and click **Sign In**.
 
 - Each family member has their own account with a unique password.
 - Your preferences (dark mode, profanity filter, listen-only mode, etc.) are stored in your account and follow you across all devices — phone, tablet, laptop.
 - If you enter the wrong password three times, your account is locked for 15 minutes. Contact your administrator to unlock it sooner.
 
-**First time?** Your administrator creates your account and gives you your initial password. You can change it any time via the account menu (see [Your account](#13-your-account)).
+**New to the station?** Your administrator creates your account and gives you your initial password. You can change it any time via the account menu (see [Your account](#13-your-account)).
 
 If the server is unreachable, the status bar shows **OFFLINE** in amber. Refresh the page or contact your administrator.
 
