@@ -73,12 +73,14 @@ from __future__ import annotations
 
 import asyncio
 import collections
+import dataclasses
 import datetime
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 
 from backend.ai.gemini_client import GeminiError
 from backend.ai.gemini_client import generate_journal as _gemini_generate
@@ -96,13 +98,17 @@ from backend.fcc.id_rule import (
 from backend.hw_detect import detect as detect_compute
 from backend.net.online import invalidate as _invalidate_online
 from backend.net.online import is_online, is_online_cached
+from backend import auth_routes
+from backend.auth_routes import router as _auth_router
 from backend.persistence.attendance import AttendanceTracker, build_attendance_rows
 from backend.persistence.contacts import (
     ContactsStore,
     known_callsigns,
     normalize_callsign,
 )
-from backend.persistence.journal import delete_journal, load_journals, save_journal
+from backend.persistence.journal import delete_journal, load_journals, publish_journal, save_journal
+from backend.persistence.tokens import TokenStore
+from backend.persistence.users import DEFAULT_PREFS, SENSITIVE_PROFILE_FIELDS, UsersStore
 from backend.ptt.factory import make_ptt
 from backend.stt.worker import STTWorker
 from backend.text.callsigns import detect_callsigns, fuzzy_match_callsign, spell_digits_in_callsigns
@@ -120,6 +126,8 @@ _log = logging.getLogger(__name__)
 
 _config: ServerConfig | None = None
 _contacts_store: ContactsStore | None = None
+_users_store: UsersStore | None = None
+_token_store: TokenStore | None = None
 _stt_worker: STTWorker | None = None
 _synthesizer: TTSSynthesizer | None = None
 _monitor: "Any | None" = None  # AudioMonitor, lazy-imported
@@ -165,17 +173,27 @@ _auto_add_tasks: dict[str, asyncio.Task] = {}
 # ConnectionManager
 # ---------------------------------------------------------------------------
 
+@dataclasses.dataclass
+class ConnectionState:
+    user_id: str
+    is_admin: bool
+    prefs: dict = dataclasses.field(default_factory=lambda: dict(DEFAULT_PREFS))
+
+
 class ConnectionManager:
     """Tracks active WebSocket connections and provides broadcast helpers."""
 
     def __init__(self) -> None:
-        self._clients: set[WebSocket] = set()
+        self._clients: dict[WebSocket, ConnectionState] = {}
 
-    def add(self, ws: WebSocket) -> None:
-        self._clients.add(ws)
+    def add(self, ws: WebSocket, state: ConnectionState) -> None:
+        self._clients[ws] = state
 
     def remove(self, ws: WebSocket) -> None:
-        self._clients.discard(ws)
+        self._clients.pop(ws, None)
+
+    def get_state(self, ws: WebSocket) -> ConnectionState | None:
+        return self._clients.get(ws)
 
     async def broadcast(self, msg: dict) -> None:
         """Send msg to every connected client. Silently drops dead sockets."""
@@ -186,7 +204,19 @@ class ConnectionManager:
             except Exception:
                 dead.append(ws)
         for ws in dead:
-            self._clients.discard(ws)
+            self._clients.pop(ws, None)
+
+    async def broadcast_rx(self, base_msg: dict, raw_text: str, filtered_text: str) -> None:
+        """Broadcast rx_message with per-client profanity filtering."""
+        dead: list[WebSocket] = []
+        for ws, state in list(self._clients.items()):
+            text = filtered_text if state.prefs.get("filter_profanity", True) else raw_text
+            try:
+                await ws.send_json({**base_msg, "text": text})
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self._clients.pop(ws, None)
 
     async def send_to(self, ws: WebSocket, msg: dict) -> None:
         """Send msg to a single client."""
@@ -194,7 +224,13 @@ class ConnectionManager:
             await ws.send_json(msg)
         except Exception as exc:
             _log.warning("send_to failed: %s", exc)
-            self._clients.discard(ws)
+            self._clients.pop(ws, None)
+
+    async def broadcast_to_user(self, user_id: str, msg: dict) -> None:
+        """Send msg to all connections belonging to *user_id*."""
+        for ws, state in list(self._clients.items()):
+            if state.user_id == user_id:
+                await self.send_to(ws, msg)
 
 
 _manager = ConnectionManager()
@@ -309,18 +345,13 @@ async def _rx_pump() -> None:
             _vad_active = bool(partial)
 
             raw_text = result.get("text", "")
-            display_text = (
-                mask_profanity(raw_text)
-                if (_config and _config.filter_profanity)
-                else raw_text
-            )
+            filtered_text = mask_profanity(raw_text)
 
-            await _manager.broadcast({
-                "type": "rx_message",
-                "utterance_id": utterance_id,
-                "text": display_text,
-                "partial": partial,
-            })
+            await _manager.broadcast_rx(
+                {"type": "rx_message", "utterance_id": utterance_id, "partial": partial},
+                raw_text=raw_text,
+                filtered_text=filtered_text,
+            )
 
             # Callsign detection and attendance use the original unmasked text.
             if not partial:
@@ -417,7 +448,7 @@ async def _tx_pump() -> None:
                 # Normal outgoing message: expand shorthand → mask profanity →
                 # FCC-format with callsign preface → digit-isolate callsigns for TTS.
                 processed = expand_tty_abbreviations(raw_text)
-                if _config.filter_profanity:
+                if payload.get("_filter_profanity", True):
                     processed = mask_profanity(processed)
                 text, _last_id_time = format_outgoing_message(
                     processed,
@@ -480,14 +511,10 @@ def _build_status() -> dict:
         "volume_ok": _volume_ok(),
         "channel_clear": _channel_clear,
         "monitor_enabled": _monitor is not None and _monitor.is_active,
-        "listen_only": bool(_config and _config.listen_only),
         "stt_listening": _stt_listening,
         "service_mode": (_config.radio_service if _config else "GMRS") or "GMRS",
-        "filter_profanity": bool(_config and _config.filter_profanity),
         "fuzzy_callsign": bool(_config and _config.fuzzy_callsign),
-        "spectro_colormap": (_config.spectro_colormap if _config else "viridis"),
         "spectro_freq_range": (_config.spectro_freq_range if _config else "full"),
-        "spectro_time_window_s": (_config.spectro_time_window_s if _config else 30),
         # Admin-editable identity fields
         "station_callsign": (_config.callsign if _config else "N0CALL"),
         "station_name": (_config.name if _config else ""),
@@ -497,6 +524,14 @@ def _build_status() -> dict:
         "input_device": (_config.input_device if _config else -1),
         "system_monitor_sink": (_config.system_monitor_sink if _config else ""),
     }
+
+
+def _safe_profile(profile: dict) -> dict:
+    return {k: v for k, v in profile.items() if k not in SENSITIVE_PROFILE_FIELDS}
+
+
+def _build_user_profile_msg(profile: dict) -> dict:
+    return {"type": "user_profile", "profile": _safe_profile(profile)}
 
 
 async def _status_pump() -> None:
@@ -560,7 +595,7 @@ async def _online_status_pump() -> None:
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     """Startup / shutdown wiring."""
-    global _config, _contacts_store, _stt_worker, _synthesizer, _monitor
+    global _config, _contacts_store, _users_store, _token_store, _stt_worker, _synthesizer, _monitor
     global _stt_out_queue, _tx_queue, _tts_event_queue, _background_tasks
     global _audio_level, _radio_error, _channel_clear, _last_id_time, _has_transmitted
     global _level_window, _attendance, _spectro, _monitor_chunk_cb
@@ -575,6 +610,49 @@ async def _lifespan(app: FastAPI):
 
     _contacts_store = ContactsStore(_config.contacts_file)
     _log.info("Contacts loaded: %d entries", len(_contacts_store.get_all()))
+
+    _users_store = UsersStore(_config.users_file)
+    _token_store = TokenStore(_config.tokens_file)
+    purged = _token_store.purge_expired()
+    if purged:
+        _log.info("Purged %d expired session tokens.", purged)
+
+    # Bootstrap: create default admin account if users.json is empty.
+    if _users_store.is_empty():
+        admin_pass = os.environ.get("RADIO_TTY_ADMIN_PASS") or None
+        generated = admin_pass is None
+        if generated:
+            import secrets as _sec
+            admin_pass = _sec.token_urlsafe(12)
+        _users_store.create(
+            display_name="Admin",
+            password=admin_pass,
+            avatar_emoji="👤",
+            operator_name=_config.name or "Admin",
+            callsign=_config.callsign or "N0CALL",
+            location=_config.location or "",
+            is_admin=True,
+            prefs={
+                "dark_mode": False,
+                "panel_order": ["config", "attendance", "journal"],
+                "filter_profanity": _config.filter_profanity,
+                "listen_only": _config.listen_only,
+                "spectro_colormap": _config.spectro_colormap,
+                "spectro_time_window_s": _config.spectro_time_window_s,
+            },
+        )
+        if generated:
+            print(
+                f"\n*** Radio-TTY: Admin account created. ***\n"
+                f"    Display name : Admin\n"
+                f"    Password     : {admin_pass}\n"
+                f"    Set RADIO_TTY_ADMIN_PASS env var to use a fixed password on restart.\n",
+                flush=True,
+            )
+        _log.info("Created default admin user account.")
+
+    # Wire auth routes with the live stores.
+    auth_routes.init(_users_store, _token_store)
 
     _stt_out_queue = asyncio.Queue()
     _tx_queue = asyncio.Queue()
@@ -673,6 +751,7 @@ async def _lifespan(app: FastAPI):
 # ---------------------------------------------------------------------------
 
 app = FastAPI(title="Radio-TTY", lifespan=_lifespan)
+app.include_router(_auth_router, prefix="/auth")
 
 
 # ---------------------------------------------------------------------------
@@ -689,14 +768,29 @@ async def health() -> dict:
 # ---------------------------------------------------------------------------
 
 @app.websocket("/ws")
-async def websocket_endpoint(ws: WebSocket) -> None:
+async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=None)) -> None:
     global _stt_worker, _stt_listening
+
+    # Validate session token — accept first so we can send a close frame.
+    user_id = _token_store.validate(token) if (_token_store and token) else None
+    profile = _users_store.get(user_id) if (_users_store and user_id) else None
+    if not user_id or not profile:
+        await ws.accept()
+        await ws.close(code=4001)
+        return
+
     await ws.accept()
-    _manager.add(ws)
-    _log.info("Client connected: %s", ws.client)
+    state = ConnectionState(
+        user_id=user_id,
+        is_admin=bool(profile.get("is_admin", False)),
+        prefs={**DEFAULT_PREFS, **profile.get("prefs", {})},
+    )
+    _manager.add(ws, state)
+    _log.info("Client connected: %s (user=%s)", ws.client, user_id)
 
     # Send initial state to the newly connected client.
     await _manager.send_to(ws, _build_status())
+    await _manager.send_to(ws, _build_user_profile_msg(profile))
     if _contacts_store is not None:
         await _manager.send_to(ws, {
             "type": "contacts",
@@ -722,10 +816,10 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                     })
                     continue
 
-                if _config and _config.listen_only:
+                if state.prefs.get("listen_only", False):
                     await _manager.send_to(ws, {
                         "type": "error",
-                        "detail": "Radio is in listen-only mode; TX disabled.",
+                        "detail": "You are in listen-only mode; TX disabled.",
                     })
                     continue
 
@@ -745,7 +839,10 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                     })
                     continue
 
-                await _tx_queue.put(data)
+                await _tx_queue.put({
+                    **data,
+                    "_filter_profanity": state.prefs.get("filter_profanity", True),
+                })
                 await _manager.broadcast({"type": "tx_status", "status": "transmitting"})
 
             elif msg_type == "add_contact":
@@ -864,17 +961,36 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                 except (ValueError, OSError) as exc:
                     await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
 
+            elif msg_type == "publish_journal":
+                if _config is None:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Server not ready."})
+                    continue
+                file_path = (data.get("file_path") or "").strip()
+                display_name = (
+                    (_users_store.get_public_one(state.user_id) or {}).get("display_name")
+                    or state.user_id
+                ) if _users_store else state.user_id
+                try:
+                    entry = publish_journal(file_path, display_name, _config.journals_dir)
+                    await _manager.send_to(ws, {
+                        "type": "journal_published",
+                        "title": entry["title"],
+                    })
+                except (ValueError, OSError) as exc:
+                    await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
+
             elif msg_type == "standalone_id":
                 # "This is" button — transmit a NATO-phonetic station ID.
-                if _config and _config.listen_only:
+                if state.prefs.get("listen_only", False):
                     await _manager.send_to(ws, {
                         "type": "error",
-                        "detail": "Radio is in listen-only mode; TX disabled.",
+                        "detail": "You are in listen-only mode; TX disabled.",
                     })
                     continue
                 await _manager.broadcast({"type": "tx_status", "status": "transmitting"})
                 await _tx_queue.put({
                     "_standalone_id": True,
+                    "_filter_profanity": state.prefs.get("filter_profanity", True),
                     "operator": (data.get("operator") or "").strip(),
                     "callsign": (data.get("callsign") or "").strip(),
                     "location": (data.get("location") or "").strip(),
@@ -989,12 +1105,14 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                 await _manager.broadcast(_build_status())
 
             elif msg_type == "set_listen_only":
-                if _config is None:
-                    await _manager.send_to(ws, {"type": "error", "detail": "Config not loaded."})
-                    continue
-                _config["listen_only"] = bool(data.get("listen_only", False))
-                _config.save()
-                await _manager.broadcast(_build_status())
+                listen_only = bool(data.get("listen_only", False))
+                state.prefs["listen_only"] = listen_only
+                if _users_store is not None:
+                    try:
+                        updated = _users_store.update_prefs(state.user_id, {"listen_only": listen_only})
+                        await _manager.send_to(ws, _build_user_profile_msg(updated))
+                    except KeyError:
+                        pass
 
             elif msg_type == "set_stt_listening":
                 _stt_listening = bool(data.get("listening", True))
@@ -1059,30 +1177,50 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                 if _config is None:
                     await _manager.send_to(ws, {"type": "error", "detail": "Config not loaded."})
                     continue
-                allowed_keys = {"filter_profanity", "fuzzy_callsign"}
-                for key in allowed_keys:
-                    if key in data:
-                        _config[key] = data[key]
-                _config.save()
-                await _manager.broadcast(_build_status())
+                # filter_profanity is now per-user; fuzzy_callsign remains station-wide.
+                if "filter_profanity" in data:
+                    fp = bool(data["filter_profanity"])
+                    state.prefs["filter_profanity"] = fp
+                    if _users_store is not None:
+                        try:
+                            updated = _users_store.update_prefs(state.user_id, {"filter_profanity": fp})
+                            await _manager.send_to(ws, _build_user_profile_msg(updated))
+                        except KeyError:
+                            pass
+                if "fuzzy_callsign" in data:
+                    _config["fuzzy_callsign"] = bool(data["fuzzy_callsign"])
+                    _config.save()
+                    await _manager.broadcast(_build_status())
 
             elif msg_type == "set_spectro_config":
                 if _config is None:
                     await _manager.send_to(ws, {"type": "error", "detail": "Config not loaded."})
                     continue
+                user_pref_updates: dict = {}
                 if "colormap" in data:
-                    _config["spectro_colormap"] = str(data["colormap"])
+                    user_pref_updates["spectro_colormap"] = str(data["colormap"])
+                if "time_window_s" in data:
+                    user_pref_updates["spectro_time_window_s"] = int(data["time_window_s"])
+                if user_pref_updates:
+                    state.prefs.update(user_pref_updates)
+                    if _users_store is not None:
+                        try:
+                            updated = _users_store.update_prefs(state.user_id, user_pref_updates)
+                            await _manager.send_to(ws, _build_user_profile_msg(updated))
+                        except KeyError:
+                            pass
                 if "freq_range" in data:
                     freq_range = str(data["freq_range"])
                     _config["spectro_freq_range"] = freq_range
                     if _spectro is not None:
                         _spectro.set_freq_range(freq_range)
-                if "time_window_s" in data:
-                    _config["spectro_time_window_s"] = int(data["time_window_s"])
-                _config.save()
-                await _manager.broadcast(_build_status())
+                    _config.save()
+                    await _manager.broadcast(_build_status())
 
             elif msg_type == "set_admin_config":
+                if not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
+                    continue
                 if _config is None:
                     await _manager.send_to(ws, {"type": "error", "detail": "Config not loaded."})
                     continue
@@ -1102,6 +1240,113 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                         _config["journals_dir"] = jdir
                 _config.save()
                 await _manager.broadcast(_build_status())
+
+            elif msg_type == "save_user_prefs":
+                if _users_store is None:
+                    continue
+                allowed = {"dark_mode", "panel_order", "filter_profanity", "listen_only",
+                           "spectro_colormap", "spectro_time_window_s"}
+                updates = {k: v for k, v in data.items() if k in allowed}
+                if updates:
+                    state.prefs.update(updates)
+                    try:
+                        updated = _users_store.update_prefs(state.user_id, updates)
+                        await _manager.send_to(ws, _build_user_profile_msg(updated))
+                    except KeyError:
+                        pass
+
+            elif msg_type == "update_profile":
+                if _users_store is None:
+                    continue
+                target_id = data.get("user_id") or state.user_id
+                if target_id != state.user_id and not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
+                    continue
+                allowed = {"display_name", "avatar_emoji", "operator_name", "callsign", "location"}
+                if state.is_admin:
+                    allowed.add("is_admin")
+                updates = {k: v for k, v in data.items() if k in allowed}
+                new_password = data.get("new_password")
+                try:
+                    updated = _users_store.update_profile(target_id, updates)
+                    if new_password:
+                        _users_store.change_password(target_id, str(new_password))
+                        updated = _users_store.get(target_id)
+                    msg_out = _build_user_profile_msg(updated)
+                    await _manager.broadcast_to_user(target_id, msg_out)
+                    await _manager.broadcast({
+                        "type": "profiles",
+                        "profiles": _users_store.get_public(),
+                    })
+                except KeyError as exc:
+                    await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
+
+            elif msg_type == "create_profile":
+                if not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
+                    continue
+                if _users_store is None:
+                    continue
+                display_name = (data.get("display_name") or "").strip()
+                password = (data.get("password") or "").strip()
+                if not display_name or not password:
+                    await _manager.send_to(ws, {"type": "error", "detail": "display_name and password are required."})
+                    continue
+                _users_store.create(
+                    display_name=display_name,
+                    password=password,
+                    avatar_emoji=(data.get("avatar_emoji") or "👤"),
+                    operator_name=(data.get("operator_name") or display_name),
+                    callsign=(data.get("callsign") or ""),
+                    location=(data.get("location") or ""),
+                    is_admin=bool(data.get("is_admin", False)),
+                )
+                await _manager.broadcast({
+                    "type": "profiles",
+                    "profiles": _users_store.get_public(),
+                })
+
+            elif msg_type == "delete_profile":
+                if not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
+                    continue
+                if _users_store is None:
+                    continue
+                target_id = (data.get("user_id") or "").strip()
+                if target_id == state.user_id:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Cannot delete your own account."})
+                    continue
+                try:
+                    _users_store.delete(target_id)
+                    await _manager.broadcast({
+                        "type": "profiles",
+                        "profiles": _users_store.get_public(),
+                    })
+                except KeyError as exc:
+                    await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
+
+            elif msg_type == "list_profiles":
+                if _users_store is not None:
+                    await _manager.send_to(ws, {
+                        "type": "profiles",
+                        "profiles": _users_store.get_public(),
+                    })
+
+            elif msg_type == "reset_lockout":
+                if not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
+                    continue
+                if _users_store is None:
+                    continue
+                target_id = (data.get("user_id") or "").strip()
+                try:
+                    _users_store.reset_lockout(target_id)
+                    await _manager.broadcast({
+                        "type": "profiles",
+                        "profiles": _users_store.get_public(),
+                    })
+                except KeyError as exc:
+                    await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
 
             else:
                 _log.debug("Unknown message type from client: %r", msg_type)

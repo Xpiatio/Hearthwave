@@ -30,6 +30,8 @@ services:
       dockerfile: Dockerfile
     ports:
       - "80:80"
+    volumes:
+      - ./data/public:/usr/share/nginx/html/public:ro
     depends_on:
       backend:
         condition: service_healthy

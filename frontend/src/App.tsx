@@ -3,9 +3,9 @@ import { DndContext } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { DraggablePanel } from './components/DraggablePanel/DraggablePanel';
-import { ThemeProvider, CssBaseline, Box } from '@mui/material';
+import { ThemeProvider, CssBaseline, Box, CircularProgress, Snackbar, Alert } from '@mui/material';
 import { makeTheme } from './theme';
-import { useOperator } from './hooks/useOperator';
+import { useAuth } from './hooks/useAuth';
 import { useWebSocket } from './hooks/useWebSocket';
 import type {
   WsMessage,
@@ -17,8 +17,9 @@ import type {
   FccLookupResultMsg,
   InputDeviceOption,
   MonitorSinkOption,
+  UserProfile,
 } from './types/ws';
-import { OperatorModal } from './components/OperatorModal/OperatorModal';
+import { LoginScreen } from './components/LoginScreen/LoginScreen';
 import { TopBar } from './components/TopBar/TopBar';
 import { ChatDisplay } from './components/ChatDisplay/ChatDisplay';
 import type { ChatEntry } from './components/ChatDisplay/ChatDisplay';
@@ -34,6 +35,7 @@ import { ContactsDialog } from './components/ContactsDialog/ContactsDialog';
 import { PendingStationsBar } from './components/PendingStationsBar/PendingStationsBar';
 import { ConfigPanel } from './components/ConfigPanel/ConfigPanel';
 import { AdminPanel } from './components/AdminPanel/AdminPanel';
+import { UsersPanel } from './components/UsersPanel/UsersPanel';
 import './App.css';
 
 let entryCounter = 0;
@@ -66,18 +68,19 @@ interface PendingStation {
 }
 
 export default function App() {
-  const { operator, setOperator } = useOperator();
-  const [showModal, setShowModal] = useState(operator === null);
+  const { token, profile, setProfile, loading: authLoading, login, logout } = useAuth();
+
   const [messages, setMessages] = useState<ChatEntry[]>([]);
   const [radioStatus, setRadioStatus] = useState<StatusMsg | null>(null);
   const [transmitting, setTransmitting] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const inProgressRef = useRef<Map<string, string>>(new Map());
   const sendRef = useRef<(p: unknown) => void>(() => {});
   const messageInputRef = useRef<MessageInputHandle>(null);
   const spectroRef = useRef<SpectrogramHandle>(null);
-  const operatorRef = useRef(operator);
-  operatorRef.current = operator;
+  const profileRef = useRef(profile);
+  profileRef.current = profile;
 
   // Panel visibility
   const [showAttendance, setShowAttendance] = useState(false);
@@ -86,23 +89,20 @@ export default function App() {
   const [showConfig, setShowConfig] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
 
-  // Panel order (persisted)
+  // Panel order — initialized from localStorage to avoid FOUC; overridden by profile on load
   const [panelOrder, setPanelOrder] = useState<string[]>(
-    () => JSON.parse(localStorage.getItem('radio_tty_panel_order') ?? '["config","attendance","journal"]')
+    () => {
+      try {
+        return JSON.parse(localStorage.getItem('radio_tty_panel_order') ?? '["config","attendance","journal"]');
+      } catch { return ['config', 'attendance', 'journal']; }
+    }
   );
 
-  // Theme
+  // Dark mode — initialized from localStorage to avoid FOUC; overridden by profile on load
   const [darkMode, setDarkMode] = useState(
     () => localStorage.getItem('radio_tty_dark_mode') === 'true'
   );
   const theme = useMemo(() => makeTheme(darkMode), [darkMode]);
-
-  function handleToggleDark() {
-    setDarkMode((v) => {
-      localStorage.setItem('radio_tty_dark_mode', String(!v));
-      return !v;
-    });
-  }
 
   // Attendance
   const [attendanceStations, setAttendanceStations] = useState<AttendanceStation[]>([]);
@@ -113,6 +113,9 @@ export default function App() {
   const [journalGenerating, setJournalGenerating] = useState(false);
   const [journalError, setJournalError] = useState<string | null>(null);
 
+  // Publish snackbar
+  const [publishSnack, setPublishSnack] = useState<string | null>(null);
+
   // FCC / Callsigns
   const [pendingStations, setPendingStations] = useState<PendingStation[]>([]);
   const [isOnline, setIsOnline] = useState<boolean | null>(null);
@@ -120,19 +123,21 @@ export default function App() {
   const [verifyAllComplete, setVerifyAllComplete] = useState(false);
   const [pendingPrefilledCallsign, setPendingPrefilledCallsign] = useState<string | undefined>();
 
-  // Config (synced from server status message)
+  // Per-user prefs (synced from user_profile message)
   const [listenOnly, setListenOnly] = useState(false);
+  const [filterProfanity, setFilterProfanity] = useState(true);
+  const [spectroColormap, setSpectroColormap] = useState<'viridis' | 'grayscale'>('viridis');
+  const [spectroTimeWindowS, setSpectroTimeWindowS] = useState(30);
+
+  // Station-wide settings (synced from status message)
   const [sttListening, setSttListening] = useState(true);
   const [serviceMode, setServiceMode] = useState('GMRS');
-  const [filterProfanity, setFilterProfanity] = useState(true);
   const [fuzzyCallsign, setFuzzyCallsign] = useState(false);
   const [inputDevice, setInputDevice] = useState<string | number>(-1);
   const [systemMonitorSink, setSystemMonitorSink] = useState('');
   const [inputDevices, setInputDevices] = useState<InputDeviceOption[]>([]);
   const [monitorSinks, setMonitorSinks] = useState<MonitorSinkOption[]>([]);
-  const [spectroColormap, setSpectroColormap] = useState<'viridis' | 'grayscale'>('viridis');
   const [spectroFreqRange, setSpectroFreqRange] = useState<'voice' | 'full'>('full');
-  const [spectroTimeWindowS, setSpectroTimeWindowS] = useState(30);
 
   // Admin config (synced from server status message)
   const [adminConfig, setAdminConfig] = useState({
@@ -212,18 +217,15 @@ export default function App() {
 
       case 'status':
         setRadioStatus(msg);
-        if (msg.listen_only !== undefined) setListenOnly(msg.listen_only);
+        // Per-user fields (listen_only, filter_profanity, spectro_colormap, spectro_time_window_s)
+        // are now set from user_profile messages — not from status.
         if (msg.stt_listening !== undefined) setSttListening(msg.stt_listening);
         if (msg.service_mode !== undefined) setServiceMode(msg.service_mode);
-        if (msg.filter_profanity !== undefined) setFilterProfanity(msg.filter_profanity);
         if (msg.fuzzy_callsign !== undefined) setFuzzyCallsign(msg.fuzzy_callsign);
         if (msg.input_device !== undefined) setInputDevice(msg.input_device);
         if (msg.system_monitor_sink !== undefined) setSystemMonitorSink(msg.system_monitor_sink);
-        if (msg.spectro_colormap === 'viridis' || msg.spectro_colormap === 'grayscale')
-          setSpectroColormap(msg.spectro_colormap);
         if (msg.spectro_freq_range === 'voice' || msg.spectro_freq_range === 'full')
           setSpectroFreqRange(msg.spectro_freq_range);
-        if (msg.spectro_time_window_s !== undefined) setSpectroTimeWindowS(msg.spectro_time_window_s);
         setAdminConfig((prev) => ({
           stationCallsign: msg.station_callsign ?? prev.stationCallsign,
           stationName: msg.station_name ?? prev.stationName,
@@ -231,6 +233,30 @@ export default function App() {
           geminiApiKeySet: msg.gemini_api_key_set ?? prev.geminiApiKeySet,
           journalsDir: msg.journals_dir ?? prev.journalsDir,
         }));
+        break;
+
+      case 'user_profile': {
+        const p = msg.profile;
+        setProfile(p);
+        // Apply per-user prefs from the profile
+        const prefs = p.prefs;
+        if (prefs.dark_mode !== undefined) {
+          setDarkMode(prefs.dark_mode);
+          localStorage.setItem('radio_tty_dark_mode', String(prefs.dark_mode));
+        }
+        if (prefs.panel_order) {
+          setPanelOrder(prefs.panel_order);
+          localStorage.setItem('radio_tty_panel_order', JSON.stringify(prefs.panel_order));
+        }
+        if (prefs.filter_profanity !== undefined) setFilterProfanity(prefs.filter_profanity);
+        if (prefs.listen_only !== undefined) setListenOnly(prefs.listen_only);
+        if (prefs.spectro_colormap) setSpectroColormap(prefs.spectro_colormap);
+        if (prefs.spectro_time_window_s) setSpectroTimeWindowS(prefs.spectro_time_window_s);
+        break;
+      }
+
+      case 'profiles':
+        setProfiles(msg.profiles);
         break;
 
       case 'tx_status':
@@ -327,6 +353,10 @@ export default function App() {
         sendRef.current({ type: 'list_journals' });
         break;
 
+      case 'journal_published':
+        setPublishSnack(`"${msg.title}" published to /journal`);
+        break;
+
       case 'journal_deleted':
         setJournals((prev) => prev.filter((j) => j._file !== msg.file_path));
         break;
@@ -361,28 +391,26 @@ export default function App() {
         setVerifyAllComplete(true);
         break;
     }
-  }, []);
+  }, [setProfile]);
 
-  const { send, connected } = useWebSocket({ onMessage: handleWsMessage });
+  const { send, connected } = useWebSocket({
+    onMessage: handleWsMessage,
+    token,
+    onOpen: () => {
+      // Request input device list whenever the socket connects or reconnects.
+      sendRef.current({ type: 'list_input_devices' });
+      sendRef.current({ type: 'list_profiles' });
+    },
+  });
   sendRef.current = send;
 
-  // Request input device list whenever the socket connects (or reconnects).
-  const [prevConnected, setPrevConnected] = useState(false);
-  if (connected !== prevConnected) {
-    setPrevConnected(connected);
-    if (connected) send({ type: 'list_input_devices' });
-  }
-
   function handleSend(text: string, targetCall: string, targetName: string) {
-    if (!operator) {
-      setShowModal(true);
-      return;
-    }
+    if (!profile) return;
     const payload: TxMessagePayload = {
       type: 'tx_message',
       text,
-      operator: operator.operatorName,
-      callsign: operator.callsign,
+      operator: profile.operator_name,
+      callsign: profile.callsign || adminConfig.stationCallsign,
       target_call: targetCall,
       target_name: targetName,
     };
@@ -393,7 +421,7 @@ export default function App() {
         id: nextId(),
         timestamp: formatTime(),
         kind: 'tx',
-        sender: operator.callsign,
+        sender: profile.callsign || adminConfig.stationCallsign,
         text,
       },
     ]);
@@ -405,7 +433,9 @@ export default function App() {
   }
 
   function handleToggleListenOnly() {
-    send({ type: 'set_listen_only', listen_only: !listenOnly });
+    const next = !listenOnly;
+    setListenOnly(next);
+    send({ type: 'set_listen_only', listen_only: next });
   }
 
   function handleToggleSttListening() {
@@ -413,7 +443,9 @@ export default function App() {
   }
 
   function handleToggleProfanity() {
-    send({ type: 'set_config', filter_profanity: !filterProfanity });
+    const next = !filterProfanity;
+    setFilterProfanity(next);
+    send({ type: 'set_config', filter_profanity: next });
   }
 
   function handleToggleFuzzy() {
@@ -455,21 +487,43 @@ export default function App() {
     send({ type: 'set_admin_config', ...values });
   }
 
+  function handleToggleDark() {
+    const next = !darkMode;
+    setDarkMode(next);
+    localStorage.setItem('radio_tty_dark_mode', String(next));
+    send({ type: 'save_user_prefs', prefs: { dark_mode: next } });
+  }
+
   function handleClearChat() {
     setMessages([]);
   }
 
-  // Add pending station → open contacts dialog pre-filled
   function handleAddPending(station: PendingStation) {
     setPendingPrefilledCallsign(station.callsign);
     setShowContacts(true);
   }
 
-  // When contacts dialog closes, clear the prefilled callsign
   function handleContactsClose() {
     setShowContacts(false);
     setPendingPrefilledCallsign(undefined);
     setFccLookupResult(null);
+  }
+
+  function handleUpdateProfile(updates: {
+    operator_name?: string;
+    callsign?: string;
+    location?: string;
+    avatar_emoji?: string;
+  }) {
+    send({ type: 'update_profile', user_id: profile?.id, ...updates });
+  }
+
+  function handleChangePassword(newPassword: string) {
+    send({ type: 'update_profile', user_id: profile?.id, new_password: newPassword });
+  }
+
+  async function handleLogout() {
+    await logout();
   }
 
   const rxMessages = messages.filter((m) => m.kind === 'rx' && !m.partial);
@@ -486,6 +540,7 @@ export default function App() {
         const newIndex = prev.indexOf(String(over.id));
         const next = arrayMove(prev, oldIndex, newIndex);
         localStorage.setItem('radio_tty_panel_order', JSON.stringify(next));
+        send({ type: 'save_user_prefs', prefs: { panel_order: next } });
         return next;
       });
     }
@@ -494,6 +549,28 @@ export default function App() {
   const stationStatus = connected ? 'READY' : 'OFFLINE';
   const showCallsignChips = serviceMode === 'GMRS';
 
+  // Show a blank screen while validating existing token on startup.
+  if (authLoading) {
+    return (
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <CircularProgress />
+        </Box>
+      </ThemeProvider>
+    );
+  }
+
+  // Show login screen when not authenticated.
+  if (!profile || !token) {
+    return (
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <LoginScreen onLogin={login} />
+      </ThemeProvider>
+    );
+  }
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -501,24 +578,13 @@ export default function App() {
         className="app-shell"
         sx={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
       >
-        {showModal && (
-          <OperatorModal
-            initial={operator}
-            onSave={(op) => {
-              setOperator(op);
-              setShowModal(false);
-            }}
-            onClose={operator ? () => setShowModal(false) : undefined}
-          />
-        )}
-
         <TopBar
+          profile={profile}
           stationStatus={stationStatus}
           connected={connected}
           isOnline={isOnline}
           serviceMode={serviceMode}
           listenOnly={listenOnly}
-          onChangeOperator={() => setShowModal(true)}
           showAttendance={showAttendance}
           onToggleAttendance={() => setShowAttendance((v) => !v)}
           showJournal={showJournal}
@@ -539,6 +605,9 @@ export default function App() {
           sttListening={sttListening}
           onToggleSttListening={handleToggleSttListening}
           onClearChat={handleClearChat}
+          onUpdateProfile={handleUpdateProfile}
+          onChangePassword={handleChangePassword}
+          onLogout={handleLogout}
         />
 
         <DndContext onDragEnd={handlePanelDragEnd}>
@@ -599,6 +668,7 @@ export default function App() {
                         send({ type: 'save_journal', title, summary, callsigns_locations, transcript });
                       }}
                       onDelete={(file_path) => send({ type: 'delete_journal', file_path })}
+                      onPublish={(file_path) => send({ type: 'publish_journal', file_path })}
                       onDismissResult={() => setJournalResult(null)}
                     />
                   </DraggablePanel>
@@ -632,7 +702,7 @@ export default function App() {
 
         {!listenOnly && (
           <QuickMessages
-            operatorName={operator?.operatorName ?? ''}
+            operatorName={profile.operator_name}
             onSelect={(text) => messageInputRef.current?.setText(text)}
           />
         )}
@@ -642,11 +712,15 @@ export default function App() {
             ref={messageInputRef}
             transmitting={transmitting}
             contacts={contacts}
-            myCallsign={operator?.callsign ?? ''}
+            myCallsign={profile.callsign || adminConfig.stationCallsign}
             onSend={handleSend}
             onStandaloneId={() => {
-              if (!operator) { setShowModal(true); return; }
-              send({ type: 'standalone_id', operator: operator.operatorName, callsign: operator.callsign, location: operator.location });
+              send({
+                type: 'standalone_id',
+                operator: profile.operator_name,
+                callsign: profile.callsign || adminConfig.stationCallsign,
+                location: profile.location,
+              });
             }}
           />
         )}
@@ -667,7 +741,32 @@ export default function App() {
           onClose={() => setShowAdmin(false)}
           config={adminConfig}
           onSave={handleAdminSave}
-        />
+        >
+          {profile.is_admin && (
+            <UsersPanel
+              profiles={profiles}
+              currentUserId={profile.id}
+              onCreateProfile={(data) => send({ type: 'create_profile', ...data })}
+              onDeleteProfile={(userId) => send({ type: 'delete_profile', user_id: userId })}
+              onResetLockout={(userId) => send({ type: 'reset_lockout', user_id: userId })}
+            />
+          )}
+        </AdminPanel>
+
+        <Snackbar
+          open={publishSnack !== null}
+          autoHideDuration={5000}
+          onClose={() => setPublishSnack(null)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        >
+          <Alert
+            onClose={() => setPublishSnack(null)}
+            severity="success"
+            sx={{ width: '100%' }}
+          >
+            {publishSnack}
+          </Alert>
+        </Snackbar>
       </Box>
     </ThemeProvider>
   );
