@@ -69,6 +69,14 @@ export interface TxStatusMsg {
   status: 'transmitting' | 'idle';
 }
 
+export interface TxEchoMsg {
+  type: 'tx_echo';
+  ts: string;
+  callsign: string;
+  operator: string;
+  text: string;
+}
+
 export interface SystemMsgMsg {
   type: 'system_msg';
   text: string;
@@ -249,6 +257,7 @@ export type WsMessage =
   | StatusMsg
   | ContactsMsg
   | TxStatusMsg
+  | TxEchoMsg
   | SystemMsgMsg
   | SpeakerEnrolledMsg
   | SpeakerResetMsg
