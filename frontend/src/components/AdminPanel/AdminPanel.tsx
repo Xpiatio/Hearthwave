@@ -45,16 +45,18 @@ export function AdminPanel({ open, onClose, config, onSave, children }: Props) {
   const [journalsDir, setJournalsDir] = useState('');
   const [showKey, setShowKey] = useState(false);
 
+  // Only re-initialize when the dialog opens. Keeping `config` out of the dep
+  // array prevents incoming WS status messages from resetting in-progress edits.
   useEffect(() => {
-    if (open) {
-      setCallsign(config.stationCallsign);
-      setName(config.stationName);
-      setLocation(config.stationLocation);
-      setGeminiKey('');
-      setJournalsDir(config.journalsDir);
-      setShowKey(false);
-    }
-  }, [open, config]);
+    if (!open) return;
+    setCallsign(config.stationCallsign);
+    setName(config.stationName);
+    setLocation(config.stationLocation);
+    setGeminiKey('');
+    setJournalsDir(config.journalsDir);
+    setShowKey(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   function handleSave() {
     onSave({

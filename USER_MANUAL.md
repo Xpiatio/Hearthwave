@@ -34,6 +34,7 @@ If no accounts exist yet, the **Setup** screen appears instead of the login scre
 
 1. Enter your **display name** and choose a **password** (minimum 8 characters, confirmed).
 2. Optionally fill in **operator name**, **call sign**, and **location** — these can be changed later.
+   - The call sign and location you enter here are saved to your personal profile **and** used to seed the station defaults in **Admin Settings**. Both can be adjusted independently afterward.
 3. Click **Create Account**. Your admin account is created and you are signed in automatically.
 
 After setup, go to **ADMIN → Users** to create accounts for other family members.
@@ -277,7 +278,9 @@ The **callsign**, **name**, **location**, **Gemini API key**, and **journals dir
 Click your **name chip** in the top-left of the top bar to open the account menu.
 
 ### Edit profile
-Change your **operator name** (shown in TX messages), **call sign**, **location**, and **avatar emoji**. These affect how your transmissions are identified.
+Change your **operator name** (shown in TX messages), **call sign**, **location**, and **avatar emoji**. These are personal to your account and affect how your transmissions are identified — other users' transmissions use their own profile values.
+
+> **Station vs. personal callsign:** Each user can have their own call sign and location. Your personal call sign takes precedence over the station-wide callsign for your transmissions. If your profile has no call sign set, the station callsign (from Admin Settings) is used as a fallback.
 
 ### Change password
 Enter a new password (minimum 8 characters). You must confirm it. Your current sessions remain active after a password change.

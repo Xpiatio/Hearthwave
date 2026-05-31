@@ -11,6 +11,7 @@ export default defineConfig({
         target: backendUrl,
         ws: true,
       },
+      '/auth': { target: backendUrl },
     },
   },
 });
