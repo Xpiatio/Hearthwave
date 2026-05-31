@@ -1,9 +1,11 @@
 """Auth HTTP endpoints for Radio-TTY.
 
-POST /auth/login      — verify credentials, issue session token
-POST /auth/logout     — revoke session token
-GET  /auth/me         — return current user profile (sensitive fields stripped)
-GET  /auth/profiles   — public list of profiles for the login screen
+GET  /auth/setup-status — returns whether first-run setup is needed
+POST /auth/setup        — create the initial admin account (first-run only)
+POST /auth/login        — verify credentials, issue session token
+POST /auth/logout       — revoke session token
+GET  /auth/me           — return current user profile (sensitive fields stripped)
+GET  /auth/profiles     — public list of profiles for the login screen
 
 These are mounted under /auth by server.py after startup.
 """
@@ -42,6 +44,50 @@ def _require_token(authorization: str | None) -> str:
 
 def _safe(u: dict) -> dict:
     return {k: v for k, v in u.items() if k not in SENSITIVE_PROFILE_FIELDS}
+
+
+@router.get("/setup-status")
+async def setup_status():
+    """Returns whether first-run admin setup is still needed."""
+    if _users_store is None:
+        raise HTTPException(status_code=503, detail="Server not ready")
+    return {"setup_needed": _users_store.is_empty()}
+
+
+class SetupRequest(BaseModel):
+    display_name: str
+    password: str
+    avatar_emoji: str = "👤"
+    operator_name: str = ""
+    callsign: str = ""
+    location: str = ""
+
+
+@router.post("/setup")
+async def setup(body: SetupRequest):
+    """First-run only: create the initial admin account and return a session token."""
+    if _users_store is None or _token_store is None:
+        raise HTTPException(status_code=503, detail="Server not ready")
+    if not _users_store.is_empty():
+        raise HTTPException(status_code=409, detail="Setup already complete")
+
+    display_name = body.display_name.strip()
+    if not display_name:
+        raise HTTPException(status_code=422, detail="Display name is required")
+    if len(body.password) < 8:
+        raise HTTPException(status_code=422, detail="Password must be at least 8 characters")
+
+    user = _users_store.create(
+        display_name=display_name,
+        password=body.password,
+        avatar_emoji=body.avatar_emoji,
+        operator_name=body.operator_name.strip() or display_name,
+        callsign=body.callsign.strip().upper(),
+        location=body.location.strip(),
+        is_admin=True,
+    )
+    token = _token_store.create(user["id"])
+    return {"token": token, "profile": _safe(user)}
 
 
 class LoginRequest(BaseModel):

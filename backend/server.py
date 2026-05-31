@@ -617,39 +617,31 @@ async def _lifespan(app: FastAPI):
     if purged:
         _log.info("Purged %d expired session tokens.", purged)
 
-    # Bootstrap: create default admin account if users.json is empty.
+    # Headless bootstrap: if RADIO_TTY_ADMIN_PASS is set and no users exist, create admin now.
+    # Without the env var, the browser first-run setup flow handles account creation.
     if _users_store.is_empty():
         admin_pass = os.environ.get("RADIO_TTY_ADMIN_PASS") or None
-        generated = admin_pass is None
-        if generated:
-            import secrets as _sec
-            admin_pass = _sec.token_urlsafe(12)
-        _users_store.create(
-            display_name="Admin",
-            password=admin_pass,
-            avatar_emoji="👤",
-            operator_name=_config.name or "Admin",
-            callsign=_config.callsign or "N0CALL",
-            location=_config.location or "",
-            is_admin=True,
-            prefs={
-                "dark_mode": False,
-                "panel_order": ["config", "attendance", "journal"],
-                "filter_profanity": _config.filter_profanity,
-                "listen_only": _config.listen_only,
-                "spectro_colormap": _config.spectro_colormap,
-                "spectro_time_window_s": _config.spectro_time_window_s,
-            },
-        )
-        if generated:
-            print(
-                f"\n*** Radio-TTY: Admin account created. ***\n"
-                f"    Display name : Admin\n"
-                f"    Password     : {admin_pass}\n"
-                f"    Set RADIO_TTY_ADMIN_PASS env var to use a fixed password on restart.\n",
-                flush=True,
+        if admin_pass:
+            _users_store.create(
+                display_name="Admin",
+                password=admin_pass,
+                avatar_emoji="👤",
+                operator_name=_config.name or "Admin",
+                callsign=_config.callsign or "N0CALL",
+                location=_config.location or "",
+                is_admin=True,
+                prefs={
+                    "dark_mode": False,
+                    "panel_order": ["config", "attendance", "journal"],
+                    "filter_profanity": _config.filter_profanity,
+                    "listen_only": _config.listen_only,
+                    "spectro_colormap": _config.spectro_colormap,
+                    "spectro_time_window_s": _config.spectro_time_window_s,
+                },
             )
-        _log.info("Created default admin user account.")
+            _log.info("Created admin account from RADIO_TTY_ADMIN_PASS.")
+        else:
+            _log.info("No users found — first-run setup required via browser.")
 
     # Wire auth routes with the live stores.
     auth_routes.init(_users_store, _token_store)
