@@ -121,6 +121,8 @@ The system will:
 
 The status bar shows **Transmitting** while the radio is keyed and returns to **Idle** when done.
 
+**Chat echo:** Every outgoing transmission appears in the chat area as a `[TX]` entry (shown in blue) with your callsign. All other connected users see the same entry at the same time, so anyone watching the screen knows exactly what was transmitted and by whom.
+
 **Targeting a specific station:** Open Contacts, select a contact, and their callsign and name pre-fill the target fields. The outgoing message will be addressed to that station.
 
 **Placeholder tokens:** Include `{1}`, `{2}`, etc. as fill-in-the-blank slots. When you send, the system prompts you to fill in each before transmitting. Useful for templates: `Heading to {1} — ETA {2} minutes`.
@@ -135,7 +137,7 @@ The status bar shows **Transmitting** while the radio is keyed and returns to **
 
 GMRS regulations require your station to identify with the callsign at least every 15 minutes. Radio-TTY handles this automatically — every outgoing message is wrapped with the station callsign and the timer resets.
 
-**Manual "THIS IS" ID:** Tap the **THIS IS** button to send a standalone identification in NATO phonetics (e.g., *"This is Whiskey Quebec Zulu X-Ray 9 9 9"*). Use this at the start of a session or when required by net control.
+**Manual "THIS IS" ID:** Tap the **THIS IS** button to send a standalone identification in NATO phonetics (e.g., *"This is Whiskey Quebec Zulu X-Ray 9 9 9"*). Use this at the start of a session or when required by net control. A `[TX] Station ID` entry appears in chat for all connected users.
 
 ---
 
@@ -367,7 +369,7 @@ You do not need to type phonetics manually.
 
 ## Tips
 
-- **Multiple users:** Each family member signs into their own account. All clients see the same chat in real time, but each person's profanity filter, listen-only mode, and display preferences are independent.
+- **Multiple users:** Each family member signs into their own account. All clients see the same chat in real time — both received audio (RX) and outgoing transmissions (TX) — but each person's profanity filter, listen-only mode, and display preferences are independent.
 - **Across devices:** Your settings follow you. Sign in on your phone and get the same preferences as your tablet.
 - **Dark environments:** Click the sun/moon icon in the top bar, or your browser's dark mode preference is respected automatically on the public `/journal` page.
 - **Slow or noisy transcription:** The VAD threshold can be adjusted in `config.json` (`vad_threshold`). Lower values (e.g. 0.3) are more sensitive; higher (e.g. 0.7) require a stronger signal.
