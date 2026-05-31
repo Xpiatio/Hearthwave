@@ -454,7 +454,7 @@ async def _tx_pump() -> None:
                 text, _last_id_time = format_standalone_id(my_call, my_name, my_loc, now)
                 text = spell_digits_in_callsigns(text)
                 _has_transmitted = True
-                chat_text = "Station ID"
+                chat_text = text
 
             elif payload.get("_pre_formatted") or is_preview:
                 # Pre-formatted text (auto-ID pump, voice preview) — no processing.
