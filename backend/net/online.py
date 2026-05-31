@@ -1,3 +1,4 @@
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -7,6 +8,7 @@ PROBE_TIMEOUT_SECONDS = 2.5
 PROBE_TTL_SECONDS = 60.0
 
 _cache = {"value": None, "checked_at": 0.0}
+_cache_lock = threading.Lock()
 
 
 def _probe(url, timeout):
@@ -19,22 +21,24 @@ def _probe(url, timeout):
 
 
 def is_online():
-    now = time.monotonic()
-    cached = _cache["value"]
-    if cached is not None and (now - _cache["checked_at"]) < PROBE_TTL_SECONDS:
-        return cached
-    try:
-        result = bool(_probe(PROBE_URL, PROBE_TIMEOUT_SECONDS))
-    except (OSError, urllib.error.URLError, TimeoutError):
-        result = False
-    _cache["value"] = result
-    _cache["checked_at"] = now
-    return result
+    with _cache_lock:
+        now = time.monotonic()
+        cached = _cache["value"]
+        if cached is not None and (now - _cache["checked_at"]) < PROBE_TTL_SECONDS:
+            return cached
+        try:
+            result = bool(_probe(PROBE_URL, PROBE_TIMEOUT_SECONDS))
+        except (OSError, urllib.error.URLError, TimeoutError):
+            result = False
+        _cache["value"] = result
+        _cache["checked_at"] = now
+        return result
 
 
 def invalidate():
-    _cache["value"] = None
-    _cache["checked_at"] = 0.0
+    with _cache_lock:
+        _cache["value"] = None
+        _cache["checked_at"] = 0.0
 
 
 def is_online_cached() -> bool | None:
@@ -45,7 +49,3 @@ def is_online_cached() -> bool | None:
     brief period of unknowing at startup.
     """
     return _cache["value"]
-
-
-def reset_cache():
-    invalidate()

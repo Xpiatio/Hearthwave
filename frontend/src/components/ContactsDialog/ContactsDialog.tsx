@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -148,9 +148,12 @@ export function ContactsDialog({
     if (verifyAllComplete) setVerifyLoading(false);
   }, [verifyAllComplete]);
 
-  const sorted = sortBySuffix
-    ? [...contacts].sort((a, b) => suffixKey(a.callsign).localeCompare(suffixKey(b.callsign)))
-    : [...contacts].sort((a, b) => a.callsign.localeCompare(b.callsign));
+  const sorted = useMemo(
+    () => sortBySuffix
+      ? [...contacts].sort((a, b) => suffixKey(a.callsign).localeCompare(suffixKey(b.callsign)))
+      : [...contacts].sort((a, b) => a.callsign.localeCompare(b.callsign)),
+    [contacts, sortBySuffix]
+  );
 
   function openAdd() {
     setForm(EMPTY_FORM);

@@ -125,7 +125,7 @@ The status bar shows **Transmitting** while the radio is keyed and returns to **
 
 **Placeholder tokens:** Include `{1}`, `{2}`, etc. as fill-in-the-blank slots. When you send, the system prompts you to fill in each before transmitting. Useful for templates: `Heading to {1} — ETA {2} minutes`.
 
-**Voice preview:** Open the Config panel and use the **Voice Test** button to hear the TTS voice without keying the radio.
+**Voice preview:** Open the Config panel and use the **Voice Test** button to hear your current TTS voice without keying the radio. To change your personal voice, see [Your account](#13-your-account).
 
 **Listen-only mode:** When active, all TX controls are hidden. Your setting does not affect other users — each person controls their own TX access independently.
 
@@ -258,7 +258,9 @@ Open the **Config** panel (CONFIG button in the top bar) to manage your personal
 ### Voice
 | Setting | Description |
 |---------|-------------|
-| Voice Test | Preview the TTS voice without keying the radio |
+| Voice Test | Preview your current TTS voice without keying the radio |
+
+Your personal TTS voice is chosen in **Account → Edit Profile** (see [Your account](#13-your-account)). If you have not selected one, the station-default voice configured by the admin is used.
 
 ### Spectrogram (per-user)
 | Setting | Description |
@@ -278,9 +280,11 @@ The **callsign**, **name**, **location**, **Gemini API key**, and **journals dir
 Click your **name chip** in the top-left of the top bar to open the account menu.
 
 ### Edit profile
-Change your **operator name** (shown in TX messages), **call sign**, **location**, and **avatar emoji**. These are personal to your account and affect how your transmissions are identified — other users' transmissions use their own profile values.
+Change your **operator name** (shown in TX messages), **call sign**, **location**, **avatar emoji**, and **TTS voice**. These are personal to your account and affect how your transmissions are identified — other users' transmissions use their own profile values.
 
 > **Station vs. personal callsign:** Each user can have their own call sign and location. Your personal call sign takes precedence over the station-wide callsign for your transmissions. If your profile has no call sign set, the station callsign (from Admin Settings) is used as a fallback.
+
+**TTS Voice:** Choose your personal Piper voice from the dropdown. Click **Sample** to hear it before saving — no radio is keyed. Select *Station Default* to fall back to whichever voice the administrator has configured. Each family member can use a different voice.
 
 ### Change password
 Enter a new password (minimum 8 characters). You must confirm it. Your current sessions remain active after a password change.

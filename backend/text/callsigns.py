@@ -81,15 +81,14 @@ EXPANDED_CALLSIGN_RE = re.compile(
     re.IGNORECASE,
 )
 
-LETTER_TO_NATO = {
-    "A": "Alpha", "B": "Bravo", "C": "Charlie", "D": "Delta",
-    "E": "Echo", "F": "Foxtrot", "G": "Golf", "H": "Hotel",
-    "I": "India", "J": "Juliet", "K": "Kilo", "L": "Lima",
-    "M": "Mike", "N": "November", "O": "Oscar", "P": "Papa",
-    "Q": "Quebec", "R": "Romeo", "S": "Sierra", "T": "Tango",
-    "U": "Uniform", "V": "Victor", "W": "Whiskey", "X": "X-ray",
-    "Y": "Yankee", "Z": "Zulu",
-}
+# Derived from NATO_PHONETIC (word→letter); first occurrence wins so
+# canonical spellings (Alpha, Juliet, Whiskey) take priority over aliases
+# (Alfa, Juliett, Whisky). X-ray is patched because NATO_PHONETIC stores it
+# as "xray" (the hyphen is stripped during normalisation).
+LETTER_TO_NATO: dict[str, str] = {}
+for _word, _letter in NATO_PHONETIC.items():
+    LETTER_TO_NATO.setdefault(_letter.upper(), _word.capitalize())
+LETTER_TO_NATO["X"] = "X-ray"
 
 
 def detect_callsigns(text):

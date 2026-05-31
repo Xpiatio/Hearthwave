@@ -8,9 +8,12 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import tempfile
 from pathlib import Path
 from typing import Required, TypedDict
+
+from backend.persistence._utils import atomic_json_write
 
 _log = logging.getLogger(__name__)
 
@@ -157,8 +160,6 @@ def sort_contacts(contacts: list[ContactDict]) -> list[ContactDict]:
 def sort_contacts_by_suffix(contacts: list[ContactDict]) -> list[ContactDict]:
     """Return ``contacts`` sorted by the trailing digits of each callsign.
     'ALL' stays pinned at index 0; entries without trailing digits sort last."""
-    import re
-
     def key(c: ContactDict):
         cs = normalize_callsign(c.get("callsign", ""))
         nm = (c.get("name", "") or "").upper()
@@ -213,20 +214,7 @@ class ContactsStore:
 
     def _save(self) -> None:
         """Atomically overwrite the contacts file with the current in-memory list."""
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        dir_ = str(self._path.parent)
-        fd, tmp = tempfile.mkstemp(dir=dir_, suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                json.dump(self._contacts, fh, indent=4, ensure_ascii=False)
-            os.replace(tmp, self._path)
-        except Exception:
-            # Clean up the tempfile if the rename never happened.
-            try:
-                os.unlink(tmp)
-            except OSError:
-                pass
-            raise
+        atomic_json_write(self._path, self._contacts)
 
     def _dedup(self) -> None:
         """Remove duplicate entries by primary callsign, keeping the last-written."""
@@ -235,11 +223,12 @@ class ContactsStore:
             cs = normalize_callsign(c.get("callsign", ""))
             if cs:
                 seen[cs] = i
-        self._contacts = [
-            c for i, c in enumerate(self._contacts)
-            if not normalize_callsign(c.get("callsign", ""))
-            or seen.get(normalize_callsign(c.get("callsign", ""))) == i
-        ]
+        survivors = []
+        for i, c in enumerate(self._contacts):
+            cs = normalize_callsign(c.get("callsign", ""))
+            if not cs or seen.get(cs) == i:
+                survivors.append(c)
+        self._contacts = survivors
 
     # ------------------------------------------------------------------
     # Public API

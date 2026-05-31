@@ -4,9 +4,10 @@ from __future__ import annotations
 import html
 import json
 import os
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+
+from backend.persistence._utils import atomic_json_write, atomic_text_write
 
 _MAX_PUBLISHED = 10
 
@@ -26,13 +27,11 @@ def save_journal(
     entry = {
         "exported_at": now.isoformat(timespec="seconds"),
         "title": title,
-        "callsigns": [c.get("callsign", "") for c in callsigns_with_locations],
         "callsigns_locations": list(callsigns_with_locations),
         "transcript": transcript,
         "summary": summary,
     }
-    with open(path, "w", encoding="utf-8") as fh:
-        json.dump(entry, fh, indent=2, ensure_ascii=False)
+    atomic_json_write(path, entry)
     return str(path)
 
 
@@ -80,19 +79,6 @@ def _public_dir(journals_dir: Path) -> Path:
     return Path(journals_dir).parent / "public"
 
 
-def _atomic_write(path: Path, content: str, mode: str = "w") -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
-    try:
-        with os.fdopen(fd, mode, encoding="utf-8") as fh:
-            fh.write(content)
-        os.replace(tmp, path)
-    except Exception:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
 
 
 def load_published_manifest(journals_dir: Path) -> list[dict]:
@@ -143,8 +129,8 @@ def publish_journal(file_path: str, published_by: str, journals_dir: Path) -> di
     manifest = manifest[:_MAX_PUBLISHED]
 
     pub_dir = _public_dir(journals_dir)
-    _atomic_write(pub_dir / "journal-manifest.json", json.dumps(manifest, indent=2, ensure_ascii=False))
-    _atomic_write(pub_dir / "journal.html", _render_public_html(manifest))
+    atomic_json_write(pub_dir / "journal-manifest.json", manifest)
+    atomic_text_write(pub_dir / "journal.html", _render_public_html(manifest))
 
     return entry
 
@@ -155,7 +141,7 @@ def _fmt_date(iso: str) -> str:
         dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
         # Use str(dt.day) to avoid the Linux-only %-d format specifier.
         return dt.strftime("%B ") + str(dt.day) + dt.strftime(", %Y")
-    except Exception:
+    except (ValueError, TypeError, AttributeError):
         return iso[:10] if len(iso) >= 10 else iso
 
 

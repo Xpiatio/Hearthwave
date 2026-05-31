@@ -1,9 +1,6 @@
 import datetime
 import os
 
-CONFIG_FILE = "config.json"
-CONTACTS_FILE = "contacts.json"
-
 
 def utc_now_iso() -> str:
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -22,17 +19,6 @@ def normalize_service(value):
         return SERVICE_FRS
     return SERVICE_GMRS
 
-
-COLOR_RX = "#15803D"
-COLOR_TX = "#1D4ED8"
-COLOR_ERROR = "#B91C1C"
-COLOR_WARN = "#92400E"
-PILL_BG = "#FEF3C7"
-PILL_TEXT = "#78350F"
-PILL_BORDER = "#A16207"
-
-VERIFIED_GLYPH = "✓"
-VERIFIED_COLOR = COLOR_RX
 
 VOICE_TEST_TEXT = "Radio-TTY voice test. Radio check, one two three."
 

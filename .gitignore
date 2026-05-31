@@ -30,3 +30,4 @@ frontend/dist/
 *.swp
 *.swo
 .env
+.claude/worktrees/

@@ -8,17 +8,21 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
+  FormControl,
   IconButton,
+  InputLabel,
   ListItemIcon,
   Menu,
   MenuItem,
+  Select,
   TextField,
   Typography,
 } from '@mui/material';
 import LogoutIcon from '@mui/icons-material/Logout';
 import EditIcon from '@mui/icons-material/Edit';
 import LockIcon from '@mui/icons-material/Lock';
-import type { UserProfile } from '../../types/ws';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import type { UserProfile, VoiceOption } from '../../types/ws';
 
 interface Props {
   profile: UserProfile;
@@ -30,11 +34,14 @@ interface Props {
   }) => void;
   onChangePassword: (newPassword: string) => void;
   onLogout: () => void;
+  voices: VoiceOption[];
+  onPreviewVoice: (voiceId: string) => void;
+  onSaveVoicePref: (voiceId: string) => void;
 }
 
 const EMOJI_OPTIONS = ['👤', '👨', '👩', '👦', '👧', '🧑', '👴', '👵', '🧔', '👮'];
 
-export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogout }: Props) {
+export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogout, voices, onPreviewVoice, onSaveVoicePref }: Props) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
@@ -43,6 +50,7 @@ export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogo
   const [callsign, setCallsign] = useState(profile.callsign);
   const [location, setLocation] = useState(profile.location);
   const [avatarEmoji, setAvatarEmoji] = useState(profile.avatar_emoji);
+  const [ttsVoice, setTtsVoice] = useState(profile.prefs?.tts_voice ?? '');
 
   // Sync form fields when profile updates from the server, but only while
   // the edit dialog is closed so we don't clobber in-progress edits.
@@ -52,6 +60,7 @@ export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogo
       setCallsign(profile.callsign);
       setLocation(profile.location);
       setAvatarEmoji(profile.avatar_emoji);
+      setTtsVoice(profile.prefs?.tts_voice ?? '');
     }
   }, [profile, editOpen]);
 
@@ -72,6 +81,7 @@ export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogo
     setCallsign(profile.callsign);
     setLocation(profile.location);
     setAvatarEmoji(profile.avatar_emoji);
+    setTtsVoice(profile.prefs?.tts_voice ?? '');
     setEditOpen(true);
     handleClose();
   }
@@ -91,6 +101,7 @@ export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogo
       location: location.trim(),
       avatar_emoji: avatarEmoji,
     });
+    onSaveVoicePref(ttsVoice);
     setEditOpen(false);
   }
 
@@ -173,6 +184,40 @@ export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogo
               slotProps={{ htmlInput: { style: { textTransform: 'uppercase' } } }}
             />
             <TextField label="Location" value={location} onChange={(e) => setLocation(e.target.value)} fullWidth />
+
+            {voices.length > 0 && (
+              <Box>
+                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
+                  TTS Voice
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                  <FormControl size="small" sx={{ flex: 1 }}>
+                    <InputLabel id="tts-voice-label">Voice</InputLabel>
+                    <Select
+                      labelId="tts-voice-label"
+                      label="Voice"
+                      value={ttsVoice}
+                      onChange={(e) => setTtsVoice(e.target.value)}
+                    >
+                      <MenuItem value="">Station Default</MenuItem>
+                      {voices.map((v) => (
+                        <MenuItem key={v.id} value={v.id}>{v.label}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<PlayArrowIcon />}
+                    onClick={() => onPreviewVoice(ttsVoice || (voices[0]?.id ?? ''))}
+                    disabled={voices.length === 0}
+                    aria-label="Preview selected voice"
+                  >
+                    Sample
+                  </Button>
+                </Box>
+              </Box>
+            )}
           </Box>
         </DialogContent>
         <DialogActions>
