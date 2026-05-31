@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -34,9 +34,10 @@ interface Props {
     gemini_api_key: string;
     journals_dir: string;
   }) => void;
+  children?: React.ReactNode;
 }
 
-export function AdminPanel({ open, onClose, config, onSave }: Props) {
+export function AdminPanel({ open, onClose, config, onSave, children }: Props) {
   const [callsign, setCallsign] = useState('');
   const [name, setName] = useState('');
   const [location, setLocation] = useState('');
@@ -146,6 +147,13 @@ export function AdminPanel({ open, onClose, config, onSave }: Props) {
             slotProps={{ htmlInput: { style: { fontFamily: 'monospace', fontSize: '0.85rem' } } }}
             fullWidth
           />
+
+          {children && (
+            <>
+              <Divider />
+              {children}
+            </>
+          )}
 
         </Box>
       </DialogContent>
