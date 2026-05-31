@@ -22,6 +22,7 @@ import {
   AccordionDetails,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
+import PublishIcon from '@mui/icons-material/Publish';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import type { JournalEntry } from '../../types/ws';
 
@@ -42,6 +43,7 @@ interface Props {
   onGenerate: (transcript: string, callsigns: string[]) => void;
   onSave: (title: string, summary: string, callsigns_locations: Array<{ callsign: string; location: string }>, transcript: string) => void;
   onDelete: (file_path: string) => void;
+  onPublish: (file_path: string) => void;
   onDismissResult: () => void;
 }
 
@@ -79,12 +81,14 @@ export function JournalPanel({
   onGenerate,
   onSave,
   onDelete,
+  onPublish,
   onDismissResult,
 }: Props) {
   const [selected, setSelected] = useState<JournalEntry | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editSummary, setEditSummary] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [confirmPublish, setConfirmPublish] = useState<string | null>(null);
 
   useEffect(() => {
     onListJournals();
@@ -114,6 +118,17 @@ export function JournalPanel({
       if (selected?._file === file) setSelected(null);
     } else {
       setConfirmDelete(file);
+    }
+  }
+
+  function handlePublish(file: string) {
+    if (confirmPublish === file) {
+      onPublish(file);
+      setConfirmPublish(null);
+    } else {
+      setConfirmPublish(file);
+      // Auto-cancel confirm state after 4 seconds if user doesn't click again
+      setTimeout(() => setConfirmPublish((cur) => cur === file ? null : cur), 4000);
     }
   }
 
@@ -159,22 +174,33 @@ export function JournalPanel({
                   key={j._file}
                   disablePadding
                   secondaryAction={
-                    <IconButton
-                      edge="end"
-                      size="small"
-                      onClick={(e) => { e.stopPropagation(); handleDelete(j._file); }}
-                      color={confirmDelete === j._file ? 'error' : 'default'}
-                      title={confirmDelete === j._file ? 'Click again to confirm' : 'Delete'}
-                      aria-label={confirmDelete === j._file ? 'Confirm delete' : 'Delete journal'}
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
+                    <Box sx={{ display: 'flex' }}>
+                      <IconButton
+                        size="small"
+                        onClick={(e) => { e.stopPropagation(); handlePublish(j._file); }}
+                        color={confirmPublish === j._file ? 'primary' : 'default'}
+                        title={confirmPublish === j._file ? 'Click again to publish to /journal' : 'Publish to family journal'}
+                        aria-label={confirmPublish === j._file ? 'Confirm publish' : 'Publish to family journal'}
+                      >
+                        <PublishIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        edge="end"
+                        size="small"
+                        onClick={(e) => { e.stopPropagation(); handleDelete(j._file); }}
+                        color={confirmDelete === j._file ? 'error' : 'default'}
+                        title={confirmDelete === j._file ? 'Click again to confirm' : 'Delete'}
+                        aria-label={confirmDelete === j._file ? 'Confirm delete' : 'Delete journal'}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
                   }
                 >
                   <ListItemButton
                     selected={selected?._file === j._file}
                     onClick={() => { setSelected(j); onDismissResult(); }}
-                    sx={{ pr: 5 }}
+                    sx={{ pr: 9 }}
                   >
                     <ListItemText
                       primary={j.title || '(untitled)'}

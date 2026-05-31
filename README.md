@@ -1,6 +1,6 @@
 # Radio-TTY
 
-A web-based TTY/TDD radio communication system for GMRS and amateur radio operators. Multiple household members can operate from their own tablets, phones, or browsers simultaneously — no software installation required on client devices.
+A web-based TTY/TDD radio communication system for GMRS and amateur radio operators. Family members each sign in with their own account and operate from any tablet, phone, or browser — no software installation required on client devices.
 
 Radio-TTY is a fork of GMRS-TTY that replaces the desktop PySide6 UI with a browser-based React frontend communicating over WebSocket.
 
@@ -10,7 +10,7 @@ Radio-TTY is a fork of GMRS-TTY that replaces the desktop PySide6 UI with a brow
 
 ```
 Browser (any device)
-      │  WebSocket :8765
+      │  WebSocket :8765 (?token=…)
       ▼
 FastAPI Backend  ──►  PulseAudio / sounddevice
       │                     │
@@ -21,14 +21,17 @@ FastAPI Backend  ──►  PulseAudio / sounddevice
     Radio               Spectrogram
 ```
 
-- **RX pipeline**: audio capture → VAD → squelch → segmentation → Whisper STT → text broadcast to all clients
+- **RX pipeline**: audio capture → VAD → squelch → segmentation → Whisper STT → text broadcast to all clients (per-user profanity filter applied)
 - **TX pipeline**: text input → abbreviation expansion → profanity filter → FCC ID wrapper → Piper TTS → PTT → audio output
-- **Clients**: receive the same real-time chat stream; any client can transmit
+- **Auth**: session tokens validated on WebSocket connect; unauthenticated connections are rejected
 
 ---
 
 ## Features
 
+- **Multi-user accounts** — named family member profiles, each with their own password and per-user preferences
+- **Per-user settings** — dark mode, panel order, profanity filter, listen-only, and spectrogram display are per-account and sync across devices
+- **Public family journal** — publish session logs to `/journal`, a no-login static page (last 10 entries, ADA-compliant)
 - Real-time spectrogram with VAD and squelch indicators
 - Speech-to-text receive using Whisper (`small.en` model)
 - Text-to-speech transmit using Piper neural voices
@@ -37,11 +40,9 @@ FastAPI Backend  ──►  PulseAudio / sounddevice
 - Shared contacts list (GMRS + HAM cross-reference, FCC-verified)
 - TTY abbreviation expansion and Q-signal support
 - NATO phonetic callsign spelling
-- Profanity filter (PG-13, configurable)
 - Session attendance tracking
 - AI-generated session journals (requires Gemini API key)
-- Dark mode + touch-optimized UI
-- Multi-operator: any number of browser clients, all views stay in sync
+- Admin panel for station identity and user management
 
 ---
 
@@ -87,14 +88,31 @@ nano data/config.json   # set callsign, audio devices, voice
 
 # Production start (frontend on :80, backend on :8765)
 docker compose up --build
+```
 
-# Development start (frontend on :5173 with hot reload)
+On first startup, a default **Admin** account is created automatically. The password is printed to the backend container logs:
+
+```
+*** Radio-TTY: Admin account created. ***
+    Display name : Admin
+    Password     : <generated-password>
+    Set RADIO_TTY_ADMIN_PASS env var to use a fixed password on restart.
+```
+
+To set a fixed admin password, add to your environment or `docker-compose.yml`:
+```yaml
+environment:
+  - RADIO_TTY_ADMIN_PASS=your-password-here
+```
+
+Open `http://<host-ip>` from any browser on the network and sign in as Admin.
+
+**Development start** (frontend on :5173 with hot reload):
+```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```
 
-Open `http://<host-ip>` from any browser on the network.
-
-### Option C — Portainer
+### Option B — Portainer
 
 If you manage containers via [Portainer](https://www.portainer.io/), use its **Stacks** feature. Because Portainer's web editor has no access to the source directory, images must be built locally first and the compose file must use absolute paths.
 
@@ -120,6 +138,7 @@ services:
       - /run/user/1000/pulse:/run/pulse:ro
     environment:
       - PULSE_SERVER=unix:/run/pulse/native
+      - RADIO_TTY_ADMIN_PASS=your-password-here
     devices:
       - /dev/snd:/dev/snd
     restart: unless-stopped
@@ -136,6 +155,8 @@ services:
     image: radio-tty-frontend
     ports:
       - "80:80"
+    volumes:
+      - /path/to/Radio-TTY/data/public:/usr/share/nginx/html/public:ro
     depends_on:
       backend:
         condition: service_healthy
@@ -152,9 +173,7 @@ networks:
 
 > **Note:** The PulseAudio socket path `/run/user/1000/pulse` assumes UID 1000. Adjust if your user has a different UID (`id -u`).
 
----
-
-### Option B — Native install
+### Option C — Native install
 
 ```bash
 bash install.sh           # full install (downloads Whisper model)
@@ -171,14 +190,27 @@ cd frontend && npm ci && npm run build
 
 ---
 
+## First-time setup
+
+1. Open `http://<host-ip>` — the login screen appears.
+2. Sign in as **Admin** using the password from the startup logs (or `RADIO_TTY_ADMIN_PASS`).
+3. Open **ADMIN → Users** to create accounts for each family member.
+4. Each person signs in from their own browser or device and sets their personal preferences.
+
+> **HTTPS:** For public internet access, place a TLS-terminating reverse proxy (nginx, Caddy) in front of the app. Without TLS, session tokens travel in plaintext.
+
+---
+
 ## Configuration
 
-Config file: `data/config.json` (created from `data/config.json.example` on first install).
+### Station config — `data/config.json`
+
+Created from `data/config.json.example` on first install. Station-wide settings editable by admin users via the Admin panel.
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `callsign` | `"N0CALL"` | Your station callsign |
-| `name` | `""` | Operator name |
+| `callsign` | `"N0CALL"` | Station callsign (shared by all users) |
+| `name` | `""` | Station name |
 | `location` | `""` | Station location |
 | `radio_service` | `""` | `"GMRS"` or `"FRS"` |
 | `voice` | `""` | Piper voice name (e.g. `"ryan-high"`) |
@@ -191,18 +223,36 @@ Config file: `data/config.json` (created from `data/config.json.example` on firs
 | `ptt_mode` | `"manual"` | `"manual"` or `"serial"` |
 | `ptt_serial_port` | `""` | e.g. `"/dev/ttyUSB0"` |
 | `ptt_serial_line` | `"RTS"` | `"RTS"` or `"DTR"` |
-| `filter_profanity` | `true` | Enable PG-13 profanity masking |
-| `fuzzy_callsign` | `false` | Fuzzy callsign matching in received text |
-| `listen_only` | `false` | Disable all TX paths |
+| `fuzzy_callsign` | `false` | Fuzzy callsign matching in received text (station-wide) |
 | `monitor_enabled` | `false` | Audio monitor passthrough |
-| `spectro_colormap` | `"viridis"` | `"viridis"` or `"grayscale"` |
 | `spectro_freq_range` | `"full"` | `"voice"` (300–3400 Hz) or `"full"` (0–8 kHz) |
-| `spectro_time_window_s` | `30` | Spectrogram scroll window in seconds |
 | `gemini_api_key` | `""` | Google Gemini API key (for AI journals) |
 | `journals_dir` | `"/data/journals"` | Where session journals are saved |
 | `contacts_file` | `"/data/contacts.json"` | Shared contacts store |
 
-Config changes made via the UI are persisted automatically. The `set_admin_config` fields (callsign, name, location, Gemini key, journals directory) require a server restart to fully take effect.
+> **Note:** `filter_profanity`, `listen_only`, `spectro_colormap`, and `spectro_time_window_s` are now **per-user preferences** stored in `data/users.json`, not in `config.json`.
+
+### Per-user preferences
+
+Each user account stores these settings independently. They are managed through the in-app UI and do not need manual editing.
+
+| Preference | Default | Description |
+|------------|---------|-------------|
+| `dark_mode` | `false` | Dark/light theme |
+| `panel_order` | `["config","attendance","journal"]` | Drag-and-drop panel layout |
+| `filter_profanity` | `true` | PG-13 profanity masking for this user |
+| `listen_only` | `false` | Disable TX for this user |
+| `spectro_colormap` | `"viridis"` | `"viridis"` or `"grayscale"` |
+| `spectro_time_window_s` | `30` | Spectrogram scroll window in seconds |
+
+### Environment variables
+
+| Variable | Description |
+|----------|-------------|
+| `RADIO_TTY_ADMIN_PASS` | Admin password on bootstrap (if not set, a random password is printed to stdout) |
+| `RADIO_TTY_CONFIG` | Path to `config.json` (default: `/data/config.json`) |
+| `RADIO_TTY_USERS` | Path to `users.json` (default: `/data/users.json`) |
+| `RADIO_TTY_TOKENS` | Path to `tokens.json` (default: `/data/tokens.json`) |
 
 ---
 
@@ -211,42 +261,60 @@ Config changes made via the UI are persisted automatically. The `set_admin_confi
 ```
 Radio-TTY/
 ├── backend/
-│   ├── server.py           # FastAPI app + WebSocket router
-│   ├── config.py           # ServerConfig typed wrapper
+│   ├── server.py               # FastAPI app + WebSocket router
+│   ├── config.py               # ServerConfig typed wrapper
+│   ├── auth_routes.py          # /auth/login, /auth/logout, /auth/me, /auth/profiles
 │   ├── audio/
-│   │   ├── capture.py      # PulseAudio loopback / sounddevice input
-│   │   ├── squelch.py      # SquelchDetector with pre-trigger ring buffer
-│   │   ├── spectro_task.py # SpectroTask — FFT → broadcast
+│   │   ├── capture.py          # PulseAudio loopback / sounddevice input
+│   │   ├── squelch.py          # SquelchDetector with pre-trigger ring buffer
+│   │   ├── spectro_task.py     # SpectroTask — FFT → broadcast
 │   │   └── silence_watchdog.py
 │   ├── stt/
-│   │   ├── worker.py       # STTWorker — capture → VAD → segment → transcribe
-│   │   ├── segmenter.py    # SpeechSegmenter
-│   │   └── transcriber.py  # WhisperTranscriber + hallucination filter
+│   │   ├── worker.py           # STTWorker — capture → VAD → segment → transcribe
+│   │   ├── segmenter.py        # SpeechSegmenter
+│   │   └── transcriber.py      # WhisperTranscriber + hallucination filter
 │   ├── text/
-│   │   ├── shorthand.py    # TTY/TDD + Q-signal + CW abbreviation expansion
-│   │   ├── phonetics.py    # NATO phonetic alphabet conversion
-│   │   ├── callsigns.py    # Callsign detection, fuzzy match, digit spacing
-│   │   ├── profanity.py    # Profanity masking
-│   │   └── placeholders.py # {N} token substitution
+│   │   ├── shorthand.py        # TTY/TDD + Q-signal + CW abbreviation expansion
+│   │   ├── phonetics.py        # NATO phonetic alphabet conversion
+│   │   ├── callsigns.py        # Callsign detection, fuzzy match, digit spacing
+│   │   ├── profanity.py        # Profanity masking
+│   │   └── placeholders.py     # {N} token substitution
 │   ├── fcc/
-│   │   ├── crossref.py     # FCC API client + callsign verification
-│   │   ├── auto_add.py     # Async background FCC lookup worker
-│   │   └── id_rule.py      # FCC 15-minute ID rule + format helpers
+│   │   ├── crossref.py         # FCC API client + callsign verification
+│   │   ├── auto_add.py         # Async background FCC lookup worker
+│   │   └── id_rule.py          # FCC 15-minute ID rule + format helpers
 │   ├── persistence/
-│   │   ├── contacts.py     # ContactsStore + GMRS/HAM cross-reference
-│   │   └── attendance.py   # Session attendance tracker
+│   │   ├── contacts.py         # ContactsStore + GMRS/HAM cross-reference
+│   │   ├── attendance.py       # Session attendance tracker
+│   │   ├── journal.py          # Journal save/load/publish (public HTML generation)
+│   │   ├── users.py            # UsersStore — PBKDF2 passwords, lockout, per-user prefs
+│   │   └── tokens.py           # TokenStore — session tokens, expiry, purge
 │   ├── ai/
-│   │   └── gemini_client.py  # AI journal generation
+│   │   └── gemini_client.py    # AI journal generation
 │   └── net/
-│       └── online.py       # Internet connectivity check (60s TTL cache)
+│       └── online.py           # Internet connectivity check (60s TTL cache)
 ├── frontend/
 │   └── src/
-│       ├── App.tsx         # Root component — WS state, message dispatch
-│       ├── theme.ts        # MUI theme factory makeTheme(dark, touch)
-│       └── types/ws.ts     # All WebSocket message TypeScript types
+│       ├── App.tsx             # Root component — auth guard, WS state, message dispatch
+│       ├── hooks/
+│       │   ├── useAuth.ts      # Login/logout, token management
+│       │   └── useWebSocket.ts # WS connection with token auth + backoff reconnect
+│       ├── components/
+│       │   ├── LoginScreen/    # Profile picker + password form
+│       │   ├── AccountMenu/    # Profile chip — edit, change password, sign out
+│       │   ├── UsersPanel/     # Admin user management
+│       │   └── …               # (other existing components)
+│       ├── theme.ts            # MUI theme factory makeTheme(dark)
+│       └── types/ws.ts         # All WebSocket message TypeScript types
 ├── data/
-│   ├── config.json         # Runtime config (gitignored)
-│   └── contacts.json       # Shared contacts (gitignored)
+│   ├── config.json             # Station config (gitignored)
+│   ├── contacts.json           # Shared contacts (gitignored)
+│   ├── users.json              # User accounts (gitignored)
+│   ├── tokens.json             # Active session tokens (gitignored)
+│   ├── journals/               # Saved session journals
+│   └── public/
+│       ├── journal.html        # Public family journal page
+│       └── journal-manifest.json
 ├── docker-compose.yml
 ├── docker-compose.dev.yml
 └── install.sh
@@ -261,8 +329,6 @@ Radio-TTY/
 cd /path/to/Radio-TTY
 python -m pytest backend/tests/ -q
 ```
-
-390 tests pass. Two pre-existing failures in `test_auto_add.py` require `pytest-asyncio` (not installed by default).
 
 **Backend only (hot reload):**
 ```bash
