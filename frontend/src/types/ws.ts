@@ -74,6 +74,7 @@ export interface TxEchoMsg {
   ts: string;
   callsign: string;
   operator: string;
+  display_name: string;
   text: string;
 }
 
