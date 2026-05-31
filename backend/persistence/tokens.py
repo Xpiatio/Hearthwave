@@ -10,14 +10,22 @@ import json
 import logging
 import os
 import secrets
-import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+from backend.persistence._utils import atomic_json_write
 
 _log = logging.getLogger(__name__)
 
 _DEFAULT_PATH = Path(os.environ.get("RADIO_TTY_TOKENS", "/data/tokens.json"))
 _DEFAULT_TTL_DAYS = 7
+
+
+def _is_expired(token: dict, now: datetime) -> bool:
+    try:
+        return datetime.fromisoformat(token.get("expires_at", "")) <= now
+    except (ValueError, TypeError):
+        return True  # malformed entry → treat as expired
 
 
 class TokenStore:
@@ -37,18 +45,7 @@ class TokenStore:
             return {}
 
     def _save(self) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=str(self._path.parent), suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                json.dump(self._tokens, fh, indent=4, ensure_ascii=False)
-            os.replace(tmp, self._path)
-        except Exception:
-            try:
-                os.unlink(tmp)
-            except OSError:
-                pass
-            raise
+        atomic_json_write(self._path, self._tokens)
 
     def create(self, user_id: str, ttl_days: int = _DEFAULT_TTL_DAYS) -> str:
         token = secrets.token_urlsafe(32)
@@ -68,7 +65,6 @@ class TokenStore:
             return None
         if datetime.now(timezone.utc) >= expires_at:
             self._tokens.pop(token, None)
-            self._save()
             return None
         return entry.get("user_id")
 
@@ -79,13 +75,7 @@ class TokenStore:
 
     def purge_expired(self) -> int:
         now = datetime.now(timezone.utc)
-        def _is_expired(entry: dict) -> bool:
-            try:
-                return datetime.fromisoformat(entry.get("expires_at", "")) <= now
-            except (ValueError, TypeError):
-                return True  # malformed entry → treat as expired
-
-        expired = [t for t, entry in list(self._tokens.items()) if _is_expired(entry)]
+        expired = [t for t, entry in list(self._tokens.items()) if _is_expired(entry, now)]
         for t in expired:
             del self._tokens[t]
         if expired:

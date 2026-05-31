@@ -46,8 +46,8 @@ export interface StatusMsg {
   service_mode?: string;
   filter_profanity?: boolean;
   fuzzy_callsign?: boolean;
-  spectro_colormap?: string;
-  spectro_freq_range?: string;
+  spectro_colormap?: 'viridis' | 'grayscale';
+  spectro_freq_range?: 'voice' | 'full';
   spectro_time_window_s?: number;
   input_device?: string | number;
   system_monitor_sink?: string;
@@ -200,6 +200,17 @@ export interface InputDevicesMsg {
   current_monitor_sink: string;
 }
 
+export interface VoiceOption {
+  id: string;
+  name: string;
+  label: string;
+}
+
+export interface VoicesListMsg {
+  type: 'voices_list';
+  voices: VoiceOption[];
+}
+
 // User profile and prefs
 export interface UserPrefs {
   dark_mode: boolean;
@@ -208,6 +219,7 @@ export interface UserPrefs {
   listen_only: boolean;
   spectro_colormap: 'viridis' | 'grayscale';
   spectro_time_window_s: number;
+  tts_voice?: string;
 }
 
 export interface UserProfile {
@@ -256,7 +268,8 @@ export type WsMessage =
   | InputDevicesMsg
   | UserProfileMsg
   | ProfilesMsg
-  | JournalPublishedMsg;
+  | JournalPublishedMsg
+  | VoicesListMsg;
 
 export interface TxMessagePayload {
   type: 'tx_message';

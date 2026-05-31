@@ -83,6 +83,15 @@ class ServerConfig(dict):
     def tts_length_scale(self) -> float:
         return float(self.get("tts_length_scale", 1.0))
 
+    @property
+    def voices_dir(self) -> Path:
+        raw = self.get("voices_dir")
+        if raw:
+            return Path(raw)
+        if self.voice:
+            return Path(self.voice).parent
+        return Path("/Voices")
+
     # ---- text / content --------------------------------------------------
 
     @property
@@ -125,7 +134,9 @@ class ServerConfig(dict):
 
     @attendance_enabled.setter
     def attendance_enabled(self, value: bool) -> None:
-        self["attendance"] = {"enabled": value}
+        existing = dict(self.get("attendance") or {})
+        existing["enabled"] = value
+        self["attendance"] = existing
 
     # ---- AI / journals ---------------------------------------------------
 
@@ -179,7 +190,7 @@ class ServerConfig(dict):
     def port(self) -> int:
         return int(self.get("port", 8765))
 
-    # ---- persistence ---------------------------------------------------------
+    # ---- serialization ---------------------------------------------------------
 
     @classmethod
     def load(cls, path: Path = CONFIG_FILE) -> "ServerConfig":

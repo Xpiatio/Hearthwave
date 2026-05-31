@@ -12,7 +12,7 @@ class ComputeBackend:
 
 
 def detect() -> ComputeBackend:
-    # CUDA
+    # CUDA / ROCm — single torch import attempt reused for both probes
     try:
         import torch
         try:
@@ -26,12 +26,8 @@ def detect() -> ComputeBackend:
                 return b
         except Exception:
             pass
-    except ImportError:
-        pass
 
-    # ROCm
-    try:
-        import torch
+        # ROCm
         try:
             if torch.version.hip is not None:
                 b = ComputeBackend(
@@ -67,12 +63,14 @@ def detect() -> ComputeBackend:
         import onnxruntime
         try:
             if "OpenVINOExecutionProvider" in onnxruntime.get_available_providers():
-                sess_opts = onnxruntime.SessionOptions()
                 # ORT exposes the active OpenVINO device through provider options;
                 # the string "NPU" appears when the OpenVINO runtime enumerates a
                 # dedicated Neural Processing Unit.
-                prov_opts = onnxruntime.capi._pybind_state.get_all_providers()
-                device_ids = [p for p in prov_opts if "NPU" in str(p)]
+                try:
+                    all_providers = onnxruntime.get_all_providers()
+                except AttributeError:
+                    all_providers = []
+                device_ids = [p for p in all_providers if "NPU" in str(p)]
                 if device_ids:
                     b = ComputeBackend(
                         provider="OpenVINOExecutionProvider",

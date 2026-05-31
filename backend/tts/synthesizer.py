@@ -60,9 +60,11 @@ class TTSSynthesizer:
             length_scale: Piper speech rate scale (1.0 = normal, >1 = slower).
         """
         await self.out_queue.put({"event": "started"})
+        lead_in_seconds = ptt.lead_in_seconds
+        tail_seconds = ptt.tail_seconds
         try:
-            audio, sample_rate = await asyncio.get_running_loop().run_in_executor(
-                None, self._synthesize_blocking, voice, text, ptt, length_scale
+            audio, sample_rate = await asyncio.to_thread(
+                self._synthesize_blocking, voice, text, lead_in_seconds, tail_seconds, length_scale
             )
         except Exception as e:
             await self.out_queue.put({"event": "error", "detail": str(e)})
@@ -76,9 +78,7 @@ class TTSSynthesizer:
 
         try:
             ptt.key()
-            await asyncio.get_running_loop().run_in_executor(
-                None, self._play_blocking, audio, sample_rate
-            )
+            await asyncio.to_thread(self._play_blocking, audio, sample_rate)
         finally:
             ptt.unkey()
             await self.out_queue.put({"event": "finished"})
@@ -91,7 +91,8 @@ class TTSSynthesizer:
         self,
         voice,
         text: str,
-        ptt: "PTT",
+        lead_in_seconds: float,
+        tail_seconds: float,
         length_scale: float,
     ) -> tuple[np.ndarray | None, int]:
         """Run Piper synthesis and build the padded PCM buffer.
@@ -114,8 +115,8 @@ class TTSSynthesizer:
         if not chunks:
             return None, sample_rate
 
-        lead_samples = int(ptt.lead_in_seconds * sample_rate)
-        tail_samples = int(ptt.tail_seconds * sample_rate)
+        lead_samples = int(lead_in_seconds * sample_rate)
+        tail_samples = int(tail_seconds * sample_rate)
         total = lead_samples + sum(len(c) for c in chunks) + tail_samples
         # np.zeros so lead and tail regions are already silence; no
         # extra concatenations needed to splice them in.
