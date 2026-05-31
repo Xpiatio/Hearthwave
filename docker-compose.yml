@@ -31,7 +31,7 @@ services:
     ports:
       - "80:80"
     volumes:
-      - ./data/public:/usr/share/nginx/html/public:ro
+      - ./data:/data:ro
     depends_on:
       backend:
         condition: service_healthy

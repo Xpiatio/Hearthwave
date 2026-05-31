@@ -3,7 +3,14 @@
 **/node_modules
 frontend/dist
 .git
+.gitignore
 specification
 Voices
 Models
 data
+README.md
+USER_MANUAL.md
+install.sh
+bootstrap_models.py
+backend/tests
+backend/.venv

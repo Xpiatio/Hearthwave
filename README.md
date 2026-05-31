@@ -104,66 +104,42 @@ environment:
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```
 
-### Option B — Portainer
+### Option B — Portainer (pre-built images)
 
-If you manage containers via [Portainer](https://www.portainer.io/), use its **Stacks** feature. Because Portainer's web editor has no access to the source directory, images must be built locally first and the compose file must use absolute paths.
+The easiest Portainer path uses pre-built images from GitHub Container Registry — no source checkout needed.
 
-**1. Build the images (run once on the host):**
+**1. Create three Docker volumes in Portainer (Volumes → Add volume):**
+
+| Volume name | Contents |
+|---|---|
+| `radio-tty-data` | Config, contacts, users, tokens, journals (auto-created on first run) |
+| `radio-tty-voices` | Piper ONNX voice files (`*.onnx` + `*.onnx.json`) |
+| `radio-tty-models` | faster-whisper and speaker recognition model directories |
+
+If your models/voices live at a known host path, use bind mounts instead (see the stack file comments).
+
+**2. In Portainer: Stacks → Add stack → Web editor**, paste the contents of [`docker-compose.portainer.yml`](docker-compose.portainer.yml) from this repository.
+
+- Adjust `/run/user/1000/pulse` if your host user is not UID 1000 (`id -u` to check).
+- Optionally set `RADIO_TTY_ADMIN_PASS` to bootstrap the admin account without the browser setup screen.
+
+**3. Deploy the stack.** Visit `http://<host-ip>` — the Setup screen appears on first run.
+
+**After a Radio-TTY update:** change the image tags in the stack file to the new version and click **Update the stack** in Portainer.
+
+> **Note:** The PulseAudio socket path `/run/user/1000/pulse` assumes UID 1000. Adjust if your user has a different UID (`id -u`).
+
+### Option B (alt) — Portainer with locally-built images
+
+If you need to deploy custom source changes via Portainer:
 
 ```bash
 cd /path/to/Radio-TTY
 docker compose build
+# Images are now available locally as radio-tty-backend and radio-tty-frontend
 ```
 
-This produces two local images: `radio-tty-backend` and `radio-tty-frontend`.
-
-**2. In Portainer: Stacks → Add stack → Web editor**, paste the following (replace `/path/to/Radio-TTY` with your actual repo path):
-
-```yaml
-services:
-  backend:
-    image: radio-tty-backend
-    volumes:
-      - /path/to/Radio-TTY/data:/data
-      - /path/to/Radio-TTY/Voices:/app/Voices:ro
-      - /path/to/Radio-TTY/Models:/app/Models:ro
-      - /run/user/1000/pulse:/run/pulse:ro
-    environment:
-      - PULSE_SERVER=unix:/run/pulse/native
-      - RADIO_TTY_ADMIN_PASS=your-password-here
-    devices:
-      - /dev/snd:/dev/snd
-    restart: unless-stopped
-    networks:
-      - radio
-    healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8765/health')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-
-  frontend:
-    image: radio-tty-frontend
-    ports:
-      - "80:80"
-    volumes:
-      - /path/to/Radio-TTY/data/public:/usr/share/nginx/html/public:ro
-    depends_on:
-      backend:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - radio
-
-networks:
-  radio:
-    driver: bridge
-```
-
-**After source changes:** run `docker compose build` on the host, then in Portainer open the stack → **Update the stack** → Deploy.
-
-> **Note:** The PulseAudio socket path `/run/user/1000/pulse` assumes UID 1000. Adjust if your user has a different UID (`id -u`).
+In Portainer use the same stack YAML but replace the `image:` lines with the local image names (`radio-tty-backend` / `radio-tty-frontend`) and substitute bind-mount paths for the named volumes.
 
 ### Option C — Native install
 

@@ -1,18 +1,37 @@
-# Radio-TTY v1.0.0 — Portainer stack (pre-built images, no source required)
+# Radio-TTY v1.1.0 — Portainer stack (pre-built images, no source required)
 #
-# BEFORE DEPLOYING:
-#   1. Create named volumes or bind mounts for your data, voices, and models:
-#      - radio-tty-data   → persistent config, contacts, journals, voiceprints
-#      - radio-tty-voices → Piper ONNX voice model files (*.onnx + *.onnx.json)
-#      - radio-tty-models → faster-whisper + speaker recognition model dirs
-#   2. Ensure PulseAudio is running on the host and adjust PULSE_SERVER /
-#      the pulse socket path to match your system if it differs from the default.
-#   3. Sound hardware access (/dev/snd) requires the host device to be present.
-#      On some NAS/VM setups this may not be applicable.
+# QUICK START
+# -----------
+# 1. In Portainer: Volumes → Add volume (one for each of the three below).
+#    Or substitute bind-mount paths if your files live in a known host directory.
+#
+#    Volume name          | What goes inside
+#    -------------------- | -----------------------------------------------
+#    radio-tty-data       | Config, contacts, users, tokens, journals (auto-created on first run)
+#    radio-tty-voices     | Piper ONNX voice files (*.onnx + *.onnx.json)
+#    radio-tty-models     | faster-whisper + speaker recognition model dirs
+#
+# 2. Adjust the PulseAudio socket path if your host user is not UID 1000:
+#       - /run/user/<YOUR_UID>/pulse:/run/pulse:ro
+#    Check with: id -u
+#
+# 3. Stacks → Add stack → Web editor → paste this file → Deploy.
+#
+# FIRST RUN
+# ---------
+# Visit http://<host-ip> — you'll see the Setup screen to create the admin account.
+# Or set RADIO_TTY_ADMIN_PASS on the backend service to bootstrap headlessly:
+#   environment:
+#     - RADIO_TTY_ADMIN_PASS=your-initial-password
+# Remove that variable after first startup; the account is persisted in the data volume.
+#
+# UPDATING
+# --------
+# Pull new images (change the tag below), then in Portainer: open the stack → Update.
 
 services:
   backend:
-    image: ghcr.io/xpiatio/radio-tty-backend:v1.0.0
+    image: ghcr.io/xpiatio/radio-tty-backend:v1.1.0
     volumes:
       - radio-tty-data:/data
       - radio-tty-voices:/app/Voices:ro
@@ -20,6 +39,8 @@ services:
       - /run/user/1000/pulse:/run/pulse:ro
     environment:
       - PULSE_SERVER=unix:/run/pulse/native
+      # Uncomment to create the admin account headlessly on first run:
+      # - RADIO_TTY_ADMIN_PASS=change-me
     devices:
       - /dev/snd:/dev/snd
     restart: unless-stopped
@@ -33,7 +54,7 @@ services:
       start_period: 30s
 
   frontend:
-    image: ghcr.io/xpiatio/radio-tty-frontend:v1.0.0
+    image: ghcr.io/xpiatio/radio-tty-frontend:v1.1.0
     ports:
       - "80:80"
     volumes:

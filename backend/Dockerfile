@@ -16,7 +16,6 @@ COPY backend/requirements.txt /tmp/requirements.txt
 
 RUN pip install --no-cache-dir --prefix=/install -r /tmp/requirements.txt
 
-# Compute-backend extras
 RUN if [ "$COMPUTE_BACKEND" = "cuda" ]; then \
         pip install --no-cache-dir --prefix=/install onnxruntime-gpu; \
     elif [ "$COMPUTE_BACKEND" = "openvino" ]; then \
@@ -26,25 +25,37 @@ RUN if [ "$COMPUTE_BACKEND" = "cuda" ]; then \
 # ── Stage 2: runtime ────────────────────────────────────────────────────────
 FROM python:3.13-slim AS runtime
 
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# Install runtime libs + gosu (privilege-drop helper for entrypoint)
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libportaudio2 \
         libsndfile1 \
         espeak-ng \
         espeak-ng-data \
         pulseaudio-utils \
-    && rm -rf /var/lib/apt/lists/*
+        gosu \
+    && rm -rf /var/lib/apt/lists/* \
+    # audio group GID 29 is standard on Debian/Ubuntu — required for /dev/snd access
+    && groupadd -g 29 audio 2>/dev/null || true \
+    && useradd -r -u 1000 -G audio -d /app -s /sbin/nologin appuser
 
-# Copy installed packages from builder
 COPY --from=builder /install /usr/local
 
 WORKDIR /app
 
-# Copy backend source
 COPY backend/ /app/backend/
 
-# Mount point for persistent data
-RUN mkdir -p /data/voiceprints /data/journals
+# Pre-create data dirs with correct ownership; volume mounts may shadow these,
+# so docker-entrypoint.sh re-creates them at runtime after the mount is visible.
+RUN mkdir -p /data/voiceprints /data/journals /data/public \
+    && chown -R appuser:appuser /app /data
+
+COPY backend/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 8765
 
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["uvicorn", "backend.server:app", "--host", "0.0.0.0", "--port", "8765"]
