@@ -195,6 +195,38 @@ export interface InputDevicesMsg {
   current_monitor_sink: string;
 }
 
+// User profile and prefs
+export interface UserPrefs {
+  dark_mode: boolean;
+  panel_order: string[];
+  filter_profanity: boolean;
+  listen_only: boolean;
+  spectro_colormap: 'viridis' | 'grayscale';
+  spectro_time_window_s: number;
+}
+
+export interface UserProfile {
+  id: string;
+  display_name: string;
+  avatar_emoji: string;
+  operator_name: string;
+  callsign: string;
+  location: string;
+  is_admin: boolean;
+  created_at: string;
+  prefs: UserPrefs;
+}
+
+export interface UserProfileMsg {
+  type: 'user_profile';
+  profile: UserProfile;
+}
+
+export interface ProfilesMsg {
+  type: 'profiles';
+  profiles: UserProfile[];
+}
+
 export type WsMessage =
   | RxMessageMsg
   | StatusMsg
@@ -216,7 +248,9 @@ export type WsMessage =
   | VerifyAllCompleteMsg
   | OnlineStatusMsg
   | SpectrogramRowMsg
-  | InputDevicesMsg;
+  | InputDevicesMsg
+  | UserProfileMsg
+  | ProfilesMsg;
 
 export interface TxMessagePayload {
   type: 'tx_message';

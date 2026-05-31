@@ -9,14 +9,16 @@ import {
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
+import { AccountMenu } from '../AccountMenu/AccountMenu';
+import type { UserProfile } from '../../types/ws';
 
 interface Props {
+  profile: UserProfile;
   stationStatus: string;
   connected: boolean;
   isOnline: boolean | null;
   serviceMode: string;
   listenOnly: boolean;
-  onChangeOperator: () => void;
   showAttendance: boolean;
   onToggleAttendance: () => void;
   showJournal: boolean;
@@ -34,15 +36,23 @@ interface Props {
   sttListening: boolean;
   onToggleSttListening: () => void;
   onClearChat: () => void;
+  onUpdateProfile: (updates: {
+    operator_name?: string;
+    callsign?: string;
+    location?: string;
+    avatar_emoji?: string;
+  }) => void;
+  onChangePassword: (newPassword: string) => void;
+  onLogout: () => void;
 }
 
 export function TopBar({
+  profile,
   stationStatus,
   connected,
   isOnline,
   serviceMode,
   listenOnly,
-  onChangeOperator,
   showAttendance,
   onToggleAttendance,
   showJournal,
@@ -60,17 +70,22 @@ export function TopBar({
   sttListening,
   onToggleSttListening,
   onClearChat,
+  onUpdateProfile,
+  onChangePassword,
+  onLogout,
 }: Props) {
   return (
     <AppBar position="static" color="default" elevation={0}
       sx={{ borderBottom: 1, borderColor: 'divider' }}>
       <Toolbar sx={{ gap: 1, flexWrap: 'wrap', py: 0.5 }}>
 
-        {/* Left: navigation buttons */}
-        <Button variant="outlined" size="small" onClick={onChangeOperator}
-          aria-label="Change operator profile">
-          CHANGE OPERATOR
-        </Button>
+        {/* Account menu (replaces CHANGE OPERATOR) */}
+        <AccountMenu
+          profile={profile}
+          onUpdateProfile={onUpdateProfile}
+          onChangePassword={onChangePassword}
+          onLogout={onLogout}
+        />
 
         <Button
           variant={showAttendance ? 'contained' : 'outlined'}
@@ -112,15 +127,17 @@ export function TopBar({
           CONFIG
         </Button>
 
-        <Button
-          variant={showAdmin ? 'contained' : 'outlined'}
-          size="small"
-          onClick={onToggleAdmin}
-          aria-pressed={showAdmin}
-          aria-label="Open admin settings"
-        >
-          ADMIN
-        </Button>
+        {profile.is_admin && (
+          <Button
+            variant={showAdmin ? 'contained' : 'outlined'}
+            size="small"
+            onClick={onToggleAdmin}
+            aria-pressed={showAdmin}
+            aria-label="Open admin settings"
+          >
+            ADMIN
+          </Button>
+        )}
 
         {/* Center: station status + online dot */}
         <Box sx={{ flex: 1, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }} aria-live="polite" aria-atomic="true">

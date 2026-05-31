@@ -152,12 +152,22 @@ class ServerConfig(dict):
     def spectro_time_window_s(self) -> int:
         return int(self.get("spectro_time_window_s", 30))
 
-    # ---- persistence (contacts) ------------------------------------------
+    # ---- persistence ---------------------------------------------------------
 
     @property
     def contacts_file(self) -> Path:
         raw = self.get("contacts_file")
         return Path(raw) if raw else Path("/data/contacts.json")
+
+    @property
+    def users_file(self) -> Path:
+        raw = self.get("users_file")
+        return Path(raw) if raw else Path("/data/users.json")
+
+    @property
+    def tokens_file(self) -> Path:
+        raw = self.get("tokens_file")
+        return Path(raw) if raw else Path("/data/tokens.json")
 
     # ---- server ----------------------------------------------------------
 
