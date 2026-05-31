@@ -22,7 +22,7 @@ FastAPI Backend  ──►  PulseAudio / sounddevice
 ```
 
 - **RX pipeline**: audio capture → VAD → squelch → segmentation → Whisper STT → text broadcast to all clients (per-user profanity filter applied)
-- **TX pipeline**: text input → abbreviation expansion → profanity filter → FCC ID wrapper → Piper TTS → PTT → audio output
+- **TX pipeline**: text input → abbreviation expansion → profanity filter → FCC ID wrapper → Piper TTS → PTT → audio output → `tx_echo` broadcast to all clients
 - **Auth**: session tokens validated on WebSocket connect; unauthenticated connections are rejected
 
 ---
@@ -30,6 +30,7 @@ FastAPI Backend  ──►  PulseAudio / sounddevice
 ## Features
 
 - **Multi-user accounts** — named family member profiles, each with their own password and per-user preferences
+- **Shared TX chat** — outgoing transmissions appear in every connected user's chat stream, labeled `[TX]` with the sender's callsign
 - **Per-user settings** — dark mode, panel order, profanity filter, listen-only, spectrogram display, and TTS voice are per-account and sync across devices
 - **Public family journal** — publish session logs to `/journal`, a no-login static page (last 10 entries, ADA-compliant)
 - Real-time spectrogram with VAD and squelch indicators
