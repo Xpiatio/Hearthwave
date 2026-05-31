@@ -108,7 +108,7 @@ from backend.persistence.contacts import (
 )
 from backend.persistence.journal import delete_journal, load_journals, publish_journal, save_journal
 from backend.persistence.tokens import TokenStore
-from backend.persistence.users import DEFAULT_PREFS, UsersStore
+from backend.persistence.users import DEFAULT_PREFS, SENSITIVE_PROFILE_FIELDS, UsersStore
 from backend.ptt.factory import make_ptt
 from backend.stt.worker import STTWorker
 from backend.text.callsigns import detect_callsigns, fuzzy_match_callsign, spell_digits_in_callsigns
@@ -527,8 +527,7 @@ def _build_status() -> dict:
 
 
 def _safe_profile(profile: dict) -> dict:
-    _sensitive = {"password_hash", "password_salt", "failed_attempts", "locked_until"}
-    return {k: v for k, v in profile.items() if k not in _sensitive}
+    return {k: v for k, v in profile.items() if k not in SENSITIVE_PROFILE_FIELDS}
 
 
 def _build_user_profile_msg(profile: dict) -> dict:
@@ -769,16 +768,14 @@ async def health() -> dict:
 # ---------------------------------------------------------------------------
 
 @app.websocket("/ws")
-async def websocket_endpoint(ws: WebSocket, token: str = Query(...)) -> None:
+async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=None)) -> None:
     global _stt_worker, _stt_listening
 
-    # Validate session token before accepting.
-    user_id = _token_store.validate(token) if _token_store else None
-    if not user_id:
-        await ws.close(code=4001)
-        return
-    profile = _users_store.get(user_id) if _users_store else None
-    if not profile:
+    # Validate session token — accept first so we can send a close frame.
+    user_id = _token_store.validate(token) if (_token_store and token) else None
+    profile = _users_store.get(user_id) if (_users_store and user_id) else None
+    if not user_id or not profile:
+        await ws.accept()
         await ws.close(code=4001)
         return
 

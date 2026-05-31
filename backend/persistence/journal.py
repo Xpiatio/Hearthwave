@@ -20,7 +20,7 @@ def save_journal(
 ) -> str:
     """Write a journal entry to journals_dir and return its file path."""
     journals_dir.mkdir(parents=True, exist_ok=True)
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     filename = now.strftime("%Y%m%d_%H%M%S") + ".json"
     path = journals_dir / filename
     entry = {
@@ -153,7 +153,8 @@ def _fmt_date(iso: str) -> str:
     """Format an ISO timestamp as a readable date string, gracefully."""
     try:
         dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
-        return dt.strftime("%B %-d, %Y")
+        # Use str(dt.day) to avoid the Linux-only %-d format specifier.
+        return dt.strftime("%B ") + str(dt.day) + dt.strftime(", %Y")
     except Exception:
         return iso[:10] if len(iso) >= 10 else iso
 
@@ -168,7 +169,9 @@ def _render_public_html(entries: list[dict]) -> str:
     else:
         for entry in entries:
             title = html.escape(entry.get("title") or "(untitled)")
-            summary = html.escape(entry.get("summary") or "")
+            # Escape first, then convert newlines to <br> so AI-generated line
+            # breaks render correctly without relying on CSS white-space.
+            summary = html.escape(entry.get("summary") or "").replace("\n", "<br>")
             published_at = entry.get("published_at") or ""
             published_by = html.escape(entry.get("published_by") or "")
             exported_at = entry.get("exported_at") or ""

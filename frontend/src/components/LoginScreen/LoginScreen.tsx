@@ -56,9 +56,10 @@ export function LoginScreen({ onLogin }: Props) {
     try {
       await onLogin(selected, password);
     } catch (err: unknown) {
-      const authErr = err as AuthError;
-      if (authErr.status === 423) {
-        const match = authErr.detail.match(/(\d{4}-\d{2}-\d{2}T[\d:.+Z-]+)/);
+      const status = (err as Partial<AuthError>)?.status;
+      const detail = (err as Partial<AuthError>)?.detail ?? '';
+      if (status === 423) {
+        const match = detail.match(/(\d{4}-\d{2}-\d{2}T[\d:.+Z-]+)/);
         if (match) {
           try {
             const dt = new Date(match[1]);
@@ -69,8 +70,10 @@ export function LoginScreen({ onLogin }: Props) {
         } else {
           setLockedUntil('a short time');
         }
-      } else {
+      } else if (status === 401) {
         setError('Invalid credentials. Please try again.');
+      } else {
+        setError('Could not reach the server. Check your connection and try again.');
       }
     } finally {
       setLoading(false);

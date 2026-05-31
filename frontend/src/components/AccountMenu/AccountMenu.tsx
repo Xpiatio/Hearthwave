@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Avatar,
   Box,
@@ -43,6 +43,17 @@ export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogo
   const [callsign, setCallsign] = useState(profile.callsign);
   const [location, setLocation] = useState(profile.location);
   const [avatarEmoji, setAvatarEmoji] = useState(profile.avatar_emoji);
+
+  // Sync form fields when profile updates from the server, but only while
+  // the edit dialog is closed so we don't clobber in-progress edits.
+  useEffect(() => {
+    if (!editOpen) {
+      setOperatorName(profile.operator_name);
+      setCallsign(profile.callsign);
+      setLocation(profile.location);
+      setAvatarEmoji(profile.avatar_emoji);
+    }
+  }, [profile, editOpen]);
 
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');

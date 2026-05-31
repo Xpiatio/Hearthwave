@@ -64,7 +64,7 @@ class TokenStore:
             return None
         try:
             expires_at = datetime.fromisoformat(entry["expires_at"])
-        except (KeyError, ValueError):
+        except (KeyError, ValueError, TypeError):
             return None
         if datetime.now(timezone.utc) >= expires_at:
             self._tokens.pop(token, None)
@@ -79,10 +79,13 @@ class TokenStore:
 
     def purge_expired(self) -> int:
         now = datetime.now(timezone.utc)
-        expired = [
-            t for t, entry in list(self._tokens.items())
-            if datetime.fromisoformat(entry.get("expires_at", "1970-01-01T00:00:00+00:00")) <= now
-        ]
+        def _is_expired(entry: dict) -> bool:
+            try:
+                return datetime.fromisoformat(entry.get("expires_at", "")) <= now
+            except (ValueError, TypeError):
+                return True  # malformed entry → treat as expired
+
+        expired = [t for t, entry in list(self._tokens.items()) if _is_expired(entry)]
         for t in expired:
             del self._tokens[t]
         if expired:

@@ -12,6 +12,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
+from backend.persistence.users import SENSITIVE_PROFILE_FIELDS
+
 router = APIRouter()
 
 # Populated by server.py via init() after singletons are ready.
@@ -39,8 +41,7 @@ def _require_token(authorization: str | None) -> str:
 
 
 def _safe(u: dict) -> dict:
-    _sensitive = {"password_hash", "password_salt", "failed_attempts", "locked_until"}
-    return {k: v for k, v in u.items() if k not in _sensitive}
+    return {k: v for k, v in u.items() if k not in SENSITIVE_PROFILE_FIELDS}
 
 
 class LoginRequest(BaseModel):

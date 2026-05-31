@@ -22,6 +22,11 @@ _log = logging.getLogger(__name__)
 
 _DEFAULT_PATH = Path(os.environ.get("RADIO_TTY_USERS", "/data/users.json"))
 
+# Fields stripped from all public-facing user profile responses.
+SENSITIVE_PROFILE_FIELDS: frozenset[str] = frozenset(
+    {"password_hash", "password_salt", "failed_attempts", "locked_until"}
+)
+
 LOCKOUT_MAX_ATTEMPTS = 3
 LOCKOUT_DURATION_MINUTES = 15
 
@@ -105,8 +110,7 @@ class UsersStore:
 
     def get_public(self) -> list[dict]:
         """Strip sensitive fields for API responses."""
-        _sensitive = {"password_hash", "password_salt", "failed_attempts", "locked_until"}
-        return [{k: v for k, v in u.items() if k not in _sensitive} for u in self._users]
+        return [{k: v for k, v in u.items() if k not in SENSITIVE_PROFILE_FIELDS} for u in self._users]
 
     def get(self, user_id: str) -> dict | None:
         for u in self._users:
@@ -118,8 +122,7 @@ class UsersStore:
         u = self.get(user_id)
         if u is None:
             return None
-        _sensitive = {"password_hash", "password_salt", "failed_attempts", "locked_until"}
-        return {k: v for k, v in u.items() if k not in _sensitive}
+        return {k: v for k, v in u.items() if k not in SENSITIVE_PROFILE_FIELDS}
 
     def is_empty(self) -> bool:
         return len(self._users) == 0
@@ -209,7 +212,11 @@ class UsersStore:
         locked_until = u.get("locked_until")
         if not locked_until:
             return False
-        expiry = datetime.fromisoformat(locked_until)
+        try:
+            expiry = datetime.fromisoformat(locked_until)
+        except (ValueError, TypeError):
+            # Malformed stored date — clear it and treat as not locked.
+            expiry = datetime.now(timezone.utc)
         if datetime.now(timezone.utc) >= expiry:
             # Lock expired — clear it
             for i, uu in enumerate(self._users):
