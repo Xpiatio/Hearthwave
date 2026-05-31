@@ -10,7 +10,7 @@ import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import { AccountMenu } from '../AccountMenu/AccountMenu';
-import type { UserProfile } from '../../types/ws';
+import type { UserProfile, VoiceOption } from '../../types/ws';
 
 interface Props {
   profile: UserProfile;
@@ -44,6 +44,9 @@ interface Props {
   }) => void;
   onChangePassword: (newPassword: string) => void;
   onLogout: () => void;
+  voices: VoiceOption[];
+  onPreviewVoice: (voiceId: string) => void;
+  onSaveVoicePref: (voiceId: string) => void;
 }
 
 export function TopBar({
@@ -73,6 +76,9 @@ export function TopBar({
   onUpdateProfile,
   onChangePassword,
   onLogout,
+  voices,
+  onPreviewVoice,
+  onSaveVoicePref,
 }: Props) {
   return (
     <AppBar position="static" color="default" elevation={0}
@@ -85,6 +91,9 @@ export function TopBar({
           onUpdateProfile={onUpdateProfile}
           onChangePassword={onChangePassword}
           onLogout={onLogout}
+          voices={voices}
+          onPreviewVoice={onPreviewVoice}
+          onSaveVoicePref={onSaveVoicePref}
         />
 
         <Button

@@ -83,6 +83,15 @@ class ServerConfig(dict):
     def tts_length_scale(self) -> float:
         return float(self.get("tts_length_scale", 1.0))
 
+    @property
+    def voices_dir(self) -> Path:
+        raw = self.get("voices_dir")
+        if raw:
+            return Path(raw)
+        if self.voice:
+            return Path(self.voice).parent
+        return Path("/Voices")
+
     # ---- text / content --------------------------------------------------
 
     @property

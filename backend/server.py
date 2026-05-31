@@ -421,7 +421,7 @@ async def _tx_pump() -> None:
         try:
             from piper import PiperVoice  # lazy import — heavy on first call
 
-            voice_name = _config.voice
+            voice_name = payload.get("_voice_name") or _config.voice
             if not voice_name:
                 _log.warning("No TTS voice configured; skipping TX synthesis.")
                 if not is_preview:
@@ -490,6 +490,32 @@ async def _tx_pump() -> None:
                 _stt_worker.resume()
             if not is_preview:
                 await _manager.broadcast({"type": "tx_status", "status": "idle"})
+
+
+# ---------------------------------------------------------------------------
+# Voice helpers
+# ---------------------------------------------------------------------------
+
+def _voice_label(stem: str) -> str:
+    """Turn 'en_US-ryan-high' into 'Ryan (High)'."""
+    parts = stem.split("-")
+    if len(parts) >= 3:
+        return f"{parts[-2].capitalize()} ({parts[-1].capitalize()})"
+    return stem.replace("-", " ").title()
+
+
+def _list_voices() -> list[dict]:
+    """Return all .onnx voice files in the configured voices directory."""
+    if _config is None:
+        return []
+    from pathlib import Path as _Path
+    try:
+        return [
+            {"id": str(p), "name": p.stem, "label": _voice_label(p.stem)}
+            for p in sorted(_config.voices_dir.glob("*.onnx"))
+        ]
+    except OSError:
+        return []
 
 
 # ---------------------------------------------------------------------------
@@ -790,6 +816,7 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
         })
     await _manager.send_to(ws, _build_attendance_payload())
     await _manager.send_to(ws, _build_pending_payload())
+    await _manager.send_to(ws, {"type": "voices_list", "voices": _list_voices()})
     cached_online = is_online_cached()
     if cached_online is not None:
         await _manager.send_to(ws, {"type": "online_status", "online": cached_online})
@@ -834,6 +861,7 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                 await _tx_queue.put({
                     **data,
                     "_filter_profanity": state.prefs.get("filter_profanity", True),
+                    "_voice_name": state.prefs.get("tts_voice") or None,
                 })
                 await _manager.broadcast({"type": "tx_status", "status": "transmitting"})
 
@@ -986,6 +1014,7 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                     "operator": (data.get("operator") or "").strip(),
                     "callsign": (data.get("callsign") or "").strip(),
                     "location": (data.get("location") or "").strip(),
+                    "_voice_name": state.prefs.get("tts_voice") or None,
                 })
 
             elif msg_type == "voice_preview":
@@ -994,7 +1023,12 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                 preview_text = (
                     data.get("text") or "Radio-TTY voice test. How does this sound?"
                 ).strip()
-                await _tx_queue.put({"text": preview_text, "_voice_preview": True})
+                preview_voice = (
+                    data.get("voice")
+                    or state.prefs.get("tts_voice")
+                    or (_config.voice if _config else None)
+                )
+                await _tx_queue.put({"text": preview_text, "_voice_preview": True, "_voice_name": preview_voice})
 
             elif msg_type == "fcc_lookup":
                 # Single callsign lookup for the Add/Edit contact dialog.
@@ -1237,7 +1271,7 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                 if _users_store is None:
                     continue
                 allowed = {"dark_mode", "panel_order", "filter_profanity", "listen_only",
-                           "spectro_colormap", "spectro_time_window_s"}
+                           "spectro_colormap", "spectro_time_window_s", "tts_voice"}
                 updates = {k: v for k, v in data.items() if k in allowed}
                 if updates:
                     state.prefs.update(updates)

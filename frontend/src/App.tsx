@@ -18,6 +18,7 @@ import type {
   InputDeviceOption,
   MonitorSinkOption,
   UserProfile,
+  VoiceOption,
 } from './types/ws';
 import { LoginScreen } from './components/LoginScreen/LoginScreen';
 import { SetupScreen } from './components/SetupScreen/SetupScreen';
@@ -129,6 +130,9 @@ export default function App() {
   const [filterProfanity, setFilterProfanity] = useState(true);
   const [spectroColormap, setSpectroColormap] = useState<'viridis' | 'grayscale'>('viridis');
   const [spectroTimeWindowS, setSpectroTimeWindowS] = useState(30);
+
+  // Available TTS voices (sent by server on connect)
+  const [voices, setVoices] = useState<VoiceOption[]>([]);
 
   // Station-wide settings (synced from status message)
   const [sttListening, setSttListening] = useState(true);
@@ -381,6 +385,10 @@ export default function App() {
         setSystemMonitorSink(msg.current_monitor_sink);
         break;
 
+      case 'voices_list':
+        setVoices(msg.voices);
+        break;
+
       case 'contact_auto_added':
         break;
 
@@ -461,6 +469,14 @@ export default function App() {
 
   function handleVoiceTest() {
     send({ type: 'voice_preview' });
+  }
+
+  function handlePreviewVoice(voiceId: string) {
+    send({ type: 'voice_preview', voice: voiceId });
+  }
+
+  function handleSaveVoicePref(voiceId: string) {
+    send({ type: 'save_user_prefs', prefs: { tts_voice: voiceId } });
   }
 
   function handleSpectroColormapChange(cm: 'viridis' | 'grayscale') {
@@ -619,6 +635,9 @@ export default function App() {
           onUpdateProfile={handleUpdateProfile}
           onChangePassword={handleChangePassword}
           onLogout={handleLogout}
+          voices={voices}
+          onPreviewVoice={handlePreviewVoice}
+          onSaveVoicePref={handleSaveVoicePref}
         />
 
         <DndContext onDragEnd={handlePanelDragEnd}>

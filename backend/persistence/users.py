@@ -37,6 +37,7 @@ DEFAULT_PREFS: dict = {
     "listen_only": False,
     "spectro_colormap": "viridis",
     "spectro_time_window_s": 30,
+    "tts_voice": "",
 }
 
 
