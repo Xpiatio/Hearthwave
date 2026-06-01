@@ -45,6 +45,7 @@ interface Props {
   onChangePassword: (newPassword: string) => void;
   onLogout: () => void;
   voices: VoiceOption[];
+  voicePreviewBusy: boolean;
   onPreviewVoice: (voiceId: string) => void;
   onSaveVoicePref: (voiceId: string) => void;
 }
@@ -77,6 +78,7 @@ export function TopBar({
   onChangePassword,
   onLogout,
   voices,
+  voicePreviewBusy,
   onPreviewVoice,
   onSaveVoicePref,
 }: Props) {
@@ -92,6 +94,7 @@ export function TopBar({
           onChangePassword={onChangePassword}
           onLogout={onLogout}
           voices={voices}
+          voicePreviewBusy={voicePreviewBusy}
           onPreviewVoice={onPreviewVoice}
           onSaveVoicePref={onSaveVoicePref}
         />

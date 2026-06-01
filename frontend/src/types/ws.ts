@@ -55,6 +55,7 @@ export interface StatusMsg {
   station_callsign?: string;
   station_name?: string;
   station_location?: string;
+  station_voice?: string;
   gemini_api_key_set?: boolean;
   journals_dir?: string;
 }
@@ -279,7 +280,9 @@ export type WsMessage =
   | UserProfileMsg
   | ProfilesMsg
   | JournalPublishedMsg
-  | VoicesListMsg;
+  | VoicesListMsg
+  | { type: 'voice_preview_done' }
+  | { type: 'error'; detail?: string };
 
 export interface TxMessagePayload {
   type: 'tx_message';
