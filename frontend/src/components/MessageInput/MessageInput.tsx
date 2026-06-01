@@ -20,13 +20,12 @@ export interface MessageInputHandle {
 interface Props {
   transmitting: boolean;
   contacts: Contact[];
-  myCallsign: string;
   onSend: (text: string, targetCall: string, targetName: string) => void;
   onStandaloneId?: () => void;
 }
 
 export const MessageInput = forwardRef<MessageInputHandle, Props>(
-  ({ transmitting, contacts, myCallsign, onSend, onStandaloneId }, ref) => {
+  ({ transmitting, contacts, onSend, onStandaloneId }, ref) => {
     const [draft, setDraft] = useState('');
     const [targetCallsign, setTargetCallsign] = useState('');
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -38,8 +37,10 @@ export const MessageInput = forwardRef<MessageInputHandle, Props>(
       },
     }));
 
-    const filteredContacts = contacts.filter((c) => c.callsign !== myCallsign);
-    const selectedContact = filteredContacts.find((c) => c.callsign === targetCallsign);
+    const sortedContacts = [...contacts].sort((a, b) =>
+      a.callsign.toUpperCase().localeCompare(b.callsign.toUpperCase())
+    );
+    const selectedContact = sortedContacts.find((c) => c.callsign === targetCallsign);
 
     function handleSend() {
       const text = draft.trim();
@@ -69,7 +70,7 @@ export const MessageInput = forwardRef<MessageInputHandle, Props>(
           </Alert>
         )}
 
-        {filteredContacts.length > 0 && (
+        {sortedContacts.length > 0 && (
           <FormControl size="small" fullWidth>
             <InputLabel id="target-label">To</InputLabel>
             <Select
@@ -80,7 +81,7 @@ export const MessageInput = forwardRef<MessageInputHandle, Props>(
               disabled={transmitting}
             >
               <MenuItem value="">ALL — Broadcast</MenuItem>
-              {filteredContacts.map((c) => (
+              {sortedContacts.map((c) => (
                 <MenuItem key={c.callsign} value={c.callsign}>
                   {c.callsign}{c.name ? ` — ${c.name}` : ''}
                 </MenuItem>

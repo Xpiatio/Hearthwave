@@ -822,7 +822,6 @@ export default function App() {
             ref={messageInputRef}
             transmitting={transmitting}
             contacts={contacts}
-            myCallsign={effectiveCallsign}
             onSend={handleSend}
             onStandaloneId={() => {
               send({
