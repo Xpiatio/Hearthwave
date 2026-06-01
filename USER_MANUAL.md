@@ -126,9 +126,14 @@ The system will:
 
 The status bar shows **Transmitting** while the radio is keyed and returns to **Idle** when done.
 
-**Chat echo:** Every outgoing transmission appears in the chat area as a `[TX]` entry (shown in blue) with your callsign. All other connected users see the same entry at the same time, so anyone watching the screen knows exactly what was transmitted and by whom.
+**Chat echo:** Every outgoing transmission appears in the chat area as a `[TX]` entry (shown in blue). All connected users see the same entry in real time. When a message is directed to a specific station, the recipient is shown between the sender and the message text:
 
-**Targeting a specific station:** Open Contacts, select a contact, and their callsign and name pre-fill the target fields. The outgoing message will be addressed to that station.
+| Scenario | Chat display |
+|---|---|
+| Broadcast | `[TX] [Dad]: Hello everyone` |
+| Directed | `[TX] [Dad] → WSLZ233 — Dave: Hello` |
+
+**Targeting a specific station:** Use the **To** dropdown above the message box to address a transmission. The list is sorted alphabetically by callsign; **ALL — Broadcast** is pinned at the top. Your own callsign appears in the list so you can address yourself (useful for testing or self-checks). Selecting a contact pre-fills the callsign and name; the outgoing message is addressed to that station and the recipient label appears in chat for all users.
 
 **Placeholder tokens:** Include `{1}`, `{2}`, etc. as fill-in-the-blank slots. When you send, the system prompts you to fill in each before transmitting. Useful for templates: `Heading to {1} — ETA {2} minutes`.
 
