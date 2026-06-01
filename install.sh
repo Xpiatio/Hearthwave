@@ -70,10 +70,32 @@ if $MODELS; then
     echo "==> Downloading Whisper STT model (small.en, ~464 MB)..."
     python bootstrap_models.py --model small.en
 
-    echo ""
-    echo "NOTE: The speaker recognition model (Models/Speaker/ecapa-tdnn) and"
-    echo "      Piper TTS voices (Voices/) must be copied from an existing install"
-    echo "      or downloaded separately — see bootstrap_models.py --help."
+    echo "==> Downloading Piper TTS voices..."
+    mkdir -p Voices
+    python - <<'PYEOF'
+import os, shutil
+from huggingface_hub import hf_hub_download
+
+REPO = "rhasspy/piper-voices"
+VOICES = [
+    "en/en_US/ryan/high/en_US-ryan-high.onnx",
+    "en/en_US/ryan/high/en_US-ryan-high.onnx.json",
+    "en/en_US/amy/medium/en_US-amy-medium.onnx",
+    "en/en_US/amy/medium/en_US-amy-medium.onnx.json",
+    "en/en_US/lessac/medium/en_US-lessac-medium.onnx",
+    "en/en_US/lessac/medium/en_US-lessac-medium.onnx.json",
+]
+for path in VOICES:
+    name = os.path.basename(path)
+    out = os.path.join("Voices", name)
+    if os.path.exists(out):
+        print(f"  {name} already present, skipping.")
+        continue
+    print(f"  Downloading {name}...")
+    cached = hf_hub_download(REPO, path)
+    shutil.copy2(os.path.realpath(cached), out)
+    print(f"  {name} done.")
+PYEOF
 fi
 
 # ── 6. Data directory ────────────────────────────────────────────────────────
