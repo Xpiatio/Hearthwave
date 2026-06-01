@@ -82,6 +82,8 @@ export interface TxEchoMsg {
   operator: string;
   display_name: string;
   text: string;
+  target_call: string;
+  target_name: string;
 }
 
 export interface SystemMsgMsg {
