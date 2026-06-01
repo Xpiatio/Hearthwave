@@ -126,6 +126,8 @@ export default function App() {
   const [fccLookupResult, setFccLookupResult] = useState<FccLookupResultMsg | null>(null);
   const [verifyAllComplete, setVerifyAllComplete] = useState(false);
   const [pendingPrefilledCallsign, setPendingPrefilledCallsign] = useState<string | undefined>();
+  const [pendingPrefilledName, setPendingPrefilledName] = useState<string | undefined>();
+  const [pendingPrefilledLocation, setPendingPrefilledLocation] = useState<string | undefined>();
 
   // Per-user prefs (synced from user_profile message)
   const [listenOnly, setListenOnly] = useState(false);
@@ -399,9 +401,6 @@ export default function App() {
         setErrorSnack(msg.detail ?? 'An error occurred.');
         break;
 
-      case 'contact_auto_added':
-        break;
-
       case 'fcc_lookup_result':
         setFccLookupResult(msg);
         break;
@@ -527,12 +526,16 @@ export default function App() {
 
   function handleAddPending(station: PendingStation) {
     setPendingPrefilledCallsign(station.callsign);
+    setPendingPrefilledName(station.name || undefined);
+    setPendingPrefilledLocation(station.location || undefined);
     setShowContacts(true);
   }
 
   function handleContactsClose() {
     setShowContacts(false);
     setPendingPrefilledCallsign(undefined);
+    setPendingPrefilledName(undefined);
+    setPendingPrefilledLocation(undefined);
     setFccLookupResult(null);
   }
 
@@ -809,6 +812,8 @@ export default function App() {
           onClose={handleContactsClose}
           contacts={contacts}
           prefilledCallsign={pendingPrefilledCallsign}
+          prefilledName={pendingPrefilledName}
+          prefilledLocation={pendingPrefilledLocation}
           fccLookupResult={fccLookupResult}
           verifyAllComplete={verifyAllComplete}
           onSend={send}

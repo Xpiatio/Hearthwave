@@ -310,39 +310,26 @@ def _build_pending_payload() -> dict:
 async def _on_auto_add_result(
     callsign: str, name: str, location: str, result: "Any"
 ) -> None:
-    """Callback fired when a background FCC auto-add lookup completes.
+    """Callback fired when a background FCC lookup completes.
 
-    If the callsign+name pair verified against the FCC database, the contact
-    is persisted and all clients are notified. A mismatch or network error
-    leaves the pending pill in place for the operator to decide.
+    Enriches the pending station entry with FCC-verified name/location so the
+    operator sees better pre-fill data when they click the pill. Never
+    auto-adds — the operator always decides.
     """
     global _auto_add_tasks, _pending_stations
     _auto_add_tasks.pop(callsign, None)
 
-    if result.status != "verified" or _contacts_store is None:
+    if callsign not in _pending_stations:
         return
 
-    contact = {"callsign": callsign, "name": name, "location": location}
-    contact = apply_verification(contact, result, utc_now_iso())
-    try:
-        updated = _contacts_store.add_contact(contact)
-    except Exception as exc:
-        _log.error("Auto-add failed for %s: %s", callsign, exc)
-        return
-
-    _pending_stations.pop(callsign, None)
-    await _manager.broadcast({"type": "contacts", "contacts": updated})
-    await _manager.broadcast(_build_pending_payload())
-    await _manager.broadcast({
-        "type": "contact_auto_added",
-        "callsign": callsign,
-        "name": name,
-    })
-    await _manager.broadcast({
-        "type": "system_msg",
-        "text": f"Contact auto-added: {callsign}" + (f" ({name})" if name else ""),
-    })
-    _log.info("Auto-added contact: %s (%s)", callsign, name)
+    if result.status == "verified":
+        entry = _pending_stations[callsign]
+        if result.license_name and not entry.get("name"):
+            entry["name"] = result.license_name
+        if result.license_location and not entry.get("location"):
+            entry["location"] = result.license_location
+        await _manager.broadcast(_build_pending_payload())
+        _log.info("Enriched pending station %s from FCC (%s)", callsign, result.license_name)
 
 
 # ---------------------------------------------------------------------------
