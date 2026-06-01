@@ -21,7 +21,7 @@ FastAPI Backend  ──►  PulseAudio / sounddevice
     Radio               Spectrogram
 ```
 
-- **RX pipeline**: audio capture → VAD → squelch → segmentation → Whisper STT → text broadcast to all clients (per-user profanity filter applied)
+- **RX pipeline**: audio capture → VAD → squelch → segmentation → Whisper STT → callsign span detection → text broadcast to all clients (per-user profanity filter applied; callsign spans included for chat highlighting)
 - **TX pipeline**: text input → abbreviation expansion → profanity filter → FCC ID wrapper → Piper TTS → PTT → audio output → `tx_echo` broadcast to all clients
 - **Auth**: session tokens validated on WebSocket connect; unauthenticated connections are rejected
 
@@ -39,6 +39,7 @@ FastAPI Backend  ──►  PulseAudio / sounddevice
 - Automatic FCC station ID every 15 minutes (GMRS requirement)
 - FCC database callsign lookup and verification
 - Shared contacts list (GMRS + HAM cross-reference, FCC-verified)
+- Callsign highlighting in chat — amber chips with tooltip; handles compact, NATO phonetic, spaced, and hyphenated forms; verified contacts show a green ✓ badge; fuzzy correction snaps STT near-misses to known callsigns
 - TTY abbreviation expansion and Q-signal support
 - NATO phonetic callsign spelling
 - Session attendance tracking
@@ -257,7 +258,7 @@ Radio-TTY/
 │   ├── text/
 │   │   ├── shorthand.py        # TTY/TDD + Q-signal + CW abbreviation expansion
 │   │   ├── phonetics.py        # NATO phonetic alphabet conversion
-│   │   ├── callsigns.py        # Callsign detection, fuzzy match, digit spacing
+│   │   ├── callsigns.py        # Callsign detection (compact, NATO phonetic, spaced, hyphenated), span location, fuzzy match, digit spacing
 │   │   ├── profanity.py        # Profanity masking
 │   │   └── placeholders.py     # {N} token substitution
 │   ├── fcc/

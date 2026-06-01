@@ -12,6 +12,9 @@ export interface ChatEntry {
   speaker?: string;
   partial?: boolean;
   cluster_label?: string | null;
+  // Server-computed [start, end, canonical_callsign] tuples — handles NATO phonetic,
+  // spaced, hyphenated, and compact forms. Falls back to frontend regex when absent.
+  callsign_spans?: Array<[number, number, string]>;
 }
 
 interface Props {
@@ -21,7 +24,8 @@ interface Props {
   onEnrollCluster?: (clusterLabel: string, callsign: string) => void;
 }
 
-// Matches GMRS modern (WSLZ233), GMRS legacy (KAE1234), and US amateur (K1ABC, KD9XYZ)
+// Fallback regex for compact callsign forms when the server hasn't sent spans.
+// Matches GMRS modern (WSLZ233), GMRS legacy (KAE1234), US amateur (K1ABC, KD9XYZ).
 const CALLSIGN_RE = /\b(W[A-Z]{3}\d{3}|KA[A-Z]\d{3,4}|[AKNW][A-Z]?\d[A-Z]{1,3})\b/gi;
 
 const KIND_COLOR: Record<string, string> = {
@@ -48,7 +52,6 @@ function callsignTooltip(c: Contact): string {
   if (c.location) parts.push(c.location);
   if (c.gmrs_callsign && c.gmrs_callsign !== c.callsign) parts.push(`GMRS: ${c.gmrs_callsign}`);
   if (c.ham_callsign && c.ham_callsign !== c.callsign) parts.push(`HAM: ${c.ham_callsign}`);
-  if (c.verified) parts.push('✓ Verified');
   return parts.join(' · ');
 }
 
@@ -58,7 +61,31 @@ interface TextSegment {
   contact?: Contact;
 }
 
-function segmentText(text: string, callsignIdx: Map<string, Contact>): TextSegment[] {
+// Uses server-provided spans (handles NATO phonetic, spaced, hyphenated, compact forms).
+// Each span carries [start, end, canonical_callsign]; the chip shows the canonical form
+// while the original matched text (which may be the long NATO spelling) is elided.
+function segmentTextBySpans(
+  text: string,
+  spans: Array<[number, number, string]>,
+  callsignIdx: Map<string, Contact>,
+): TextSegment[] {
+  const segments: TextSegment[] = [];
+  let lastIndex = 0;
+  for (const [start, end, canonical] of spans) {
+    if (start > lastIndex) {
+      segments.push({ text: text.slice(lastIndex, start), isCallsign: false });
+    }
+    segments.push({ text: canonical, isCallsign: true, contact: callsignIdx.get(canonical) });
+    lastIndex = end;
+  }
+  if (lastIndex < text.length) {
+    segments.push({ text: text.slice(lastIndex), isCallsign: false });
+  }
+  return segments;
+}
+
+// Fallback used when the server hasn't sent callsign_spans (compact forms only).
+function segmentTextByRegex(text: string, callsignIdx: Map<string, Contact>): TextSegment[] {
   const segments: TextSegment[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -77,14 +104,51 @@ function segmentText(text: string, callsignIdx: Map<string, Contact>): TextSegme
   return segments;
 }
 
+function CallsignChip({ seg, index }: { seg: TextSegment; index: number }) {
+  const chip = (
+    <Chip
+      label={seg.text}
+      size="small"
+      sx={{
+        mx: 0.25,
+        height: 20,
+        fontSize: '0.875rem',
+        fontFamily: 'monospace',
+        fontWeight: 700,
+        bgcolor: seg.contact ? 'warning.light' : 'action.hover',
+        color: seg.contact ? 'warning.dark' : 'text.secondary',
+        '& .MuiChip-label': { px: 0.75 },
+      }}
+    />
+  );
+  return (
+    <span key={index} style={{ display: 'inline-flex', alignItems: 'baseline', gap: 2 }}>
+      {seg.contact ? (
+        <Tooltip title={callsignTooltip(seg.contact)} placement="top">
+          {chip}
+        </Tooltip>
+      ) : (
+        chip
+      )}
+      {seg.contact?.verified && (
+        <Typography component="span" sx={{ fontSize: '0.75rem', color: 'success.main', fontWeight: 700, lineHeight: 1 }}>
+          ✓
+        </Typography>
+      )}
+    </span>
+  );
+}
+
 function MessageText({
   text,
   callsignIdx,
+  callsignSpans,
   showCallsignChips,
   color,
 }: {
   text: string;
   callsignIdx: Map<string, Contact>;
+  callsignSpans?: Array<[number, number, string]>;
   showCallsignChips: boolean;
   color: string;
 }) {
@@ -96,39 +160,17 @@ function MessageText({
     );
   }
 
-  const segments = segmentText(text, callsignIdx);
+  const segments = callsignSpans && callsignSpans.length > 0
+    ? segmentTextBySpans(text, callsignSpans, callsignIdx)
+    : segmentTextByRegex(text, callsignIdx);
 
   return (
     <Typography component="span" sx={{ wordBreak: 'break-word', color }}>
-      {segments.map((seg, i) => {
-        if (!seg.isCallsign) return <span key={i}>{seg.text}</span>;
-        const chip = (
-          <Chip
-            key={i}
-            label={seg.text}
-            size="small"
-            sx={{
-              mx: 0.25,
-              height: 20,
-              fontSize: '0.875rem',
-              fontFamily: 'monospace',
-              fontWeight: 700,
-              bgcolor: seg.contact ? 'warning.light' : 'action.hover',
-              color: seg.contact ? 'warning.dark' : 'text.secondary',
-              cursor: seg.contact ? 'default' : 'default',
-              '& .MuiChip-label': { px: 0.75 },
-            }}
-          />
-        );
-        if (seg.contact) {
-          return (
-            <Tooltip key={i} title={callsignTooltip(seg.contact)} placement="top">
-              {chip}
-            </Tooltip>
-          );
-        }
-        return chip;
-      })}
+      {segments.map((seg, i) =>
+        seg.isCallsign
+          ? <CallsignChip key={i} seg={seg} index={i} />
+          : <span key={i}>{seg.text}</span>
+      )}
     </Typography>
   );
 }
@@ -261,6 +303,7 @@ export function ChatDisplay({ entries, contacts, showCallsignChips, onEnrollClus
             <MessageText
               text={entry.text}
               callsignIdx={callsignIdx}
+              callsignSpans={entry.callsign_spans}
               showCallsignChips={showCallsignChips && entry.kind === 'rx'}
               color={KIND_COLOR[entry.kind]}
             />

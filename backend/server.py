@@ -40,7 +40,7 @@ WebSocket message types (server → client):
                           "monitor_enabled": bool, ...}
     contacts          — {"type": "contacts", "contacts": [...]}
     rx_message        — {"type": "rx_message", "utterance_id": str, "text": str,
-                          "partial": bool}
+                          "partial": bool, "callsign_spans": [[start, end, callsign], ...]}
     tx_status         — {"type": "tx_status", "status": "transmitting" | "idle"}
     monitor_status    — {"type": "monitor_status", "enabled": bool}
     prompt_token      — {"type": "prompt_token", "tokens": [str], "original_text": str,
@@ -117,7 +117,7 @@ from backend.persistence.tokens import TokenStore
 from backend.persistence.users import DEFAULT_PREFS, SENSITIVE_PROFILE_FIELDS, UsersStore
 from backend.ptt.factory import make_ptt
 from backend.stt.worker import STTWorker
-from backend.text.callsigns import detect_callsigns, fuzzy_match_callsign, spell_digits_in_callsigns
+from backend.text.callsigns import find_callsign_spans, fuzzy_match_callsign, spell_digits_in_callsigns
 from backend.text.metadata import extract_name_location
 from backend.text.shorthand import expand_tty_abbreviations
 from backend.text.profanity import mask_profanity
@@ -355,52 +355,61 @@ async def _rx_pump() -> None:
             raw_text = result.get("text", "")
             filtered_text = mask_profanity(raw_text)
 
+            # Compute callsign spans from original text (handles NATO phonetic, spaced,
+            # hyphenated, and compact forms). For final messages apply fuzzy correction
+            # so the span carries the canonical callsign the contacts index knows about.
+            raw_spans = find_callsign_spans(raw_text)
+
+            if not partial and _contacts_store is not None and _config is not None:
+                known = known_callsigns(_contacts_store.get_all())
+                callsign_spans = []
+                for start, end, cs in raw_spans:
+                    effective = cs
+                    if _config.fuzzy_callsign:
+                        matched = fuzzy_match_callsign(cs, known)
+                        if matched:
+                            effective = matched
+                    callsign_spans.append([start, end, effective])
+            else:
+                known = set()
+                callsign_spans = [[s, e, cs] for s, e, cs in raw_spans]
+
             await _manager.broadcast_rx(
-                {"type": "rx_message", "utterance_id": utterance_id, "partial": partial},
+                {
+                    "type": "rx_message",
+                    "utterance_id": utterance_id,
+                    "partial": partial,
+                    "callsign_spans": callsign_spans,
+                },
                 raw_text=raw_text,
                 filtered_text=filtered_text,
             )
 
-            # Callsign detection and attendance use the original unmasked text.
+            # Attendance and pending-station detection use the final (non-partial) text.
             if not partial:
-                detected = detect_callsigns(raw_text)
+                # Extract the fuzzy-corrected callsigns from spans.
+                detected = list({span[2] for span in callsign_spans})
                 changed = any(_attendance.record(cs) for cs in detected)
                 if changed:
                     await _manager.broadcast(_build_attendance_payload())
 
                 # Identify unknown callsigns and drive pending-station pills + auto-add.
-                if detected and _contacts_store is not None and _config is not None:
-                    known = known_callsigns(_contacts_store.get_all())
+                if detected:
                     pending_changed = False
                     for cs in detected:
-                        # Fuzzy match: off-by-one rewrite when toggle is enabled.
-                        effective_cs = cs
-                        if _config.fuzzy_callsign:
-                            match = fuzzy_match_callsign(cs, known)
-                            if match and match != cs:
-                                effective_cs = match
-
-                        if effective_cs in known:
+                        if cs in known:
                             continue  # already a contact — no pending pill needed
-
-                        if effective_cs in _pending_stations:
+                        if cs in _pending_stations:
                             continue  # already pending — avoid duplicate pills
 
                         name, location = extract_name_location(raw_text, cs)
-                        _pending_stations[effective_cs] = {
-                            "name": name,
-                            "location": location,
-                        }
+                        _pending_stations[cs] = {"name": name, "location": location}
                         pending_changed = True
 
-                        # Kick off FCC auto-add if name is available and online.
-                        if (name
-                                and effective_cs not in _auto_add_tasks
-                                and is_online_cached()):
-                            worker = CallsignLookupWorker(
-                                effective_cs, name, location, _on_auto_add_result
-                            )
-                            _auto_add_tasks[effective_cs] = worker.start()
+                        # Kick off FCC enrichment if name is available and online.
+                        if name and cs not in _auto_add_tasks and is_online_cached():
+                            worker = CallsignLookupWorker(cs, name, location, _on_auto_add_result)
+                            _auto_add_tasks[cs] = worker.start()
 
                     if pending_changed:
                         await _manager.broadcast(_build_pending_payload())

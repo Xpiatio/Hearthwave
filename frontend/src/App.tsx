@@ -168,7 +168,9 @@ export default function App() {
             const existingId = inProgressRef.current.get(uid);
             if (existingId) {
               return prev.map((e) =>
-                e.id === existingId ? { ...e, text: msg.text, partial: true } : e
+                e.id === existingId
+                  ? { ...e, text: msg.text, partial: true, callsign_spans: msg.callsign_spans }
+                  : e
               );
             }
             const id = nextId();
@@ -182,6 +184,7 @@ export default function App() {
                 sender: msg.from || msg.callsign || undefined,
                 text: msg.text,
                 partial: true,
+                callsign_spans: msg.callsign_spans,
               },
             ];
           });
@@ -199,6 +202,7 @@ export default function App() {
                       partial: false,
                       speaker,
                       cluster_label: msg.cluster_label,
+                      callsign_spans: msg.callsign_spans,
                     }
                   : e
               );
@@ -213,6 +217,7 @@ export default function App() {
                 text: msg.text,
                 speaker,
                 cluster_label: msg.cluster_label,
+                callsign_spans: msg.callsign_spans,
               },
             ];
           });

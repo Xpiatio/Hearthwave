@@ -101,7 +101,12 @@ Received audio is automatically transcribed by Whisper and displayed in the chat
 
 **Partial transcripts** appear while the system processes audio in real time. The final transcript replaces them once the transmission ends.
 
-**Callsign highlighting:** Recognized callsigns appear as amber chips. Hover or tap a chip for FCC verification status and contact details.
+**Callsign highlighting:** Callsigns in received text appear as amber chips. The system detects all common forms — compact (`WSLZ233`), NATO phonetic (*Whiskey Sierra Lima Zulu Two Three Three*), spaced (`W S L Z 2 3 3`), and hyphenated (`WSLZ-233`) — and collapses them into a single chip showing the compact canonical form.
+
+- **Known contacts** (in your shared contacts list) show an amber chip. Hover or tap for the operator name, location, and any GMRS/HAM cross-references.
+- **Verified contacts** show a green **✓** badge immediately after the chip, indicating the callsign has been confirmed against the FCC database.
+- **Unknown callsigns** appear as a dimmer chip and are added to the [Pending stations](#7-pending-stations) bar above the chat.
+- **Fuzzy correction:** If fuzzy callsign matching is enabled and Whisper mishears a single character (e.g. `WSLZ235` instead of `WSLZ233`), the chip is shown with the corrected canonical form if a known contact is only one character away.
 
 **Profanity filter:** If your profanity filter is enabled (see [Settings](#12-settings)), profanity is masked in received text with asterisks. Other users with the filter off see the unmasked text. This is a per-account setting.
 
@@ -255,7 +260,7 @@ Open the **Config** panel (CONFIG button in the top bar) to manage your personal
 |---------|-------------|
 | Profanity filter | Masks profanity in your sent and received text (other users unaffected) |
 | Listen-only mode | Disables TX for your account only |
-| Fuzzy callsign matching | Station-wide; attempts to match near-misses to known callsigns |
+| Fuzzy callsign matching | Station-wide; when Whisper mishears a single character in a callsign (e.g. `WSLZ235` → `WSLZ233`), the chip in chat and the pending/attendance entry are corrected to the known canonical form |
 
 ### Voice
 | Setting | Description |
