@@ -21,6 +21,10 @@ export interface RxMessageMsg {
   speaker_callsign: string | null;
   speaker_name: string | null;
   cluster_label: string | null;
+  // [start, end, canonical_callsign] tuples computed by the backend.
+  // Spans reference original character positions in `text`, handling NATO-phonetic,
+  // spaced, hyphenated, and compact callsign forms.
+  callsign_spans?: Array<[number, number, string]>;
 }
 
 export interface SpeakerEnrolledMsg {
@@ -78,6 +82,8 @@ export interface TxEchoMsg {
   operator: string;
   display_name: string;
   text: string;
+  target_call: string;
+  target_name: string;
 }
 
 export interface SystemMsgMsg {
