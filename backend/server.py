@@ -645,6 +645,31 @@ async def _online_status_pump() -> None:
             _log.error("_online_status_pump error: %s", exc)
 
 
+async def _voices_watcher_pump() -> None:
+    """Detect changes to the voices directory and push voices_list to all clients.
+
+    Polls every 5 seconds. Only broadcasts when the set of .onnx files changes,
+    so there is no steady-state traffic. Evicts removed voices from _voice_cache
+    so stale PiperVoice objects don't linger in memory.
+    """
+    last_ids: frozenset[str] = frozenset(v["id"] for v in _list_voices())
+    while True:
+        try:
+            await asyncio.sleep(5.0)
+            current = _list_voices()
+            current_ids = frozenset(v["id"] for v in current)
+            if current_ids != last_ids:
+                removed = last_ids - current_ids
+                for vid in removed:
+                    _voice_cache.pop(vid, None)
+                await _manager.broadcast({"type": "voices_list", "voices": current})
+                last_ids = current_ids
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            _log.error("_voices_watcher_pump error: %s", exc)
+
+
 # ---------------------------------------------------------------------------
 # FastAPI lifespan
 # ---------------------------------------------------------------------------
@@ -772,6 +797,7 @@ async def _lifespan(app: FastAPI):
         asyncio.create_task(_id_rule_pump(), name="id-rule-pump"),
         asyncio.create_task(_spectro.run(), name="spectro-pump"),
         asyncio.create_task(_online_status_pump(), name="online-status-pump"),
+        asyncio.create_task(_voices_watcher_pump(), name="voices-watcher"),
     }
     _log.info("Radio-TTY server ready.")
 

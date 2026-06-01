@@ -2,8 +2,13 @@
 #
 # QUICK START
 # -----------
+# 0. On the Docker host, populate the volumes with models and voices FIRST:
+#       bash prereq.sh
+#    (Download prereq.sh from https://github.com/Xpiatio/Radio-TTY/blob/master/prereq.sh
+#     or check out the repo. Requires only docker — no Python needed on the host.)
+#
 # 1. In Portainer: Volumes → Add volume (one for each of the three below).
-#    Or substitute bind-mount paths if your files live in a known host directory.
+#    prereq.sh creates them automatically, so this step is already done if you ran it.
 #
 #    Volume name          | What goes inside
 #    -------------------- | -----------------------------------------------
@@ -74,3 +79,15 @@ volumes:
   radio-tty-data:
   radio-tty-voices:
   radio-tty-models:
+
+# TO ADD MORE VOICES AFTER DEPLOY:
+#   Re-run prereq.sh with the --voice-only flag:
+#       bash prereq.sh --voice-only
+#
+#   Or copy a .onnx + .onnx.json pair directly into the volume:
+#       docker run --rm \
+#         -v radio-tty-voices:/v \
+#         -v "$(pwd):/src" \
+#         alpine cp /src/myvoice.onnx /src/myvoice.onnx.json /v/
+#
+#   Browse available Piper voices: https://huggingface.co/rhasspy/piper-voices
