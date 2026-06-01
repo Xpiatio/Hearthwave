@@ -9,6 +9,7 @@ env:
   REGISTRY: ghcr.io
   BACKEND_IMAGE: ghcr.io/xpiatio/radio-tty-backend
   FRONTEND_IMAGE: ghcr.io/xpiatio/radio-tty-frontend
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build-backend:
