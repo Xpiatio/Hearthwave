@@ -1,4 +1,4 @@
-# Radio-TTY v1.1.0 — Portainer stack (pre-built images, no source required)
+# Radio-TTY v1.2.0 — Portainer stack (pre-built images, no source required)
 #
 # QUICK START
 # -----------
@@ -33,10 +33,24 @@
 # UPDATING
 # --------
 # Pull new images (change the tag below), then in Portainer: open the stack → Update.
+#
+# CUDA (GPU) VARIANT
+# ------------------
+# If the host has an NVIDIA GPU, swap the backend image tag to the -cuda suffix:
+#   image: ghcr.io/xpiatio/radio-tty-backend:v1.2.0-cuda
+# The CUDA image uses onnxruntime-gpu for accelerated Whisper inference.
+# Requires the NVIDIA Container Toolkit on the host and the `deploy` section:
+#   deploy:
+#     resources:
+#       reservations:
+#         devices:
+#           - driver: nvidia
+#             count: 1
+#             capabilities: [gpu]
 
 services:
   backend:
-    image: ghcr.io/xpiatio/radio-tty-backend:v1.1.0
+    image: ghcr.io/xpiatio/radio-tty-backend:v1.2.0
     volumes:
       - radio-tty-data:/data
       - radio-tty-voices:/app/Voices:ro
@@ -59,7 +73,7 @@ services:
       start_period: 30s
 
   frontend:
-    image: ghcr.io/xpiatio/radio-tty-frontend:v1.1.0
+    image: ghcr.io/xpiatio/radio-tty-frontend:v1.2.0
     ports:
       - "80:80"
     volumes:
