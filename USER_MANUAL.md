@@ -260,7 +260,7 @@ Open the **Config** panel (CONFIG button in the top bar) to manage your personal
 ### Voice
 | Setting | Description |
 |---------|-------------|
-| Voice Test | Preview your current TTS voice without keying the radio |
+| Voice Test | Preview your current TTS voice (or the first available voice if none is set) without keying the radio. The button shows **Playing…** while audio is synthesizing. |
 
 Your personal TTS voice is chosen in **Account → Edit Profile** (see [Your account](#13-your-account)). If you have not selected one, the station-default voice configured by the admin is used.
 
@@ -273,7 +273,9 @@ Your personal TTS voice is chosen in **Account → Edit Profile** (see [Your acc
 > Frequency range is a station-wide setting controlled by an admin.
 
 ### Station identity (admin only)
-The **callsign**, **name**, **location**, **Gemini API key**, and **journals directory** are set in the **Admin** panel. These are shared by all users. Changes are persisted to `config.json`.
+The **callsign**, **name**, **location**, **default TTS voice**, **Gemini API key**, and **journals directory** are set in the **Admin** panel. These are shared by all users. Changes are persisted to `config.json`.
+
+The **Default TTS Voice** dropdown sets which Piper voice the station uses when a user has not chosen a personal voice. Click the **mic icon** next to the dropdown to preview the selected voice without keying the radio.
 
 ---
 
