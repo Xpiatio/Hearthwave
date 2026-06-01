@@ -46,6 +46,23 @@ class TTSSynthesizer:
     # Public async interface
     # ------------------------------------------------------------------
 
+    async def synthesize_to_buffer(
+        self,
+        voice,
+        text: str,
+        length_scale: float = 1.0,
+        lead_in_seconds: float = 0.0,
+        tail_seconds: float = 0.0,
+    ) -> tuple["np.ndarray | None", int]:
+        """Synthesize ``text`` and return (audio_int16, sample_rate) without playing.
+
+        Synthesis runs in the thread executor to avoid blocking the event loop.
+        Returns (None, sample_rate) if synthesis produces no audio.
+        """
+        return await asyncio.to_thread(
+            self._synthesize_blocking, voice, text, lead_in_seconds, tail_seconds, length_scale
+        )
+
     async def synthesize(self, voice, text: str, ptt: "PTT", length_scale: float = 1.0) -> None:
         """Synthesize ``text`` with ``voice``, key ``ptt``, and play the result.
 

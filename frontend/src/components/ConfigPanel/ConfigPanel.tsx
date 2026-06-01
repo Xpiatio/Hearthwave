@@ -1,8 +1,7 @@
 import {
-  Box, Paper, Typography, FormControlLabel, Switch, Button, Divider,
+  Box, Paper, Typography, FormControlLabel, Switch, Divider,
   ToggleButtonGroup, ToggleButton, FormControl, InputLabel, Select, MenuItem,
 } from '@mui/material';
-import MicIcon from '@mui/icons-material/Mic';
 import type { InputDeviceOption, MonitorSinkOption } from '../../types/ws';
 
 interface Props {
@@ -18,7 +17,6 @@ interface Props {
   onToggleProfanity: () => void;
   onToggleFuzzy: () => void;
   onInputDeviceChange: (device: string | number, sink: string) => void;
-  onVoiceTest: () => void;
   onSpectroColormapChange: (cm: 'viridis' | 'grayscale') => void;
   onSpectroFreqRangeChange: (range: 'voice' | 'full') => void;
   onSpectroTimeWindowChange: (s: number) => void;
@@ -37,7 +35,6 @@ export function ConfigPanel({
   onToggleProfanity,
   onToggleFuzzy,
   onInputDeviceChange,
-  onVoiceTest,
   onSpectroColormapChange,
   onSpectroFreqRangeChange,
   onSpectroTimeWindowChange,
@@ -80,18 +77,6 @@ export function ConfigPanel({
           }
           label="Fuzzy Callsign Match"
         />
-
-        <Divider orientation="vertical" flexItem />
-
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<MicIcon />}
-          onClick={onVoiceTest}
-          aria-label="Play voice test audio"
-        >
-          Voice Test
-        </Button>
 
         <Divider orientation="vertical" flexItem />
 

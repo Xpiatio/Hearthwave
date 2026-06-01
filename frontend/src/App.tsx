@@ -154,6 +154,7 @@ export default function App() {
     stationName: '',
     stationLocation: '',
     stationVoice: '',
+    stationLengthScale: 1.0,
     geminiApiKeySet: false,
     journalsDir: '/data/journals',
   });
@@ -235,6 +236,7 @@ export default function App() {
           stationName: msg.station_name ?? prev.stationName,
           stationLocation: msg.station_location ?? prev.stationLocation,
           stationVoice: msg.station_voice ?? prev.stationVoice,
+          stationLengthScale: msg.station_length_scale ?? prev.stationLengthScale,
           geminiApiKeySet: msg.gemini_api_key_set ?? prev.geminiApiKeySet,
           journalsDir: msg.journals_dir ?? prev.journalsDir,
         }));
@@ -392,6 +394,32 @@ export default function App() {
         setVoices(msg.voices);
         break;
 
+      case 'voice_preview_audio':
+      case 'tx_audio': {
+        // Decode base64 int16 PCM and play in the browser via Web Audio API.
+        // tx_audio routes transmitted speech through the local audio output
+        // (e.g. 3.5mm jack to radio); voice_preview_audio does the same for previews.
+        try {
+          const binary = atob(msg.data);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          const int16 = new Int16Array(bytes.buffer);
+          const float32 = new Float32Array(int16.length);
+          for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768;
+          const ctx = new AudioContext({ sampleRate: msg.sample_rate });
+          const buf = ctx.createBuffer(1, float32.length, msg.sample_rate);
+          buf.getChannelData(0).set(float32);
+          const src = ctx.createBufferSource();
+          src.buffer = buf;
+          src.connect(ctx.destination);
+          src.onended = () => ctx.close();
+          src.start();
+        } catch (e) {
+          console.error('audio playback error', e);
+        }
+        break;
+      }
+
       case 'voice_preview_done':
         setVoicePreviewBusy(false);
         break;
@@ -472,19 +500,13 @@ export default function App() {
     send({ type: 'set_input_device', input_device: device, system_monitor_sink: sink });
   }
 
-  function handleVoiceTest() {
-    const voiceId = voices[0]?.id ?? '';
-    setVoicePreviewBusy(true);
-    send({ type: 'voice_preview', voice: voiceId });
-  }
-
   function handlePreviewVoice(voiceId: string) {
     setVoicePreviewBusy(true);
     send({ type: 'voice_preview', voice: voiceId });
   }
 
-  function handleSaveVoicePref(voiceId: string) {
-    send({ type: 'save_user_prefs', prefs: { tts_voice: voiceId } });
+  function handleSaveTtsPrefs({ voice, length_scale }: { voice: string; length_scale: number }) {
+    send({ type: 'save_user_prefs', prefs: { tts_voice: voice, tts_length_scale: length_scale } });
   }
 
   function handleSpectroColormapChange(cm: 'viridis' | 'grayscale') {
@@ -507,6 +529,7 @@ export default function App() {
     name: string;
     location: string;
     voice: string;
+    tts_length_scale: number;
     gemini_api_key: string;
     journals_dir: string;
   }) {
@@ -695,7 +718,8 @@ export default function App() {
           voices={voices}
           voicePreviewBusy={voicePreviewBusy}
           onPreviewVoice={handlePreviewVoice}
-          onSaveVoicePref={handleSaveVoicePref}
+          stationLengthScale={adminConfig.stationLengthScale}
+          onSaveTtsPrefs={handleSaveTtsPrefs}
         />
 
         <DndContext onDragEnd={handlePanelDragEnd}>
@@ -717,7 +741,6 @@ export default function App() {
                       onToggleProfanity={handleToggleProfanity}
                       onToggleFuzzy={handleToggleFuzzy}
                       onInputDeviceChange={handleInputDeviceChange}
-                      onVoiceTest={handleVoiceTest}
                       onSpectroColormapChange={handleSpectroColormapChange}
                       onSpectroFreqRangeChange={handleSpectroFreqRangeChange}
                       onSpectroTimeWindowChange={handleSpectroTimeWindowChange}

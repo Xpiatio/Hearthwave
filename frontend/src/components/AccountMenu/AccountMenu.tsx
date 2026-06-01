@@ -15,6 +15,7 @@ import {
   Menu,
   MenuItem,
   Select,
+  Slider,
   TextField,
   Typography,
 } from '@mui/material';
@@ -23,6 +24,13 @@ import EditIcon from '@mui/icons-material/Edit';
 import LockIcon from '@mui/icons-material/Lock';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import type { UserProfile, VoiceOption } from '../../types/ws';
+
+const SPEED_MARKS = [
+  { value: 0.5, label: 'Fast' },
+  { value: 1.0, label: 'Normal' },
+  { value: 1.5, label: 'Slow' },
+  { value: 2.0, label: 'Slowest' },
+];
 
 interface Props {
   profile: UserProfile;
@@ -37,12 +45,13 @@ interface Props {
   voices: VoiceOption[];
   voicePreviewBusy: boolean;
   onPreviewVoice: (voiceId: string) => void;
-  onSaveVoicePref: (voiceId: string) => void;
+  stationLengthScale: number;
+  onSaveTtsPrefs: (prefs: { voice: string; length_scale: number }) => void;
 }
 
 const EMOJI_OPTIONS = ['👤', '👨', '👩', '👦', '👧', '🧑', '👴', '👵', '🧔', '👮'];
 
-export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogout, voices, voicePreviewBusy, onPreviewVoice, onSaveVoicePref }: Props) {
+export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogout, voices, voicePreviewBusy, onPreviewVoice, stationLengthScale, onSaveTtsPrefs }: Props) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
@@ -52,6 +61,9 @@ export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogo
   const [location, setLocation] = useState(profile.location);
   const [avatarEmoji, setAvatarEmoji] = useState(profile.avatar_emoji);
   const [ttsVoice, setTtsVoice] = useState(profile.prefs?.tts_voice ?? '');
+  const savedLS = profile.prefs?.tts_length_scale ?? 0;
+  const [ttsLengthScale, setTtsLengthScale] = useState(savedLS > 0 ? savedLS : stationLengthScale);
+  const [customSpeed, setCustomSpeed] = useState(savedLS > 0);
 
   // Sync form fields when profile updates from the server, but only while
   // the edit dialog is closed so we don't clobber in-progress edits.
@@ -62,8 +74,11 @@ export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogo
       setLocation(profile.location);
       setAvatarEmoji(profile.avatar_emoji);
       setTtsVoice(profile.prefs?.tts_voice ?? '');
+      const ls = profile.prefs?.tts_length_scale ?? 0;
+      setTtsLengthScale(ls > 0 ? ls : stationLengthScale);
+      setCustomSpeed(ls > 0);
     }
-  }, [profile, editOpen]);
+  }, [profile, editOpen, stationLengthScale]);
 
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -83,6 +98,9 @@ export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogo
     setLocation(profile.location);
     setAvatarEmoji(profile.avatar_emoji);
     setTtsVoice(profile.prefs?.tts_voice ?? '');
+    const ls = profile.prefs?.tts_length_scale ?? 0;
+    setTtsLengthScale(ls > 0 ? ls : stationLengthScale);
+    setCustomSpeed(ls > 0);
     setEditOpen(true);
     handleClose();
   }
@@ -102,7 +120,7 @@ export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogo
       location: location.trim(),
       avatar_emoji: avatarEmoji,
     });
-    onSaveVoicePref(ttsVoice);
+    onSaveTtsPrefs({ voice: ttsVoice, length_scale: customSpeed ? ttsLengthScale : 0 });
     setEditOpen(false);
   }
 
@@ -219,6 +237,39 @@ export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogo
                 </Box>
               </Box>
             )}
+
+            <Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', mb: 0.5 }}>
+                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                  Speech Speed
+                </Typography>
+                {customSpeed ? (
+                  <Button
+                    size="small"
+                    sx={{ fontSize: '0.7rem', py: 0, minWidth: 0 }}
+                    onClick={() => { setCustomSpeed(false); setTtsLengthScale(stationLengthScale); }}
+                  >
+                    Reset to station default
+                  </Button>
+                ) : (
+                  <Typography variant="caption" sx={{ color: 'text.disabled' }}>
+                    Station default ({stationLengthScale}×)
+                  </Typography>
+                )}
+              </Box>
+              <Slider
+                value={ttsLengthScale}
+                min={0.5}
+                max={2.0}
+                step={0.25}
+                marks={SPEED_MARKS}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(v) => `${v}×`}
+                onChange={(_, v) => { setTtsLengthScale(v as number); setCustomSpeed(true); }}
+                aria-label="Speech speed"
+                sx={{ mt: 1 }}
+              />
+            </Box>
           </Box>
         </DialogContent>
         <DialogActions>

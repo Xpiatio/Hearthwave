@@ -212,6 +212,15 @@ export function ChatDisplay({ entries, contacts, showCallsignChips, onEnrollClus
               {entry.timestamp}
             </Typography>
 
+            {entry.kind === 'rx' && (
+              <Typography
+                component="span"
+                sx={{ fontWeight: 700, fontSize: '1.0625rem', color: KIND_COLOR.rx, flexShrink: 0 }}
+                aria-label="Received from radio"
+              >
+                [RX]
+              </Typography>
+            )}
             {entry.kind === 'tx' && (
               <Typography
                 component="span"
