@@ -35,13 +35,14 @@ interface Props {
   onChangePassword: (newPassword: string) => void;
   onLogout: () => void;
   voices: VoiceOption[];
+  voicePreviewBusy: boolean;
   onPreviewVoice: (voiceId: string) => void;
   onSaveVoicePref: (voiceId: string) => void;
 }
 
 const EMOJI_OPTIONS = ['👤', '👨', '👩', '👦', '👧', '🧑', '👴', '👵', '🧔', '👮'];
 
-export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogout, voices, onPreviewVoice, onSaveVoicePref }: Props) {
+export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogout, voices, voicePreviewBusy, onPreviewVoice, onSaveVoicePref }: Props) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
@@ -210,10 +211,10 @@ export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogo
                     size="small"
                     startIcon={<PlayArrowIcon />}
                     onClick={() => onPreviewVoice(ttsVoice || (voices[0]?.id ?? ''))}
-                    disabled={voices.length === 0}
+                    disabled={voices.length === 0 || voicePreviewBusy}
                     aria-label="Preview selected voice"
                   >
-                    Sample
+                    {voicePreviewBusy ? 'Playing…' : 'Sample'}
                   </Button>
                 </Box>
               </Box>

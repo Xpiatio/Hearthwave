@@ -438,7 +438,10 @@ async def _tx_pump() -> None:
             voice_name = payload.get("_voice_name") or _config.voice
             if not voice_name:
                 _log.warning("No TTS voice configured; skipping TX synthesis.")
-                if not is_preview:
+                if is_preview:
+                    await _manager.broadcast({"type": "error", "detail": "No TTS voice configured. Select a voice in Admin Settings."})
+                    await _manager.broadcast({"type": "voice_preview_done"})
+                else:
                     await _manager.broadcast({"type": "tx_status", "status": "idle"})
                 continue
 
@@ -519,7 +522,9 @@ async def _tx_pump() -> None:
         finally:
             if not is_preview and _stt_worker is not None and _stt_listening:
                 _stt_worker.resume()
-            if not is_preview:
+            if is_preview:
+                await _manager.broadcast({"type": "voice_preview_done"})
+            else:
                 await _manager.broadcast({"type": "tx_status", "status": "idle"})
 
 
@@ -576,6 +581,7 @@ def _build_status() -> dict:
         "station_callsign": (_config.callsign if _config else "N0CALL"),
         "station_name": (_config.name if _config else ""),
         "station_location": (_config.location if _config else ""),
+        "station_voice": (_config.voice if _config else ""),
         "gemini_api_key_set": bool(_config and _config.gemini_api_key),
         "journals_dir": str(_config.journals_dir) if _config else "/data/journals",
         "input_device": (_config.input_device if _config else -1),
@@ -861,6 +867,8 @@ async def _ws_handle_set_admin_config(ws: WebSocket, data: dict, state: "Connect
         jdir = str(data["journals_dir"]).strip()
         if jdir:
             _config["journals_dir"] = jdir
+    if "voice" in data:
+        _config["voice"] = str(data["voice"]).strip()
     _config.save()
     await _manager.broadcast(_build_status())
 

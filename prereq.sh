@@ -28,7 +28,12 @@ HF_BASE="https://huggingface.co/rhasspy/piper-voices/resolve/main"
 VOICES=(
   "en_US-ryan-high|en/en_US/ryan/high/en_US-ryan-high"
   "en_US-amy-medium|en/en_US/amy/medium/en_US-amy-medium"
-  "en_US-lessac-medium|en/en_US/lessac/medium/en_US-lessac-medium"
+  "en_US-arctic-medium|en/en_US/arctic/medium/en_US-arctic-medium"
+  "en_US-hfc_female-medium|en/en_US/hfc_female/medium/en_US-hfc_female-medium"
+  "en_US-kathleen-low|en/en_US/kathleen/low/en_US-kathleen-low"
+  "en_US-kristin-medium|en/en_US/kristin/medium/en_US-kristin-medium"
+  "en_US-lessac-high|en/en_US/lessac/high/en_US-lessac-high"
+  "en_US-libritts-high|en/en_US/libritts/high/en_US-libritts-high"
 )
 
 # ── 1. Check prerequisites ─────────────────────────────────────────────────────

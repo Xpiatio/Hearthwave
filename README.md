@@ -192,8 +192,8 @@ Created from `data/config.json.example` on first install. Station-wide settings 
 | `name` | `""` | Station name |
 | `location` | `""` | Station location |
 | `radio_service` | `""` | `"GMRS"` or `"FRS"` |
-| `voice` | `""` | Station-default Piper voice path (e.g. `"/Voices/en_US-ryan-high.onnx"`); used when a user has no personal voice set |
-| `voices_dir` | *(derived)* | Directory to scan for `.onnx` voice files; defaults to the parent directory of `voice` or `/Voices` |
+| `voice` | `""` | Station-default Piper voice path (e.g. `"/app/Voices/en_US-ryan-high.onnx"`); settable via Admin Settings UI; used when a user has no personal voice set |
+| `voices_dir` | *(derived)* | Directory to scan for `.onnx` voice files; defaults to the parent directory of `voice` or `/app/Voices` |
 | `tts_length_scale` | `1.0` | TTS speed (lower = faster) |
 | `input_device` | `-1` | Audio input device index (-1 = default) |
 | `output_device` | `-1` | Audio output device index (-1 = default) |

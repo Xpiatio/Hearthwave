@@ -115,8 +115,10 @@ export default function App() {
   const [journalGenerating, setJournalGenerating] = useState(false);
   const [journalError, setJournalError] = useState<string | null>(null);
 
-  // Publish snackbar
+  // Snackbars
   const [publishSnack, setPublishSnack] = useState<string | null>(null);
+  const [errorSnack, setErrorSnack] = useState<string | null>(null);
+  const [voicePreviewBusy, setVoicePreviewBusy] = useState(false);
 
   // FCC / Callsigns
   const [pendingStations, setPendingStations] = useState<PendingStation[]>([]);
@@ -149,6 +151,7 @@ export default function App() {
     stationCallsign: 'N0CALL',
     stationName: '',
     stationLocation: '',
+    stationVoice: '',
     geminiApiKeySet: false,
     journalsDir: '/data/journals',
   });
@@ -229,6 +232,7 @@ export default function App() {
           stationCallsign: msg.station_callsign ?? prev.stationCallsign,
           stationName: msg.station_name ?? prev.stationName,
           stationLocation: msg.station_location ?? prev.stationLocation,
+          stationVoice: msg.station_voice ?? prev.stationVoice,
           geminiApiKeySet: msg.gemini_api_key_set ?? prev.geminiApiKeySet,
           journalsDir: msg.journals_dir ?? prev.journalsDir,
         }));
@@ -386,6 +390,15 @@ export default function App() {
         setVoices(msg.voices);
         break;
 
+      case 'voice_preview_done':
+        setVoicePreviewBusy(false);
+        break;
+
+      case 'error':
+        setVoicePreviewBusy(false);
+        setErrorSnack(msg.detail ?? 'An error occurred.');
+        break;
+
       case 'contact_auto_added':
         break;
 
@@ -461,10 +474,13 @@ export default function App() {
   }
 
   function handleVoiceTest() {
-    send({ type: 'voice_preview' });
+    const voiceId = voices[0]?.id ?? '';
+    setVoicePreviewBusy(true);
+    send({ type: 'voice_preview', voice: voiceId });
   }
 
   function handlePreviewVoice(voiceId: string) {
+    setVoicePreviewBusy(true);
     send({ type: 'voice_preview', voice: voiceId });
   }
 
@@ -491,6 +507,7 @@ export default function App() {
     callsign: string;
     name: string;
     location: string;
+    voice: string;
     gemini_api_key: string;
     journals_dir: string;
   }) {
@@ -673,6 +690,7 @@ export default function App() {
           onChangePassword={handleChangePassword}
           onLogout={handleLogout}
           voices={voices}
+          voicePreviewBusy={voicePreviewBusy}
           onPreviewVoice={handlePreviewVoice}
           onSaveVoicePref={handleSaveVoicePref}
         />
@@ -801,7 +819,10 @@ export default function App() {
           open={showAdmin}
           onClose={() => setShowAdmin(false)}
           config={adminConfig}
+          voices={voices}
+          voicePreviewBusy={voicePreviewBusy}
           onSave={handleAdminSave}
+          onPreviewVoice={handlePreviewVoice}
         >
           {profile.is_admin && (
             <UsersPanel
@@ -820,12 +841,19 @@ export default function App() {
           onClose={() => setPublishSnack(null)}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
         >
-          <Alert
-            onClose={() => setPublishSnack(null)}
-            severity="success"
-            sx={{ width: '100%' }}
-          >
+          <Alert onClose={() => setPublishSnack(null)} severity="success" sx={{ width: '100%' }}>
             {publishSnack}
+          </Alert>
+        </Snackbar>
+
+        <Snackbar
+          open={errorSnack !== null}
+          autoHideDuration={7000}
+          onClose={() => setErrorSnack(null)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        >
+          <Alert onClose={() => setErrorSnack(null)} severity="error" sx={{ width: '100%' }}>
+            {errorSnack}
           </Alert>
         </Snackbar>
       </Box>
