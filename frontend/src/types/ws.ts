@@ -55,6 +55,7 @@ export interface StatusMsg {
   station_callsign?: string;
   station_name?: string;
   station_location?: string;
+  station_voice?: string;
   gemini_api_key_set?: boolean;
   journals_dir?: string;
 }

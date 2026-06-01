@@ -90,7 +90,7 @@ class ServerConfig(dict):
             return Path(raw)
         if self.voice:
             return Path(self.voice).parent
-        return Path("/Voices")
+        return Path("/app/Voices")
 
     # ---- text / content --------------------------------------------------
 

@@ -149,6 +149,7 @@ export default function App() {
     stationCallsign: 'N0CALL',
     stationName: '',
     stationLocation: '',
+    stationVoice: '',
     geminiApiKeySet: false,
     journalsDir: '/data/journals',
   });
@@ -229,6 +230,7 @@ export default function App() {
           stationCallsign: msg.station_callsign ?? prev.stationCallsign,
           stationName: msg.station_name ?? prev.stationName,
           stationLocation: msg.station_location ?? prev.stationLocation,
+          stationVoice: msg.station_voice ?? prev.stationVoice,
           geminiApiKeySet: msg.gemini_api_key_set ?? prev.geminiApiKeySet,
           journalsDir: msg.journals_dir ?? prev.journalsDir,
         }));
@@ -491,6 +493,7 @@ export default function App() {
     callsign: string;
     name: string;
     location: string;
+    voice: string;
     gemini_api_key: string;
     journals_dir: string;
   }) {
@@ -801,7 +804,9 @@ export default function App() {
           open={showAdmin}
           onClose={() => setShowAdmin(false)}
           config={adminConfig}
+          voices={voices}
           onSave={handleAdminSave}
+          onPreviewVoice={handlePreviewVoice}
         >
           {profile.is_admin && (
             <UsersPanel

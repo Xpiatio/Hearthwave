@@ -11,14 +11,21 @@ import {
   Divider,
   InputAdornment,
   IconButton,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
+import MicIcon from '@mui/icons-material/Mic';
+import type { VoiceOption } from '../../types/ws';
 
 interface AdminConfig {
   stationCallsign: string;
   stationName: string;
   stationLocation: string;
+  stationVoice: string;
   geminiApiKeySet: boolean;
   journalsDir: string;
 }
@@ -27,20 +34,24 @@ interface Props {
   open: boolean;
   onClose: () => void;
   config: AdminConfig;
+  voices: VoiceOption[];
   onSave: (values: {
     callsign: string;
     name: string;
     location: string;
+    voice: string;
     gemini_api_key: string;
     journals_dir: string;
   }) => void;
+  onPreviewVoice: (voiceId: string) => void;
   children?: React.ReactNode;
 }
 
-export function AdminPanel({ open, onClose, config, onSave, children }: Props) {
+export function AdminPanel({ open, onClose, config, voices, onSave, onPreviewVoice, children }: Props) {
   const [callsign, setCallsign] = useState('');
   const [name, setName] = useState('');
   const [location, setLocation] = useState('');
+  const [voice, setVoice] = useState('');
   const [geminiKey, setGeminiKey] = useState('');
   const [journalsDir, setJournalsDir] = useState('');
   const [showKey, setShowKey] = useState(false);
@@ -52,6 +63,7 @@ export function AdminPanel({ open, onClose, config, onSave, children }: Props) {
     setCallsign(config.stationCallsign);
     setName(config.stationName);
     setLocation(config.stationLocation);
+    setVoice(config.stationVoice);
     setGeminiKey('');
     setJournalsDir(config.journalsDir);
     setShowKey(false);
@@ -63,6 +75,7 @@ export function AdminPanel({ open, onClose, config, onSave, children }: Props) {
       callsign: callsign.trim().toUpperCase() || 'N0CALL',
       name: name.trim(),
       location: location.trim(),
+      voice: voice.trim(),
       gemini_api_key: geminiKey.trim(),
       journals_dir: journalsDir.trim(),
     });
@@ -107,6 +120,33 @@ export function AdminPanel({ open, onClose, config, onSave, children }: Props) {
             placeholder="e.g. Grand Rapids, MI"
             fullWidth
           />
+
+          {voices.length > 0 && (
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+              <FormControl size="small" sx={{ flex: 1 }}>
+                <InputLabel id="admin-voice-label">Default TTS Voice</InputLabel>
+                <Select
+                  labelId="admin-voice-label"
+                  label="Default TTS Voice"
+                  value={voice}
+                  onChange={(e) => setVoice(e.target.value)}
+                >
+                  {voices.map((v) => (
+                    <MenuItem key={v.id} value={v.id}>{v.label}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <IconButton
+                size="small"
+                onClick={() => onPreviewVoice(voice || (voices[0]?.id ?? ''))}
+                disabled={voices.length === 0}
+                aria-label="Preview selected voice"
+                title="Preview"
+              >
+                <MicIcon fontSize="small" />
+              </IconButton>
+            </Box>
+          )}
 
           <Divider />
 

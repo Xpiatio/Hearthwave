@@ -82,8 +82,18 @@ VOICES = [
     "en/en_US/ryan/high/en_US-ryan-high.onnx.json",
     "en/en_US/amy/medium/en_US-amy-medium.onnx",
     "en/en_US/amy/medium/en_US-amy-medium.onnx.json",
-    "en/en_US/lessac/medium/en_US-lessac-medium.onnx",
-    "en/en_US/lessac/medium/en_US-lessac-medium.onnx.json",
+    "en/en_US/arctic/medium/en_US-arctic-medium.onnx",
+    "en/en_US/arctic/medium/en_US-arctic-medium.onnx.json",
+    "en/en_US/hfc_female/medium/en_US-hfc_female-medium.onnx",
+    "en/en_US/hfc_female/medium/en_US-hfc_female-medium.onnx.json",
+    "en/en_US/kathleen/low/en_US-kathleen-low.onnx",
+    "en/en_US/kathleen/low/en_US-kathleen-low.onnx.json",
+    "en/en_US/kristin/medium/en_US-kristin-medium.onnx",
+    "en/en_US/kristin/medium/en_US-kristin-medium.onnx.json",
+    "en/en_US/lessac/high/en_US-lessac-high.onnx",
+    "en/en_US/lessac/high/en_US-lessac-high.onnx.json",
+    "en/en_US/libritts/high/en_US-libritts-high.onnx",
+    "en/en_US/libritts/high/en_US-libritts-high.onnx.json",
 ]
 for path in VOICES:
     name = os.path.basename(path)

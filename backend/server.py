@@ -576,6 +576,7 @@ def _build_status() -> dict:
         "station_callsign": (_config.callsign if _config else "N0CALL"),
         "station_name": (_config.name if _config else ""),
         "station_location": (_config.location if _config else ""),
+        "station_voice": (_config.voice if _config else ""),
         "gemini_api_key_set": bool(_config and _config.gemini_api_key),
         "journals_dir": str(_config.journals_dir) if _config else "/data/journals",
         "input_device": (_config.input_device if _config else -1),
@@ -861,6 +862,8 @@ async def _ws_handle_set_admin_config(ws: WebSocket, data: dict, state: "Connect
         jdir = str(data["journals_dir"]).strip()
         if jdir:
             _config["journals_dir"] = jdir
+    if "voice" in data:
+        _config["voice"] = str(data["voice"]).strip()
     _config.save()
     await _manager.broadcast(_build_status())
 
