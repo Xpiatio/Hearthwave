@@ -101,7 +101,12 @@ Received audio is automatically transcribed by Whisper and displayed in the chat
 
 **Partial transcripts** appear while the system processes audio in real time. The final transcript replaces them once the transmission ends.
 
-**Callsign highlighting:** Recognized callsigns appear as amber chips. Hover or tap a chip for FCC verification status and contact details.
+**Callsign highlighting:** Callsigns in received text appear as amber chips. The system detects all common forms — compact (`WSLZ233`), NATO phonetic (*Whiskey Sierra Lima Zulu Two Three Three*), spaced (`W S L Z 2 3 3`), and hyphenated (`WSLZ-233`) — and collapses them into a single chip showing the compact canonical form.
+
+- **Known contacts** (in your shared contacts list) show an amber chip. Hover or tap for the operator name, location, and any GMRS/HAM cross-references.
+- **Verified contacts** show a green **✓** badge immediately after the chip, indicating the callsign has been confirmed against the FCC database.
+- **Unknown callsigns** appear as a dimmer chip and are added to the [Pending stations](#7-pending-stations) bar above the chat.
+- **Fuzzy correction:** If fuzzy callsign matching is enabled and Whisper mishears a single character (e.g. `WSLZ235` instead of `WSLZ233`), the chip is shown with the corrected canonical form if a known contact is only one character away.
 
 **Profanity filter:** If your profanity filter is enabled (see [Settings](#12-settings)), profanity is masked in received text with asterisks. Other users with the filter off see the unmasked text. This is a per-account setting.
 
@@ -121,9 +126,14 @@ The system will:
 
 The status bar shows **Transmitting** while the radio is keyed and returns to **Idle** when done.
 
-**Chat echo:** Every outgoing transmission appears in the chat area as a `[TX]` entry (shown in blue) with your callsign. All other connected users see the same entry at the same time, so anyone watching the screen knows exactly what was transmitted and by whom.
+**Chat echo:** Every outgoing transmission appears in the chat area as a `[TX]` entry (shown in blue). All connected users see the same entry in real time. When a message is directed to a specific station, the recipient is shown between the sender and the message text:
 
-**Targeting a specific station:** Open Contacts, select a contact, and their callsign and name pre-fill the target fields. The outgoing message will be addressed to that station.
+| Scenario | Chat display |
+|---|---|
+| Broadcast | `[TX] [Dad]: Hello everyone` |
+| Directed | `[TX] [Dad] → WSLZ233 — Dave: Hello` |
+
+**Targeting a specific station:** Use the **To** dropdown above the message box to address a transmission. The list is sorted alphabetically by callsign; **ALL — Broadcast** is pinned at the top. Your own callsign appears in the list so you can address yourself (useful for testing or self-checks). Selecting a contact pre-fills the callsign and name; the outgoing message is addressed to that station and the recipient label appears in chat for all users.
 
 **Placeholder tokens:** Include `{1}`, `{2}`, etc. as fill-in-the-blank slots. When you send, the system prompts you to fill in each before transmitting. Useful for templates: `Heading to {1} — ETA {2} minutes`.
 
@@ -255,7 +265,7 @@ Open the **Config** panel (CONFIG button in the top bar) to manage your personal
 |---------|-------------|
 | Profanity filter | Masks profanity in your sent and received text (other users unaffected) |
 | Listen-only mode | Disables TX for your account only |
-| Fuzzy callsign matching | Station-wide; attempts to match near-misses to known callsigns |
+| Fuzzy callsign matching | Station-wide; when Whisper mishears a single character in a callsign (e.g. `WSLZ235` → `WSLZ233`), the chip in chat and the pending/attendance entry are corrected to the known canonical form |
 
 ### Voice
 | Setting | Description |

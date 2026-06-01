@@ -168,7 +168,9 @@ export default function App() {
             const existingId = inProgressRef.current.get(uid);
             if (existingId) {
               return prev.map((e) =>
-                e.id === existingId ? { ...e, text: msg.text, partial: true } : e
+                e.id === existingId
+                  ? { ...e, text: msg.text, partial: true, callsign_spans: msg.callsign_spans }
+                  : e
               );
             }
             const id = nextId();
@@ -182,6 +184,7 @@ export default function App() {
                 sender: msg.from || msg.callsign || undefined,
                 text: msg.text,
                 partial: true,
+                callsign_spans: msg.callsign_spans,
               },
             ];
           });
@@ -199,6 +202,7 @@ export default function App() {
                       partial: false,
                       speaker,
                       cluster_label: msg.cluster_label,
+                      callsign_spans: msg.callsign_spans,
                     }
                   : e
               );
@@ -213,6 +217,7 @@ export default function App() {
                 text: msg.text,
                 speaker,
                 cluster_label: msg.cluster_label,
+                callsign_spans: msg.callsign_spans,
               },
             ];
           });
@@ -270,7 +275,13 @@ export default function App() {
         setTransmitting(msg.status === 'transmitting');
         break;
 
-      case 'tx_echo':
+      case 'tx_echo': {
+        const recipient =
+          msg.target_call && msg.target_call !== 'ALL'
+            ? msg.target_name
+              ? `${msg.target_call} — ${msg.target_name}`
+              : msg.target_call
+            : undefined;
         setMessages((prev) => [
           ...prev,
           {
@@ -278,10 +289,12 @@ export default function App() {
             timestamp: formatTime(msg.ts),
             kind: 'tx',
             sender: msg.display_name || msg.operator || msg.callsign,
+            recipient,
             text: msg.text,
           },
         ]);
         break;
+      }
 
       case 'system_msg':
         setMessages((prev) => [
@@ -817,7 +830,6 @@ export default function App() {
             ref={messageInputRef}
             transmitting={transmitting}
             contacts={contacts}
-            myCallsign={effectiveCallsign}
             onSend={handleSend}
             onStandaloneId={() => {
               send({
