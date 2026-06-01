@@ -108,15 +108,25 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 
 The easiest Portainer path uses pre-built images from GitHub Container Registry — no source checkout needed.
 
-**1. Create three Docker volumes in Portainer (Volumes → Add volume):**
+**0. On the Docker host, run the prerequisite script to download models and voices into Docker volumes:**
+
+```bash
+# Download the script (or clone the repo and run from there)
+curl -fsSL https://raw.githubusercontent.com/Xpiatio/Radio-TTY/master/prereq.sh -o prereq.sh
+bash prereq.sh
+```
+
+This creates the three named volumes and populates them with the Whisper STT model (~464 MB) and default Piper TTS voices. Requires only `docker` — no Python or pip needed.
+
+> **Why this step?** Docker named volumes are not visible as regular host folders. Files must be loaded into the volume before the stack starts — you can't add them by copying to a directory on the host after the fact.
+
+**1. The volumes are created automatically by `prereq.sh`.** Verify in Portainer under Volumes → you should see:
 
 | Volume name | Contents |
 |---|---|
 | `radio-tty-data` | Config, contacts, users, tokens, journals (auto-created on first run) |
 | `radio-tty-voices` | Piper ONNX voice files (`*.onnx` + `*.onnx.json`) |
 | `radio-tty-models` | faster-whisper and speaker recognition model directories |
-
-If your models/voices live at a known host path, use bind mounts instead (see the stack file comments).
 
 **2. In Portainer: Stacks → Add stack → Web editor**, paste the contents of [`docker-compose.portainer.yml`](docker-compose.portainer.yml) from this repository.
 
