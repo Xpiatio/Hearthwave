@@ -30,6 +30,8 @@ interface Props {
   onClose: () => void;
   contacts: Contact[];
   prefilledCallsign?: string;
+  prefilledName?: string;
+  prefilledLocation?: string;
   fccLookupResult: FccLookupResultMsg | null;
   verifyAllComplete: boolean;
   onSend: (payload: unknown) => void;
@@ -107,6 +109,8 @@ export function ContactsDialog({
   onClose,
   contacts,
   prefilledCallsign,
+  prefilledName,
+  prefilledLocation,
   fccLookupResult,
   verifyAllComplete,
   onSend,
@@ -123,11 +127,16 @@ export function ContactsDialog({
   // Open add dialog pre-filled when prefilledCallsign changes
   useEffect(() => {
     if (open && prefilledCallsign) {
-      setForm({ ...EMPTY_FORM, callsign: prefilledCallsign });
+      setForm({
+        ...EMPTY_FORM,
+        callsign: prefilledCallsign,
+        name: prefilledName ?? '',
+        location: prefilledLocation ?? '',
+      });
       setEditingCallsign(null);
       setEditOpen(true);
     }
-  }, [open, prefilledCallsign]);
+  }, [open, prefilledCallsign, prefilledName, prefilledLocation]);
 
   // Auto-fill form from FCC lookup result
   useEffect(() => {
