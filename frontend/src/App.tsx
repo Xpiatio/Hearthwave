@@ -275,7 +275,13 @@ export default function App() {
         setTransmitting(msg.status === 'transmitting');
         break;
 
-      case 'tx_echo':
+      case 'tx_echo': {
+        const recipient =
+          msg.target_call && msg.target_call !== 'ALL'
+            ? msg.target_name
+              ? `${msg.target_call} — ${msg.target_name}`
+              : msg.target_call
+            : undefined;
         setMessages((prev) => [
           ...prev,
           {
@@ -283,10 +289,12 @@ export default function App() {
             timestamp: formatTime(msg.ts),
             kind: 'tx',
             sender: msg.display_name || msg.operator || msg.callsign,
+            recipient,
             text: msg.text,
           },
         ]);
         break;
+      }
 
       case 'system_msg':
         setMessages((prev) => [

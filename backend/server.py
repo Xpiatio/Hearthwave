@@ -493,6 +493,8 @@ async def _tx_pump() -> None:
                     "operator": payload.get("operator") or _config.name,
                     "display_name": payload.get("_display_name") or "",
                     "text": chat_text,
+                    "target_call": payload.get("target_call") or "ALL",
+                    "target_name": payload.get("target_name") or "",
                 })
 
             # Pause STT before keying so the radio receiver doesn't

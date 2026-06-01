@@ -8,6 +8,7 @@ export interface ChatEntry {
   timestamp: string;
   kind: 'rx' | 'tx' | 'system';
   sender?: string;
+  recipient?: string;   // e.g. "WSLZ233 — Dave"; absent when broadcast to ALL
   text: string;
   speaker?: string;
   partial?: boolean;
@@ -296,7 +297,16 @@ export function ChatDisplay({ entries, contacts, showCallsignChips, onEnrollClus
                 component="span"
                 sx={{ fontWeight: 700, color: KIND_COLOR[entry.kind], flexShrink: 0 }}
               >
-                [{entry.sender}]:
+                [{entry.sender}]{entry.recipient ? '' : ':'}
+              </Typography>
+            )}
+
+            {entry.recipient && (
+              <Typography
+                component="span"
+                sx={{ fontWeight: 700, color: KIND_COLOR[entry.kind], flexShrink: 0 }}
+              >
+                → {entry.recipient}:
               </Typography>
             )}
 
