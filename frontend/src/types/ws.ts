@@ -56,6 +56,7 @@ export interface StatusMsg {
   station_name?: string;
   station_location?: string;
   station_voice?: string;
+  station_length_scale?: number;
   gemini_api_key_set?: boolean;
   journals_dir?: string;
 }
@@ -230,6 +231,7 @@ export interface UserPrefs {
   spectro_colormap: 'viridis' | 'grayscale';
   spectro_time_window_s: number;
   tts_voice?: string;
+  tts_length_scale?: number;
 }
 
 export interface UserProfile {
@@ -252,6 +254,18 @@ export interface UserProfileMsg {
 export interface ProfilesMsg {
   type: 'profiles';
   profiles: UserProfile[];
+}
+
+export interface VoicePreviewAudioMsg {
+  type: 'voice_preview_audio';
+  data: string; // base64-encoded int16 PCM
+  sample_rate: number;
+}
+
+export interface TxAudioMsg {
+  type: 'tx_audio';
+  data: string; // base64-encoded int16 PCM
+  sample_rate: number;
 }
 
 export type WsMessage =
@@ -281,6 +295,8 @@ export type WsMessage =
   | ProfilesMsg
   | JournalPublishedMsg
   | VoicesListMsg
+  | VoicePreviewAudioMsg
+  | TxAudioMsg
   | { type: 'voice_preview_done' }
   | { type: 'error'; detail?: string };
 

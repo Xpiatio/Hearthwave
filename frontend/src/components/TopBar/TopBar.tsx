@@ -47,7 +47,8 @@ interface Props {
   voices: VoiceOption[];
   voicePreviewBusy: boolean;
   onPreviewVoice: (voiceId: string) => void;
-  onSaveVoicePref: (voiceId: string) => void;
+  stationLengthScale: number;
+  onSaveTtsPrefs: (prefs: { voice: string; length_scale: number }) => void;
 }
 
 export function TopBar({
@@ -80,7 +81,8 @@ export function TopBar({
   voices,
   voicePreviewBusy,
   onPreviewVoice,
-  onSaveVoicePref,
+  stationLengthScale,
+  onSaveTtsPrefs,
 }: Props) {
   return (
     <AppBar position="static" color="default" elevation={0}
@@ -96,7 +98,8 @@ export function TopBar({
           voices={voices}
           voicePreviewBusy={voicePreviewBusy}
           onPreviewVoice={onPreviewVoice}
-          onSaveVoicePref={onSaveVoicePref}
+          stationLengthScale={stationLengthScale}
+          onSaveTtsPrefs={onSaveTtsPrefs}
         />
 
         <Button

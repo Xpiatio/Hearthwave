@@ -15,17 +15,26 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Slider,
 } from '@mui/material';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import MicIcon from '@mui/icons-material/Mic';
 import type { VoiceOption } from '../../types/ws';
 
+const SPEED_MARKS = [
+  { value: 0.5, label: 'Fast' },
+  { value: 1.0, label: 'Normal' },
+  { value: 1.5, label: 'Slow' },
+  { value: 2.0, label: 'Slowest' },
+];
+
 interface AdminConfig {
   stationCallsign: string;
   stationName: string;
   stationLocation: string;
   stationVoice: string;
+  stationLengthScale: number;
   geminiApiKeySet: boolean;
   journalsDir: string;
 }
@@ -41,6 +50,7 @@ interface Props {
     name: string;
     location: string;
     voice: string;
+    tts_length_scale: number;
     gemini_api_key: string;
     journals_dir: string;
   }) => void;
@@ -53,6 +63,7 @@ export function AdminPanel({ open, onClose, config, voices, voicePreviewBusy, on
   const [name, setName] = useState('');
   const [location, setLocation] = useState('');
   const [voice, setVoice] = useState('');
+  const [lengthScale, setLengthScale] = useState(1.0);
   const [geminiKey, setGeminiKey] = useState('');
   const [journalsDir, setJournalsDir] = useState('');
   const [showKey, setShowKey] = useState(false);
@@ -65,6 +76,7 @@ export function AdminPanel({ open, onClose, config, voices, voicePreviewBusy, on
     setName(config.stationName);
     setLocation(config.stationLocation);
     setVoice(config.stationVoice);
+    setLengthScale(config.stationLengthScale);
     setGeminiKey('');
     setJournalsDir(config.journalsDir);
     setShowKey(false);
@@ -77,6 +89,7 @@ export function AdminPanel({ open, onClose, config, voices, voicePreviewBusy, on
       name: name.trim(),
       location: location.trim(),
       voice: voice.trim(),
+      tts_length_scale: lengthScale,
       gemini_api_key: geminiKey.trim(),
       journals_dir: journalsDir.trim(),
     });
@@ -148,6 +161,24 @@ export function AdminPanel({ open, onClose, config, voices, voicePreviewBusy, on
               </IconButton>
             </Box>
           )}
+
+          <Box>
+            <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
+              Default Speech Speed
+            </Typography>
+            <Slider
+              value={lengthScale}
+              min={0.5}
+              max={2.0}
+              step={0.25}
+              marks={SPEED_MARKS}
+              valueLabelDisplay="auto"
+              valueLabelFormat={(v) => `${v}×`}
+              onChange={(_, v) => setLengthScale(v as number)}
+              aria-label="Default speech speed"
+              sx={{ mt: 1 }}
+            />
+          </Box>
 
           <Divider />
 

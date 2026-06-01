@@ -25,7 +25,8 @@ WebSocket message types (client → server):
                           "freq_range"?: "voice" | "full",
                           "time_window_s"?: int}
     set_admin_config  — {"type": "set_admin_config", "callsign"?: str, "name"?: str,
-                          "location"?: str, "gemini_api_key"?: str, "journals_dir"?: str}
+                          "location"?: str, "gemini_api_key"?: str, "journals_dir"?: str,
+                          "tts_length_scale"?: float}
     set_monitor       — {"type": "set_monitor", "enabled": bool}
     clear_attendance  — {"type": "clear_attendance"}
     list_journals     — {"type": "list_journals"}
@@ -67,11 +68,16 @@ WebSocket message types (server → client):
     journal_deleted   — {"type": "journal_deleted", "file_path": str}
     spectrogram_row   — {"type": "spectrogram_row", "row": [int, ...],
                           "vad": bool, "squelch": bool}
+    voice_preview_audio — {"type": "voice_preview_audio", "data": str (base64 int16 PCM),
+                          "sample_rate": int}
+    tx_audio          — {"type": "tx_audio", "data": str (base64 int16 PCM),
+                          "sample_rate": int}
     error             — {"type": "error", "detail": str}
 """
 from __future__ import annotations
 
 import asyncio
+import base64
 import collections
 import dataclasses
 import datetime
@@ -408,7 +414,6 @@ async def _rx_pump() -> None:
 async def _tx_pump() -> None:
     """Drain tx_queue; apply text pipeline, FCC formatting, synthesize, play."""
     global _last_id_time, _has_transmitted
-    from backend.ptt.manual import ManualPTT
 
     while True:
         try:
@@ -489,11 +494,45 @@ async def _tx_pump() -> None:
             voice = await asyncio.get_running_loop().run_in_executor(
                 None, _load_voice, voice_name
             )
-            # Voice preview uses ManualPTT so no radio keying occurs.
-            ptt = ManualPTT() if is_preview else make_ptt(_config)
-            length_scale = _config.tts_length_scale
+            length_scale = payload.get("_length_scale") or _config.tts_length_scale
 
-            await _synthesizer.synthesize(voice, text, ptt, length_scale=length_scale)
+            if is_preview:
+                # Synthesize without PTT keying, then stream PCM to the browser
+                # so remote users hear the preview in their own speaker.
+                audio, sample_rate = await _synthesizer.synthesize_to_buffer(
+                    voice, text, length_scale=length_scale
+                )
+                if audio is not None:
+                    audio_b64 = base64.b64encode(audio.tobytes()).decode("ascii")
+                    await _manager.broadcast({
+                        "type": "voice_preview_audio",
+                        "data": audio_b64,
+                        "sample_rate": sample_rate,
+                    })
+            else:
+                # Synthesize to buffer (including PTT lead/tail silence), key PTT
+                # server-side, then stream PCM to the browser so it plays through
+                # the local audio device connected to the radio.
+                ptt = make_ptt(_config)
+                audio, sample_rate = await _synthesizer.synthesize_to_buffer(
+                    voice, text, length_scale=length_scale,
+                    lead_in_seconds=ptt.lead_in_seconds,
+                    tail_seconds=ptt.tail_seconds,
+                )
+                if audio is not None:
+                    audio_b64 = base64.b64encode(audio.tobytes()).decode("ascii")
+                    try:
+                        ptt.key()
+                        await _manager.broadcast({
+                            "type": "tx_audio",
+                            "data": audio_b64,
+                            "sample_rate": sample_rate,
+                        })
+                        # Sleep for the audio duration so serial PTT timing is
+                        # approximate even though playback happens in the browser.
+                        await asyncio.sleep(len(audio) / sample_rate)
+                    finally:
+                        ptt.unkey()
 
             while True:
                 try:
@@ -569,6 +608,7 @@ def _build_status() -> dict:
         "station_name": (_config.name if _config else ""),
         "station_location": (_config.location if _config else ""),
         "station_voice": (_config.voice if _config else ""),
+        "station_length_scale": float(_config.tts_length_scale) if _config else 1.0,
         "gemini_api_key_set": bool(_config and _config.gemini_api_key),
         "journals_dir": str(_config.journals_dir) if _config else "/data/journals",
         "input_device": (_config.input_device if _config else -1),
@@ -856,6 +896,13 @@ async def _ws_handle_set_admin_config(ws: WebSocket, data: dict, state: "Connect
             _config["journals_dir"] = jdir
     if "voice" in data:
         _config["voice"] = str(data["voice"]).strip()
+    if "tts_length_scale" in data:
+        try:
+            ls = float(data["tts_length_scale"])
+            if 0.1 <= ls <= 4.0:
+                _config["tts_length_scale"] = ls
+        except (TypeError, ValueError):
+            pass
     _config.save()
     await _manager.broadcast(_build_status())
 
@@ -967,6 +1014,7 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                     **data,
                     "_filter_profanity": state.prefs.get("filter_profanity", True),
                     "_voice_name": state.prefs.get("tts_voice") or None,
+                    "_length_scale": state.prefs.get("tts_length_scale") or None,
                     "_display_name": _tx_sender_display,
                 })
                 await _manager.broadcast({"type": "tx_status", "status": "transmitting"})
@@ -1117,6 +1165,7 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                     "callsign": (data.get("callsign") or "").strip(),
                     "location": (data.get("location") or "").strip(),
                     "_voice_name": state.prefs.get("tts_voice") or None,
+                    "_length_scale": state.prefs.get("tts_length_scale") or None,
                 })
 
             elif msg_type == "voice_preview":
@@ -1130,7 +1179,12 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                     or state.prefs.get("tts_voice")
                     or (_config.voice if _config else None)
                 )
-                await _tx_queue.put({"text": preview_text, "_voice_preview": True, "_voice_name": preview_voice})
+                await _tx_queue.put({
+                    "text": preview_text,
+                    "_voice_preview": True,
+                    "_voice_name": preview_voice,
+                    "_length_scale": state.prefs.get("tts_length_scale") or None,
+                })
 
             elif msg_type == "fcc_lookup":
                 await _ws_handle_fcc_lookup(ws, data, state)
@@ -1337,7 +1391,7 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                 if _users_store is None:
                     continue
                 allowed = {"dark_mode", "panel_order", "filter_profanity", "listen_only",
-                           "spectro_colormap", "spectro_time_window_s", "tts_voice"}
+                           "spectro_colormap", "spectro_time_window_s", "tts_voice", "tts_length_scale"}
                 updates = {k: v for k, v in data.get("prefs", data).items() if k in allowed}
                 if updates:
                     state.prefs.update(updates)
