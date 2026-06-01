@@ -280,7 +280,9 @@ export type WsMessage =
   | UserProfileMsg
   | ProfilesMsg
   | JournalPublishedMsg
-  | VoicesListMsg;
+  | VoicesListMsg
+  | { type: 'voice_preview_done' }
+  | { type: 'error'; detail?: string };
 
 export interface TxMessagePayload {
   type: 'tx_message';

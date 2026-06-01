@@ -438,7 +438,10 @@ async def _tx_pump() -> None:
             voice_name = payload.get("_voice_name") or _config.voice
             if not voice_name:
                 _log.warning("No TTS voice configured; skipping TX synthesis.")
-                if not is_preview:
+                if is_preview:
+                    await _manager.broadcast({"type": "error", "detail": "No TTS voice configured. Select a voice in Admin Settings."})
+                    await _manager.broadcast({"type": "voice_preview_done"})
+                else:
                     await _manager.broadcast({"type": "tx_status", "status": "idle"})
                 continue
 
@@ -519,7 +522,9 @@ async def _tx_pump() -> None:
         finally:
             if not is_preview and _stt_worker is not None and _stt_listening:
                 _stt_worker.resume()
-            if not is_preview:
+            if is_preview:
+                await _manager.broadcast({"type": "voice_preview_done"})
+            else:
                 await _manager.broadcast({"type": "tx_status", "status": "idle"})
 
 

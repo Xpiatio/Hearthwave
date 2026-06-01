@@ -35,6 +35,7 @@ interface Props {
   onClose: () => void;
   config: AdminConfig;
   voices: VoiceOption[];
+  voicePreviewBusy: boolean;
   onSave: (values: {
     callsign: string;
     name: string;
@@ -47,7 +48,7 @@ interface Props {
   children?: React.ReactNode;
 }
 
-export function AdminPanel({ open, onClose, config, voices, onSave, onPreviewVoice, children }: Props) {
+export function AdminPanel({ open, onClose, config, voices, voicePreviewBusy, onSave, onPreviewVoice, children }: Props) {
   const [callsign, setCallsign] = useState('');
   const [name, setName] = useState('');
   const [location, setLocation] = useState('');
@@ -139,9 +140,9 @@ export function AdminPanel({ open, onClose, config, voices, onSave, onPreviewVoi
               <IconButton
                 size="small"
                 onClick={() => onPreviewVoice(voice || (voices[0]?.id ?? ''))}
-                disabled={voices.length === 0}
+                disabled={voices.length === 0 || voicePreviewBusy}
                 aria-label="Preview selected voice"
-                title="Preview"
+                title={voicePreviewBusy ? 'Playing…' : 'Preview'}
               >
                 <MicIcon fontSize="small" />
               </IconButton>
