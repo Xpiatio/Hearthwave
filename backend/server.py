@@ -176,6 +176,10 @@ _pending_stations: dict[str, dict] = {}
 # In-flight auto-add FCC lookup tasks — keyed by callsign to prevent duplicate lookups.
 _auto_add_tasks: dict[str, asyncio.Task] = {}
 
+# Accumulated partial text per utterance_id — each partial slice is a delta;
+# we send the running total so the frontend "replace" logic is always correct.
+_utterance_partial_texts: dict[str, str] = {}
+
 # Voice model cache — loaded once per voice path, reused across TX calls.
 _voice_cache: dict[str, Any] = {}
 
@@ -352,7 +356,19 @@ async def _rx_pump() -> None:
             partial = result.get("partial", False)
             _vad_active = bool(partial)
 
-            raw_text = result.get("text", "")
+            chunk_text = result.get("text", "")
+
+            if partial:
+                # Accumulate deltas so the frontend "replace" logic always sees the
+                # full running transcript rather than just the latest slice.
+                prior = _utterance_partial_texts.get(utterance_id, "")
+                raw_text = (prior + " " + chunk_text).strip() if prior else chunk_text
+                _utterance_partial_texts[utterance_id] = raw_text
+            else:
+                # Final is a fresh Whisper pass over the complete utterance audio.
+                _utterance_partial_texts.pop(utterance_id, None)
+                raw_text = chunk_text
+
             filtered_text = mask_profanity(raw_text)
 
             # Compute callsign spans from original text (handles NATO phonetic, spaced,

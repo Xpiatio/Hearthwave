@@ -33,7 +33,7 @@ FastAPI Backend  ──►  PulseAudio / sounddevice
 - **Shared TX chat** — outgoing transmissions appear in every connected user's chat stream labeled `[TX]`; directed messages show `→ CALLSIGN — Name` between the sender and message text
 - **Per-user settings** — dark mode, panel order, profanity filter, listen-only, spectrogram display, and TTS voice are per-account and sync across devices
 - **Public family journal** — publish session logs to `/journal`, a no-login static page (last 10 entries, ADA-compliant)
-- Real-time spectrogram with VAD and squelch indicators
+- Real-time spectrogram waterfall with VAD and squelch indicators; toggled on/off via the **WATERFALL** button
 - Speech-to-text receive using Whisper (`small.en` model)
 - Text-to-speech transmit using Piper neural voices
 - Automatic FCC station ID every 15 minutes (GMRS requirement)
