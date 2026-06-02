@@ -19,6 +19,10 @@ import type {
   MonitorSinkOption,
   UserProfile,
   VoiceOption,
+  VoiceTxStartPayload,
+  VoiceTxChunkPayload,
+  VoiceTxEndPayload,
+  VoiceTxCancelPayload,
 } from './types/ws';
 import { LoginScreen } from './components/LoginScreen/LoginScreen';
 import { SetupScreen } from './components/SetupScreen/SetupScreen';
@@ -541,6 +545,13 @@ export default function App() {
         setVoicePreviewBusy(false);
         break;
 
+      case 'voice_tx_ack':
+        break;
+
+      case 'voice_tx_error':
+        setErrorSnack(msg.detail);
+        break;
+
       case 'error':
         setVoicePreviewBusy(false);
         setErrorSnack(msg.detail ?? 'An error occurred.');
@@ -584,6 +595,20 @@ export default function App() {
       target_name: targetName,
     };
     send(payload);
+  }
+
+  function handleVoicePttStart() {
+    if (!profile || !connected) return;
+    send({ type: 'voice_tx_start', callsign: effectiveCallsign, operator: profile.operator_name } satisfies VoiceTxStartPayload);
+  }
+  function handleVoicePttChunk(b64: string) {
+    send({ type: 'voice_tx_chunk', data: b64 } satisfies VoiceTxChunkPayload);
+  }
+  function handleVoicePttEnd() {
+    send({ type: 'voice_tx_end' } satisfies VoiceTxEndPayload);
+  }
+  function handleVoicePttCancel() {
+    send({ type: 'voice_tx_cancel' } satisfies VoiceTxCancelPayload);
   }
 
   function handleToggleServiceMode() {
@@ -886,6 +911,11 @@ export default function App() {
           onPreviewVoice={handlePreviewVoice}
           stationLengthScale={adminConfig.stationLengthScale}
           onSaveTtsPrefs={handleSaveTtsPrefs}
+          transmitting={transmitting}
+          onVoicePttStart={handleVoicePttStart}
+          onVoicePttChunk={handleVoicePttChunk}
+          onVoicePttEnd={handleVoicePttEnd}
+          onVoicePttCancel={handleVoicePttCancel}
         />
 
         <DndContext onDragEnd={handlePanelDragEnd}>

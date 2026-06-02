@@ -378,7 +378,9 @@ export type WsMessage =
   | VoiceTxAckMsg
   | VoiceTxErrorMsg
   | { type: 'voice_preview_done' }
-  | { type: 'error'; detail?: string };
+  | { type: 'error'; detail?: string }
+  | VoiceTxAckMsg
+  | VoiceTxErrorMsg;
 
 export interface TxMessagePayload {
   type: 'tx_message';
@@ -389,7 +391,7 @@ export interface TxMessagePayload {
   target_name?: string;
 }
 
-// Voice PTT (Client → Server payloads, sent via send(), not part of WsMessage union)
+// Voice PTT — Client → Server payloads (sent via send(), NOT part of WsMessage union)
 export interface VoiceTxStartPayload {
   type: 'voice_tx_start';
   callsign: string;
@@ -409,7 +411,7 @@ export interface VoiceTxCancelPayload {
   type: 'voice_tx_cancel';
 }
 
-// Voice PTT (Server → Client messages, part of WsMessage union)
+// Voice PTT — Server → Client messages (part of WsMessage union)
 export interface VoiceTxAckMsg {
   type: 'voice_tx_ack';
 }
