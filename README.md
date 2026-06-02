@@ -31,11 +31,14 @@ FastAPI Backend  ──►  PulseAudio / sounddevice
 
 - **Multi-user accounts** — named family member profiles, each with their own password and per-user preferences
 - **Shared TX chat** — outgoing transmissions appear in every connected user's chat stream labeled `[TX]`; directed messages show `→ CALLSIGN — Name` between the sender and message text
-- **Per-user settings** — dark mode, panel order, profanity filter, listen-only, spectrogram display, TTS voice, and speech speed are per-account and sync across devices
+- **Per-user settings** — dark mode, panel order, profanity filter, listen-only, read-aloud, notifications, spectrogram display, TTS voice, and speech speed are per-account and sync across devices
 - **Public family journal** — publish session logs to `/journal`, a no-login static page (last 10 entries, ADA-compliant)
 - Real-time spectrogram waterfall with VAD and squelch indicators; toggled on/off via the **WATERFALL** button
 - Speech-to-text receive using Whisper (`small.en` model)
 - Text-to-speech transmit using Piper neural voices
+- **Read Aloud** — per-user toggle that pipes finalized RX transcripts through Piper TTS and plays audio in the operator's browser; useful for eyes-busy operation
+- **Browser notifications** — opt-in Web Notifications for final RX transcripts and SKYWARN alerts when the tab is in the background
+- **NCS / SKYWARN plugin** — Net Control Station mode (admin-only): roster with check-in/standby/log-out and traffic priority, BREAK BREAK emergency interrupt, 15-second rolling audio replay buffer, NWS CAP SKYWARN alert feed (polls every 5 min), periodic net ID announcements, and end-of-net auto-journal
 - Automatic FCC station ID every 15 minutes (GMRS requirement)
 - FCC database callsign lookup and verification
 - Shared contacts list (GMRS + HAM cross-reference, FCC-verified)
@@ -212,6 +215,8 @@ Created from `data/config.json.example` on first install. Station-wide settings 
 | `gemini_api_key` | `""` | Google Gemini API key (for AI journals) |
 | `journals_dir` | `"/data/journals"` | Where session journals are saved |
 | `contacts_file` | `"/data/contacts.json"` | Shared contacts store |
+| `ncs_zone` | `""` | NWS county zone code for SKYWARN alerts (e.g. `"MIZ025"`); empty = disabled |
+| `ncs_announcement_interval` | `600` | Seconds between periodic net ID announcements when NCS mode is active |
 
 > **Note:** `filter_profanity`, `listen_only`, `spectro_colormap`, and `spectro_time_window_s` are now **per-user preferences** stored in `data/users.json`, not in `config.json`.
 
@@ -229,6 +234,8 @@ Each user account stores these settings independently. They are managed through 
 | `spectro_time_window_s` | `30` | Spectrogram scroll window in seconds |
 | `tts_voice` | `""` | Piper voice for this user's transmissions (`""` = use station default) |
 | `tts_length_scale` | `0` | TTS speech speed override (`0` = use station default; lower = faster, e.g. `0.8`) |
+| `read_aloud` | `false` | Play finalized RX transcripts through TTS audio in the browser |
+| `notifications_enabled` | `false` | Browser notifications for incoming RX and SKYWARN alerts when the tab is in the background (requires browser permission) |
 
 ### Environment variables
 
@@ -276,19 +283,27 @@ Radio-TTY/
 │   │   └── tokens.py           # TokenStore — session tokens, expiry, purge
 │   ├── ai/
 │   │   └── gemini_client.py    # AI journal generation
-│   └── net/
-│       └── online.py           # Internet connectivity check (60s TTL cache)
+│   ├── net/
+│   │   └── online.py           # Internet connectivity check (60s TTL cache)
+│   └── plugins/
+│       ├── base.py             # BasePlugin with async hook methods
+│       ├── registry.py         # PluginRegistry singleton — collects and dispatches hooks
+│       └── ncs.py              # NCS/SKYWARN plugin — roster, BREAK BREAK, replay buffer, NWS CAP
 ├── frontend/
 │   └── src/
 │       ├── App.tsx             # Root component — auth guard, WS state, message dispatch
 │       ├── hooks/
 │       │   ├── useAuth.ts      # Login/logout, token management
 │       │   └── useWebSocket.ts # WS connection with token auth + backoff reconnect
+│       ├── plugins/
+│       │   └── index.ts        # PluginDefinition, PluginProps, registerPlugin helper
 │       ├── components/
 │       │   ├── SetupScreen/    # First-run admin account creation form
 │       │   ├── LoginScreen/    # Profile picker + password form
-│       │   ├── AccountMenu/    # Profile chip — edit, change password, sign out
+│       │   ├── AccountMenu/    # Profile chip — edit, change password, settings, admin, sign out
 │       │   ├── UsersPanel/     # Admin user management
+│       │   ├── NCSPanel/       # Net Control Station panel — roster, BREAK BREAK, replay, alerts
+│       │   ├── PluginSlot/     # Thin wrapper mounting plugin React components
 │       │   └── …               # (other existing components)
 │       ├── theme.ts            # MUI theme factory makeTheme(dark)
 │       └── types/ws.ts         # All WebSocket message TypeScript types
