@@ -350,6 +350,30 @@ async def _on_auto_add_result(
 # Background pump tasks
 # ---------------------------------------------------------------------------
 
+async def _synthesize_rx_audio(text: str) -> None:
+    """Synthesize *text* via Piper and send rx_audio to read_aloud-enabled clients."""
+    if _synthesizer is None or _config is None:
+        return
+    read_aloud_clients = [
+        (ws, state) for ws, state in list(_manager._clients.items())
+        if state.prefs.get("read_aloud", False)
+    ]
+    if not read_aloud_clients:
+        return
+    loop = asyncio.get_event_loop()
+    voice = await loop.run_in_executor(None, _load_voice, _config.voice)
+    audio, sample_rate = await _synthesizer.synthesize_to_buffer(
+        voice, text, length_scale=_config.tts_length_scale
+    )
+    if audio is None:
+        return
+    audio_b64 = base64.b64encode(audio.tobytes()).decode("ascii")
+    msg = {"type": "rx_audio", "data": audio_b64, "sample_rate": sample_rate}
+    for ws, state in read_aloud_clients:
+        if state.prefs.get("read_aloud", False):
+            await _manager.send_to(ws, msg)
+
+
 async def _rx_pump() -> None:
     """Drain the STT output queue and broadcast rx_message frames."""
     global _vad_active
@@ -436,6 +460,11 @@ async def _rx_pump() -> None:
                     "utterance_id": cross_prev_uid,
                     "callsign_spans": cross_prev_spans,
                 })
+
+            if not partial:
+                asyncio.create_task(
+                    _synthesize_rx_audio(raw_text), name="rx-audio"
+                )
 
             # Attendance and pending-station detection use the final (non-partial) text.
             if not partial:
@@ -1456,7 +1485,8 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                 if _users_store is None:
                     continue
                 allowed = {"dark_mode", "panel_order", "filter_profanity", "listen_only",
-                           "spectro_colormap", "spectro_time_window_s", "tts_voice", "tts_length_scale"}
+                           "read_aloud", "spectro_colormap", "spectro_time_window_s",
+                           "tts_voice", "tts_length_scale"}
                 updates = {k: v for k, v in data.get("prefs", data).items() if k in allowed}
                 if updates:
                     state.prefs.update(updates)
