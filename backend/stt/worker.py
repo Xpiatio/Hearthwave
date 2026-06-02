@@ -59,7 +59,7 @@ class STTWorker:
     feeds downstream consumers. The collaborators are lazy-imported (the heavy
     ML deps don't load until listening starts).
 
-    Long utterances are streamed: every ~5 s of continuous speech, the
+    Long utterances are streamed: every ~2 s of continuous speech, the
     capture loop slices off the buffer at a quiet point (so cuts land
     between words, not mid-syllable) and hands the segment to a background
     transcription thread. Partial transcripts are pushed in order under a
@@ -84,8 +84,8 @@ class STTWorker:
     # Streaming-transcription cut points: slice when the in-speech buffer
     # passes ROLLING_SEGMENT_S, choosing the lowest-peak chunk in the next
     # CUT_WINDOW_S so cuts land in a natural pause between words.
-    ROLLING_SEGMENT_S = 5.0
-    CUT_WINDOW_S = 0.5
+    ROLLING_SEGMENT_S = 2.0
+    CUT_WINDOW_S = 0.3
 
     _MODELS_DIR = Path(__file__).resolve().parent.parent / "Models" / "STT"
 
