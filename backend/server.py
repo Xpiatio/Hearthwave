@@ -180,6 +180,10 @@ _auto_add_tasks: dict[str, asyncio.Task] = {}
 # we send the running total so the frontend "replace" logic is always correct.
 _utterance_partial_texts: dict[str, str] = {}
 
+# Rolling buffer of last two finalized utterances — used to detect callsigns
+# that span the boundary between consecutive transmissions.
+_recent_finals: collections.deque = collections.deque(maxlen=2)
+
 # Voice model cache — loaded once per voice path, reused across TX calls.
 _voice_cache: dict[str, Any] = {}
 
@@ -391,6 +395,30 @@ async def _rx_pump() -> None:
                 known = set()
                 callsign_spans = [[s, e, cs] for s, e, cs in raw_spans]
 
+            # Cross-boundary callsign detection: join with the previous final to catch
+            # callsigns spoken across two separate transmissions (e.g. NATO phonetics
+            # split across a PTT release).  Must run before broadcast_rx so the
+            # current-entry spans are complete in the outgoing message.
+            cross_prev_uid: "str | None" = None
+            cross_prev_spans: list = []
+            if not partial and _recent_finals:
+                prev_uid, prev_text = _recent_finals[-1]
+                combined = prev_text + " " + raw_text
+                sep = len(prev_text)
+                sep_offset = sep + 1
+                for c_start, c_end, c_cs in find_callsign_spans(combined):
+                    if c_start < sep and c_end > sep_offset:
+                        effective = c_cs
+                        if _config is not None and _config.fuzzy_callsign:
+                            matched = fuzzy_match_callsign(c_cs, known)
+                            if matched:
+                                effective = matched
+                        cross_prev_spans.append([c_start, sep, effective])
+                        callsign_spans.append([0, c_end - sep_offset, effective])
+                if cross_prev_spans:
+                    callsign_spans.sort(key=lambda s: s[0])
+                    cross_prev_uid = prev_uid
+
             await _manager.broadcast_rx(
                 {
                     "type": "rx_message",
@@ -402,9 +430,18 @@ async def _rx_pump() -> None:
                 filtered_text=filtered_text,
             )
 
+            if cross_prev_uid and cross_prev_spans:
+                await _manager.broadcast({
+                    "type": "rx_message_patch",
+                    "utterance_id": cross_prev_uid,
+                    "callsign_spans": cross_prev_spans,
+                })
+
             # Attendance and pending-station detection use the final (non-partial) text.
             if not partial:
-                # Extract the fuzzy-corrected callsigns from spans.
+                _recent_finals.append((utterance_id, raw_text))
+
+                # Extract all detected callsigns (regular + any cross-boundary additions).
                 detected = list({span[2] for span in callsign_spans})
                 changed = any(_attendance.record(cs) for cs in detected)
                 if changed:
