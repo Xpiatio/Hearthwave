@@ -319,7 +319,9 @@ export type WsMessage =
   | TxAudioMsg
   | RxAudioMsg
   | { type: 'voice_preview_done' }
-  | { type: 'error'; detail?: string };
+  | { type: 'error'; detail?: string }
+  | VoiceTxAckMsg
+  | VoiceTxErrorMsg;
 
 export interface TxMessagePayload {
   type: 'tx_message';
@@ -328,4 +330,34 @@ export interface TxMessagePayload {
   callsign: string;
   target_call?: string;
   target_name?: string;
+}
+
+// Voice PTT — Client → Server payloads (sent via send(), NOT part of WsMessage union)
+export interface VoiceTxStartPayload {
+  type: 'voice_tx_start';
+  callsign: string;
+  operator: string;
+}
+
+export interface VoiceTxChunkPayload {
+  type: 'voice_tx_chunk';
+  data: string; // base64 int16 PCM, 16 kHz mono
+}
+
+export interface VoiceTxEndPayload {
+  type: 'voice_tx_end';
+}
+
+export interface VoiceTxCancelPayload {
+  type: 'voice_tx_cancel';
+}
+
+// Voice PTT — Server → Client messages (part of WsMessage union)
+export interface VoiceTxAckMsg {
+  type: 'voice_tx_ack';
+}
+
+export interface VoiceTxErrorMsg {
+  type: 'voice_tx_error';
+  detail: string;
 }
