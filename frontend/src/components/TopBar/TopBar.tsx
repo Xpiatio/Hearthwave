@@ -12,6 +12,7 @@ import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import { AccountMenu } from '../AccountMenu/AccountMenu';
+import { VoicePTT } from '../VoicePTT/VoicePTT';
 import type { UserProfile, VoiceOption } from '../../types/ws';
 
 interface Props {
@@ -55,6 +56,11 @@ interface Props {
   onPreviewVoice: (voiceId: string) => void;
   stationLengthScale: number;
   onSaveTtsPrefs: (prefs: { voice: string; length_scale: number }) => void;
+  transmitting: boolean;
+  onVoicePttStart: () => void;
+  onVoicePttChunk: (b64: string) => void;
+  onVoicePttEnd: () => void;
+  onVoicePttCancel: () => void;
 }
 
 export function TopBar({
@@ -93,6 +99,11 @@ export function TopBar({
   onPreviewVoice,
   stationLengthScale,
   onSaveTtsPrefs,
+  transmitting,
+  onVoicePttStart,
+  onVoicePttChunk,
+  onVoicePttEnd,
+  onVoicePttCancel,
 }: Props) {
   return (
     <AppBar position="static" color="default" elevation={0}
@@ -251,6 +262,14 @@ export function TopBar({
             {readAloud ? 'READ ALOUD' : 'READ ALOUD'}
           </Button>
         </Tooltip>
+
+        <VoicePTT
+          disabled={listenOnly || transmitting || !connected}
+          onStart={onVoicePttStart}
+          onChunk={onVoicePttChunk}
+          onEnd={onVoicePttEnd}
+          onCancel={onVoicePttCancel}
+        />
 
         <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
 
