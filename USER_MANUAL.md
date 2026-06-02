@@ -58,9 +58,9 @@ If the server is unreachable, the status bar shows **OFFLINE** in amber. Refresh
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ [👤 Dad ▾]  STATIONS  JOURNAL  CONTACTS  CONFIG  WATERFALL   │  ← Top bar
+│ [👤 Dad ▾] │ STATIONS  JOURNAL │ CONTACTS │ CONFIG  WATERFALL│  ← Top bar
 │                  STATION STATUS: READY  ●                    │
-│    [GMRS]  [LISTENING]  [TX ENABLED]  [ADMIN]  [🗑]  [☀]    │
+│    [GMRS] │ [LISTENING]  [TX ENABLED] │ [ADMIN] │ [🗑]  [☀] │
 ├──────────────────────────────────────────────────────────────┤
 │  [Pending stations bar — amber chips, hidden when empty]     │
 ├──────────────────────────────────────────────────────────────┤
@@ -103,7 +103,7 @@ Received audio is automatically transcribed by Whisper and displayed in the chat
 
 Each received entry is labelled **[RX]** in the chat (in green). Outgoing entries are labelled **[TX]** (in blue). System messages appear without a label.
 
-**Partial transcripts** grow in place while the system processes audio in real time. As each audio slice is transcribed it is appended to the running line, building up the full text of the transmission. The final Whisper pass covers the complete utterance — the partial is replaced with the clean, complete transcript once the transmission ends.
+**Partial transcripts** appear within about two seconds of a station keying up — you see the text growing while the operator is still talking rather than waiting for them to unkey. Each ~2-second audio slice is transcribed and appended to the running chat line. Once the transmission ends the complete transcript replaces the partial.
 
 **Callsign highlighting:** Callsigns in received text appear as amber chips. The system detects all common forms — compact (`WSLZ233`), NATO phonetic (*Whiskey Sierra Lima Zulu Two Three Three*), spaced (`W S L Z 2 3 3`), and hyphenated (`WSLZ-233`) — and collapses them into a single chip showing the compact canonical form.
 
@@ -111,6 +111,7 @@ Each received entry is labelled **[RX]** in the chat (in green). Outgoing entrie
 - **Verified contacts** show a green **✓** badge immediately after the chip, indicating the callsign has been confirmed against the FCC database.
 - **Unknown callsigns** appear as a dimmer chip and are added to the [Pending stations](#8-pending-stations) bar above the chat.
 - **Fuzzy correction:** If fuzzy callsign matching is enabled and Whisper mishears a single character (e.g. `WSLZ235` instead of `WSLZ233`), the chip is shown with the corrected canonical form if a known contact is only one character away.
+- **Cross-transmission detection:** If a callsign is phonetically spelled across two separate keying events (e.g. the first half in one transmission, the second half in the next), it is still detected and highlighted in both chat entries.
 
 **Profanity filter:** If your profanity filter is enabled (see [Settings](#13-settings)), profanity is masked in received text with asterisks. Other users with the filter off see the unmasked text. This is a per-account setting.
 
