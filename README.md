@@ -31,7 +31,7 @@ FastAPI Backend  ──►  PulseAudio / sounddevice
 
 - **Multi-user accounts** — named family member profiles, each with their own password and per-user preferences
 - **Shared TX chat** — outgoing transmissions appear in every connected user's chat stream labeled `[TX]`; directed messages show `→ CALLSIGN — Name` between the sender and message text
-- **Per-user settings** — dark mode, panel order, profanity filter, listen-only, spectrogram display, and TTS voice are per-account and sync across devices
+- **Per-user settings** — dark mode, panel order, profanity filter, listen-only, spectrogram display, TTS voice, and speech speed are per-account and sync across devices
 - **Public family journal** — publish session logs to `/journal`, a no-login static page (last 10 entries, ADA-compliant)
 - Real-time spectrogram waterfall with VAD and squelch indicators; toggled on/off via the **WATERFALL** button
 - Speech-to-text receive using Whisper (`small.en` model)
@@ -41,6 +41,7 @@ FastAPI Backend  ──►  PulseAudio / sounddevice
 - Shared contacts list (GMRS + HAM cross-reference, FCC-verified)
 - Callsign highlighting in chat — amber chips with tooltip; handles compact, NATO phonetic, spaced, and hyphenated forms; verified contacts show a green ✓ badge; fuzzy correction snaps STT near-misses to known callsigns
 - WCAG 2.1 AA accessible pending stations bar — live region announces new detections to screen readers; per-callsign dismiss labels; name/location context in accessible chip labels
+- Quick messages bar — one-tap access to customisable pre-set phrases; supports `{Name}` placeholder; per-browser
 - TTY abbreviation expansion and Q-signal support
 - NATO phonetic callsign spelling
 - Session attendance tracking
@@ -227,6 +228,7 @@ Each user account stores these settings independently. They are managed through 
 | `spectro_colormap` | `"viridis"` | `"viridis"` or `"grayscale"` |
 | `spectro_time_window_s` | `30` | Spectrogram scroll window in seconds |
 | `tts_voice` | `""` | Piper voice for this user's transmissions (`""` = use station default) |
+| `tts_length_scale` | `0` | TTS speech speed override (`0` = use station default; lower = faster, e.g. `0.8`) |
 
 ### Environment variables
 
