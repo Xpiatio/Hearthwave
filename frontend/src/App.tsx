@@ -30,6 +30,7 @@ import { MessageInput } from './components/MessageInput/MessageInput';
 import type { MessageInputHandle } from './components/MessageInput/MessageInput';
 import { AttendancePanel } from './components/AttendancePanel/AttendancePanel';
 import { JournalPanel } from './components/JournalPanel/JournalPanel';
+import { NCSPanel } from './components/NCSPanel/NCSPanel';
 import { Spectrogram } from './components/Spectrogram/Spectrogram';
 import type { SpectrogramHandle } from './components/Spectrogram/Spectrogram';
 import { QuickMessages } from './components/QuickMessages/QuickMessages';
@@ -195,9 +196,18 @@ export default function App() {
     stationLengthScale: 1.0,
     geminiApiKeySet: false,
     journalsDir: '/data/journals',
+    ncsZone: '',
   });
 
+  // Plugin infrastructure — last WS message forwarded to mounted plugin panels
+  const [lastMessage, setLastMessage] = useState<WsMessage | null>(null);
+  const [channelClear, setChannelClear] = useState(true);
+
+  // NCS panel visibility (admin-only toggle)
+  const [showNcs, setShowNcs] = useState(false);
+
   const handleWsMessage = useCallback((msg: WsMessage) => {
+    setLastMessage(msg);
     switch (msg.type) {
       case 'rx_message': {
         const uid = msg.utterance_id;
@@ -286,6 +296,7 @@ export default function App() {
 
       case 'status':
         setRadioStatus(msg);
+        if (msg.channel_clear !== undefined) setChannelClear(msg.channel_clear);
         // Per-user fields (listen_only, filter_profanity, spectro_colormap, spectro_time_window_s)
         // are now set from user_profile messages — not from status.
         if (msg.stt_listening !== undefined) setSttListening(msg.stt_listening);
@@ -303,6 +314,7 @@ export default function App() {
           stationLengthScale: msg.station_length_scale ?? prev.stationLengthScale,
           geminiApiKeySet: msg.gemini_api_key_set ?? prev.geminiApiKeySet,
           journalsDir: msg.journals_dir ?? prev.journalsDir,
+          ncsZone: msg.ncs_zone ?? prev.ncsZone,
         }));
         break;
 
@@ -613,6 +625,7 @@ export default function App() {
     tts_length_scale: number;
     gemini_api_key: string;
     journals_dir: string;
+    ncs_zone: string;
   }) {
     send({ type: 'set_admin_config', ...values });
   }
@@ -794,6 +807,14 @@ export default function App() {
           onToggleConfig={() => setShowConfig((v) => !v)}
           showAdmin={showAdmin}
           onToggleAdmin={() => setShowAdmin((v) => !v)}
+          showNcs={showNcs}
+          onToggleNcs={() => {
+            const next = !showNcs;
+            setShowNcs(next);
+            setPanelOrder((prev) =>
+              next && !prev.includes('ncs') ? [...prev, 'ncs'] : prev.filter((id) => id !== 'ncs' || next)
+            );
+          }}
           showWaterfall={showWaterfall}
           onToggleWaterfall={handleToggleWaterfall}
           darkMode={darkMode}
@@ -865,6 +886,19 @@ export default function App() {
                       onDelete={handleDeleteJournal}
                       onPublish={handlePublishJournal}
                       onDismissResult={handleDismissJournalResult}
+                    />
+                  </DraggablePanel>
+                );
+              }
+              if (id === 'ncs' && showNcs) {
+                return (
+                  <DraggablePanel key="ncs" id="ncs">
+                    <NCSPanel
+                      send={send}
+                      lastMessage={lastMessage}
+                      contacts={contacts}
+                      channelClear={channelClear}
+                      transmitting={transmitting}
                     />
                   </DraggablePanel>
                 );
