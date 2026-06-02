@@ -23,6 +23,8 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import EditIcon from '@mui/icons-material/Edit';
 import LockIcon from '@mui/icons-material/Lock';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import SettingsIcon from '@mui/icons-material/Settings';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import type { UserProfile, VoiceOption } from '../../types/ws';
 
 const SPEED_MARKS = [
@@ -47,11 +49,15 @@ interface Props {
   onPreviewVoice: (voiceId: string) => void;
   stationLengthScale: number;
   onSaveTtsPrefs: (prefs: { voice: string; length_scale: number }) => void;
+  showConfig: boolean;
+  onToggleConfig: () => void;
+  showAdmin: boolean;
+  onToggleAdmin: () => void;
 }
 
 const EMOJI_OPTIONS = ['👤', '👨', '👩', '👦', '👧', '🧑', '👴', '👵', '🧔', '👮'];
 
-export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogout, voices, voicePreviewBusy, onPreviewVoice, stationLengthScale, onSaveTtsPrefs }: Props) {
+export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogout, voices, voicePreviewBusy, onPreviewVoice, stationLengthScale, onSaveTtsPrefs, showConfig, onToggleConfig, showAdmin, onToggleAdmin }: Props) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
@@ -160,6 +166,17 @@ export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogo
           <ListItemIcon><LockIcon fontSize="small" /></ListItemIcon>
           Change Password
         </MenuItem>
+        <Divider />
+        <MenuItem selected={showConfig} onClick={() => { onToggleConfig(); handleClose(); }}>
+          <ListItemIcon><SettingsIcon fontSize="small" /></ListItemIcon>
+          Settings
+        </MenuItem>
+        {profile.is_admin && (
+          <MenuItem selected={showAdmin} onClick={() => { onToggleAdmin(); handleClose(); }}>
+            <ListItemIcon><AdminPanelSettingsIcon fontSize="small" /></ListItemIcon>
+            Admin
+          </MenuItem>
+        )}
         <Divider />
         <MenuItem onClick={() => { handleClose(); onLogout(); }}>
           <ListItemIcon><LogoutIcon fontSize="small" /></ListItemIcon>

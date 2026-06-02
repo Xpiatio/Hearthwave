@@ -1,6 +1,7 @@
 import {
   AppBar,
   Toolbar,
+  ToggleButton,
   Button,
   Box,
   Divider,
@@ -109,72 +110,58 @@ export function TopBar({
           onPreviewVoice={onPreviewVoice}
           stationLengthScale={stationLengthScale}
           onSaveTtsPrefs={onSaveTtsPrefs}
+          showConfig={showConfig}
+          onToggleConfig={onToggleConfig}
+          showAdmin={showAdmin}
+          onToggleAdmin={onToggleAdmin}
         />
 
         <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
 
         {/* Group 2 — Panel toggles */}
-        <Button
-          variant={showAttendance ? 'contained' : 'outlined'}
-          size="small"
+        <ToggleButton
+          value="attendance"
+          selected={showAttendance}
           onClick={onToggleAttendance}
-          aria-pressed={showAttendance}
+          size="small"
+          color="primary"
           aria-label="Toggle stations heard panel"
         >
           STATIONS
-        </Button>
+        </ToggleButton>
 
-        <Button
-          variant={showJournal ? 'contained' : 'outlined'}
-          size="small"
+        <ToggleButton
+          value="journal"
+          selected={showJournal}
           onClick={onToggleJournal}
-          aria-pressed={showJournal}
+          size="small"
+          color="primary"
           aria-label="Toggle journal panel"
         >
           JOURNAL
-        </Button>
+        </ToggleButton>
 
-        <Button
-          variant={showContacts ? 'contained' : 'outlined'}
-          size="small"
+        <ToggleButton
+          value="contacts"
+          selected={showContacts}
           onClick={onToggleContacts}
-          aria-pressed={showContacts}
-          aria-label="Open contacts"
+          size="small"
+          color="primary"
+          aria-label="Toggle contacts"
         >
           CONTACTS
-        </Button>
+        </ToggleButton>
 
-        <Button
-          variant={showConfig ? 'contained' : 'outlined'}
-          size="small"
-          onClick={onToggleConfig}
-          aria-pressed={showConfig}
-          aria-label="Toggle configuration panel"
-        >
-          CONFIG
-        </Button>
-
-        <Button
-          variant={showWaterfall ? 'contained' : 'outlined'}
-          size="small"
+        <ToggleButton
+          value="waterfall"
+          selected={showWaterfall}
           onClick={onToggleWaterfall}
-          aria-pressed={showWaterfall}
+          size="small"
+          color="primary"
           aria-label={showWaterfall ? 'Hide waterfall' : 'Show waterfall'}
         >
           WATERFALL
-        </Button>
-
-        {profile.is_admin && (
-          <Button
-            variant={showAdmin ? 'contained' : 'outlined'}
-            size="small"
-            onClick={onToggleAdmin}
-            aria-pressed={showAdmin}
-            aria-label="Open admin settings"
-          >
-            ADMIN
-          </Button>
-        )}
+        </ToggleButton>
 
         {/* Center — station status + FCC online dot */}
         <Box
