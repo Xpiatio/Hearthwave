@@ -242,6 +242,7 @@ export interface UserPrefs {
   filter_profanity: boolean;
   listen_only: boolean;
   read_aloud: boolean;
+  notifications_enabled: boolean;
   spectro_colormap: 'viridis' | 'grayscale';
   spectro_time_window_s: number;
   tts_voice?: string;
@@ -374,6 +375,8 @@ export type WsMessage =
   | NCSReplayAudioMsg
   | NCSBreakBreakAckMsg
   | NCSJournalSavedMsg
+  | VoiceTxAckMsg
+  | VoiceTxErrorMsg
   | { type: 'voice_preview_done' }
   | { type: 'error'; detail?: string };
 
@@ -384,4 +387,34 @@ export interface TxMessagePayload {
   callsign: string;
   target_call?: string;
   target_name?: string;
+}
+
+// Voice PTT (Client → Server payloads, sent via send(), not part of WsMessage union)
+export interface VoiceTxStartPayload {
+  type: 'voice_tx_start';
+  callsign: string;
+  operator: string;
+}
+
+export interface VoiceTxChunkPayload {
+  type: 'voice_tx_chunk';
+  data: string; // base64 int16 PCM, 16 kHz mono
+}
+
+export interface VoiceTxEndPayload {
+  type: 'voice_tx_end';
+}
+
+export interface VoiceTxCancelPayload {
+  type: 'voice_tx_cancel';
+}
+
+// Voice PTT (Server → Client messages, part of WsMessage union)
+export interface VoiceTxAckMsg {
+  type: 'voice_tx_ack';
+}
+
+export interface VoiceTxErrorMsg {
+  type: 'voice_tx_error';
+  detail: string;
 }
