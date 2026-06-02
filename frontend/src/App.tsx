@@ -170,6 +170,9 @@ export default function App() {
   // Per-user prefs (synced from user_profile message)
   const [listenOnly, setListenOnly] = useState(false);
   const [readAloud, setReadAloud] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const notificationsEnabledRef = useRef(false);
+  notificationsEnabledRef.current = notificationsEnabled;
   const [filterProfanity, setFilterProfanity] = useState(true);
   const [spectroColormap, setSpectroColormap] = useState<'viridis' | 'grayscale'>('viridis');
   const [spectroTimeWindowS, setSpectroTimeWindowS] = useState(30);
@@ -276,6 +279,18 @@ export default function App() {
               },
             ]);
           }
+          if (
+            notificationsEnabledRef.current &&
+            Notification.permission === 'granted' &&
+            document.visibilityState === 'hidden'
+          ) {
+            const sender = msg.callsign || msg.from || 'Station';
+            new Notification(`📻 ${sender}`, {
+              body: msg.text.slice(0, 120),
+              tag: `rx-${msg.utterance_id}`,
+              silent: true,
+            });
+          }
         }
         break;
       }
@@ -334,6 +349,7 @@ export default function App() {
         if (prefs.filter_profanity !== undefined) setFilterProfanity(prefs.filter_profanity);
         if (prefs.listen_only !== undefined) setListenOnly(prefs.listen_only);
         if (prefs.read_aloud !== undefined) setReadAloud(prefs.read_aloud);
+        if (prefs.notifications_enabled !== undefined) setNotificationsEnabled(prefs.notifications_enabled);
         if (prefs.spectro_colormap) setSpectroColormap(prefs.spectro_colormap);
         if (prefs.spectro_time_window_s) setSpectroTimeWindowS(prefs.spectro_time_window_s);
         break;
@@ -507,6 +523,20 @@ export default function App() {
         break;
       }
 
+      case 'ncs_alert':
+        if (
+          notificationsEnabledRef.current &&
+          Notification.permission === 'granted' &&
+          document.visibilityState === 'hidden'
+        ) {
+          new Notification(`⚠️ SKYWARN: ${msg.event}`, {
+            body: msg.headline.slice(0, 120),
+            tag: `ncs-alert-${msg.id}`,
+            silent: false,
+          });
+        }
+        break;
+
       case 'voice_preview_done':
         setVoicePreviewBusy(false);
         break;
@@ -565,6 +595,28 @@ export default function App() {
     const next = !readAloud;
     setReadAloud(next);
     send({ type: 'save_user_prefs', prefs: { read_aloud: next } });
+  }
+
+  async function handleToggleNotifications() {
+    if (notificationsEnabled) {
+      setNotificationsEnabled(false);
+      send({ type: 'save_user_prefs', prefs: { notifications_enabled: false } });
+      return;
+    }
+    if (!('Notification' in window)) {
+      setErrorSnack('Browser notifications are not supported.');
+      return;
+    }
+    let permission = Notification.permission;
+    if (permission === 'default') {
+      permission = await Notification.requestPermission();
+    }
+    if (permission === 'granted') {
+      setNotificationsEnabled(true);
+      send({ type: 'save_user_prefs', prefs: { notifications_enabled: true } });
+    } else {
+      setErrorSnack('Notification permission denied. Enable it in browser settings.');
+    }
   }
 
   function handleToggleListenOnly() {
@@ -794,6 +846,8 @@ export default function App() {
           listenOnly={listenOnly}
           readAloud={readAloud}
           onToggleReadAloud={handleToggleReadAloud}
+          notificationsEnabled={notificationsEnabled}
+          onToggleNotifications={handleToggleNotifications}
           showAttendance={showAttendance}
           onToggleAttendance={() => setShowAttendance((v) => !v)}
           showJournal={showJournal}

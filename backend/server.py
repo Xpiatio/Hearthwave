@@ -1520,7 +1520,7 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                 if _users_store is None:
                     continue
                 allowed = {"dark_mode", "panel_order", "filter_profanity", "listen_only",
-                           "read_aloud", "spectro_colormap", "spectro_time_window_s",
+                           "read_aloud", "notifications_enabled", "spectro_colormap", "spectro_time_window_s",
                            "tts_voice", "tts_length_scale"}
                 updates = {k: v for k, v in data.get("prefs", data).items() if k in allowed}
                 if updates:
