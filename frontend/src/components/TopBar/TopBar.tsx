@@ -23,6 +23,8 @@ interface Props {
   listenOnly: boolean;
   readAloud: boolean;
   onToggleReadAloud: () => void;
+  notificationsEnabled: boolean;
+  onToggleNotifications: () => void;
   showAttendance: boolean;
   onToggleAttendance: () => void;
   showJournal: boolean;
@@ -68,6 +70,8 @@ export function TopBar({
   listenOnly,
   readAloud,
   onToggleReadAloud,
+  notificationsEnabled,
+  onToggleNotifications,
   showAttendance,
   onToggleAttendance,
   showJournal,
@@ -267,7 +271,20 @@ export function TopBar({
             aria-pressed={readAloud}
             aria-label={readAloud ? 'Read aloud active — click to disable' : 'Read aloud disabled — click to enable'}
           >
-            {readAloud ? 'READ ALOUD' : 'READ ALOUD'}
+            READ ALOUD
+          </Button>
+        </Tooltip>
+
+        <Tooltip title={notificationsEnabled ? 'Notifications on — click to disable' : 'Notifications off — click to enable (browser permission required)'}>
+          <Button
+            variant={notificationsEnabled ? 'contained' : 'outlined'}
+            color={notificationsEnabled ? 'info' : 'inherit'}
+            size="small"
+            onClick={onToggleNotifications}
+            aria-pressed={notificationsEnabled}
+            aria-label={notificationsEnabled ? 'Notifications active — click to disable' : 'Notifications disabled — click to enable'}
+          >
+            NOTIFY
           </Button>
         </Tooltip>
 
