@@ -62,6 +62,11 @@ export function VoicePTT({ disabled, onStart, onChunk, onEnd, onCancel }: VoiceP
       return;
     }
 
+    if (!activeRef.current) {
+      stream.getTracks().forEach(t => t.stop());
+      return;
+    }
+
     streamRef.current = stream;
 
     const ctx = new AudioContext({ sampleRate: 16000 });
@@ -91,6 +96,7 @@ export function VoicePTT({ disabled, onStart, onChunk, onEnd, onCancel }: VoiceP
     activeRef.current = false;
     setRecording(false);
 
+    if (workletRef.current) workletRef.current.port.onmessage = null;
     workletRef.current?.port.close();
     workletRef.current?.disconnect();
     workletRef.current = null;
@@ -111,6 +117,7 @@ export function VoicePTT({ disabled, onStart, onChunk, onEnd, onCancel }: VoiceP
   // Cancel if disabled flips on while recording (WS drop, listen-only toggle)
   useEffect(() => {
     if (disabled && activeRef.current) stopRecording(true);
+  // stopRecording is defined at component scope and doesn't change; only re-run on disabled change
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [disabled]);
 
