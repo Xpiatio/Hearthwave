@@ -57,20 +57,18 @@ If the server is unreachable, the status bar shows **OFFLINE** in amber. Refresh
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ [👤 Dad ▾]  STATIONS  JOURNAL  CONTACTS  CONFIG  ADMIN       │  ← Top bar
+│ [👤 Dad ▾]  STATIONS  JOURNAL  CONTACTS  CONFIG  WATERFALL   │  ← Top bar
 │                  STATION STATUS: READY  ●                    │
-│         [GMRS]  [LISTENING]  [TX ENABLED]  [🗑]  [☀]        │
+│    [GMRS]  [LISTENING]  [TX ENABLED]  [ADMIN]  [🗑]  [☀]    │
 ├──────────────────────────────────────────────────────────────┤
 │  [Pending stations bar — amber chips, hidden when empty]     │
 ├──────────────────────────────────────────────────────────────┤
-│                                                              │
-│                     Chat display                             │
-│                                                              │
-│  WQZX999 — Dave  >  Hello this is Bravo                     │
-│  KD9ABC  — Mom   >  Good morning                            │
-│                                                              │
-├──────────────────────────────────────────────────────────────┤
-│                    Spectrogram                               │
+│                │                                             │
+│  Spectrogram   │           Chat display                      │
+│  (waterfall)   │                                             │
+│                │  WQZX999 — Dave  >  Hello this is Bravo    │
+│                │  KD9ABC  — Mom   >  Good morning           │
+│                │                                             │
 ├──────────────────────────────────────────────────────────────┤
 │  Status: Radio connected · Volume OK · Channel clear         │
 ├──────────────────────────────────────────────────────────────┤
@@ -84,6 +82,7 @@ If the server is unreachable, the status bar shows **OFFLINE** in amber. Refresh
 - **JOURNAL** — toggle the journals panel
 - **CONTACTS** — open the shared contacts list
 - **CONFIG** — toggle personal settings panel
+- **WATERFALL** — show or hide the spectrogram waterfall (preference is saved locally per browser)
 - **ADMIN** — station settings and user management (admin accounts only)
 
 **Top bar — right side:**
@@ -99,7 +98,7 @@ If the server is unreachable, the status bar shows **OFFLINE** in amber. Refresh
 
 Received audio is automatically transcribed by Whisper and displayed in the chat area. Transcription runs continuously in the background.
 
-**Partial transcripts** appear while the system processes audio in real time. The final transcript replaces them once the transmission ends.
+**Partial transcripts** grow in place while the system processes audio in real time — each new audio slice is appended to the line. The final transcript replaces it with a clean Whisper pass over the complete utterance once the transmission ends.
 
 **Callsign highlighting:** Callsigns in received text appear as amber chips. The system detects all common forms — compact (`WSLZ233`), NATO phonetic (*Whiskey Sierra Lima Zulu Two Three Three*), spaced (`W S L Z 2 3 3`), and hyphenated (`WSLZ-233`) — and collapses them into a single chip showing the compact canonical form.
 
@@ -192,7 +191,9 @@ If internet is available and a name was detected, the system runs an FCC lookup 
 
 ## 8. Spectrogram
 
-The spectrogram shows a real-time waterfall of incoming audio.
+The spectrogram shows a real-time waterfall of incoming audio to the left of the chat area.
+
+**Showing / hiding:** Click the **WATERFALL** button in the top bar to toggle the display on or off. The preference is remembered in your browser across sessions.
 
 **Left-edge indicators:**
 - **Amber stripe** — squelch is open (audio above the noise floor)

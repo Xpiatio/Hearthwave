@@ -29,6 +29,8 @@ interface Props {
   onToggleConfig: () => void;
   showAdmin: boolean;
   onToggleAdmin: () => void;
+  showWaterfall: boolean;
+  onToggleWaterfall: () => void;
   darkMode: boolean;
   onToggleDark: () => void;
   onToggleServiceMode: () => void;
@@ -68,6 +70,8 @@ export function TopBar({
   onToggleConfig,
   showAdmin,
   onToggleAdmin,
+  showWaterfall,
+  onToggleWaterfall,
   darkMode,
   onToggleDark,
   onToggleServiceMode,
@@ -140,6 +144,16 @@ export function TopBar({
           aria-label="Toggle configuration panel"
         >
           CONFIG
+        </Button>
+
+        <Button
+          variant={showWaterfall ? 'contained' : 'outlined'}
+          size="small"
+          onClick={onToggleWaterfall}
+          aria-pressed={showWaterfall}
+          aria-label={showWaterfall ? 'Hide waterfall' : 'Show waterfall'}
+        >
+          WATERFALL
         </Button>
 
         {profile.is_admin && (

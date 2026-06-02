@@ -104,6 +104,11 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(
     () => localStorage.getItem('radio_tty_dark_mode') === 'true'
   );
+
+  // Waterfall visibility — persisted locally; defaults to visible
+  const [showWaterfall, setShowWaterfall] = useState(
+    () => localStorage.getItem('radio_tty_show_waterfall') !== 'false'
+  );
   const theme = useMemo(() => makeTheme(darkMode), [darkMode]);
 
   // Attendance
@@ -556,6 +561,12 @@ export default function App() {
     send({ type: 'save_user_prefs', prefs: { dark_mode: next } });
   }
 
+  function handleToggleWaterfall() {
+    const next = !showWaterfall;
+    setShowWaterfall(next);
+    localStorage.setItem('radio_tty_show_waterfall', String(next));
+  }
+
   function handleClearChat() {
     setMessages([]);
   }
@@ -718,6 +729,8 @@ export default function App() {
           onToggleConfig={() => setShowConfig((v) => !v)}
           showAdmin={showAdmin}
           onToggleAdmin={() => setShowAdmin((v) => !v)}
+          showWaterfall={showWaterfall}
+          onToggleWaterfall={handleToggleWaterfall}
           darkMode={darkMode}
           onToggleDark={handleToggleDark}
           onToggleServiceMode={handleToggleServiceMode}
@@ -804,11 +817,13 @@ export default function App() {
         />
 
         <Box sx={{ display: 'flex', flexDirection: 'row', flex: '1 1 auto', overflow: 'hidden' }}>
-          <Spectrogram
-            ref={spectroRef}
-            colormap={spectroColormap}
-            timeWindowS={spectroTimeWindowS}
-          />
+          {showWaterfall && (
+            <Spectrogram
+              ref={spectroRef}
+              colormap={spectroColormap}
+              timeWindowS={spectroTimeWindowS}
+            />
+          )}
           <ChatDisplay
             entries={messages}
             contacts={contacts}
