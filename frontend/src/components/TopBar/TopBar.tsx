@@ -3,6 +3,7 @@ import {
   Toolbar,
   Button,
   Box,
+  Divider,
   IconButton,
   Tooltip,
 } from '@mui/material';
@@ -93,7 +94,7 @@ export function TopBar({
       sx={{ borderBottom: 1, borderColor: 'divider' }}>
       <Toolbar sx={{ gap: 1, flexWrap: 'wrap', py: 0.5 }}>
 
-        {/* Account menu (replaces CHANGE OPERATOR) */}
+        {/* Group 1 — Identity */}
         <AccountMenu
           profile={profile}
           onUpdateProfile={onUpdateProfile}
@@ -106,6 +107,9 @@ export function TopBar({
           onSaveTtsPrefs={onSaveTtsPrefs}
         />
 
+        <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+
+        {/* Group 2 — Panel toggles */}
         <Button
           variant={showAttendance ? 'contained' : 'outlined'}
           size="small"
@@ -168,8 +172,12 @@ export function TopBar({
           </Button>
         )}
 
-        {/* Center: station status + online dot */}
-        <Box sx={{ flex: 1, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }} aria-live="polite" aria-atomic="true">
+        {/* Center — station status + FCC online dot */}
+        <Box
+          sx={{ flex: 1, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}
+          aria-live="polite"
+          aria-atomic="true"
+        >
           <Box component="span" sx={{ typography: 'body1', fontWeight: 600 }}>
             STATION STATUS:{' '}
           </Box>
@@ -201,7 +209,7 @@ export function TopBar({
           )}
         </Box>
 
-        {/* Right: service mode, listen-only, clear chat, theme */}
+        {/* Group 3 — Radio operation controls */}
         <Tooltip title={`Radio service: click to switch to ${serviceMode === 'GMRS' ? 'FRS' : 'GMRS'}`}>
           <Button
             variant="outlined"
@@ -240,12 +248,11 @@ export function TopBar({
           </Button>
         </Tooltip>
 
+        <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+
+        {/* Group 4 — UI utilities */}
         <Tooltip title="Clear chat log">
-          <IconButton
-            onClick={onClearChat}
-            aria-label="Clear chat log"
-            size="small"
-          >
+          <IconButton onClick={onClearChat} aria-label="Clear chat log" size="small">
             <DeleteSweepIcon />
           </IconButton>
         </Tooltip>
