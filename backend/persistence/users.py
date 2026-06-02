@@ -36,6 +36,7 @@ DEFAULT_PREFS: dict = {
     "panel_order": ["config", "attendance", "journal"],
     "filter_profanity": True,
     "listen_only": False,
+    "read_aloud": False,
     "spectro_colormap": "viridis",
     "spectro_time_window_s": 30,
     "tts_voice": "",

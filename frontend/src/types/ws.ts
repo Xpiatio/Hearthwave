@@ -240,6 +240,7 @@ export interface UserPrefs {
   panel_order: string[];
   filter_profanity: boolean;
   listen_only: boolean;
+  read_aloud: boolean;
   spectro_colormap: 'viridis' | 'grayscale';
   spectro_time_window_s: number;
   tts_voice?: string;
@@ -280,6 +281,12 @@ export interface TxAudioMsg {
   sample_rate: number;
 }
 
+export interface RxAudioMsg {
+  type: 'rx_audio';
+  data: string; // base64-encoded int16 PCM
+  sample_rate: number;
+}
+
 export type WsMessage =
   | RxMessageMsg
   | RxMessagePatchMsg
@@ -310,6 +317,7 @@ export type WsMessage =
   | VoicesListMsg
   | VoicePreviewAudioMsg
   | TxAudioMsg
+  | RxAudioMsg
   | { type: 'voice_preview_done' }
   | { type: 'error'; detail?: string };
 
