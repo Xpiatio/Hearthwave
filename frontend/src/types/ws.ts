@@ -27,6 +27,12 @@ export interface RxMessageMsg {
   callsign_spans?: Array<[number, number, string]>;
 }
 
+export interface RxMessagePatchMsg {
+  type: 'rx_message_patch';
+  utterance_id: string;
+  callsign_spans: Array<[number, number, string]>;
+}
+
 export interface SpeakerEnrolledMsg {
   type: 'speaker_enrolled';
   callsign: string;
@@ -276,6 +282,7 @@ export interface TxAudioMsg {
 
 export type WsMessage =
   | RxMessageMsg
+  | RxMessagePatchMsg
   | StatusMsg
   | ContactsMsg
   | TxStatusMsg
