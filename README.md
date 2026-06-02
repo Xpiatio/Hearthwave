@@ -40,6 +40,7 @@ FastAPI Backend  ──►  PulseAudio / sounddevice
 - FCC database callsign lookup and verification
 - Shared contacts list (GMRS + HAM cross-reference, FCC-verified)
 - Callsign highlighting in chat — amber chips with tooltip; handles compact, NATO phonetic, spaced, and hyphenated forms; verified contacts show a green ✓ badge; fuzzy correction snaps STT near-misses to known callsigns
+- WCAG 2.1 AA accessible pending stations bar — live region announces new detections to screen readers; per-callsign dismiss labels; name/location context in accessible chip labels
 - TTY abbreviation expansion and Q-signal support
 - NATO phonetic callsign spelling
 - Session attendance tracking

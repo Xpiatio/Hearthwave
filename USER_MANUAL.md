@@ -179,13 +179,15 @@ The **Contacts** panel shows the shared station contact list. All users on all d
 
 ## 7. Pending stations
 
-When an unrecognized callsign is detected in a received transmission, it appears as an **amber chip** in the bar below the top bar.
+When an unrecognized callsign is detected in a received transmission, it appears as a chip in the bar below the top bar.
 
 - **Click a chip** to open Add Contact pre-filled with the extracted callsign, name, and location.
 - **Tap × on a chip** to dismiss without adding.
 - **Dismiss All** clears the entire bar.
 
 If internet is available and a name was detected, the system runs an FCC lookup automatically and may add the contact on its own. A notification appears in chat when this happens.
+
+**Accessibility:** The pending stations bar is a labelled landmark region. Screen readers announce new chips as stations are detected mid-session. Each chip's dismiss button is labelled with the specific callsign (e.g. "Dismiss WSLZ233") so it is unambiguous in a screen reader's interactive elements list. When a name or location was extracted from the transmission, it is included in the chip's accessible label.
 
 ---
 
