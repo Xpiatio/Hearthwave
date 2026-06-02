@@ -6,7 +6,7 @@ import urllib.error
 import urllib.request
 
 _BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
-_MODEL = "gemini-2.0-flash"
+_MODEL = "gemini-3.5-flash"
 
 _PROMPT_TEMPLATE = """You are a radio communication session assistant. \
 Based on the following radio session transcript and detected callsigns, \
