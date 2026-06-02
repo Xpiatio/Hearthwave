@@ -212,6 +212,7 @@ class ConnectionState:
     voice_tx_chunks:   list = dataclasses.field(default_factory=list)  # list[bytes]
     voice_tx_callsign: str  = ""
     voice_tx_operator: str  = ""
+    voice_tx_bytes:    int  = 0  # running total for cap check
 
 
 class ConnectionManager:
@@ -678,6 +679,10 @@ async def _handle_voice_tx(payload: dict) -> None:
     operator:     str   = payload.get("operator") or (_config.name if _config else "")
     display_name: str   = payload.get("_display_name") or ""
     now = datetime.datetime.now(datetime.timezone.utc)
+
+    if _config is None:
+        await _manager.broadcast({"type": "tx_status", "status": "idle"})
+        return
 
     # Pause STT so the worker doesn't use the Whisper model concurrently
     if _stt_worker is not None:
@@ -1701,6 +1706,7 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                     continue
                 state.voice_tx_active   = True
                 state.voice_tx_chunks   = []
+                state.voice_tx_bytes    = 0
                 state.voice_tx_callsign = callsign
                 state.voice_tx_operator = (data.get("operator") or "").strip()
                 await _manager.send_to(ws, {"type": "voice_tx_ack"})
@@ -1715,10 +1721,12 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                     _log.warning("voice_tx_chunk: invalid base64")
                     continue
                 state.voice_tx_chunks.append(raw)
+                state.voice_tx_bytes += len(raw)
                 # Safety cap: 120 s @ 16 kHz int16 = 3,840,000 bytes
-                if sum(len(c) for c in state.voice_tx_chunks) > 3_840_000:
+                if state.voice_tx_bytes > 3_840_000:
                     state.voice_tx_active = False
                     state.voice_tx_chunks = []
+                    state.voice_tx_bytes  = 0
                     await _manager.send_to(ws, {"type": "voice_tx_error", "detail": "Recording too long (120 s max)."})
 
             elif msg_type == "voice_tx_end":
@@ -1730,6 +1738,7 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                 # Reset immediately so a fast second press can start
                 state.voice_tx_active   = False
                 state.voice_tx_chunks   = []
+                state.voice_tx_bytes    = 0
                 state.voice_tx_callsign = ""
                 state.voice_tx_operator = ""
 
@@ -1756,6 +1765,7 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
             elif msg_type == "voice_tx_cancel":
                 state.voice_tx_active   = False
                 state.voice_tx_chunks   = []
+                state.voice_tx_bytes    = 0
                 state.voice_tx_callsign = ""
                 state.voice_tx_operator = ""
 
