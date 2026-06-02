@@ -168,6 +168,7 @@ export default function App() {
 
   // Per-user prefs (synced from user_profile message)
   const [listenOnly, setListenOnly] = useState(false);
+  const [readAloud, setReadAloud] = useState(false);
   const [filterProfanity, setFilterProfanity] = useState(true);
   const [spectroColormap, setSpectroColormap] = useState<'viridis' | 'grayscale'>('viridis');
   const [spectroTimeWindowS, setSpectroTimeWindowS] = useState(30);
@@ -320,6 +321,7 @@ export default function App() {
         }
         if (prefs.filter_profanity !== undefined) setFilterProfanity(prefs.filter_profanity);
         if (prefs.listen_only !== undefined) setListenOnly(prefs.listen_only);
+        if (prefs.read_aloud !== undefined) setReadAloud(prefs.read_aloud);
         if (prefs.spectro_colormap) setSpectroColormap(prefs.spectro_colormap);
         if (prefs.spectro_time_window_s) setSpectroTimeWindowS(prefs.spectro_time_window_s);
         break;
@@ -466,10 +468,12 @@ export default function App() {
         break;
 
       case 'voice_preview_audio':
-      case 'tx_audio': {
+      case 'tx_audio':
+      case 'rx_audio': {
         // Decode base64 int16 PCM and play in the browser via Web Audio API.
         // tx_audio routes transmitted speech through the local audio output
         // (e.g. 3.5mm jack to radio); voice_preview_audio does the same for previews.
+        // rx_audio plays incoming RX transcripts aloud (read_aloud pref).
         try {
           const binary = atob(msg.data);
           const bytes = new Uint8Array(binary.length);
@@ -543,6 +547,12 @@ export default function App() {
   function handleToggleServiceMode() {
     const next = serviceMode === 'GMRS' ? 'FRS' : 'GMRS';
     send({ type: 'set_service_mode', service: next });
+  }
+
+  function handleToggleReadAloud() {
+    const next = !readAloud;
+    setReadAloud(next);
+    send({ type: 'save_user_prefs', prefs: { read_aloud: next } });
   }
 
   function handleToggleListenOnly() {
@@ -769,6 +779,8 @@ export default function App() {
           isOnline={isOnline}
           serviceMode={serviceMode}
           listenOnly={listenOnly}
+          readAloud={readAloud}
+          onToggleReadAloud={handleToggleReadAloud}
           showAttendance={showAttendance}
           onToggleAttendance={() => setShowAttendance((v) => !v)}
           showJournal={showJournal}

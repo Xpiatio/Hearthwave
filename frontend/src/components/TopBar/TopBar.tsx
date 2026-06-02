@@ -20,6 +20,8 @@ interface Props {
   isOnline: boolean | null;
   serviceMode: string;
   listenOnly: boolean;
+  readAloud: boolean;
+  onToggleReadAloud: () => void;
   showAttendance: boolean;
   onToggleAttendance: () => void;
   showJournal: boolean;
@@ -61,6 +63,8 @@ export function TopBar({
   isOnline,
   serviceMode,
   listenOnly,
+  readAloud,
+  onToggleReadAloud,
   showAttendance,
   onToggleAttendance,
   showJournal,
@@ -245,6 +249,19 @@ export function TopBar({
             aria-label={listenOnly ? 'Listen-only mode active — click to enable transmit' : 'Transmit enabled — click for listen-only'}
           >
             {listenOnly ? 'LISTEN ONLY' : 'TX ENABLED'}
+          </Button>
+        </Tooltip>
+
+        <Tooltip title={readAloud ? 'Read aloud on — incoming messages spoken aloud' : 'Read aloud off — click to hear incoming messages'}>
+          <Button
+            variant={readAloud ? 'contained' : 'outlined'}
+            color={readAloud ? 'info' : 'inherit'}
+            size="small"
+            onClick={onToggleReadAloud}
+            aria-pressed={readAloud}
+            aria-label={readAloud ? 'Read aloud active — click to disable' : 'Read aloud disabled — click to enable'}
+          >
+            {readAloud ? 'READ ALOUD' : 'READ ALOUD'}
           </Button>
         </Tooltip>
 
