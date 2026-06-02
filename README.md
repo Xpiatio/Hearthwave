@@ -21,7 +21,7 @@ FastAPI Backend  ──►  PulseAudio / sounddevice
     Radio               Spectrogram
 ```
 
-- **RX pipeline**: audio capture → VAD → squelch → segmentation → Whisper STT → callsign span detection → text broadcast to all clients (per-user profanity filter applied; callsign spans included for chat highlighting)
+- **RX pipeline**: audio capture → VAD → squelch → segmentation → Whisper STT → callsign span detection → text broadcast to all clients (per-user profanity filter applied; streaming partials update every ~2 s so text appears while the operator is still talking; callsign spans included for chat highlighting)
 - **TX pipeline**: text input → abbreviation expansion → profanity filter → FCC ID wrapper → Piper TTS → PTT → audio output → `tx_echo` broadcast to all clients (includes sender, recipient callsign/name, and raw message text)
 - **Auth**: session tokens validated on WebSocket connect; unauthenticated connections are rejected
 
@@ -39,7 +39,7 @@ FastAPI Backend  ──►  PulseAudio / sounddevice
 - Automatic FCC station ID every 15 minutes (GMRS requirement)
 - FCC database callsign lookup and verification
 - Shared contacts list (GMRS + HAM cross-reference, FCC-verified)
-- Callsign highlighting in chat — amber chips with tooltip; handles compact, NATO phonetic, spaced, and hyphenated forms; verified contacts show a green ✓ badge; fuzzy correction snaps STT near-misses to known callsigns
+- Callsign highlighting in chat — amber chips with tooltip; handles compact, NATO phonetic, spaced, and hyphenated forms; detects callsigns that span two consecutive transmissions; verified contacts show a green ✓ badge; fuzzy correction snaps STT near-misses to known callsigns
 - WCAG 2.1 AA accessible pending stations bar — live region announces new detections to screen readers; per-callsign dismiss labels; name/location context in accessible chip labels
 - Quick messages bar — one-tap access to customisable pre-set phrases; supports `{Name}` placeholder; per-browser
 - TTY abbreviation expansion and Q-signal support
