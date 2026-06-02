@@ -106,6 +106,7 @@ from backend.net.online import invalidate as _invalidate_online
 from backend.net.online import is_online, is_online_cached
 from backend import auth_routes
 from backend.auth_routes import router as _auth_router
+from backend.plugins import plugin_registry
 from backend.persistence.attendance import AttendanceTracker, build_attendance_rows
 from backend.persistence.contacts import (
     ContactsStore,
@@ -132,6 +133,7 @@ _log = logging.getLogger(__name__)
 # Module-level singletons populated at startup
 # ---------------------------------------------------------------------------
 
+_event_loop: asyncio.AbstractEventLoop | None = None  # set in _lifespan; used for thread→asyncio bridge
 _config: ServerConfig | None = None
 _contacts_store: ContactsStore | None = None
 _users_store: UsersStore | None = None
@@ -291,6 +293,11 @@ def _on_stt_capture_event(event: str) -> None:
     global _channel_clear
     if event == "squelch_opened":
         _channel_clear = False
+        if _event_loop is not None and _event_loop.is_running():
+            _event_loop.call_soon_threadsafe(
+                _event_loop.create_task,
+                plugin_registry.dispatch_audio_rx_start(),
+            )
     elif event == "squelch_closed":
         _channel_clear = True
 
@@ -808,9 +815,10 @@ async def _lifespan(app: FastAPI):
     global _stt_out_queue, _tx_queue, _tts_event_queue, _background_tasks
     global _audio_level, _radio_error, _channel_clear, _last_id_time, _has_transmitted
     global _level_window, _attendance, _spectro, _monitor_chunk_cb
-    global _pending_stations, _auto_add_tasks
+    global _pending_stations, _auto_add_tasks, _event_loop
 
     # --- startup -----------------------------------------------------------
+    _event_loop = asyncio.get_running_loop()
     _config = ServerConfig.load()
     _log.info("Config loaded: callsign=%s, port=%d", _config.callsign, _config.port)
 
@@ -1073,6 +1081,11 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
             data: Any = await ws.receive_json()
             msg_type = data.get("type")
 
+            asyncio.create_task(
+                plugin_registry.dispatch_client_message(dict(data)),
+                name="plugin-client-msg",
+            )
+
             if msg_type == "tx_message":
                 callsign = (data.get("callsign") or "").strip()
                 if not callsign:
@@ -1104,13 +1117,16 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                 _tx_sender_display = (
                     (_users_store.get_public_one(state.user_id) or {}).get("display_name") or ""
                 ) if _users_store else ""
-                await _tx_queue.put({
+                tx_payload = await plugin_registry.dispatch_tx_pre_queue({
                     **data,
                     "_filter_profanity": state.prefs.get("filter_profanity", True),
                     "_voice_name": state.prefs.get("tts_voice") or None,
                     "_length_scale": state.prefs.get("tts_length_scale") or None,
                     "_display_name": _tx_sender_display,
                 })
+                if tx_payload is None:
+                    continue  # TX blocked by a plugin
+                await _tx_queue.put(tx_payload)
                 await _manager.broadcast({"type": "tx_status", "status": "transmitting"})
 
             elif msg_type == "add_contact":
