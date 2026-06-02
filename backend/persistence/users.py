@@ -37,6 +37,7 @@ DEFAULT_PREFS: dict = {
     "filter_profanity": True,
     "listen_only": False,
     "read_aloud": False,
+    "notifications_enabled": False,
     "spectro_colormap": "viridis",
     "spectro_time_window_s": 30,
     "tts_voice": "",

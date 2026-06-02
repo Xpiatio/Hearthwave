@@ -69,6 +69,7 @@ export interface StatusMsg {
   station_length_scale?: number;
   gemini_api_key_set?: boolean;
   journals_dir?: string;
+  ncs_zone?: string;
 }
 
 export interface ContactsMsg {
@@ -241,6 +242,7 @@ export interface UserPrefs {
   filter_profanity: boolean;
   listen_only: boolean;
   read_aloud: boolean;
+  notifications_enabled: boolean;
   spectro_colormap: 'viridis' | 'grayscale';
   spectro_time_window_s: number;
   tts_voice?: string;
@@ -287,6 +289,55 @@ export interface RxAudioMsg {
   sample_rate: number;
 }
 
+// NCS — Net Control Station plugin messages (server → client)
+export interface NCSEntry {
+  callsign: string;
+  status: 'CheckedIn' | 'Standby' | 'LoggedOut';
+  traffic: 'Routine' | 'Priority' | 'Emergency';
+  name: string;
+  location: string;
+  checkin_time: number; // Unix timestamp
+}
+
+export interface NCSAlert {
+  id: string;
+  event: string;
+  headline: string;
+  zone: string;
+  severity: string;
+}
+
+export interface NCSStateMsg {
+  type: 'ncs_state';
+  active: boolean;
+  roster: NCSEntry[];
+  zone: string;
+}
+
+export interface NCSRosterUpdateMsg {
+  type: 'ncs_roster_update';
+  roster: NCSEntry[];
+}
+
+export interface NCSAlertMsg extends NCSAlert {
+  type: 'ncs_alert';
+}
+
+export interface NCSReplayAudioMsg {
+  type: 'ncs_replay_audio';
+  data: string; // base64-encoded int16 PCM (empty string = no buffer)
+  sample_rate: number;
+}
+
+export interface NCSBreakBreakAckMsg {
+  type: 'ncs_break_break_ack';
+}
+
+export interface NCSJournalSavedMsg {
+  type: 'ncs_journal_saved';
+  path: string;
+}
+
 export type WsMessage =
   | RxMessageMsg
   | RxMessagePatchMsg
@@ -318,6 +369,14 @@ export type WsMessage =
   | VoicePreviewAudioMsg
   | TxAudioMsg
   | RxAudioMsg
+  | NCSStateMsg
+  | NCSRosterUpdateMsg
+  | NCSAlertMsg
+  | NCSReplayAudioMsg
+  | NCSBreakBreakAckMsg
+  | NCSJournalSavedMsg
+  | VoiceTxAckMsg
+  | VoiceTxErrorMsg
   | { type: 'voice_preview_done' }
   | { type: 'error'; detail?: string }
   | VoiceTxAckMsg

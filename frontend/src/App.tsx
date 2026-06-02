@@ -34,6 +34,7 @@ import { MessageInput } from './components/MessageInput/MessageInput';
 import type { MessageInputHandle } from './components/MessageInput/MessageInput';
 import { AttendancePanel } from './components/AttendancePanel/AttendancePanel';
 import { JournalPanel } from './components/JournalPanel/JournalPanel';
+import { NCSPanel } from './components/NCSPanel/NCSPanel';
 import { Spectrogram } from './components/Spectrogram/Spectrogram';
 import type { SpectrogramHandle } from './components/Spectrogram/Spectrogram';
 import { QuickMessages } from './components/QuickMessages/QuickMessages';
@@ -173,6 +174,9 @@ export default function App() {
   // Per-user prefs (synced from user_profile message)
   const [listenOnly, setListenOnly] = useState(false);
   const [readAloud, setReadAloud] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const notificationsEnabledRef = useRef(false);
+  notificationsEnabledRef.current = notificationsEnabled;
   const [filterProfanity, setFilterProfanity] = useState(true);
   const [spectroColormap, setSpectroColormap] = useState<'viridis' | 'grayscale'>('viridis');
   const [spectroTimeWindowS, setSpectroTimeWindowS] = useState(30);
@@ -199,9 +203,18 @@ export default function App() {
     stationLengthScale: 1.0,
     geminiApiKeySet: false,
     journalsDir: '/data/journals',
+    ncsZone: '',
   });
 
+  // Plugin infrastructure — last WS message forwarded to mounted plugin panels
+  const [lastMessage, setLastMessage] = useState<WsMessage | null>(null);
+  const [channelClear, setChannelClear] = useState(true);
+
+  // NCS panel visibility (admin-only toggle)
+  const [showNcs, setShowNcs] = useState(false);
+
   const handleWsMessage = useCallback((msg: WsMessage) => {
+    setLastMessage(msg);
     switch (msg.type) {
       case 'rx_message': {
         const uid = msg.utterance_id;
@@ -270,6 +283,18 @@ export default function App() {
               },
             ]);
           }
+          if (
+            notificationsEnabledRef.current &&
+            Notification.permission === 'granted' &&
+            document.visibilityState === 'hidden'
+          ) {
+            const sender = msg.callsign || msg.from || 'Station';
+            new Notification(`📻 ${sender}`, {
+              body: msg.text.slice(0, 120),
+              tag: `rx-${msg.utterance_id}`,
+              silent: true,
+            });
+          }
         }
         break;
       }
@@ -290,6 +315,7 @@ export default function App() {
 
       case 'status':
         setRadioStatus(msg);
+        if (msg.channel_clear !== undefined) setChannelClear(msg.channel_clear);
         // Per-user fields (listen_only, filter_profanity, spectro_colormap, spectro_time_window_s)
         // are now set from user_profile messages — not from status.
         if (msg.stt_listening !== undefined) setSttListening(msg.stt_listening);
@@ -307,6 +333,7 @@ export default function App() {
           stationLengthScale: msg.station_length_scale ?? prev.stationLengthScale,
           geminiApiKeySet: msg.gemini_api_key_set ?? prev.geminiApiKeySet,
           journalsDir: msg.journals_dir ?? prev.journalsDir,
+          ncsZone: msg.ncs_zone ?? prev.ncsZone,
         }));
         break;
 
@@ -326,6 +353,7 @@ export default function App() {
         if (prefs.filter_profanity !== undefined) setFilterProfanity(prefs.filter_profanity);
         if (prefs.listen_only !== undefined) setListenOnly(prefs.listen_only);
         if (prefs.read_aloud !== undefined) setReadAloud(prefs.read_aloud);
+        if (prefs.notifications_enabled !== undefined) setNotificationsEnabled(prefs.notifications_enabled);
         if (prefs.spectro_colormap) setSpectroColormap(prefs.spectro_colormap);
         if (prefs.spectro_time_window_s) setSpectroTimeWindowS(prefs.spectro_time_window_s);
         break;
@@ -499,6 +527,20 @@ export default function App() {
         break;
       }
 
+      case 'ncs_alert':
+        if (
+          notificationsEnabledRef.current &&
+          Notification.permission === 'granted' &&
+          document.visibilityState === 'hidden'
+        ) {
+          new Notification(`⚠️ SKYWARN: ${msg.event}`, {
+            body: msg.headline.slice(0, 120),
+            tag: `ncs-alert-${msg.id}`,
+            silent: false,
+          });
+        }
+        break;
+
       case 'voice_preview_done':
         setVoicePreviewBusy(false);
         break;
@@ -580,6 +622,28 @@ export default function App() {
     send({ type: 'save_user_prefs', prefs: { read_aloud: next } });
   }
 
+  async function handleToggleNotifications() {
+    if (notificationsEnabled) {
+      setNotificationsEnabled(false);
+      send({ type: 'save_user_prefs', prefs: { notifications_enabled: false } });
+      return;
+    }
+    if (!('Notification' in window)) {
+      setErrorSnack('Browser notifications are not supported.');
+      return;
+    }
+    let permission = Notification.permission;
+    if (permission === 'default') {
+      permission = await Notification.requestPermission();
+    }
+    if (permission === 'granted') {
+      setNotificationsEnabled(true);
+      send({ type: 'save_user_prefs', prefs: { notifications_enabled: true } });
+    } else {
+      setErrorSnack('Notification permission denied. Enable it in browser settings.');
+    }
+  }
+
   function handleToggleListenOnly() {
     const next = !listenOnly;
     setListenOnly(next);
@@ -638,6 +702,7 @@ export default function App() {
     tts_length_scale: number;
     gemini_api_key: string;
     journals_dir: string;
+    ncs_zone: string;
   }) {
     send({ type: 'set_admin_config', ...values });
   }
@@ -806,6 +871,8 @@ export default function App() {
           listenOnly={listenOnly}
           readAloud={readAloud}
           onToggleReadAloud={handleToggleReadAloud}
+          notificationsEnabled={notificationsEnabled}
+          onToggleNotifications={handleToggleNotifications}
           showAttendance={showAttendance}
           onToggleAttendance={() => setShowAttendance((v) => !v)}
           showJournal={showJournal}
@@ -819,6 +886,14 @@ export default function App() {
           onToggleConfig={() => setShowConfig((v) => !v)}
           showAdmin={showAdmin}
           onToggleAdmin={() => setShowAdmin((v) => !v)}
+          showNcs={showNcs}
+          onToggleNcs={() => {
+            const next = !showNcs;
+            setShowNcs(next);
+            setPanelOrder((prev) =>
+              next && !prev.includes('ncs') ? [...prev, 'ncs'] : prev.filter((id) => id !== 'ncs' || next)
+            );
+          }}
           showWaterfall={showWaterfall}
           onToggleWaterfall={handleToggleWaterfall}
           darkMode={darkMode}
@@ -895,6 +970,19 @@ export default function App() {
                       onDelete={handleDeleteJournal}
                       onPublish={handlePublishJournal}
                       onDismissResult={handleDismissJournalResult}
+                    />
+                  </DraggablePanel>
+                );
+              }
+              if (id === 'ncs' && showNcs) {
+                return (
+                  <DraggablePanel key="ncs" id="ncs">
+                    <NCSPanel
+                      send={send}
+                      lastMessage={lastMessage}
+                      contacts={contacts}
+                      channelClear={channelClear}
+                      transmitting={transmitting}
                     />
                   </DraggablePanel>
                 );

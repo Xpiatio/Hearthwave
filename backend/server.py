@@ -309,11 +309,12 @@ def _on_stt_capture_event(event: str) -> None:
 
 
 def _audio_chunk_fanout(chunk) -> None:
-    """Fan out audio chunks to both the monitor and the spectrogram task."""
+    """Fan out audio chunks to the monitor, spectrogram task, and plugins."""
     if _monitor_chunk_cb is not None:
         _monitor_chunk_cb(chunk)
     if _spectro is not None:
         _spectro.push_chunk(chunk)
+    plugin_registry.dispatch_audio_rx_chunk(chunk)
 
 
 # ---------------------------------------------------------------------------
@@ -477,6 +478,9 @@ async def _rx_pump() -> None:
             if not partial:
                 asyncio.create_task(
                     _synthesize_rx_audio(raw_text), name="rx-audio"
+                )
+                asyncio.create_task(
+                    plugin_registry.dispatch_rx_final(raw_text), name="plugin-rx-final"
                 )
 
             # Attendance and pending-station detection use the final (non-partial) text.
@@ -804,6 +808,7 @@ def _build_status() -> dict:
         "station_length_scale": float(_config.tts_length_scale) if _config else 1.0,
         "gemini_api_key_set": bool(_config and _config.gemini_api_key),
         "journals_dir": str(_config.journals_dir) if _config else "/data/journals",
+        "ncs_zone": (_config.ncs_zone if _config else ""),
         "input_device": (_config.input_device if _config else -1),
         "system_monitor_sink": (_config.system_monitor_sink if _config else ""),
     }
@@ -1011,6 +1016,15 @@ async def _lifespan(app: FastAPI):
     )
     _stt_worker.start()
 
+    # Register plugins — must happen after _tx_queue and _config are initialised.
+    from backend.plugins.ncs import NCSPlugin
+    plugin_registry.register(NCSPlugin(
+        broadcast_fn=_manager.broadcast,
+        tx_queue=_tx_queue,
+        config_getter=lambda: _config,
+        channel_clear_fn=lambda: _channel_clear,
+    ))
+
     _synthesizer = TTSSynthesizer(
         out_queue=_tts_event_queue,
         compute_backend=compute,
@@ -1097,6 +1111,8 @@ async def _ws_handle_set_admin_config(ws: WebSocket, data: dict, state: "Connect
                 _config["tts_length_scale"] = ls
         except (TypeError, ValueError):
             pass
+    if "ncs_zone" in data:
+        _config["ncs_zone"] = str(data["ncs_zone"]).strip().upper()
     _config.save()
     await _manager.broadcast(_build_status())
 
@@ -1174,7 +1190,10 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
             msg_type = data.get("type")
 
             asyncio.create_task(
-                plugin_registry.dispatch_client_message(dict(data)),
+                plugin_registry.dispatch_client_message(
+                    dict(data),
+                    reply=lambda msg: _manager.send_to(ws, msg),
+                ),
                 name="plugin-client-msg",
             )
 
@@ -1593,7 +1612,7 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                 if _users_store is None:
                     continue
                 allowed = {"dark_mode", "panel_order", "filter_profanity", "listen_only",
-                           "read_aloud", "spectro_colormap", "spectro_time_window_s",
+                           "read_aloud", "notifications_enabled", "spectro_colormap", "spectro_time_window_s",
                            "tts_voice", "tts_length_scale"}
                 updates = {k: v for k, v in data.get("prefs", data).items() if k in allowed}
                 if updates:

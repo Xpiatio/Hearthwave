@@ -24,6 +24,8 @@ interface Props {
   listenOnly: boolean;
   readAloud: boolean;
   onToggleReadAloud: () => void;
+  notificationsEnabled: boolean;
+  onToggleNotifications: () => void;
   showAttendance: boolean;
   onToggleAttendance: () => void;
   showJournal: boolean;
@@ -34,6 +36,8 @@ interface Props {
   onToggleConfig: () => void;
   showAdmin: boolean;
   onToggleAdmin: () => void;
+  showNcs: boolean;
+  onToggleNcs: () => void;
   showWaterfall: boolean;
   onToggleWaterfall: () => void;
   darkMode: boolean;
@@ -72,6 +76,8 @@ export function TopBar({
   listenOnly,
   readAloud,
   onToggleReadAloud,
+  notificationsEnabled,
+  onToggleNotifications,
   showAttendance,
   onToggleAttendance,
   showJournal,
@@ -82,6 +88,8 @@ export function TopBar({
   onToggleConfig,
   showAdmin,
   onToggleAdmin,
+  showNcs,
+  onToggleNcs,
   showWaterfall,
   onToggleWaterfall,
   darkMode,
@@ -174,6 +182,21 @@ export function TopBar({
           WATERFALL
         </ToggleButton>
 
+        {profile.is_admin && (
+          <Tooltip title={showNcs ? 'Hide Net Control Station panel' : 'Show Net Control Station panel'}>
+            <ToggleButton
+              value="ncs"
+              selected={showNcs}
+              onClick={onToggleNcs}
+              size="small"
+              color="error"
+              aria-label={showNcs ? 'NCS panel visible — click to hide' : 'Show NCS panel'}
+            >
+              NCS MODE
+            </ToggleButton>
+          </Tooltip>
+        )}
+
         {/* Center — station status + FCC online dot */}
         <Box
           sx={{ flex: 1, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}
@@ -259,7 +282,20 @@ export function TopBar({
             aria-pressed={readAloud}
             aria-label={readAloud ? 'Read aloud active — click to disable' : 'Read aloud disabled — click to enable'}
           >
-            {readAloud ? 'READ ALOUD' : 'READ ALOUD'}
+            READ ALOUD
+          </Button>
+        </Tooltip>
+
+        <Tooltip title={notificationsEnabled ? 'Notifications on — click to disable' : 'Notifications off — click to enable (browser permission required)'}>
+          <Button
+            variant={notificationsEnabled ? 'contained' : 'outlined'}
+            color={notificationsEnabled ? 'info' : 'inherit'}
+            size="small"
+            onClick={onToggleNotifications}
+            aria-pressed={notificationsEnabled}
+            aria-label={notificationsEnabled ? 'Notifications active — click to disable' : 'Notifications disabled — click to enable'}
+          >
+            NOTIFY
           </Button>
         </Tooltip>
 
