@@ -180,6 +180,18 @@ class ServerConfig(dict):
         raw = self.get("tokens_file")
         return Path(raw) if raw else Path("/data/tokens.json")
 
+    # ---- NCS / Net Control Station --------------------------------------
+
+    @property
+    def ncs_zone(self) -> str:
+        """NWS county zone code for SKYWARN alerts (e.g. 'MIZ025'). Empty = disabled."""
+        return (self.get("ncs_zone") or "").strip().upper()
+
+    @property
+    def ncs_announcement_interval(self) -> int:
+        """Seconds between automated net announcements while NCS is active (default 600)."""
+        return int(self.get("ncs_announcement_interval", 600))
+
     # ---- server ----------------------------------------------------------
 
     @property

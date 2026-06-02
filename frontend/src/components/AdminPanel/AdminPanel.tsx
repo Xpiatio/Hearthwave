@@ -37,6 +37,7 @@ interface AdminConfig {
   stationLengthScale: number;
   geminiApiKeySet: boolean;
   journalsDir: string;
+  ncsZone: string;
 }
 
 interface Props {
@@ -53,6 +54,7 @@ interface Props {
     tts_length_scale: number;
     gemini_api_key: string;
     journals_dir: string;
+    ncs_zone: string;
   }) => void;
   onPreviewVoice: (voiceId: string) => void;
   children?: React.ReactNode;
@@ -66,6 +68,7 @@ export function AdminPanel({ open, onClose, config, voices, voicePreviewBusy, on
   const [lengthScale, setLengthScale] = useState(1.0);
   const [geminiKey, setGeminiKey] = useState('');
   const [journalsDir, setJournalsDir] = useState('');
+  const [ncsZone, setNcsZone] = useState('');
   const [showKey, setShowKey] = useState(false);
 
   // Only re-initialize when the dialog opens. Keeping `config` out of the dep
@@ -79,6 +82,7 @@ export function AdminPanel({ open, onClose, config, voices, voicePreviewBusy, on
     setLengthScale(config.stationLengthScale);
     setGeminiKey('');
     setJournalsDir(config.journalsDir);
+    setNcsZone(config.ncsZone);
     setShowKey(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -92,6 +96,7 @@ export function AdminPanel({ open, onClose, config, voices, voicePreviewBusy, on
       tts_length_scale: lengthScale,
       gemini_api_key: geminiKey.trim(),
       journals_dir: journalsDir.trim(),
+      ncs_zone: ncsZone.trim().toUpperCase(),
     });
     onClose();
   }
@@ -219,6 +224,23 @@ export function AdminPanel({ open, onClose, config, voices, voicePreviewBusy, on
             onChange={(e) => setJournalsDir(e.target.value)}
             placeholder="/data/journals"
             slotProps={{ htmlInput: { style: { fontFamily: 'monospace', fontSize: '0.85rem' } } }}
+            fullWidth
+          />
+
+          <Divider />
+
+          <Typography variant="overline" sx={{ color: 'text.secondary', lineHeight: 1 }}>
+            NCS / SKYWARN
+          </Typography>
+
+          <TextField
+            label="NWS County Zone"
+            size="small"
+            value={ncsZone}
+            onChange={(e) => setNcsZone(e.target.value.toUpperCase())}
+            placeholder="e.g. MIZ025"
+            helperText="NWS county zone code for SKYWARN alerts. Leave blank to disable."
+            slotProps={{ htmlInput: { style: { fontFamily: 'monospace', fontWeight: 700 } } }}
             fullWidth
           />
 

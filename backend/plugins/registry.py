@@ -15,7 +15,7 @@ class PluginRegistry:
         self._plugins: list[BasePlugin] = []
 
     def register(self, plugin: BasePlugin) -> None:
-        """Add a plugin to the registry. Call before the server starts accepting connections."""
+        """Add a plugin to the registry. Call before the server accepts connections."""
         self._plugins.append(plugin)
         _log.info("Plugin registered: %s", type(plugin).__name__)
 
@@ -23,11 +23,11 @@ class PluginRegistry:
     # Hook dispatchers
     # ------------------------------------------------------------------
 
-    async def dispatch_client_message(self, payload: dict) -> None:
+    async def dispatch_client_message(self, payload: dict, reply=None) -> None:
         """Notify all plugins of an inbound client WS message (fire-and-forget)."""
         for plugin in self._plugins:
             try:
-                await plugin.on_client_message_received(payload)
+                await plugin.on_client_message_received(payload, reply=reply)
             except Exception:
                 _log.exception("Plugin %s raised in on_client_message_received", type(plugin).__name__)
 
@@ -38,6 +38,22 @@ class PluginRegistry:
                 await plugin.on_audio_rx_start()
             except Exception:
                 _log.exception("Plugin %s raised in on_audio_rx_start", type(plugin).__name__)
+
+    def dispatch_audio_rx_chunk(self, chunk) -> None:
+        """Dispatch audio chunk to all plugins (sync — called from STT worker thread)."""
+        for plugin in self._plugins:
+            try:
+                plugin.on_audio_rx_chunk(chunk)
+            except Exception:
+                _log.exception("Plugin %s raised in on_audio_rx_chunk", type(plugin).__name__)
+
+    async def dispatch_rx_final(self, text: str) -> None:
+        """Notify all plugins of a finalized RX transcript."""
+        for plugin in self._plugins:
+            try:
+                await plugin.on_rx_final(text)
+            except Exception:
+                _log.exception("Plugin %s raised in on_rx_final", type(plugin).__name__)
 
     async def dispatch_tx_pre_queue(self, payload: dict) -> dict | None:
         """Run the TX pre-queue hook chain.
