@@ -33,6 +33,8 @@ interface Props {
   onToggleConfig: () => void;
   showAdmin: boolean;
   onToggleAdmin: () => void;
+  showNcs: boolean;
+  onToggleNcs: () => void;
   showWaterfall: boolean;
   onToggleWaterfall: () => void;
   darkMode: boolean;
@@ -76,6 +78,8 @@ export function TopBar({
   onToggleConfig,
   showAdmin,
   onToggleAdmin,
+  showNcs,
+  onToggleNcs,
   showWaterfall,
   onToggleWaterfall,
   darkMode,
@@ -162,6 +166,21 @@ export function TopBar({
         >
           WATERFALL
         </ToggleButton>
+
+        {profile.is_admin && (
+          <Tooltip title={showNcs ? 'Hide Net Control Station panel' : 'Show Net Control Station panel'}>
+            <ToggleButton
+              value="ncs"
+              selected={showNcs}
+              onClick={onToggleNcs}
+              size="small"
+              color="error"
+              aria-label={showNcs ? 'NCS panel visible — click to hide' : 'Show NCS panel'}
+            >
+              NCS MODE
+            </ToggleButton>
+          </Tooltip>
+        )}
 
         {/* Center — station status + FCC online dot */}
         <Box
