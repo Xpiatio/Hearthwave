@@ -10,17 +10,18 @@ This manual covers day-to-day operation of Radio-TTY. For installation and serve
 2. [The interface](#2-the-interface)
 3. [Receiving transmissions (RX)](#3-receiving-transmissions-rx)
 4. [Sending a message (TX)](#4-sending-a-message-tx)
-5. [Station identification (FCC ID)](#5-station-identification-fcc-id)
-6. [Contacts](#6-contacts)
-7. [Pending stations](#7-pending-stations)
-8. [Spectrogram](#8-spectrogram)
-9. [Session attendance](#9-session-attendance)
-10. [Journals](#10-journals)
-11. [Family journal (public page)](#11-family-journal-public-page)
-12. [Settings](#12-settings)
-13. [Your account](#13-your-account)
-14. [Admin — managing users](#14-admin--managing-users)
-15. [Text shortcuts reference](#15-text-shortcuts-reference)
+5. [Quick messages](#5-quick-messages)
+6. [Station identification (FCC ID)](#6-station-identification-fcc-id)
+7. [Contacts](#7-contacts)
+8. [Pending stations](#8-pending-stations)
+9. [Spectrogram](#9-spectrogram)
+10. [Session attendance](#10-session-attendance)
+11. [Journals](#11-journals)
+12. [Family journal (public page)](#12-family-journal-public-page)
+13. [Settings](#13-settings)
+14. [Your account](#14-your-account)
+15. [Admin — managing users](#15-admin--managing-users)
+16. [Text shortcuts reference](#16-text-shortcuts-reference)
 
 ---
 
@@ -47,7 +48,7 @@ The **login screen** appears automatically. Select your name from the profile li
 - Your preferences (dark mode, profanity filter, listen-only mode, etc.) are stored in your account and follow you across all devices — phone, tablet, laptop.
 - If you enter the wrong password three times, your account is locked for 15 minutes. Contact your administrator to unlock it sooner.
 
-**New to the station?** Your administrator creates your account and gives you your initial password. You can change it any time via the account menu (see [Your account](#13-your-account)).
+**New to the station?** Your administrator creates your account and gives you your initial password. You can change it any time via the account menu (see [Your account](#14-your-account)).
 
 If the server is unreachable, the status bar shows **OFFLINE** in amber. Refresh the page or contact your administrator.
 
@@ -66,11 +67,13 @@ If the server is unreachable, the status bar shows **OFFLINE** in amber. Refresh
 │                │                                             │
 │  Spectrogram   │           Chat display                      │
 │  (waterfall)   │                                             │
-│                │  WQZX999 — Dave  >  Hello this is Bravo    │
-│                │  KD9ABC  — Mom   >  Good morning           │
+│                │  [RX] WQZX999 — Dave > Hello this is Bravo │
+│                │  [TX] Dad > Good morning                    │
 │                │                                             │
 ├──────────────────────────────────────────────────────────────┤
 │  Status: Radio connected · Volume OK · Channel clear         │
+├──────────────────────────────────────────────────────────────┤
+│  [Standing by] [QSL] [Copy that] [QSY to channel {N}]  ⚙    │  ← Quick messages
 ├──────────────────────────────────────────────────────────────┤
 │  [THIS IS]  Message [_________________________] [SEND ↵]     │
 └──────────────────────────────────────────────────────────────┘
@@ -98,16 +101,18 @@ If the server is unreachable, the status bar shows **OFFLINE** in amber. Refresh
 
 Received audio is automatically transcribed by Whisper and displayed in the chat area. Transcription runs continuously in the background.
 
-**Partial transcripts** grow in place while the system processes audio in real time — each new audio slice is appended to the line. The final transcript replaces it with a clean Whisper pass over the complete utterance once the transmission ends.
+Each received entry is labelled **[RX]** in the chat (in green). Outgoing entries are labelled **[TX]** (in blue). System messages appear without a label.
+
+**Partial transcripts** grow in place while the system processes audio in real time. As each audio slice is transcribed it is appended to the running line, building up the full text of the transmission. The final Whisper pass covers the complete utterance — the partial is replaced with the clean, complete transcript once the transmission ends.
 
 **Callsign highlighting:** Callsigns in received text appear as amber chips. The system detects all common forms — compact (`WSLZ233`), NATO phonetic (*Whiskey Sierra Lima Zulu Two Three Three*), spaced (`W S L Z 2 3 3`), and hyphenated (`WSLZ-233`) — and collapses them into a single chip showing the compact canonical form.
 
 - **Known contacts** (in your shared contacts list) show an amber chip. Hover or tap for the operator name, location, and any GMRS/HAM cross-references.
 - **Verified contacts** show a green **✓** badge immediately after the chip, indicating the callsign has been confirmed against the FCC database.
-- **Unknown callsigns** appear as a dimmer chip and are added to the [Pending stations](#7-pending-stations) bar above the chat.
+- **Unknown callsigns** appear as a dimmer chip and are added to the [Pending stations](#8-pending-stations) bar above the chat.
 - **Fuzzy correction:** If fuzzy callsign matching is enabled and Whisper mishears a single character (e.g. `WSLZ235` instead of `WSLZ233`), the chip is shown with the corrected canonical form if a known contact is only one character away.
 
-**Profanity filter:** If your profanity filter is enabled (see [Settings](#12-settings)), profanity is masked in received text with asterisks. Other users with the filter off see the unmasked text. This is a per-account setting.
+**Profanity filter:** If your profanity filter is enabled (see [Settings](#13-settings)), profanity is masked in received text with asterisks. Other users with the filter off see the unmasked text. This is a per-account setting.
 
 ---
 
@@ -117,7 +122,7 @@ Received audio is automatically transcribed by Whisper and displayed in the chat
 2. Press **Enter** or tap **SEND**.
 
 The system will:
-- Expand TTY abbreviations and Q-signals (see [Text shortcuts reference](#15-text-shortcuts-reference))
+- Expand TTY abbreviations and Q-signals (see [Text shortcuts reference](#16-text-shortcuts-reference))
 - Apply your profanity filter if enabled
 - Wrap the message with the station callsign per FCC rules
 - Synthesize speech using the configured Piper voice
@@ -136,13 +141,32 @@ The status bar shows **Transmitting** while the radio is keyed and returns to **
 
 **Placeholder tokens:** Include `{1}`, `{2}`, etc. as fill-in-the-blank slots. When you send, the system prompts you to fill in each before transmitting. Useful for templates: `Heading to {1} — ETA {2} minutes`.
 
-**Voice preview:** Open the Config panel and use the **Voice Test** button to hear your current TTS voice without keying the radio. To change your personal voice, see [Your account](#13-your-account).
+**Voice preview:** Open the Config panel and use the **Voice Test** button to hear your current TTS voice without keying the radio. To change your personal voice, see [Your account](#14-your-account).
 
 **Listen-only mode:** When active, all TX controls are hidden. Your setting does not affect other users — each person controls their own TX access independently.
 
 ---
 
-## 5. Station identification (FCC ID)
+## 5. Quick messages
+
+The quick messages bar sits between the chat area and the message input. It provides one-tap access to pre-set phrases — useful for common responses like "Standing by", "QSL", or channel changes.
+
+**Using a quick message:** Click any button to insert that phrase into the message box. The text can be edited before sending as normal.
+
+**`{Name}` placeholder:** If a phrase contains `{Name}` it is automatically replaced with your operator name when you tap the button.
+
+**Editing your quick messages:** Click the **⚙** (settings) icon on the right of the bar to open edit mode.
+
+- **Add:** Type a new phrase in the text box and click **ADD** (or press Enter).
+- **Reorder:** Use the **↑** / **↓** arrow buttons.
+- **Remove:** Click the **🗑** button next to a phrase.
+- Click **DONE** to close edit mode.
+
+Quick messages are stored in your browser's local storage — they are per-browser, not synced across devices.
+
+---
+
+## 6. Station identification (FCC ID)
 
 GMRS regulations require your station to identify with the callsign at least every 15 minutes. Radio-TTY handles this automatically — every outgoing message is wrapped with the station callsign and the timer resets.
 
@@ -150,7 +174,7 @@ GMRS regulations require your station to identify with the callsign at least eve
 
 ---
 
-## 6. Contacts
+## 7. Contacts
 
 The **Contacts** panel shows the shared station contact list. All users on all devices see the same list.
 
@@ -177,7 +201,7 @@ The **Contacts** panel shows the shared station contact list. All users on all d
 
 ---
 
-## 7. Pending stations
+## 8. Pending stations
 
 When an unrecognized callsign is detected in a received transmission, it appears as a chip in the bar below the top bar.
 
@@ -191,7 +215,7 @@ If internet is available and a name was detected, the system runs an FCC lookup 
 
 ---
 
-## 8. Spectrogram
+## 9. Spectrogram
 
 The spectrogram shows a real-time waterfall of incoming audio to the left of the chat area.
 
@@ -211,7 +235,7 @@ The spectrogram shows a real-time waterfall of incoming audio to the left of the
 
 ---
 
-## 9. Session attendance
+## 10. Session attendance
 
 The **Stations** panel tracks which callsigns have been heard during the current session.
 
@@ -221,7 +245,7 @@ Attendance is in-memory only and resets when the server restarts.
 
 ---
 
-## 10. Journals
+## 11. Journals
 
 The **Journals** panel lets you generate and save AI-written session summaries. Requires a Google Gemini API key configured by your administrator.
 
@@ -235,11 +259,11 @@ The **Journals** panel lets you generate and save AI-written session summaries. 
 
 **Deleting a journal:** Click the **delete icon** (🗑) next to a journal. Click once to arm the delete, click again to confirm.
 
-**Publishing to the family journal:** Click the **publish icon** (⬆) next to a saved journal to post it to the public family journal page. Click once to arm, click again to confirm. A snackbar confirms publication and shows the URL (`/journal`). See [Family journal](#11-family-journal-public-page).
+**Publishing to the family journal:** Click the **publish icon** (⬆) next to a saved journal to post it to the public family journal page. Click once to arm, click again to confirm. A snackbar confirms publication and shows the URL (`/journal`). See [Family journal](#12-family-journal-public-page).
 
 ---
 
-## 11. Family journal (public page)
+## 12. Family journal (public page)
 
 The family journal at `/journal` is a public page — no login required. It shows the most recent published session logs and can be bookmarked and shared with anyone.
 
@@ -253,7 +277,7 @@ The family journal at `/journal` is a public page — no login required. It show
 
 ---
 
-## 12. Settings
+## 13. Settings
 
 Open the **Config** panel (CONFIG button in the top bar) to manage your personal settings. All changes take effect immediately and are saved to your account.
 
@@ -275,7 +299,7 @@ Open the **Config** panel (CONFIG button in the top bar) to manage your personal
 |---------|-------------|
 | Voice Test | Preview your current TTS voice (or the first available voice if none is set) without keying the radio. The button shows **Playing…** while audio is synthesizing. |
 
-Your personal TTS voice is chosen in **Account → Edit Profile** (see [Your account](#13-your-account)). If you have not selected one, the station-default voice configured by the admin is used.
+Your personal TTS voice and speech speed are chosen in **Account → Edit Profile** (see [Your account](#14-your-account)). If you have not selected a voice, the station-default voice configured by the admin is used.
 
 ### Spectrogram (per-user)
 | Setting | Description |
@@ -285,6 +309,10 @@ Your personal TTS voice is chosen in **Account → Edit Profile** (see [Your acc
 
 > Frequency range is a station-wide setting controlled by an admin.
 
+### Panel layout (per-user)
+
+The **Config**, **Stations**, and **Journal** panels on the left side of the screen can be reordered by dragging. Grab the drag handle on a panel header and move it up or down. The order is saved to your account and restored across devices.
+
 ### Station identity (admin only)
 The **callsign**, **name**, **location**, **default TTS voice**, **Gemini API key**, and **journals directory** are set in the **Admin** panel. These are shared by all users. Changes are persisted to `config.json`.
 
@@ -292,16 +320,18 @@ The **Default TTS Voice** dropdown sets which Piper voice the station uses when 
 
 ---
 
-## 13. Your account
+## 14. Your account
 
 Click your **name chip** in the top-left of the top bar to open the account menu.
 
 ### Edit profile
-Change your **operator name** (shown in TX messages), **call sign**, **location**, **avatar emoji**, and **TTS voice**. These are personal to your account and affect how your transmissions are identified — other users' transmissions use their own profile values.
+Change your **operator name** (shown in TX messages), **call sign**, **location**, **avatar emoji**, **TTS voice**, and **speech speed**. These are personal to your account and affect how your transmissions are identified — other users' transmissions use their own profile values.
 
 > **Station vs. personal callsign:** Each user can have their own call sign and location. Your personal call sign takes precedence over the station-wide callsign for your transmissions. If your profile has no call sign set, the station callsign (from Admin Settings) is used as a fallback.
 
 **TTS Voice:** Choose your personal Piper voice from the dropdown. Click **Sample** to hear it before saving — no radio is keyed. Select *Station Default* to fall back to whichever voice the administrator has configured. Each family member can use a different voice.
+
+**Speech speed:** Enable **Custom speed** and adjust the slider to set a personal TTS pace — lower values produce faster speech, higher values produce slower speech. Leave it on *Station Default* to use the speed configured by the admin.
 
 ### Change password
 Enter a new password (minimum 8 characters). You must confirm it. Your current sessions remain active after a password change.
@@ -313,7 +343,7 @@ Ends your session on this device. Your preferences are saved and will be restore
 
 ---
 
-## 14. Admin — managing users
+## 15. Admin — managing users
 
 Admin accounts have access to the **ADMIN** button in the top bar. The Admin panel has two sections: station settings and user accounts.
 
@@ -336,7 +366,7 @@ The **User Accounts** table lists all family member accounts.
 
 ---
 
-## 15. Text shortcuts reference
+## 16. Text shortcuts reference
 
 Radio-TTY automatically expands common TTY, Q-signal, and CW abbreviations before transmitting.
 
