@@ -365,9 +365,10 @@ async def _rx_pump() -> None:
                 raw_text = (prior + " " + chunk_text).strip() if prior else chunk_text
                 _utterance_partial_texts[utterance_id] = raw_text
             else:
-                # Final is a fresh Whisper pass over the complete utterance audio.
-                _utterance_partial_texts.pop(utterance_id, None)
-                raw_text = chunk_text
+                # Final covers only the tail audio after the last partial cut.
+                # Prepend accumulated partial text so the full utterance is preserved.
+                prior = _utterance_partial_texts.pop(utterance_id, "")
+                raw_text = (prior + " " + chunk_text).strip() if prior else chunk_text
 
             filtered_text = mask_profanity(raw_text)
 
