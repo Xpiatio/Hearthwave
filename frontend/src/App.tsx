@@ -50,6 +50,37 @@ function formatTime(isoOrNow?: string): string {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+function normalizeForDedup(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function isNearDuplicate(a: string, b: string): boolean {
+  const na = normalizeForDedup(a);
+  const nb = normalizeForDedup(b);
+  if (na === nb) return true;
+  const [shorter, longer] = na.length <= nb.length ? [na, nb] : [nb, na];
+  if (shorter.length < 20) return false;
+  if (longer.startsWith(shorter)) {
+    return shorter.length === longer.length || longer[shorter.length] === ' ';
+  }
+  return false;
+}
+
+function removeAdjacentDuplicates(entries: ChatEntry[], newText: string): ChatEntry[] {
+  for (let i = entries.length - 1; i >= Math.max(0, entries.length - 3); i--) {
+    if (entries[i].kind === 'rx' && isNearDuplicate(entries[i].text, newText)) {
+      return [...entries.slice(0, i), ...entries.slice(i + 1)];
+    }
+  }
+  return entries;
+}
+
+function pruneMap<K, V>(map: Map<K, V>, maxSize: number): void {
+  while (map.size > maxSize) {
+    map.delete(map.keys().next().value as K);
+  }
+}
+
 function speakerLabel(callsign: string | null, name: string | null, cluster: string | null): string | undefined {
   if (callsign && name) return `${callsign} — ${name}`;
   if (callsign) return callsign;
@@ -78,6 +109,7 @@ export default function App() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const inProgressRef = useRef<Map<string, string>>(new Map());
+  const recentFinalIdsRef = useRef<Map<string, string>>(new Map());
   const sendRef = useRef<(p: unknown) => void>(() => {});
   const messageInputRef = useRef<MessageInputHandle>(null);
   const spectroRef = useRef<SpectrogramHandle>(null);
@@ -169,19 +201,20 @@ export default function App() {
       case 'rx_message': {
         const uid = msg.utterance_id;
         if (msg.partial) {
-          setMessages((prev) => {
-            const existingId = inProgressRef.current.get(uid);
-            if (existingId) {
-              return prev.map((e) =>
+          const existingId = inProgressRef.current.get(uid);
+          if (existingId) {
+            setMessages((prev) =>
+              prev.map((e) =>
                 e.id === existingId
                   ? { ...e, text: msg.text, partial: true, callsign_spans: msg.callsign_spans }
                   : e
-              );
-            }
+              )
+            );
+          } else {
             const id = nextId();
             inProgressRef.current.set(uid, id);
-            return [
-              ...prev,
+            setMessages((prev) => [
+              ...removeAdjacentDuplicates(prev, msg.text),
               {
                 id,
                 timestamp: formatTime(msg.ts),
@@ -191,15 +224,17 @@ export default function App() {
                 partial: true,
                 callsign_spans: msg.callsign_spans,
               },
-            ];
-          });
+            ]);
+          }
         } else {
+          const existingId = inProgressRef.current.get(uid);
+          inProgressRef.current.delete(uid);
           const speaker = speakerLabel(msg.speaker_callsign, msg.speaker_name, msg.cluster_label);
-          setMessages((prev) => {
-            const existingId = inProgressRef.current.get(uid);
-            inProgressRef.current.delete(uid);
-            if (existingId) {
-              return prev.map((e) =>
+          if (existingId) {
+            recentFinalIdsRef.current.set(uid, existingId);
+            pruneMap(recentFinalIdsRef.current, 10);
+            setMessages((prev) =>
+              prev.map((e) =>
                 e.id === existingId
                   ? {
                       ...e,
@@ -210,12 +245,16 @@ export default function App() {
                       callsign_spans: msg.callsign_spans,
                     }
                   : e
-              );
-            }
-            return [
-              ...prev,
+              )
+            );
+          } else {
+            const id = nextId();
+            recentFinalIdsRef.current.set(uid, id);
+            pruneMap(recentFinalIdsRef.current, 10);
+            setMessages((prev) => [
+              ...removeAdjacentDuplicates(prev, msg.text),
               {
-                id: nextId(),
+                id,
                 timestamp: formatTime(msg.ts),
                 kind: 'rx',
                 sender: msg.from || msg.callsign || undefined,
@@ -224,8 +263,22 @@ export default function App() {
                 cluster_label: msg.cluster_label,
                 callsign_spans: msg.callsign_spans,
               },
-            ];
-          });
+            ]);
+          }
+        }
+        break;
+      }
+
+      case 'rx_message_patch': {
+        const entryId = recentFinalIdsRef.current.get(msg.utterance_id);
+        if (entryId) {
+          setMessages((prev) =>
+            prev.map((e) =>
+              e.id === entryId
+                ? { ...e, callsign_spans: [...(e.callsign_spans ?? []), ...msg.callsign_spans].sort((a, b) => a[0] - b[0]) }
+                : e
+            )
+          );
         }
         break;
       }
