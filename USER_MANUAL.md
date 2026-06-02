@@ -21,7 +21,9 @@ This manual covers day-to-day operation of Radio-TTY. For installation and serve
 13. [Settings](#13-settings)
 14. [Your account](#14-your-account)
 15. [Admin — managing users](#15-admin--managing-users)
-16. [Text shortcuts reference](#16-text-shortcuts-reference)
+16. [NCS — Net Control Station mode](#16-ncs--net-control-station-mode)
+17. [Browser notifications](#17-browser-notifications)
+18. [Text shortcuts reference](#18-text-shortcuts-reference)
 
 ---
 
@@ -57,41 +59,51 @@ If the server is unreachable, the status bar shows **OFFLINE** in amber. Refresh
 ## 2. The interface
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│ [👤 Dad ▾] │ STATIONS  JOURNAL │ CONTACTS │ CONFIG  WATERFALL│  ← Top bar
-│                  STATION STATUS: READY  ●                    │
-│    [GMRS] │ [LISTENING]  [TX ENABLED] │ [ADMIN] │ [🗑]  [☀] │
-├──────────────────────────────────────────────────────────────┤
-│  [Pending stations bar — amber chips, hidden when empty]     │
-├──────────────────────────────────────────────────────────────┤
-│                │                                             │
-│  Spectrogram   │           Chat display                      │
-│  (waterfall)   │                                             │
-│                │  [RX] WQZX999 — Dave > Hello this is Bravo │
-│                │  [TX] Dad > Good morning                    │
-│                │                                             │
-├──────────────────────────────────────────────────────────────┤
-│  Status: Radio connected · Volume OK · Channel clear         │
-├──────────────────────────────────────────────────────────────┤
-│  [Standing by] [QSL] [Copy that] [QSY to channel {N}]  ⚙    │  ← Quick messages
-├──────────────────────────────────────────────────────────────┤
-│  [THIS IS]  Message [_________________________] [SEND ↵]     │
-└──────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────┐
+│ [👤 Dad ▾] │ STATIONS  JOURNAL  CONTACTS  WATERFALL [NCS MODE] │ STATUS: READY ●│  ← Top bar
+│            [GMRS] [LISTENING] [TX ENABLED] [READ ALOUD] [NOTIFY] │ [🗑]  [☀/🌙] │
+├────────────────────────────────────────────────────────────────────────────────┤
+│  [Pending stations bar — amber chips, hidden when empty]                       │
+├────────────────────────────────────────────────────────────────────────────────┤
+│                │                                                                │
+│  Spectrogram   │           Chat display                                         │
+│  (waterfall)   │                                                                │
+│                │  [RX] WQZX999 — Dave > Hello this is Bravo                    │
+│                │  [TX] Dad > Good morning                                       │
+│                │                                                                │
+├────────────────────────────────────────────────────────────────────────────────┤
+│  Status: Radio connected · Volume OK · Channel clear                           │
+├────────────────────────────────────────────────────────────────────────────────┤
+│  [Standing by] [QSL] [Copy that] [QSY to channel {N}]  ⚙                      │  ← Quick messages
+├────────────────────────────────────────────────────────────────────────────────┤
+│  [THIS IS]  Message [_________________________] [SEND ↵]                       │
+└────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Top bar — left side:**
-- **Account chip** (e.g. *👤 Dad*) — your name; click to edit your profile, change your password, or sign out
-- **STATIONS** — toggle the session attendance panel
-- **JOURNAL** — toggle the journals panel
-- **CONTACTS** — open the shared contacts list
-- **CONFIG** — toggle personal settings panel
-- **WATERFALL** — show or hide the spectrogram waterfall (preference is saved locally per browser)
-- **ADMIN** — station settings and user management (admin accounts only)
+**Account chip** (e.g. *👤 Dad*) — click to open a menu with:
+- **Edit Profile** — change operator name, call sign, location, avatar emoji, TTS voice, speech speed
+- **Change Password**
+- **Settings** — toggle your personal settings panel
+- **Admin** — toggle the Admin panel (admin accounts only)
+- **Sign Out**
 
-**Top bar — right side:**
-- **GMRS / FRS badge** — current service mode; click to toggle
+**Panel toggles** (highlighted when the panel is open):
+- **STATIONS** — session attendance panel
+- **JOURNAL** — journals panel
+- **CONTACTS** — shared contacts list
+- **WATERFALL** — spectrogram waterfall (preference saved per browser)
+- **NCS MODE** — Net Control Station panel (admin accounts only; red when active)
+
+**Station status** (center) — current state (READY, Transmitting, etc.) with an FCC online indicator dot.
+
+**Radio controls** (right side of top bar):
+- **GMRS / FRS** — current service mode; click to toggle
 - **LISTENING / LISTEN** — STT active; click to pause automatic transcription
 - **TX ENABLED / LISTEN ONLY** — transmit status; click to toggle listen-only for your account
+- **READ ALOUD** — when active (blue), incoming RX transcripts are spoken aloud through your browser audio
+- **NOTIFY** — when active (blue), browser notifications fire for incoming RX and SKYWARN alerts while the tab is in the background (browser permission required on first enable)
+
+**UI utilities:**
 - **Trash icon** — clear the chat log
 - **Sun/moon icon** — toggle dark/light mode
 
@@ -114,6 +126,8 @@ Each received entry is labelled **[RX]** in the chat (in green). Outgoing entrie
 - **Cross-transmission detection:** If a callsign is phonetically spelled across two separate keying events (e.g. the first half in one transmission, the second half in the next), it is still detected and highlighted in both chat entries.
 
 **Profanity filter:** If your profanity filter is enabled (see [Settings](#13-settings)), profanity is masked in received text with asterisks. Other users with the filter off see the unmasked text. This is a per-account setting.
+
+**Read Aloud:** Enable the **READ ALOUD** button in the top bar to have finalized RX transcripts spoken aloud through your browser. The station's TTS voice is used. Useful for eyes-busy operation or hearing-accommodated operators. This is a per-account preference and does not affect other users.
 
 ---
 
@@ -280,7 +294,7 @@ The family journal at `/journal` is a public page — no login required. It show
 
 ## 13. Settings
 
-Open the **Config** panel (CONFIG button in the top bar) to manage your personal settings. All changes take effect immediately and are saved to your account.
+Open your personal settings panel by clicking your **account chip** in the top bar and selecting **Settings**. All changes take effect immediately and are saved to your account.
 
 ### Audio (station-wide, admin)
 | Setting | Description |
@@ -346,7 +360,7 @@ Ends your session on this device. Your preferences are saved and will be restore
 
 ## 15. Admin — managing users
 
-Admin accounts have access to the **ADMIN** button in the top bar. The Admin panel has two sections: station settings and user accounts.
+Admin accounts have access to the **Admin** item in the account menu (click your name chip → **Admin**), or via the **NCS MODE** button which opens the NCS panel alongside the Admin panel. The Admin panel has three sections: station settings, user accounts, and NCS / SKYWARN.
 
 ### User accounts
 
@@ -365,9 +379,94 @@ The **User Accounts** table lists all family member accounts.
 
 > **Security note:** For public internet access, put a TLS reverse proxy (nginx, Caddy) in front of the app. Passwords are hashed with PBKDF2-SHA256 (260,000 iterations, per-user salt) but session tokens travel in plaintext over HTTP without TLS.
 
+### NCS / SKYWARN (admin only)
+
+The **NCS / SKYWARN** section at the bottom of the Admin panel configures the Net Control Station plugin:
+
+| Field | Description |
+|-------|-------------|
+| NWS County Zone | NWS zone code for SKYWARN alert polling (e.g. `MIZ025`). Empty = disabled. Find your zone at weather.gov. |
+
+The announcement interval (how often net ID is broadcast during an active NCS session) defaults to 10 minutes and is set in `config.json` (`ncs_announcement_interval`).
+
 ---
 
-## 16. Text shortcuts reference
+## 16. NCS — Net Control Station mode
+
+NCS mode is for licensed operators running a net. It is available to admin accounts only. When active, the **NCS MODE** button in the top bar glows red and the **NCS panel** appears on the left side of the screen alongside the other panels.
+
+### Activating NCS mode
+
+Click **NCS MODE** in the top bar. The button turns red and the NCS panel opens. Click again to deactivate — ongoing roster and audio state are reset when NCS mode ends. An end-of-net journal is automatically saved on deactivation.
+
+### Roster
+
+The roster table lists stations that have checked in during the net. Each entry shows:
+
+| Column | Values |
+|--------|--------|
+| Callsign | Station callsign |
+| Status | **Checked In** / **Standby** / **Logged Out** |
+| Traffic | **Routine** / **Priority** / **Emergency** |
+
+**Checking in a station:** Type the callsign in the check-in bar at the top of the NCS panel and press **Enter** (or click **Check In**). The station appears in the roster as Checked In / Routine.
+
+**Changing status or traffic:** Click the Status or Traffic badge in the roster row to cycle through the available values.
+
+### BREAK BREAK
+
+The red **BREAK BREAK** button immediately interrupts the current net. When pressed:
+
+1. Any queued TX is drained.
+2. TX is blocked for 2 seconds while an acknowledgement is broadcast to all connected clients.
+3. A pulsing animation on the button confirms the break was sent.
+
+Use BREAK BREAK for emergency announcements or to immediately silence the channel.
+
+### Instant replay
+
+Click **REPLAY** to hear the last 15 seconds of received audio played back through your browser. The replay buffer rolls continuously; clicking it at any moment lets you re-listen to something you may have missed.
+
+### SKYWARN alerts
+
+If a NWS county zone is configured in the Admin panel and internet is available, the NCS plugin polls api.weather.gov every 5 minutes for Extreme or Severe weather alerts. When one arrives:
+
+- A red alert banner appears at the top of the NCS panel showing the event name and headline.
+- A browser notification fires (if **NOTIFY** is enabled and the tab is hidden).
+- An auto-TX announcement is sent over the air (listen-before-talk checked first).
+
+### Net announcements
+
+While NCS mode is active, the system periodically transmits a net ID announcement at the configured interval (default 10 minutes). The listen-before-talk check prevents it from interrupting an active transmission.
+
+### End-of-net journal
+
+When you deactivate NCS mode, a session journal is automatically saved with the roster and transcript. It appears in the Journals panel and can be published to the public family journal like any other journal.
+
+---
+
+## 17. Browser notifications
+
+Radio-TTY can fire browser (OS-level) notifications when the tab is in the background — useful when the station is monitoring in another window or on a separate screen.
+
+**Enabling notifications:**
+1. Click the **NOTIFY** button in the top bar. It turns blue when active.
+2. On first enable, the browser asks for notification permission. Grant it.
+3. If you deny permission in the browser, the button shows an error and remains off. You will need to re-enable the permission in your browser settings.
+
+**What triggers a notification:**
+- A final RX transcript arrives (shows callsign + first 120 characters of the text)
+- A SKYWARN alert fires from the NCS plugin (shows event name)
+
+Notifications only appear when the Radio-TTY tab is **not** in focus. If you are actively looking at the tab, no notification is shown.
+
+**Disabling notifications:** Click **NOTIFY** again. The button returns to the unselected state and notifications stop.
+
+This preference is saved to your account and restored across sessions and devices.
+
+---
+
+## 18. Text shortcuts reference
 
 Radio-TTY automatically expands common TTY, Q-signal, and CW abbreviations before transmitting.
 
