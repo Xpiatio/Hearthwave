@@ -803,18 +803,19 @@ export default function App() {
           onDismissAll={() => send({ type: 'dismiss_all_pending' })}
         />
 
-        <ChatDisplay
-          entries={messages}
-          contacts={contacts}
-          showCallsignChips={showCallsignChips}
-          onEnrollCluster={handleEnrollCluster}
-        />
-
-        <Spectrogram
-          ref={spectroRef}
-          colormap={spectroColormap}
-          timeWindowS={spectroTimeWindowS}
-        />
+        <Box sx={{ display: 'flex', flexDirection: 'row', flex: '1 1 auto', overflow: 'hidden' }}>
+          <Spectrogram
+            ref={spectroRef}
+            colormap={spectroColormap}
+            timeWindowS={spectroTimeWindowS}
+          />
+          <ChatDisplay
+            entries={messages}
+            contacts={contacts}
+            showCallsignChips={showCallsignChips}
+            onEnrollCluster={handleEnrollCluster}
+          />
+        </Box>
 
         <StatusRow status={radioStatus} />
 

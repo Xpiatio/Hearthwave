@@ -172,16 +172,19 @@ export const Spectrogram = forwardRef<SpectrogramHandle, Props>(
         square
         elevation={0}
         sx={{
+          flexShrink: 0,
+          width: 72,
+          height: '100%',
           overflow: 'hidden',
           bgcolor: '#000',
-          borderTop: 1,
+          borderRight: 1,
           borderColor: 'divider',
           lineHeight: 0,
         }}
       >
         <canvas
           ref={canvasRef}
-          style={{ display: 'block', width: '100%', height: CANVAS_HEIGHT }}
+          style={{ display: 'block', width: '100%', height: '100%' }}
           width={256}
           height={CANVAS_HEIGHT}
           aria-label="Live audio spectrogram waterfall"
