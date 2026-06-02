@@ -207,6 +207,11 @@ class ConnectionState:
     user_id: str
     is_admin: bool
     prefs: dict = dataclasses.field(default_factory=lambda: dict(DEFAULT_PREFS))
+    # Voice PTT session
+    voice_tx_active:   bool = False
+    voice_tx_chunks:   list = dataclasses.field(default_factory=list)  # list[bytes]
+    voice_tx_callsign: str  = ""
+    voice_tx_operator: str  = ""
 
 
 class ConnectionManager:
@@ -520,6 +525,10 @@ async def _tx_pump() -> None:
         except asyncio.CancelledError:
             break
 
+        if payload.get("_voice_tx"):
+            await _handle_voice_tx(payload)
+            continue
+
         if _synthesizer is None or _config is None:
             await _manager.broadcast({"type": "tx_status", "status": "idle"})
             continue
@@ -658,6 +667,84 @@ async def _tx_pump() -> None:
 # ---------------------------------------------------------------------------
 # Voice helpers
 # ---------------------------------------------------------------------------
+
+async def _handle_voice_tx(payload: dict) -> None:
+    """Transcribe browser voice audio, key PTT, play raw audio, broadcast tx_echo."""
+    import numpy as np
+
+    audio_bytes:  bytes = payload["audio_bytes"]
+    sample_rate:  int   = payload.get("sample_rate", 16000)
+    callsign:     str   = payload.get("callsign") or (_config.callsign if _config else "")
+    operator:     str   = payload.get("operator") or (_config.name if _config else "")
+    display_name: str   = payload.get("_display_name") or ""
+    now = datetime.datetime.now(datetime.timezone.utc)
+
+    # Pause STT so the worker doesn't use the Whisper model concurrently
+    if _stt_worker is not None:
+        _stt_worker.pause()
+    try:
+        int16_arr   = np.frombuffer(audio_bytes, dtype=np.int16)
+        float32_arr = int16_arr.astype(np.float32) / 32768.0
+
+        transcription: str | None = None
+        mc = _stt_worker.model_cache if _stt_worker else None
+        if mc is not None:
+            try:
+                transcription = await asyncio.to_thread(mc.whisper.transcribe, float32_arr)
+            except Exception as exc:
+                _log.warning("voice_tx STT error: %s", exc)
+
+        chat_text = transcription or "[unintelligible]"
+        await _manager.broadcast({
+            "type":         "tx_echo",
+            "ts":           now.isoformat(),
+            "callsign":     callsign,
+            "operator":     operator,
+            "display_name": display_name,
+            "text":         chat_text,
+            "target_call":  "ALL",
+            "target_name":  "",
+        })
+
+        # Key PTT and play raw voice audio
+        ptt = make_ptt(_config)
+        out_dev = _config.output_device if (_config and _config.output_device != -1) else None
+        try:
+            ptt.key()
+            await asyncio.to_thread(_play_voice_blocking, int16_arr, sample_rate, out_dev)
+        finally:
+            ptt.unkey()
+
+    except Exception as exc:
+        _log.error("_handle_voice_tx: %s", exc)
+        await _manager.broadcast({"type": "error", "detail": f"Voice TX error: {exc}"})
+    finally:
+        if _stt_worker is not None and _stt_listening:
+            _stt_worker.resume()
+        await _manager.broadcast({"type": "tx_status", "status": "idle"})
+
+
+def _play_voice_blocking(audio: "np.ndarray", sample_rate: int, output_device) -> None:
+    """Play int16 PCM audio through the configured output device, blocking until done.
+    Resamples if the device's native rate differs from the input rate."""
+    import math
+    import numpy as np
+
+    try:
+        dev_idx   = output_device if output_device is not None else sd.default.device[1]
+        native_sr = int(sd.query_devices(dev_idx)["default_samplerate"])
+    except Exception:
+        native_sr = sample_rate
+
+    if native_sr != sample_rate:
+        from scipy.signal import resample_poly
+        gcd       = math.gcd(sample_rate, native_sr)
+        resampled = resample_poly(audio.astype(np.float32), native_sr // gcd, sample_rate // gcd)
+        audio     = np.clip(resampled, -32768, 32767).astype(np.int16)
+
+    sd.play(audio, samplerate=native_sr, device=output_device)
+    sd.wait()
+
 
 def _voice_label(stem: str) -> str:
     """Turn 'en_US-ryan-high' into 'Ryan (High)'."""
@@ -1604,6 +1691,73 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                     })
                 except KeyError as exc:
                     await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
+
+            elif msg_type == "voice_tx_start":
+                if await _check_listen_only(ws, state):
+                    continue
+                callsign = (data.get("callsign") or "").strip()
+                if not callsign:
+                    await _manager.send_to(ws, {"type": "voice_tx_error", "detail": "Callsign required."})
+                    continue
+                state.voice_tx_active   = True
+                state.voice_tx_chunks   = []
+                state.voice_tx_callsign = callsign
+                state.voice_tx_operator = (data.get("operator") or "").strip()
+                await _manager.send_to(ws, {"type": "voice_tx_ack"})
+
+            elif msg_type == "voice_tx_chunk":
+                if not state.voice_tx_active:
+                    continue
+                b64 = data.get("data") or ""
+                try:
+                    raw = base64.b64decode(b64)
+                except Exception:
+                    _log.warning("voice_tx_chunk: invalid base64")
+                    continue
+                state.voice_tx_chunks.append(raw)
+                # Safety cap: 120 s @ 16 kHz int16 = 3,840,000 bytes
+                if sum(len(c) for c in state.voice_tx_chunks) > 3_840_000:
+                    state.voice_tx_active = False
+                    state.voice_tx_chunks = []
+                    await _manager.send_to(ws, {"type": "voice_tx_error", "detail": "Recording too long (120 s max)."})
+
+            elif msg_type == "voice_tx_end":
+                if not state.voice_tx_active:
+                    continue
+                chunks   = state.voice_tx_chunks
+                callsign = state.voice_tx_callsign
+                operator = state.voice_tx_operator
+                # Reset immediately so a fast second press can start
+                state.voice_tx_active   = False
+                state.voice_tx_chunks   = []
+                state.voice_tx_callsign = ""
+                state.voice_tx_operator = ""
+
+                audio_bytes = b"".join(chunks)
+                if len(audio_bytes) < 9_600:   # < 300 ms @ 16 kHz int16
+                    await _manager.send_to(ws, {"type": "voice_tx_error", "detail": "Recording too short."})
+                    continue
+
+                display_name = ""
+                if _users_store:
+                    rec = _users_store.get_public_one(state.user_id) or {}
+                    display_name = rec.get("display_name") or ""
+
+                await _manager.broadcast({"type": "tx_status", "status": "transmitting"})
+                await _tx_queue.put({
+                    "_voice_tx":     True,
+                    "audio_bytes":   audio_bytes,
+                    "sample_rate":   16000,
+                    "callsign":      callsign,
+                    "operator":      operator,
+                    "_display_name": display_name,
+                })
+
+            elif msg_type == "voice_tx_cancel":
+                state.voice_tx_active   = False
+                state.voice_tx_chunks   = []
+                state.voice_tx_callsign = ""
+                state.voice_tx_operator = ""
 
             else:
                 _log.debug("Unknown message type from client: %r", msg_type)
