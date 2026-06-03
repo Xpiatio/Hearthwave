@@ -1057,6 +1057,10 @@ async def _lifespan(app: FastAPI):
         tx_queue=_tx_queue,
         config_getter=lambda: _config,
         channel_clear_fn=lambda: _channel_clear,
+        contacts_getter=lambda: _contacts_store.get_all() if _contacts_store else [],
+        add_contact_fn=lambda c: _contacts_store.add_contact(c) if _contacts_store else [],
+        update_contact_fn=lambda cs, u: _contacts_store.update_contact(cs, u) if _contacts_store else [],
+        broadcast_contacts_fn=lambda contacts: _manager.broadcast({"type": "contacts", "contacts": contacts}),
     ))
 
     _synthesizer = TTSSynthesizer(

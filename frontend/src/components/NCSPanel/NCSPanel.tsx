@@ -20,19 +20,23 @@ import {
   Typography,
 } from '@mui/material';
 import CampaignIcon from '@mui/icons-material/Campaign';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ReplayIcon from '@mui/icons-material/Replay';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import type { PluginProps } from '../../plugins';
 import type { NCSEntry, NCSAlert } from '../../types/ws';
 
-type TrafficLevel = 'Routine' | 'Priority' | 'Emergency';
+type TrafficLevel = 'Routine' | 'Priority' | 'Emergency' | 'General' | 'Short Term' | 'IN-n-Out';
 type StationStatus = 'CheckedIn' | 'Standby' | 'LoggedOut';
 
 const TRAFFIC_COLORS: Record<TrafficLevel, 'default' | 'warning' | 'error'> = {
   Routine: 'default',
   Priority: 'warning',
   Emergency: 'error',
+  General: 'default',
+  'Short Term': 'default',
+  'IN-n-Out': 'default',
 };
 
 const STATUS_LABELS: Record<StationStatus, string> = {
@@ -72,6 +76,8 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
   const [roster, setRoster] = useState<NCSEntry[]>([]);
   const [alerts, setAlerts] = useState<NCSAlert[]>([]);
   const [callsignInput, setCallsignInput] = useState('');
+  const [nameInput, setNameInput] = useState('');
+  const [locationInput, setLocationInput] = useState('');
   const [trafficInput, setTrafficInput] = useState<TrafficLevel>('Routine');
   const [breakBreakFlash, setBreakBreakFlash] = useState(false);
   const [journalSavedMsg, setJournalSavedMsg] = useState<string | null>(null);
@@ -120,9 +126,11 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
   const handleCheckIn = useCallback(() => {
     const cs = callsignInput.trim().toUpperCase();
     if (!cs) return;
-    send({ type: 'ncs_checkin', callsign: cs, traffic: trafficInput });
+    send({ type: 'ncs_checkin', callsign: cs, traffic: trafficInput, name: nameInput.trim(), location: locationInput.trim() });
     setCallsignInput('');
-  }, [callsignInput, trafficInput, send]);
+    setNameInput('');
+    setLocationInput('');
+  }, [callsignInput, nameInput, locationInput, trafficInput, send]);
 
   const handleStatusToggle = useCallback((callsign: string, currentStatus: StationStatus) => {
     const next: StationStatus = currentStatus === 'CheckedIn' ? 'Standby' : 'CheckedIn';
@@ -190,40 +198,65 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
       )}
 
       {/* Check-in form */}
-      <Box sx={{ display: 'flex', gap: 1, px: 2, py: 1, alignItems: 'center', borderBottom: 1, borderColor: 'divider' }}>
-        <TextField
-          size="small"
-          placeholder="Callsign"
-          value={callsignInput}
-          onChange={(e) => setCallsignInput(e.target.value.toUpperCase())}
-          onKeyDown={(e) => { if (e.key === 'Enter') handleCheckIn(); }}
-          disabled={!active}
-          slotProps={{ htmlInput: { style: { fontFamily: 'monospace', fontWeight: 700, width: 90 } } }}
-          sx={{ width: 110 }}
-          aria-label="Callsign to check in"
-        />
-        <FormControl size="small" sx={{ minWidth: 110 }}>
-          <InputLabel id="ncs-traffic-label">Traffic</InputLabel>
-          <Select
-            labelId="ncs-traffic-label"
-            label="Traffic"
-            value={trafficInput}
-            onChange={(e) => setTrafficInput(e.target.value as TrafficLevel)}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, px: 2, py: 1, borderBottom: 1, borderColor: 'divider' }}>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          <TextField
+            size="small"
+            placeholder="Callsign"
+            value={callsignInput}
+            onChange={(e) => setCallsignInput(e.target.value.toUpperCase())}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleCheckIn(); }}
             disabled={!active}
+            slotProps={{ htmlInput: { style: { fontFamily: 'monospace', fontWeight: 700, width: 90 } } }}
+            sx={{ width: 110 }}
+            aria-label="Callsign to check in"
+          />
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+            <InputLabel id="ncs-traffic-label">Traffic</InputLabel>
+            <Select
+              labelId="ncs-traffic-label"
+              label="Traffic"
+              value={trafficInput}
+              onChange={(e) => setTrafficInput(e.target.value as TrafficLevel)}
+              disabled={!active}
+            >
+              <MenuItem value="Routine">Routine</MenuItem>
+              <MenuItem value="Priority">Priority</MenuItem>
+              <MenuItem value="Emergency">Emergency</MenuItem>
+              <MenuItem value="General">General</MenuItem>
+              <MenuItem value="Short Term">Short Term</MenuItem>
+              <MenuItem value="IN-n-Out">IN-n-Out</MenuItem>
+            </Select>
+          </FormControl>
+        </Box>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          <TextField
+            size="small"
+            placeholder="Name"
+            value={nameInput}
+            onChange={(e) => setNameInput(e.target.value)}
+            disabled={!active}
+            sx={{ flex: 1 }}
+            aria-label="Operator name"
+          />
+          <TextField
+            size="small"
+            placeholder="Location"
+            value={locationInput}
+            onChange={(e) => setLocationInput(e.target.value)}
+            disabled={!active}
+            sx={{ flex: 1 }}
+            aria-label="Station location"
+          />
+          <Button
+            variant="contained"
+            size="small"
+            onClick={handleCheckIn}
+            disabled={!active || !callsignInput.trim()}
           >
-            <MenuItem value="Routine">Routine</MenuItem>
-            <MenuItem value="Priority">Priority</MenuItem>
-            <MenuItem value="Emergency">Emergency</MenuItem>
-          </Select>
-        </FormControl>
-        <Button
-          variant="contained"
-          size="small"
-          onClick={handleCheckIn}
-          disabled={!active || !callsignInput.trim()}
-        >
-          CHECK IN
-        </Button>
+            CHECK IN
+          </Button>
+        </Box>
       </Box>
 
       {/* Roster table */}
@@ -243,7 +276,14 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
               {roster.map((entry) => (
                 <TableRow key={entry.callsign} hover>
                   <TableCell sx={{ fontFamily: 'monospace', fontWeight: 700, py: 0.5 }}>
-                    {entry.callsign}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      {entry.callsign}
+                      {entry.verified && (
+                        <Tooltip title="Verified contact">
+                          <CheckCircleIcon fontSize="inherit" color="success" sx={{ fontSize: '0.9rem' }} />
+                        </Tooltip>
+                      )}
+                    </Box>
                     {entry.name && (
                       <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary' }}>{entry.name}</Typography>
                     )}

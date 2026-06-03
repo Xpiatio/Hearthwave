@@ -15,11 +15,13 @@ import datetime
 import json as _json
 import logging
 import urllib.request
-from typing import Callable
+from typing import Callable, Optional
 
 from backend.plugins.base import BasePlugin
 
 _log = logging.getLogger(__name__)
+
+_VALID_TRAFFIC = {"Routine", "Priority", "Emergency", "General", "Short Term", "IN-n-Out"}
 
 # Bytes per sample for float32 PCM (the format captured by STTWorker)
 _BYTES_PER_SAMPLE = 4
@@ -56,11 +58,19 @@ class NCSPlugin(BasePlugin):
         tx_queue: asyncio.Queue,
         config_getter: Callable,
         channel_clear_fn: Callable[[], bool],
+        contacts_getter: Optional[Callable] = None,
+        add_contact_fn: Optional[Callable] = None,
+        update_contact_fn: Optional[Callable] = None,
+        broadcast_contacts_fn: Optional[Callable] = None,
     ) -> None:
         self._broadcast = broadcast_fn
         self._tx_queue = tx_queue
         self._get_config = config_getter
         self._channel_clear = channel_clear_fn
+        self._contacts_getter = contacts_getter
+        self._add_contact_fn = add_contact_fn
+        self._update_contact_fn = update_contact_fn
+        self._broadcast_contacts_fn = broadcast_contacts_fn
 
         self._active = False
         # Roster: callsign → {callsign, status, traffic, name, location, checkin_time}
@@ -186,15 +196,65 @@ class NCSPlugin(BasePlugin):
     async def _handle_checkin(self, callsign: str, traffic: str, name: str, location: str) -> None:
         now = datetime.datetime.now(tz=datetime.timezone.utc).timestamp()
         existing = self._roster.get(callsign, {})
+
+        verified = False
+        if self._contacts_getter is not None:
+            contacts_index = {
+                (c.get("callsign") or "").upper(): c
+                for c in self._contacts_getter()
+            }
+            contact = contacts_index.get(callsign)
+            if contact is not None:
+                verified = bool(contact.get("verified", False))
+                name = name or contact.get("name", "")
+                location = location or contact.get("location", "")
+            else:
+                new_contact: dict = {"callsign": callsign, "name": name, "location": location}
+                if self._add_contact_fn is not None:
+                    try:
+                        updated_list = self._add_contact_fn(new_contact)
+                        if self._broadcast_contacts_fn is not None:
+                            asyncio.create_task(
+                                self._broadcast_contacts_fn(updated_list),
+                                name="ncs-broadcast-contacts",
+                            )
+                    except Exception as exc:
+                        _log.warning("NCS auto-add contact failed for %s: %s", callsign, exc)
+                if name and self._update_contact_fn is not None:
+                    from backend.fcc.auto_add import CallsignLookupWorker
+                    CallsignLookupWorker(callsign, name, location, self._on_fcc_result).start()
+
         self._roster[callsign] = {
             "callsign": callsign,
             "status": "CheckedIn",
-            "traffic": traffic if traffic in ("Routine", "Priority", "Emergency") else "Routine",
+            "traffic": traffic if traffic in _VALID_TRAFFIC else "Routine",
             "name": name or existing.get("name", ""),
             "location": location or existing.get("location", ""),
             "checkin_time": existing.get("checkin_time", now),
+            "verified": verified,
         }
         await self._broadcast_roster()
+
+    async def _on_fcc_result(self, callsign: str, name: str, location: str, result) -> None:
+        from backend.fcc.crossref import apply_verification
+        now_iso = datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
+        try:
+            contacts = self._contacts_getter() if self._contacts_getter is not None else []
+            contact = next(
+                (c for c in contacts if (c.get("callsign") or "").upper() == callsign),
+                None,
+            )
+            if contact is None or self._update_contact_fn is None:
+                return
+            updated = apply_verification(contact, result, now_iso)
+            updated_list = self._update_contact_fn(callsign, updated)
+            if self._broadcast_contacts_fn is not None:
+                await self._broadcast_contacts_fn(updated_list)
+            if callsign in self._roster:
+                self._roster[callsign]["verified"] = bool(updated.get("verified", False))
+                await self._broadcast_roster()
+        except Exception as exc:
+            _log.warning("NCS FCC result callback error for %s: %s", callsign, exc)
 
     async def _handle_break_break(self) -> None:
         self._break_break_pending = True
