@@ -9,11 +9,12 @@ WebSocket message types (client → server):
     standalone_id     — {"type": "standalone_id"}
     voice_preview     — {"type": "voice_preview", "text"?: str}
     add_contact       — {"type": "add_contact", "callsign": str, ...contact fields...}
+    update_contact    — {"type": "update_contact", "callsign": str, "original_name"?: str, ...updates...}
     fcc_lookup        — {"type": "fcc_lookup", "callsign": str, "name"?: str}
     verify_all        — {"type": "verify_all"}
     dismiss_pending   — {"type": "dismiss_pending", "callsign": str}
     dismiss_all_pending — {"type": "dismiss_all_pending"}
-    delete_contact    — {"type": "delete_contact", "callsign": str}
+    delete_contact    — {"type": "delete_contact", "callsign": str, "name"?: str}
     set_service_mode  — {"type": "set_service_mode", "service": "GMRS" | "FRS"}
     set_listen_only   — {"type": "set_listen_only", "listen_only": bool}
     list_input_devices — {"type": "list_input_devices"}
@@ -1059,7 +1060,7 @@ async def _lifespan(app: FastAPI):
         channel_clear_fn=lambda: _channel_clear,
         contacts_getter=lambda: _contacts_store.get_all() if _contacts_store else [],
         add_contact_fn=lambda c: _contacts_store.add_contact(c) if _contacts_store else [],
-        update_contact_fn=lambda cs, u: _contacts_store.update_contact(cs, u) if _contacts_store else [],
+        update_contact_fn=lambda cs, u, original_name=None: _contacts_store.update_contact(cs, u, original_name=original_name) if _contacts_store else [],
         broadcast_contacts_fn=lambda contacts: _manager.broadcast({"type": "contacts", "contacts": contacts}),
     ))
 
@@ -1400,6 +1401,25 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                 except ValueError as exc:
                     await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
 
+            elif msg_type == "update_contact":
+                if _contacts_store is None:
+                    await _manager.send_to(ws, {
+                        "type": "error",
+                        "detail": "Contacts store not initialised.",
+                    })
+                    continue
+                cs = normalize_callsign(data.get("callsign", ""))
+                if not cs:
+                    await _manager.send_to(ws, {"type": "error", "detail": "update_contact requires 'callsign'."})
+                    continue
+                original_name = (data.get("original_name") or "").strip() or None
+                updates = {k: v for k, v in data.items() if k not in ("type", "callsign", "original_name")}
+                try:
+                    updated = _contacts_store.update_contact(cs, updates, original_name=original_name)
+                    await _manager.broadcast({"type": "contacts", "contacts": updated})
+                except KeyError as exc:
+                    await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
+
             elif msg_type == "set_monitor":
                 global _monitor, _monitor_chunk_cb
                 enabled = bool(data.get("enabled", False))
@@ -1605,7 +1625,7 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                         updated = apply_verification(contact, result, now_iso)
                         if updated != contact:
                             try:
-                                _contacts_store.update_contact(cs, updated)
+                                _contacts_store.update_contact(cs, updated, original_name=name or None)
                                 updated_any = True
                             except Exception as exc:
                                 _log.warning("verify_all: update failed for %s: %s", cs, exc)
@@ -1641,8 +1661,9 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                 if not cs:
                     await _manager.send_to(ws, {"type": "error", "detail": "delete_contact requires a non-empty 'callsign' field."})
                     continue
+                contact_name = (data.get("name") or "").strip() or None
                 try:
-                    updated = _contacts_store.delete_contact(cs)
+                    updated = _contacts_store.delete_contact(cs, name=contact_name)
                     await _manager.broadcast({"type": "contacts", "contacts": updated})
                 except KeyError as exc:
                     await _manager.send_to(ws, {"type": "error", "detail": str(exc)})

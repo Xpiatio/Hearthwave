@@ -276,8 +276,10 @@ class TestClientMessageRouting:
         await ncs.on_client_message_received(
             {"type": "ncs_checkin", "callsign": "kd9xyz", "traffic": "Routine", "name": "Alice", "location": "GR"}
         )
-        assert "KD9XYZ" in ncs._roster
-        entry = ncs._roster["KD9XYZ"]
+        # Roster key is "callsign|name"
+        key = "KD9XYZ|Alice"
+        assert key in ncs._roster
+        entry = ncs._roster[key]
         assert entry["callsign"] == "KD9XYZ"
         assert entry["status"] == "CheckedIn"
         assert entry["name"] == "Alice"
@@ -291,47 +293,47 @@ class TestClientMessageRouting:
     async def test_ncs_checkin_normalizes_callsign_to_uppercase(self):
         ncs = make_ncs()
         await ncs.on_client_message_received({"type": "ncs_checkin", "callsign": "w8tst"})
-        assert "W8TST" in ncs._roster
+        assert "W8TST|" in ncs._roster
 
     async def test_ncs_status_update_changes_status(self):
         ncs = make_ncs()
-        # Pre-populate roster
-        ncs._roster["W8TST"] = {
+        # Roster key is "callsign|name"
+        ncs._roster["W8TST|"] = {
             "callsign": "W8TST", "status": "CheckedIn",
             "traffic": "Routine", "name": "", "location": "", "checkin_time": 0,
         }
         await ncs.on_client_message_received(
-            {"type": "ncs_status_update", "callsign": "W8TST", "status": "Standby"}
+            {"type": "ncs_status_update", "callsign": "W8TST", "name": "", "status": "Standby"}
         )
-        assert ncs._roster["W8TST"]["status"] == "Standby"
+        assert ncs._roster["W8TST|"]["status"] == "Standby"
 
     async def test_ncs_status_update_invalid_status_ignored(self):
         ncs = make_ncs()
-        ncs._roster["W8TST"] = {
+        ncs._roster["W8TST|"] = {
             "callsign": "W8TST", "status": "CheckedIn",
             "traffic": "Routine", "name": "", "location": "", "checkin_time": 0,
         }
         await ncs.on_client_message_received(
-            {"type": "ncs_status_update", "callsign": "W8TST", "status": "INVALID"}
+            {"type": "ncs_status_update", "callsign": "W8TST", "name": "", "status": "INVALID"}
         )
-        assert ncs._roster["W8TST"]["status"] == "CheckedIn"
+        assert ncs._roster["W8TST|"]["status"] == "CheckedIn"
 
     async def test_ncs_status_update_unknown_callsign_ignored(self):
         ncs = make_ncs()
         # Should not raise even if callsign not in roster
         await ncs.on_client_message_received(
-            {"type": "ncs_status_update", "callsign": "NOCALL", "status": "Standby"}
+            {"type": "ncs_status_update", "callsign": "NOCALL", "name": "", "status": "Standby"}
         )
-        assert "NOCALL" not in ncs._roster
+        assert not any(k.startswith("NOCALL|") for k in ncs._roster)
 
     async def test_ncs_remove_deletes_from_roster(self):
         ncs = make_ncs()
-        ncs._roster["W8TST"] = {
+        ncs._roster["W8TST|"] = {
             "callsign": "W8TST", "status": "CheckedIn",
             "traffic": "Routine", "name": "", "location": "", "checkin_time": 0,
         }
-        await ncs.on_client_message_received({"type": "ncs_remove", "callsign": "W8TST"})
-        assert "W8TST" not in ncs._roster
+        await ncs.on_client_message_received({"type": "ncs_remove", "callsign": "W8TST", "name": ""})
+        assert "W8TST|" not in ncs._roster
 
     async def test_ncs_remove_unknown_callsign_does_not_raise(self):
         ncs = make_ncs()
@@ -371,7 +373,7 @@ class TestBuildStateMsg:
 
     def test_roster_field_is_list(self):
         ncs = make_ncs()
-        ncs._roster["W8TST"] = {
+        ncs._roster["W8TST|"] = {
             "callsign": "W8TST", "status": "CheckedIn",
             "traffic": "Routine", "name": "", "location": "", "checkin_time": 0,
         }
@@ -394,42 +396,48 @@ class TestHandleCheckin:
     async def test_new_checkin_added_to_roster(self):
         ncs = make_ncs()
         await ncs._handle_checkin("W8TST", "Routine", "Bob", "GR")
-        assert "W8TST" in ncs._roster
-        assert ncs._roster["W8TST"]["traffic"] == "Routine"
+        assert "W8TST|Bob" in ncs._roster
+        assert ncs._roster["W8TST|Bob"]["traffic"] == "Routine"
 
     async def test_invalid_traffic_defaults_to_routine(self):
         ncs = make_ncs()
         await ncs._handle_checkin("W8TST", "NotReal", "", "")
-        assert ncs._roster["W8TST"]["traffic"] == "Routine"
+        assert ncs._roster["W8TST|"]["traffic"] == "Routine"
 
     async def test_emergency_traffic_accepted(self):
         ncs = make_ncs()
         await ncs._handle_checkin("W8TST", "Emergency", "", "")
-        assert ncs._roster["W8TST"]["traffic"] == "Emergency"
+        assert ncs._roster["W8TST|"]["traffic"] == "Emergency"
 
     async def test_priority_traffic_accepted(self):
         ncs = make_ncs()
         await ncs._handle_checkin("W8TST", "Priority", "", "")
-        assert ncs._roster["W8TST"]["traffic"] == "Priority"
+        assert ncs._roster["W8TST|"]["traffic"] == "Priority"
 
-    async def test_recheckin_preserves_original_checkin_time(self):
-        ncs = make_ncs()
-        await ncs._handle_checkin("W8TST", "Routine", "", "")
-        original_time = ncs._roster["W8TST"]["checkin_time"]
-        await ncs._handle_checkin("W8TST", "Priority", "NewName", "")
-        assert ncs._roster["W8TST"]["checkin_time"] == original_time
-
-    async def test_recheckin_updates_name_if_provided(self):
-        ncs = make_ncs()
-        await ncs._handle_checkin("W8TST", "Routine", "", "")
-        await ncs._handle_checkin("W8TST", "Routine", "Alice", "")
-        assert ncs._roster["W8TST"]["name"] == "Alice"
-
-    async def test_recheckin_preserves_existing_name_if_empty(self):
+    async def test_recheckin_same_callsign_and_name_preserves_checkin_time(self):
+        """Re-check-in of the exact same operator keeps the original check-in timestamp."""
         ncs = make_ncs()
         await ncs._handle_checkin("W8TST", "Routine", "Bob", "")
+        original_time = ncs._roster["W8TST|Bob"]["checkin_time"]
+        await ncs._handle_checkin("W8TST", "Priority", "Bob", "")
+        assert ncs._roster["W8TST|Bob"]["checkin_time"] == original_time
+
+    async def test_two_family_members_same_callsign_both_in_roster(self):
+        """GMRS family sharing one callsign: both operators appear as separate entries."""
+        ncs = make_ncs()
+        await ncs._handle_checkin("WQZE123", "Routine", "John Smith", "")
+        await ncs._handle_checkin("WQZE123", "Routine", "Jane Smith", "")
+        assert len(ncs._roster) == 2
+        assert "WQZE123|John Smith" in ncs._roster
+        assert "WQZE123|Jane Smith" in ncs._roster
+
+    async def test_recheckin_without_name_preserves_existing_name(self):
+        """A follow-up anonymous check-in (no name) for the same empty-name slot is idempotent."""
+        ncs = make_ncs()
         await ncs._handle_checkin("W8TST", "Routine", "", "")
-        assert ncs._roster["W8TST"]["name"] == "Bob"
+        await ncs._handle_checkin("W8TST", "Priority", "", "")
+        assert len(ncs._roster) == 1
+        assert "W8TST|" in ncs._roster
 
     async def test_broadcasts_roster_after_checkin(self):
         ncs = make_ncs()

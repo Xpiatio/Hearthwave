@@ -132,13 +132,13 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
     setLocationInput('');
   }, [callsignInput, nameInput, locationInput, trafficInput, send]);
 
-  const handleStatusToggle = useCallback((callsign: string, currentStatus: StationStatus) => {
-    const next: StationStatus = currentStatus === 'CheckedIn' ? 'Standby' : 'CheckedIn';
-    send({ type: 'ncs_status_update', callsign, status: next });
+  const handleStatusToggle = useCallback((entry: NCSEntry) => {
+    const next: StationStatus = entry.status === 'CheckedIn' ? 'Standby' : 'CheckedIn';
+    send({ type: 'ncs_status_update', callsign: entry.callsign, name: entry.name ?? '', status: next });
   }, [send]);
 
-  const handleRemove = useCallback((callsign: string) => {
-    send({ type: 'ncs_remove', callsign });
+  const handleRemove = useCallback((entry: NCSEntry) => {
+    send({ type: 'ncs_remove', callsign: entry.callsign, name: entry.name ?? '' });
   }, [send]);
 
   return (
@@ -274,7 +274,7 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
             </TableHead>
             <TableBody>
               {roster.map((entry) => (
-                <TableRow key={entry.callsign} hover>
+                <TableRow key={`${entry.callsign}|${entry.name ?? ''}`} hover>
                   <TableCell sx={{ fontFamily: 'monospace', fontWeight: 700, py: 0.5 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                       {entry.callsign}
@@ -294,7 +294,7 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
                         label={STATUS_LABELS[entry.status as StationStatus] ?? entry.status}
                         size="small"
                         color={entry.status === 'CheckedIn' ? 'success' : entry.status === 'Standby' ? 'warning' : 'default'}
-                        onClick={() => handleStatusToggle(entry.callsign, entry.status as StationStatus)}
+                        onClick={() => handleStatusToggle(entry)}
                         clickable
                         sx={{ fontWeight: 700, minWidth: 48 }}
                       />
@@ -313,7 +313,7 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
                   <TableCell sx={{ py: 0.5 }}>
                     <IconButton
                       size="small"
-                      onClick={() => handleRemove(entry.callsign)}
+                      onClick={() => handleRemove(entry)}
                       aria-label={`Remove ${entry.callsign}`}
                     >
                       <DeleteIcon fontSize="small" />

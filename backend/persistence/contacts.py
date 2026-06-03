@@ -217,16 +217,23 @@ class ContactsStore:
         atomic_json_write(self._path, self._contacts)
 
     def _dedup(self) -> None:
-        """Remove duplicate entries by primary callsign, keeping the last-written."""
-        seen: dict[str, int] = {}
+        """Remove duplicate entries by (callsign, name), keeping the last-written.
+
+        Two records are considered duplicates only when both their callsign and
+        their name match.  Records with the same callsign but different names
+        (e.g. family members sharing a GMRS licence) are kept as separate rows.
+        """
+        seen: dict[tuple[str, str], int] = {}
         for i, c in enumerate(self._contacts):
             cs = normalize_callsign(c.get("callsign", ""))
+            nm = (c.get("name") or "").strip().upper()
             if cs:
-                seen[cs] = i
+                seen[(cs, nm)] = i
         survivors = []
         for i, c in enumerate(self._contacts):
             cs = normalize_callsign(c.get("callsign", ""))
-            if not cs or seen.get(cs) == i:
+            nm = (c.get("name") or "").strip().upper()
+            if not cs or seen.get((cs, nm)) == i:
                 survivors.append(c)
         self._contacts = survivors
 
@@ -254,35 +261,48 @@ class ContactsStore:
         self._save()
         return list(self._contacts)
 
-    def update_contact(self, callsign: str, updates: dict) -> list[dict]:
+    def update_contact(self, callsign: str, updates: dict, original_name: str | None = None) -> list[dict]:
         """Merge ``updates`` into the contact identified by ``callsign``.
 
-        Raises ``KeyError`` if no contact with that callsign exists.
-        Persists atomically. Returns the updated list.
-        """
-        cs = normalize_callsign(callsign)
-        for i, c in enumerate(self._contacts):
-            if normalize_callsign(c.get("callsign", "")) == cs:
-                merged = dict(c)
-                merged.update(updates)
-                # Re-normalise callsign in case caller passed an update for it.
-                merged["callsign"] = normalize_callsign(merged.get("callsign", cs))
-                self._contacts[i] = merged
-                self._save()
-                return list(self._contacts)
-        raise KeyError(f"No contact with callsign {cs!r}")
-
-    def delete_contact(self, callsign: str) -> list[dict]:
-        """Remove the contact identified by *callsign*.
+        When multiple contacts share the same callsign (e.g. GMRS family
+        members), pass ``original_name`` to target the specific record.
+        Without it the first callsign match is updated (backwards-compatible).
 
         Raises ``KeyError`` if no matching contact exists.
         Persists atomically. Returns the updated list.
         """
         cs = normalize_callsign(callsign)
+        nm_key = original_name.strip().upper() if original_name is not None else None
+        for i, c in enumerate(self._contacts):
+            if normalize_callsign(c.get("callsign", "")) != cs:
+                continue
+            if nm_key is not None and (c.get("name") or "").strip().upper() != nm_key:
+                continue
+            merged = dict(c)
+            merged.update(updates)
+            merged["callsign"] = normalize_callsign(merged.get("callsign", cs))
+            self._contacts[i] = merged
+            self._save()
+            return list(self._contacts)
+        raise KeyError(f"No contact with callsign {cs!r}")
+
+    def delete_contact(self, callsign: str, name: str | None = None) -> list[dict]:
+        """Remove the contact identified by *callsign* (and optionally *name*).
+
+        When multiple contacts share the same callsign (e.g. GMRS family
+        members), pass ``name`` to delete only the matching record; omit it to
+        delete all records with that callsign.
+
+        Raises ``KeyError`` if no matching contact exists.
+        Persists atomically. Returns the updated list.
+        """
+        cs = normalize_callsign(callsign)
+        nm_key = name.strip().upper() if name is not None else None
         before = len(self._contacts)
         self._contacts = [
             c for c in self._contacts
             if normalize_callsign(c.get("callsign", "")) != cs
+            or (nm_key is not None and (c.get("name") or "").strip().upper() != nm_key)
         ]
         if len(self._contacts) == before:
             raise KeyError(f"No contact with callsign {cs!r}")
