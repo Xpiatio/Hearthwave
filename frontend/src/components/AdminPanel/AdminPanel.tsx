@@ -16,6 +16,8 @@ import {
   Select,
   MenuItem,
   Slider,
+  ToggleButtonGroup,
+  ToggleButton,
 } from '@mui/material';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
@@ -38,6 +40,7 @@ interface AdminConfig {
   geminiApiKeySet: boolean;
   journalsDir: string;
   ncsZone: string;
+  rxMode: string;
 }
 
 interface Props {
@@ -55,6 +58,7 @@ interface Props {
     gemini_api_key: string;
     journals_dir: string;
     ncs_zone: string;
+    rx_mode: string;
   }) => void;
   onPreviewVoice: (voiceId: string) => void;
   children?: React.ReactNode;
@@ -69,6 +73,7 @@ export function AdminPanel({ open, onClose, config, voices, voicePreviewBusy, on
   const [geminiKey, setGeminiKey] = useState('');
   const [journalsDir, setJournalsDir] = useState('');
   const [ncsZone, setNcsZone] = useState('');
+  const [rxMode, setRxMode] = useState('voice');
   const [showKey, setShowKey] = useState(false);
 
   // Only re-initialize when the dialog opens. Keeping `config` out of the dep
@@ -83,6 +88,7 @@ export function AdminPanel({ open, onClose, config, voices, voicePreviewBusy, on
     setGeminiKey('');
     setJournalsDir(config.journalsDir);
     setNcsZone(config.ncsZone);
+    setRxMode(config.rxMode || 'voice');
     setShowKey(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -97,6 +103,7 @@ export function AdminPanel({ open, onClose, config, voices, voicePreviewBusy, on
       gemini_api_key: geminiKey.trim(),
       journals_dir: journalsDir.trim(),
       ncs_zone: ncsZone.trim().toUpperCase(),
+      rx_mode: rxMode,
     });
     onClose();
   }
@@ -243,6 +250,30 @@ export function AdminPanel({ open, onClose, config, voices, voicePreviewBusy, on
             slotProps={{ htmlInput: { style: { fontFamily: 'monospace', fontWeight: 700 } } }}
             fullWidth
           />
+
+          <Divider />
+
+          <Typography variant="overline" sx={{ color: 'text.secondary', lineHeight: 1 }}>
+            Receive Mode
+          </Typography>
+
+          <Box>
+            <ToggleButtonGroup
+              size="small"
+              exclusive
+              value={rxMode}
+              onChange={(_, v) => v && setRxMode(v)}
+              aria-label="Receive mode"
+            >
+              <ToggleButton value="voice">Voice (STT)</ToggleButton>
+              <ToggleButton value="cw">CW / Morse</ToggleButton>
+            </ToggleButtonGroup>
+            <Typography variant="caption" sx={{ display: 'block', mt: 0.75, color: 'text.secondary' }}>
+              {rxMode === 'cw'
+                ? 'Incoming audio decoded as morse code. Whisper STT is disabled.'
+                : 'Incoming audio transcribed with Whisper speech-to-text.'}
+            </Typography>
+          </Box>
 
           {children && (
             <>

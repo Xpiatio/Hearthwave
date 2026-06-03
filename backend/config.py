@@ -126,6 +126,13 @@ class ServerConfig(dict):
     def ptt_serial_line(self) -> str:
         return self.get("ptt_serial_line", "RTS")
 
+    # ---- receive mode ----------------------------------------------------
+
+    @property
+    def rx_mode(self) -> str:
+        """Receive mode: 'voice' (Whisper STT) or 'cw' (morse decoder)."""
+        return self.get("rx_mode", "voice")
+
     # ---- attendance ------------------------------------------------------
 
     @property
