@@ -38,16 +38,17 @@ FastAPI Backend  ──►  PulseAudio / sounddevice
 - **Speech-to-text receive** — Whisper STT (`small.en` model) for voice; switchable to CW (Morse code) decoder via `rx_mode` config key
 - **CW (Morse code) receive** — FFT-based tone detection (400–1200 Hz), bandpass filter, envelope extraction, adaptive WPM estimation, and full morse table including prosigns; switchable live via the Admin panel (requires STT worker restart)
 - Text-to-speech transmit using Piper neural voices
-- **Voice PTT (browser microphone)** — PTT button in the top bar streams browser mic audio (16 kHz int16, chunked as base64) to the server for radio output with PTT keying; Whisper transcribes the audio client-side and the text appears in chat as a TX echo; max 120 s per transmission
+- **Voice PTT (browser microphone)** — PTT button in the top bar streams browser mic audio (16 kHz int16, chunked as base64) to the server for radio output with PTT keying; Whisper transcribes the audio client-side and the text appears in chat as a TX echo; max 120 s per transmission; a browser playback completion signal prevents the system from re-transcribing its own TTS output
 - **Read Aloud** — per-user toggle that pipes finalized RX transcripts through Piper TTS and plays audio in the operator's browser; useful for eyes-busy operation
 - **Browser notifications** — opt-in Web Notifications for final RX transcripts and SKYWARN alerts when the tab is in the background
 - **Speaker recognition / enrollment** — ecapa-tdnn model identifies speakers; RX messages carry `speaker_callsign`, `speaker_name`, and `cluster_label` fields; users can enroll a voice cluster to a callsign from the chat UI; voiceprints stored in `data/voiceprints/`
-- **NCS / SKYWARN plugin** — Net Control Station mode (admin-only): roster with check-in/standby/log-out and traffic priority, BREAK BREAK emergency interrupt, 15-second rolling audio replay buffer, NWS CAP SKYWARN alert feed (polls every 5 min), periodic net ID announcements, and end-of-net auto-journal
+- **GMRS family callsign support** — a single GMRS licence covers the whole household; multiple contacts and NCS check-ins can share the same callsign, each identified by a distinct name (John Smith / WQZE123 and Jane Smith / WQZE123 appear as separate, independently editable records)
+- **NCS / SKYWARN plugin** — Net Control Station mode (admin-only): roster with per-operator name, location, check-in/standby/log-out, and six traffic priority levels (Routine, Priority, Emergency, General, Short Term, IN-n-Out); automatic FCC verification badge per roster entry; auto-adds unknown check-in callsigns to contacts with background FCC lookup; BREAK BREAK emergency interrupt; 15-second rolling audio replay buffer; NWS CAP SKYWARN alert feed (polls every 5 min); periodic net ID announcements; end-of-net auto-journal
 - **Server Config panel** — admin UI for VAD threshold, Whisper model selection, PTT mode/port/line, audio monitor passthrough, and attendance tracking toggle (separate from Admin Settings)
 - **Audio monitor passthrough** — when enabled (`monitor_passthrough`), audio captured from the radio input is simultaneously played back through the output device for monitoring
 - Automatic FCC station ID every 15 minutes (GMRS requirement)
-- FCC database callsign lookup and verification
-- Shared contacts list (GMRS + HAM cross-reference, FCC-verified)
+- FCC database callsign lookup and verification; **Verify All** batch-checks every contact against the FCC database
+- **Shared contacts list** — GMRS + HAM cross-reference, FCC-verified; supports import/export as JSON or CSV; multiple records per callsign for GMRS family licences
 - Callsign highlighting in chat — amber chips with tooltip; handles compact, NATO phonetic, spaced, and hyphenated forms; detects callsigns that span two consecutive transmissions; verified contacts show a green ✓ badge; fuzzy correction snaps STT near-misses to known callsigns
 - WCAG 2.1 AA accessible pending stations bar — live region announces new detections to screen readers; per-callsign dismiss labels; name/location context in accessible chip labels
 - Quick messages bar — one-tap access to customisable pre-set phrases; supports `{Name}` placeholder; per-browser
@@ -228,7 +229,7 @@ Created from `data/config.json.example` on first install. Station-wide settings 
 | `ncs_zone` | `""` | NWS county zone code for SKYWARN alerts (e.g. `"MIZ025"`); empty = disabled |
 | `ncs_announcement_interval` | `600` | Seconds between periodic net ID announcements when NCS mode is active |
 
-> **Note:** `filter_profanity`, `listen_only`, `spectro_colormap`, and `spectro_time_window_s` are now **per-user preferences** stored in `data/users.json`, not in `config.json`.
+> **Note:** `filter_profanity`, `listen_only`, `spectro_colormap`, and `spectro_time_window_s` are **per-user preferences** stored in `data/users.json`, not in `config.json`.
 
 ### Per-user preferences
 
@@ -288,7 +289,7 @@ Radio-TTY/
 │   │   ├── auto_add.py         # Async background FCC lookup worker
 │   │   └── id_rule.py          # FCC 15-minute ID rule + format helpers
 │   ├── persistence/
-│   │   ├── contacts.py         # ContactsStore + GMRS/HAM cross-reference
+│   │   ├── contacts.py         # ContactsStore + GMRS/HAM cross-reference; deduplicates by (callsign, name) to support GMRS family licences
 │   │   ├── attendance.py       # Session attendance tracker
 │   │   ├── journal.py          # Journal save/load/publish (public HTML generation)
 │   │   ├── users.py            # UsersStore — PBKDF2 passwords, lockout, per-user prefs
@@ -300,7 +301,7 @@ Radio-TTY/
 │   └── plugins/
 │       ├── base.py             # BasePlugin with async hook methods
 │       ├── registry.py         # PluginRegistry singleton — collects and dispatches hooks
-│       └── ncs.py              # NCS/SKYWARN plugin — roster, BREAK BREAK, replay buffer, NWS CAP
+│       └── ncs.py              # NCS/SKYWARN plugin — roster (keyed by callsign|name for GMRS family support), BREAK BREAK, replay buffer, NWS CAP
 ├── frontend/
 │   └── src/
 │       ├── App.tsx             # Root component — auth guard, WS state, message dispatch
@@ -315,9 +316,10 @@ Radio-TTY/
 │       │   ├── LoginScreen/    # Profile picker + password form
 │       │   ├── AccountMenu/    # Profile chip — edit, change password, settings, admin, sign out
 │       │   ├── UsersPanel/     # Admin user management
-│       │   ├── NCSPanel/       # Net Control Station panel — roster, BREAK BREAK, replay, alerts
+│       │   ├── NCSPanel/       # Net Control Station panel — roster (supports GMRS family), BREAK BREAK, replay, alerts
+│       │   ├── ContactsDialog/ # Contacts CRUD with multi-callsign support, import/export, FCC lookup
 │       │   ├── PluginSlot/     # Thin wrapper mounting plugin React components
-│       │   ├── DesktopApp/     # Desktop layout shell (extracted from App.tsx)
+│       │   ├── DesktopApp/     # Desktop layout shell
 │       │   ├── MobileApp/      # Mobile layout shell with BottomNavigation tabs
 │       │   └── …               # (other existing components)
 │       ├── theme.ts            # MUI theme factory makeTheme(dark)

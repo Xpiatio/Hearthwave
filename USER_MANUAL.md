@@ -165,7 +165,7 @@ Each received entry is labelled **[RX]** in the chat (in green). Outgoing entrie
 
 **Callsign highlighting:** Callsigns in received text appear as amber chips. The system detects all common forms — compact (`WSLZ233`), NATO phonetic (*Whiskey Sierra Lima Zulu Two Three Three*), spaced (`W S L Z 2 3 3`), and hyphenated (`WSLZ-233`) — and collapses them into a single chip showing the compact canonical form.
 
-- **Known contacts** (in your shared contacts list) show an amber chip. Hover or tap for the operator name, location, and any GMRS/HAM cross-references.
+- **Known contacts** (in your shared contacts list) show an amber chip. Hover or tap for the operator name, location, and any GMRS/HAM cross-references. If multiple family members share the same callsign, the tooltip lists all of them.
 - **Verified contacts** show a green **✓** badge immediately after the chip, indicating the callsign has been confirmed against the FCC database.
 - **Unknown callsigns** appear as a dimmer chip and are added to the [Pending stations](#8-pending-stations) bar above the chat.
 - **Fuzzy correction:** If fuzzy callsign matching is enabled and Whisper mishears a single character (e.g. `WSLZ235` instead of `WSLZ233`), the chip is shown with the corrected canonical form if a known contact is only one character away.
@@ -241,24 +241,58 @@ The **Contacts** panel shows the shared station contact list. All users on all d
 
 | Field | Description |
 |-------|-------------|
-| Callsign | Primary callsign |
+| Callsign | Primary callsign (GMRS or HAM) |
 | Name | Operator name |
 | Location | City/state or grid square |
-| GMRS callsign | GMRS-specific callsign (if different) |
-| HAM callsign | Amateur radio callsign (if different) |
-| Verified | FCC verification status (✓ = verified) |
+| GMRS callsign | GMRS-specific callsign (if different from primary) |
+| HAM callsign | Amateur radio callsign (if different from primary) |
+| Verified | FCC verification status (✓ = confirmed against FCC database) |
 
-**Adding a contact:**
-1. Click **Add** in the Contacts panel.
-2. Enter the callsign at minimum.
-3. Click **FCC Look Up** to auto-fill name and location from the FCC database (requires internet).
-4. Click **Save**.
+### GMRS family callsigns
 
-**Editing / deleting:** Click a row to open the edit dialog.
+A GMRS licence covers an entire household, so multiple people share the same callsign. Radio-TTY supports this by allowing **multiple contact records with the same callsign**, each identified by a unique name.
 
-**Verify All:** Runs an FCC database check on every contact in the list.
+**Example:** John Smith / WQZE123 and Jane Smith / WQZE123 are stored as two separate rows. Each can be edited, deleted, or verified independently. When a callsign chip appears in chat, hovering shows all family members registered to that callsign.
 
-**Sort by suffix:** Sorts by the numeric suffix — useful for GMRS family callsigns that share a prefix.
+There is no limit to the number of records per callsign. A nameless record can still be created for stations where the operator is not yet known; a second record with a name is added separately and does not replace the nameless one.
+
+### Adding a contact
+
+1. Click **Add Contact** in the Contacts panel.
+2. Enter the callsign. This field is required.
+3. Optionally enter a name, location, GMRS callsign, and HAM callsign.
+4. Click **FCC Look Up** to auto-fill name and location from the FCC database (requires internet).
+5. Click **Save**.
+
+To add a second family member with the same callsign, simply click **Add Contact** again, enter the same callsign, and enter a different name. Both records are kept.
+
+### Editing a contact
+
+Click the **edit icon** (✏) in the row you want to change. The callsign cannot be changed during edit (it is the record's identifier). All other fields — name, location, GMRS callsign, HAM callsign — can be updated freely. Click **Save** to apply.
+
+> **Note:** When editing a contact that shares a callsign with other family members, only that specific record is changed. The others are not affected.
+
+### Deleting a contact
+
+Click the **delete icon** (🗑) in the row you want to remove. Only that specific record is deleted — other records with the same callsign are unaffected.
+
+### Verify All
+
+Runs an FCC database check on every contact in the list simultaneously. Verified contacts display a ✓ badge. This requires internet access.
+
+### Sort by suffix
+
+Sorts the list by the numeric suffix of each callsign — useful for GMRS family callsigns that share a prefix (e.g. WQZE100, WQZE200, WQZE543 sort together by 100, 200, 543 regardless of prefix).
+
+### Import and export
+
+Use the **Import** and **Export** buttons in the Contacts toolbar to transfer contacts in bulk.
+
+| Format | Description |
+|--------|-------------|
+| **Export JSON** | Saves the full contacts list as `contacts.json` — includes all fields and can be re-imported directly |
+| **Export CSV** | Saves as a spreadsheet-compatible CSV with columns: callsign, name, location, gmrs_callsign, ham_callsign, verified |
+| **Import** | Accepts `.json` or `.csv` files; all records in the file are added; existing records with the same callsign *and* name are updated in place |
 
 ---
 
@@ -445,19 +479,55 @@ NCS mode is for licensed operators running a net. It is available to admin accou
 
 Click **NCS MODE** in the top bar. The button turns red and the NCS panel opens. Click again to deactivate — ongoing roster and audio state are reset when NCS mode ends. An end-of-net journal is automatically saved on deactivation.
 
+### Checking in a station
+
+The check-in form at the top of the NCS panel has four fields:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| **Callsign** | Yes | The station's callsign (uppercase, normalized automatically) |
+| **Traffic** | No | Traffic priority level (see below); defaults to Routine |
+| **Name** | No | Operator name; auto-filled from Contacts if known |
+| **Location** | No | Station location; auto-filled from Contacts if known |
+
+Type the callsign and press **Enter** or click **CHECK IN**. The callsign and name fields clear after a successful check-in; the traffic level is kept for the next entry.
+
+**When the same callsign checks in twice with a different name**, both appear as separate roster rows — this is the expected behavior for GMRS family licences where John Smith and Jane Smith share WQZE123.
+
+### Traffic levels
+
+Six levels are available, selectable from the Traffic dropdown:
+
+| Level | Use |
+|-------|-----|
+| **Routine** | Normal net traffic — default |
+| **Priority** | Elevated — time-sensitive but non-emergency |
+| **Emergency** | Life-safety situation — displayed prominently |
+| **General** | General conversation / off-net traffic |
+| **Short Term** | Operator can only stay for a few minutes |
+| **IN-n-Out** | Quick check-in, no traffic, leaving after acknowledgement |
+
 ### Roster
 
-The roster table lists stations that have checked in during the net. Each entry shows:
+The roster table lists every station that has checked in during the net. Each row shows:
 
-| Column | Values |
-|--------|--------|
-| Callsign | Station callsign |
-| Status | **Checked In** / **Standby** / **Logged Out** |
-| Traffic | **Routine** / **Priority** / **Emergency** |
+| Column | Description |
+|--------|-------------|
+| Callsign | Station callsign; a ✓ badge indicates FCC-verified contact |
+| Name | Operator name (shown below the callsign in small text if set) |
+| Status | Current status — click the chip to toggle between CheckedIn and Standby |
+| Traffic | Traffic priority — displayed as a colored chip |
+| Time | Check-in time |
+| Remove | Click the delete icon to remove a station from the roster |
 
-**Checking in a station:** Type the callsign in the check-in bar at the top of the NCS panel and press **Enter** (or click **Check In**). The station appears in the roster as Checked In / Routine.
+**Status values:**
+- **✓ In** (green) — Checked in and active
+- **Stby** (amber) — Standing by, not responding at the moment
+- **Out** (gray) — Logged out of the net
 
-**Changing status or traffic:** Click the Status or Traffic badge in the roster row to cycle through the available values.
+**Automatic contact handling:** When a callsign checks in that is not in the shared contacts list, it is automatically added as a new contact and an FCC lookup is triggered in the background. When the FCC result arrives, the contact record is updated and the ✓ badge appears in the roster live — no manual action required. If the callsign is already in contacts, the name and location fields are pre-filled automatically.
+
+**GMRS family members:** Multiple operators sharing a callsign appear as distinct rows — one per name. Remove, status-toggle, and traffic actions target only the individual row clicked.
 
 ### BREAK BREAK
 
@@ -471,7 +541,7 @@ Use BREAK BREAK for emergency announcements or to immediately silence the channe
 
 ### Instant replay
 
-Click **REPLAY** to hear the last 15 seconds of received audio played back through your browser. The replay buffer rolls continuously; clicking it at any moment lets you re-listen to something you may have missed.
+Click the **replay icon** in the NCS panel header to hear the last 15 seconds of received audio played back through your browser. The replay buffer rolls continuously; clicking it at any moment lets you re-listen to something you may have missed.
 
 ### SKYWARN alerts
 
@@ -571,6 +641,8 @@ A **PTT** (push-to-talk) button appears in the top bar area when TX is enabled f
 3. Release to transmit. The server keys PTT, plays your audio through the radio's output device, and Whisper transcribes it.
 4. The transcript appears in chat as a **[TX]** entry (labeled with your name) visible to all connected users.
 
+> **Self-echo prevention:** The TTS voice playing through the radio output does not trigger the station's own STT listener. The system waits for the browser to signal that audio playback is complete before resuming transcription, preventing the station from transcribing its own transmissions.
+
 ### Limits and behavior
 
 | Parameter | Value |
@@ -645,6 +717,7 @@ The **Server Config** panel provides technical server-side settings, separate fr
 
 ## Tips
 
+- **GMRS family licences:** One callsign covers your whole household. Add each person as a separate contact with the same callsign — only the name needs to differ. In NCS mode, each family member checks in as their own entry in the roster.
 - **Multiple users:** Each family member signs into their own account. All clients see the same chat in real time — both received audio (RX) and outgoing transmissions (TX) — but each person's profanity filter, listen-only mode, and display preferences are independent.
 - **Across devices:** Your settings follow you. Sign in on your phone and get the same preferences as your tablet.
 - **Dark environments:** Click the sun/moon icon in the top bar, or your browser's dark mode preference is respected automatically on the public `/journal` page.
@@ -652,3 +725,4 @@ The **Server Config** panel provides technical server-side settings, separate fr
 - **FCC lookups not working:** The online indicator (dot in the top bar) shows internet connectivity. If it is gray, FCC verification is unavailable until connectivity is restored.
 - **Session locked out?** Wait 15 minutes or ask an admin to use **Admin → Users → Reset lockout**.
 - **On a phone or tablet:** The app automatically shows the mobile interface — bottom tabs for Chat, Stations, and Journal. Tap the ≡ menu for settings and your account.
+- **NCS traffic levels:** Use **IN-n-Out** for stations who only have a moment; use **Short Term** for those who can stay a few minutes but need to leave soon. Both are tracked in the roster and included in the end-of-net journal.
