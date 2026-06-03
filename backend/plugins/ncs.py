@@ -23,6 +23,11 @@ _log = logging.getLogger(__name__)
 
 _VALID_TRAFFIC = {"Routine", "Priority", "Emergency", "General", "Short Term", "IN-n-Out"}
 
+
+def _roster_key(callsign: str, name: str) -> str:
+    """Composite key that lets multiple operators share a GMRS callsign."""
+    return f"{callsign}|{(name or '').strip()}"
+
 # Bytes per sample for float32 PCM (the format captured by STTWorker)
 _BYTES_PER_SAMPLE = 4
 _SAMPLE_RATE = 16_000
@@ -118,15 +123,19 @@ class NCSPlugin(BasePlugin):
 
         elif msg_type == "ncs_status_update":
             cs = (payload.get("callsign") or "").strip().upper()
+            entry_name = (payload.get("name") or "").strip()
             new_status = payload.get("status")
-            if cs and cs in self._roster and new_status in ("CheckedIn", "Standby", "LoggedOut"):
-                self._roster[cs]["status"] = new_status
+            key = _roster_key(cs, entry_name)
+            if cs and key in self._roster and new_status in ("CheckedIn", "Standby", "LoggedOut"):
+                self._roster[key]["status"] = new_status
                 await self._broadcast_roster()
 
         elif msg_type == "ncs_remove":
             cs = (payload.get("callsign") or "").strip().upper()
-            if cs in self._roster:
-                del self._roster[cs]
+            entry_name = (payload.get("name") or "").strip()
+            key = _roster_key(cs, entry_name)
+            if key in self._roster:
+                del self._roster[key]
                 await self._broadcast_roster()
 
         elif msg_type == "ncs_break_break":
@@ -195,15 +204,18 @@ class NCSPlugin(BasePlugin):
 
     async def _handle_checkin(self, callsign: str, traffic: str, name: str, location: str) -> None:
         now = datetime.datetime.now(tz=datetime.timezone.utc).timestamp()
-        existing = self._roster.get(callsign, {})
+        key = _roster_key(callsign, name)
+        existing = self._roster.get(key, {})
 
         verified = False
         if self._contacts_getter is not None:
-            contacts_index = {
-                (c.get("callsign") or "").upper(): c
-                for c in self._contacts_getter()
-            }
-            contact = contacts_index.get(callsign)
+            all_contacts = self._contacts_getter()
+            cs_matches = [c for c in all_contacts if (c.get("callsign") or "").upper() == callsign]
+            # Prefer name match; fall back to first callsign match (allows anonymous check-in).
+            contact = next(
+                (c for c in cs_matches if (c.get("name") or "").strip().lower() == name.strip().lower()),
+                cs_matches[0] if cs_matches else None,
+            )
             if contact is not None:
                 verified = bool(contact.get("verified", False))
                 name = name or contact.get("name", "")
@@ -224,7 +236,10 @@ class NCSPlugin(BasePlugin):
                     from backend.fcc.auto_add import CallsignLookupWorker
                     CallsignLookupWorker(callsign, name, location, self._on_fcc_result).start()
 
-        self._roster[callsign] = {
+        # Re-compute key after name may have been resolved from the contact record.
+        key = _roster_key(callsign, name)
+        existing = self._roster.get(key, existing)
+        self._roster[key] = {
             "callsign": callsign,
             "status": "CheckedIn",
             "traffic": traffic if traffic in _VALID_TRAFFIC else "Routine",
@@ -240,18 +255,20 @@ class NCSPlugin(BasePlugin):
         now_iso = datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
         try:
             contacts = self._contacts_getter() if self._contacts_getter is not None else []
+            cs_matches = [c for c in contacts if (c.get("callsign") or "").upper() == callsign]
             contact = next(
-                (c for c in contacts if (c.get("callsign") or "").upper() == callsign),
-                None,
+                (c for c in cs_matches if (c.get("name") or "").strip().lower() == name.strip().lower()),
+                cs_matches[0] if cs_matches else None,
             )
             if contact is None or self._update_contact_fn is None:
                 return
             updated = apply_verification(contact, result, now_iso)
-            updated_list = self._update_contact_fn(callsign, updated)
+            updated_list = self._update_contact_fn(callsign, updated, original_name=name or None)
             if self._broadcast_contacts_fn is not None:
                 await self._broadcast_contacts_fn(updated_list)
-            if callsign in self._roster:
-                self._roster[callsign]["verified"] = bool(updated.get("verified", False))
+            key = _roster_key(callsign, name)
+            if key in self._roster:
+                self._roster[key]["verified"] = bool(updated.get("verified", False))
                 await self._broadcast_roster()
         except Exception as exc:
             _log.warning("NCS FCC result callback error for %s: %s", callsign, exc)
