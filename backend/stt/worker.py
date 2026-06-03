@@ -97,6 +97,7 @@ class STTWorker:
         vad_threshold: float = 0.5,
         model_cache: "ModelCache | None" = None,
         system_monitor_sink: str = "",
+        rx_mode: str = "voice",
         # Optional event callbacks — all called from the worker thread;
         # implementations must be thread-safe (e.g. loop.call_soon_threadsafe).
         on_audio_level: "Callable[[int], None] | None" = None,
@@ -111,6 +112,7 @@ class STTWorker:
         self.whisper_model_name = whisper_model
         self.whisper_model_path = str(self._MODELS_DIR / whisper_model)
         self.vad_threshold = float(vad_threshold)
+        self.rx_mode = rx_mode
         self._model_cache: ModelCache | None = model_cache
 
         self._on_audio_level = on_audio_level
@@ -177,7 +179,7 @@ class STTWorker:
     # Private helpers — emit helpers bridge thread → asyncio queue/callbacks
     # ------------------------------------------------------------------
 
-    def _emit_result(self, utterance_id: int, text: str, partial: bool) -> None:
+    def _emit_result(self, utterance_id: int, text: str, partial: bool, source: str = "voice") -> None:
         """Push a transcription result onto the asyncio queue from the worker thread."""
         if self._loop is None:
             return
@@ -187,6 +189,7 @@ class STTWorker:
                 "utterance_id": str(utterance_id),
                 "text": text,
                 "partial": partial,
+                "source": source,
             },
         )
 
@@ -217,6 +220,10 @@ class STTWorker:
     def _run(self) -> None:
         """Blocking capture/VAD/segmentation loop. Called via asyncio.to_thread."""
         if self._stop_event.is_set():
+            return
+
+        if self.rx_mode == "cw":
+            self._run_cw()
             return
 
         if not os.path.isdir(self.whisper_model_path):
@@ -339,6 +346,98 @@ class STTWorker:
                 pass
             transcribe_queue.put(None)
             transcribe_thread.join(timeout=15)
+            self._emit_status("Stopped listening")
+
+    def _run_cw(self) -> None:
+        """CW-mode receive loop. Buffers audio while the squelch is open, then
+        decodes the full transmission as morse code on squelch close.
+
+        Bypasses Whisper and Silero VAD entirely — squelch acts as the sole
+        transmission boundary detector, which is appropriate for CW because
+        the tone is not speech and VAD would never fire.
+        """
+        from backend.cw.decoder import CWDecoder
+
+        try:
+            source = open_input_source(
+                sample_rate=self.SAMPLE_RATE,
+                chunk_samples=self.CHUNK_SAMPLES,
+                input_device=self.input_device,
+                system_monitor_sink=self.system_monitor_sink,
+            )
+        except Exception as e:
+            self._emit_error(f"Failed to open input device: {e}")
+            return
+
+        decoder = CWDecoder()
+        squelch = SquelchDetector(
+            open_threshold=self.SQUELCH_OPEN_THRESHOLD,
+            open_hold_chunks=self.SQUELCH_OPEN_HOLD_CHUNKS,
+            close_hold_chunks=self.SQUELCH_CLOSE_HOLD_CHUNKS,
+        )
+        # Chunks of audio accumulated during the current transmission
+        buffer: list[np.ndarray] = []
+        close_hold_count = 0
+        # How many below-threshold chunks to collect after squelch closes
+        # before treating the transmission as complete (~500 ms of tail)
+        CLOSE_HOLD = 16
+        uid_counter = 0
+        was_paused = False
+
+        self._emit_status("Listening (CW)...")
+        try:
+            while not self._stop_event.is_set():
+                try:
+                    chunk = source.read()
+                except Exception as e:
+                    self._emit_error(f"Audio read error: {e}")
+                    break
+
+                peak = float(np.max(np.abs(chunk))) if chunk.size else 0.0
+                self._emit_audio_level(min(100, int(peak * 100)))
+                self._emit_audio_chunk(chunk)
+
+                if self._pause_event.is_set():
+                    if not was_paused:
+                        buffer.clear()
+                        close_hold_count = 0
+                        squelch.reset()
+                        self._emit_status("Paused (transmitting)")
+                        was_paused = True
+                    continue
+
+                if was_paused:
+                    squelch.reset()
+                    self._emit_status("Listening (CW)...")
+                    was_paused = False
+
+                squelch.update(peak)
+
+                if squelch.is_open:
+                    buffer.append(chunk)
+                    close_hold_count = 0
+                elif buffer:
+                    # Squelch is closed but we have a buffered transmission — collect
+                    # a short tail then decode.
+                    close_hold_count += 1
+                    buffer.append(chunk)
+                    if close_hold_count >= CLOSE_HOLD:
+                        audio = np.concatenate(buffer)
+                        buffer = []
+                        close_hold_count = 0
+                        uid_counter += 1
+                        try:
+                            text = decoder.decode(audio)
+                        except Exception as e:
+                            self._emit_error(f"CW decode error: {e}")
+                            text = None
+                        if text:
+                            self._emit_result(uid_counter, text, partial=False, source="cw")
+        finally:
+            try:
+                source.close()
+            except Exception:
+                pass
             self._emit_status("Stopped listening")
 
     def _transcription_loop(
