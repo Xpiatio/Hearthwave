@@ -25,6 +25,7 @@ export interface RxMessageMsg {
   // Spans reference original character positions in `text`, handling NATO-phonetic,
   // spaced, hyphenated, and compact callsign forms.
   callsign_spans?: Array<[number, number, string]>;
+  source?: 'voice' | 'cw';
 }
 
 export interface RxMessagePatchMsg {
@@ -70,6 +71,14 @@ export interface StatusMsg {
   gemini_api_key_set?: boolean;
   journals_dir?: string;
   ncs_zone?: string;
+  rx_mode?: string;
+  vad_threshold?: number;
+  whisper_model?: string;
+  ptt_mode?: string;
+  ptt_serial_port?: string;
+  ptt_serial_line?: string;
+  monitor_passthrough?: boolean;
+  attendance_enabled?: boolean;
 }
 
 export interface ContactsMsg {

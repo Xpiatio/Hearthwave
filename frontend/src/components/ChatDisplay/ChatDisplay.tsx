@@ -16,6 +16,7 @@ export interface ChatEntry {
   // Server-computed [start, end, canonical_callsign] tuples — handles NATO phonetic,
   // spaced, hyphenated, and compact forms. Falls back to frontend regex when absent.
   callsign_spans?: Array<[number, number, string]>;
+  source?: 'voice' | 'cw';
 }
 
 interface Props {
@@ -255,13 +256,22 @@ export function ChatDisplay({ entries, contacts, showCallsignChips, onEnrollClus
               {entry.timestamp}
             </Typography>
 
-            {entry.kind === 'rx' && (
+            {entry.kind === 'rx' && entry.source !== 'cw' && (
               <Typography
                 component="span"
                 sx={{ fontWeight: 700, fontSize: '1.0625rem', color: KIND_COLOR.rx, flexShrink: 0 }}
                 aria-label="Received from radio"
               >
                 [RX]
+              </Typography>
+            )}
+            {entry.kind === 'rx' && entry.source === 'cw' && (
+              <Typography
+                component="span"
+                sx={{ fontWeight: 700, fontSize: '1.0625rem', color: KIND_COLOR.rx, flexShrink: 0 }}
+                aria-label="Received morse code"
+              >
+                [CW]
               </Typography>
             )}
             {entry.kind === 'tx' && (

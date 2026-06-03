@@ -27,6 +27,10 @@ WebSocket message types (client → server):
     set_admin_config  — {"type": "set_admin_config", "callsign"?: str, "name"?: str,
                           "location"?: str, "gemini_api_key"?: str, "journals_dir"?: str,
                           "tts_length_scale"?: float}
+    set_server_config — {"type": "set_server_config", "vad_threshold"?: float,
+                          "whisper_model"?: str, "ptt_mode"?: str, "ptt_serial_port"?: str,
+                          "ptt_serial_line"?: str, "monitor_passthrough"?: bool,
+                          "attendance_enabled"?: bool}
     set_monitor       — {"type": "set_monitor", "enabled": bool}
     clear_attendance  — {"type": "clear_attendance"}
     list_journals     — {"type": "list_journals"}
@@ -393,6 +397,7 @@ async def _rx_pump() -> None:
             _vad_active = bool(partial)
 
             chunk_text = result.get("text", "")
+            source = result.get("source", "voice")
 
             if partial:
                 # Accumulate deltas so the frontend "replace" logic always sees the
@@ -457,6 +462,7 @@ async def _rx_pump() -> None:
                     "utterance_id": utterance_id,
                     "partial": partial,
                     "callsign_spans": callsign_spans,
+                    "source": source,
                 },
                 raw_text=raw_text,
                 filtered_text=filtered_text,
@@ -719,6 +725,14 @@ def _build_status() -> dict:
         "ncs_zone": (_config.ncs_zone if _config else ""),
         "input_device": (_config.input_device if _config else -1),
         "system_monitor_sink": (_config.system_monitor_sink if _config else ""),
+        "rx_mode": (_config.rx_mode if _config else "voice"),
+        "vad_threshold": float(_config.vad_threshold) if _config else 0.5,
+        "whisper_model": (_config.whisper_model if _config else "small.en"),
+        "ptt_mode": (_config.ptt_mode if _config else "manual"),
+        "ptt_serial_port": (_config.ptt_serial_port if _config else ""),
+        "ptt_serial_line": (_config.ptt_serial_line if _config else "RTS"),
+        "monitor_passthrough": bool(_config.monitor_passthrough) if _config else False,
+        "attendance_enabled": bool(_config.attendance_enabled) if _config else False,
     }
 
 
@@ -916,6 +930,7 @@ async def _lifespan(app: FastAPI):
         whisper_model=_config.whisper_model,
         vad_threshold=_config.vad_threshold,
         system_monitor_sink=_config.system_monitor_sink,
+        rx_mode=_config.rx_mode,
         on_audio_level=_on_stt_audio_level,
         on_audio_chunk=_audio_chunk_fanout,
         on_capture_event=_on_stt_capture_event,
@@ -993,6 +1008,7 @@ async def health() -> dict:
 # ---------------------------------------------------------------------------
 
 async def _ws_handle_set_admin_config(ws: WebSocket, data: dict, state: "ConnectionState") -> None:
+    global _stt_worker
     if _config is None:
         await _manager.send_to(ws, {"type": "error", "detail": "Config not loaded."})
         return
@@ -1021,8 +1037,100 @@ async def _ws_handle_set_admin_config(ws: WebSocket, data: dict, state: "Connect
             pass
     if "ncs_zone" in data:
         _config["ncs_zone"] = str(data["ncs_zone"]).strip().upper()
+    rx_mode_changed = False
+    if "rx_mode" in data:
+        new_mode = str(data["rx_mode"]).strip().lower()
+        if new_mode in ("voice", "cw") and new_mode != _config.rx_mode:
+            _config["rx_mode"] = new_mode
+            rx_mode_changed = True
     _config.save()
     await _manager.broadcast(_build_status())
+    if rx_mode_changed and _stt_worker is not None and _stt_listening:
+        _stt_worker.stop()
+        await _stt_worker.join()
+        _stt_worker = STTWorker(
+            out_queue=_stt_out_queue,
+            input_device=_config.input_device if _config.input_device != -1 else None,
+            whisper_model=_config.whisper_model,
+            vad_threshold=_config.vad_threshold,
+            system_monitor_sink=_config.system_monitor_sink,
+            rx_mode=_config.rx_mode,
+            on_audio_level=_on_stt_audio_level,
+            on_audio_chunk=_audio_chunk_fanout,
+            on_capture_event=_on_stt_capture_event,
+            on_status=_on_stt_status,
+            on_error=_on_stt_error,
+        )
+        _stt_worker.start()
+
+
+async def _ws_handle_set_server_config(ws: WebSocket, data: dict, state: "ConnectionState") -> None:
+    """Handle technical server settings that require STT worker restart on change."""
+    global _stt_worker
+    if _config is None:
+        await _manager.send_to(ws, {"type": "error", "detail": "Config not loaded."})
+        return
+
+    stt_restart_needed = False
+
+    if "vad_threshold" in data:
+        try:
+            vt = float(data["vad_threshold"])
+            if 0.0 < vt < 1.0 and vt != _config.vad_threshold:
+                _config["vad_threshold"] = vt
+                stt_restart_needed = True
+        except (TypeError, ValueError):
+            pass
+
+    if "whisper_model" in data:
+        model = str(data["whisper_model"]).strip()
+        valid = {"tiny.en", "base.en", "small.en", "medium.en", "large-v3"}
+        if model in valid and model != _config.whisper_model:
+            _config["whisper_model"] = model
+            stt_restart_needed = True
+
+    if "ptt_mode" in data:
+        mode = str(data["ptt_mode"]).strip().lower()
+        if mode in ("manual", "serial", "vox"):
+            _config["ptt_mode"] = mode
+
+    if "ptt_serial_port" in data:
+        _config["ptt_serial_port"] = str(data["ptt_serial_port"]).strip()
+
+    if "ptt_serial_line" in data:
+        line = str(data["ptt_serial_line"]).strip().upper()
+        if line in ("RTS", "DTR"):
+            _config["ptt_serial_line"] = line
+
+    if "monitor_passthrough" in data:
+        pt = bool(data["monitor_passthrough"])
+        _config["monitor_passthrough"] = pt
+        if _monitor is not None:
+            _monitor.set_passthrough(pt)
+
+    if "attendance_enabled" in data:
+        _config.attendance_enabled = bool(data["attendance_enabled"])
+
+    _config.save()
+    await _manager.broadcast(_build_status())
+
+    if stt_restart_needed and _stt_worker is not None and _stt_listening:
+        _stt_worker.stop()
+        await _stt_worker.join()
+        _stt_worker = STTWorker(
+            out_queue=_stt_out_queue,
+            input_device=_config.input_device if _config.input_device != -1 else None,
+            whisper_model=_config.whisper_model,
+            vad_threshold=_config.vad_threshold,
+            system_monitor_sink=_config.system_monitor_sink,
+            rx_mode=_config.rx_mode,
+            on_audio_level=_on_stt_audio_level,
+            on_audio_chunk=_audio_chunk_fanout,
+            on_capture_event=_on_stt_capture_event,
+            on_status=_on_stt_status,
+            on_error=_on_stt_error,
+        )
+        _stt_worker.start()
 
 
 async def _ws_handle_fcc_lookup(ws: WebSocket, data: dict, state: "ConnectionState") -> None:
@@ -1457,6 +1565,7 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                     whisper_model=_config.whisper_model,
                     vad_threshold=_config.vad_threshold,
                     system_monitor_sink=new_sink,
+                    rx_mode=_config.rx_mode,
                     on_audio_level=_on_stt_audio_level,
                     on_audio_chunk=_audio_chunk_fanout,
                     on_capture_event=_on_stt_capture_event,
@@ -1515,6 +1624,12 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                     await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
                     continue
                 await _ws_handle_set_admin_config(ws, data, state)
+
+            elif msg_type == "set_server_config":
+                if not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
+                    continue
+                await _ws_handle_set_server_config(ws, data, state)
 
             elif msg_type == "save_user_prefs":
                 if _users_store is None:

@@ -38,6 +38,8 @@ import { ContactsDialog } from './components/ContactsDialog/ContactsDialog';
 import { PendingStationsBar } from './components/PendingStationsBar/PendingStationsBar';
 import { ConfigPanel } from './components/ConfigPanel/ConfigPanel';
 import { AdminPanel } from './components/AdminPanel/AdminPanel';
+import { ServerConfigPanel } from './components/ServerConfigPanel/ServerConfigPanel';
+import type { ServerConfig } from './components/ServerConfigPanel/ServerConfigPanel';
 import { UsersPanel } from './components/UsersPanel/UsersPanel';
 import './App.css';
 
@@ -123,6 +125,16 @@ export default function App() {
   const [showContacts, setShowContacts] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [showServerConfig, setShowServerConfig] = useState(false);
+  const [serverConfig, setServerConfig] = useState<ServerConfig>({
+    vadThreshold: 0.5,
+    whisperModel: 'small.en',
+    pttMode: 'manual',
+    pttSerialPort: '',
+    pttSerialLine: 'RTS',
+    monitorPassthrough: false,
+    attendanceEnabled: false,
+  });
 
   // Panel order — initialized from localStorage to avoid FOUC; overridden by profile on load
   const [panelOrder, setPanelOrder] = useState<string[]>(
@@ -200,6 +212,7 @@ export default function App() {
     geminiApiKeySet: false,
     journalsDir: '/data/journals',
     ncsZone: '',
+    rxMode: 'voice',
   });
 
   // Plugin infrastructure — last WS message forwarded to mounted plugin panels
@@ -220,7 +233,7 @@ export default function App() {
             setMessages((prev) =>
               prev.map((e) =>
                 e.id === existingId
-                  ? { ...e, text: msg.text, partial: true, callsign_spans: msg.callsign_spans }
+                  ? { ...e, text: msg.text, partial: true, callsign_spans: msg.callsign_spans, source: msg.source }
                   : e
               )
             );
@@ -237,6 +250,7 @@ export default function App() {
                 text: msg.text,
                 partial: true,
                 callsign_spans: msg.callsign_spans,
+                source: msg.source,
               },
             ]);
           }
@@ -257,6 +271,7 @@ export default function App() {
                       speaker,
                       cluster_label: msg.cluster_label,
                       callsign_spans: msg.callsign_spans,
+                      source: msg.source,
                     }
                   : e
               )
@@ -276,6 +291,7 @@ export default function App() {
                 speaker,
                 cluster_label: msg.cluster_label,
                 callsign_spans: msg.callsign_spans,
+                source: msg.source,
               },
             ]);
           }
@@ -330,6 +346,16 @@ export default function App() {
           geminiApiKeySet: msg.gemini_api_key_set ?? prev.geminiApiKeySet,
           journalsDir: msg.journals_dir ?? prev.journalsDir,
           ncsZone: msg.ncs_zone ?? prev.ncsZone,
+          rxMode: msg.rx_mode ?? prev.rxMode,
+        }));
+        setServerConfig((prev) => ({
+          vadThreshold: msg.vad_threshold ?? prev.vadThreshold,
+          whisperModel: msg.whisper_model ?? prev.whisperModel,
+          pttMode: msg.ptt_mode ?? prev.pttMode,
+          pttSerialPort: msg.ptt_serial_port ?? prev.pttSerialPort,
+          pttSerialLine: msg.ptt_serial_line ?? prev.pttSerialLine,
+          monitorPassthrough: msg.monitor_passthrough ?? prev.monitorPassthrough,
+          attendanceEnabled: msg.attendance_enabled ?? prev.attendanceEnabled,
         }));
         break;
 
@@ -678,8 +704,21 @@ export default function App() {
     gemini_api_key: string;
     journals_dir: string;
     ncs_zone: string;
+    rx_mode: string;
   }) {
     send({ type: 'set_admin_config', ...values });
+  }
+
+  function handleServerConfigSave(values: {
+    vad_threshold: number;
+    whisper_model: string;
+    ptt_mode: string;
+    ptt_serial_port: string;
+    ptt_serial_line: string;
+    monitor_passthrough: boolean;
+    attendance_enabled: boolean;
+  }) {
+    send({ type: 'set_server_config', ...values });
   }
 
   function handleToggleDark() {
@@ -861,6 +900,8 @@ export default function App() {
           onToggleConfig={() => setShowConfig((v) => !v)}
           showAdmin={showAdmin}
           onToggleAdmin={() => setShowAdmin((v) => !v)}
+          showServerConfig={showServerConfig}
+          onToggleServerConfig={() => setShowServerConfig((v) => !v)}
           showNcs={showNcs}
           onToggleNcs={() => {
             const next = !showNcs;
@@ -1043,6 +1084,13 @@ export default function App() {
             />
           )}
         </AdminPanel>
+
+        <ServerConfigPanel
+          open={showServerConfig}
+          onClose={() => setShowServerConfig(false)}
+          config={serverConfig}
+          onSave={handleServerConfigSave}
+        />
 
         <Snackbar
           open={publishSnack !== null}
