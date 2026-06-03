@@ -145,6 +145,7 @@ _users_store: UsersStore | None = None
 _token_store: TokenStore | None = None
 _stt_worker: STTWorker | None = None
 _synthesizer: TTSSynthesizer | None = None
+_tx_audio_complete_event: asyncio.Event | None = None
 _monitor: "Any | None" = None  # AudioMonitor, lazy-imported
 _spectro: SpectroTask | None = None
 
@@ -643,6 +644,7 @@ async def _tx_pump() -> None:
                 )
                 if audio is not None:
                     audio_b64 = base64.b64encode(audio.tobytes()).decode("ascii")
+                    _tx_audio_complete_event = asyncio.Event()
                     try:
                         ptt.key()
                         await _manager.broadcast({
@@ -668,12 +670,27 @@ async def _tx_pump() -> None:
             _log.error("TX synthesis error: %s", exc)
             await _manager.broadcast({"type": "error", "detail": f"TX error: {exc}"})
         finally:
-            if not is_preview and _stt_worker is not None and _stt_listening:
-                _stt_worker.resume()
             if is_preview:
                 await _manager.broadcast({"type": "voice_preview_done"})
             else:
                 await _manager.broadcast({"type": "tx_status", "status": "idle"})
+                if _stt_worker is not None and _stt_listening:
+                    # Wait for the browser to confirm audio playback has ended
+                    # before resuming STT.  The duration-based sleep above only
+                    # covers synthesis length; browser Web Audio API buffering +
+                    # PulseAudio loopback latency means audio is still playing
+                    # when that sleep expires.  We fall back to a 2 s timeout
+                    # in case the browser never sends the signal (tab hidden,
+                    # WS drop, etc.), then add a short tail for loopback drain.
+                    evt = _tx_audio_complete_event
+                    if evt is not None:
+                        try:
+                            await asyncio.wait_for(evt.wait(), timeout=2.0)
+                        except asyncio.TimeoutError:
+                            pass
+                    await asyncio.sleep(0.2)
+                    _stt_worker.resume()
+            _tx_audio_complete_event = None
 
 
 # ---------------------------------------------------------------------------
@@ -735,9 +752,10 @@ async def _handle_voice_tx(payload: dict) -> None:
         _log.error("_handle_voice_tx: %s", exc)
         await _manager.broadcast({"type": "error", "detail": f"Voice TX error: {exc}"})
     finally:
-        if _stt_worker is not None and _stt_listening:
-            _stt_worker.resume()
         await _manager.broadcast({"type": "tx_status", "status": "idle"})
+        if _stt_worker is not None and _stt_listening:
+            await asyncio.sleep(0.3)  # let PulseAudio output buffer drain
+            _stt_worker.resume()
 
 
 def _play_voice_blocking(audio: "np.ndarray", sample_rate: int, output_device) -> None:
@@ -1315,6 +1333,11 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                 ),
                 name="plugin-client-msg",
             )
+
+            if msg_type == "tx_audio_complete":
+                if _tx_audio_complete_event is not None:
+                    _tx_audio_complete_event.set()
+                continue
 
             if msg_type == "tx_message":
                 callsign = (data.get("callsign") or "").strip()
