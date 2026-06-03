@@ -308,10 +308,11 @@ export interface RxAudioMsg {
 export interface NCSEntry {
   callsign: string;
   status: 'CheckedIn' | 'Standby' | 'LoggedOut';
-  traffic: 'Routine' | 'Priority' | 'Emergency';
+  traffic: 'Routine' | 'Priority' | 'Emergency' | 'General' | 'Short Term' | 'IN-n-Out';
   name: string;
   location: string;
   checkin_time: number; // Unix timestamp
+  verified?: boolean;
 }
 
 export interface NCSAlert {
