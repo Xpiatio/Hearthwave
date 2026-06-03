@@ -30,6 +30,7 @@ FastAPI Backend  ──►  PulseAudio / sounddevice
 ## Features
 
 - **Multi-user accounts** — named family member profiles, each with their own password and per-user preferences
+- **Mobile-optimized interface** — smartphones and tablets automatically receive a touch-friendly layout with bottom tab navigation (Chat, Stations, Journal), a compact top bar showing the station callsign and connection status, and the Voice PTT button accessible at all times; the full desktop panel layout is preserved for mouse/keyboard devices
 - **Shared TX chat** — outgoing transmissions appear in every connected user's chat stream labeled `[TX]`; directed messages show `→ CALLSIGN — Name` between the sender and message text
 - **Per-user settings** — dark mode, panel order, profanity filter, listen-only, read-aloud, notifications, spectrogram display, TTS voice, and speech speed are per-account and sync across devices
 - **Public family journal** — publish session logs to `/journal`, a no-login static page (last 10 entries, ADA-compliant)
@@ -305,6 +306,7 @@ Radio-TTY/
 │       ├── App.tsx             # Root component — auth guard, WS state, message dispatch
 │       ├── hooks/
 │       │   ├── useAuth.ts      # Login/logout, token management
+│       │   ├── useMobileDetect.ts  # Detects touch devices via pointer:coarse media query
 │       │   └── useWebSocket.ts # WS connection with token auth + backoff reconnect
 │       ├── plugins/
 │       │   └── index.ts        # PluginDefinition, PluginProps, registerPlugin helper
@@ -315,6 +317,8 @@ Radio-TTY/
 │       │   ├── UsersPanel/     # Admin user management
 │       │   ├── NCSPanel/       # Net Control Station panel — roster, BREAK BREAK, replay, alerts
 │       │   ├── PluginSlot/     # Thin wrapper mounting plugin React components
+│       │   ├── DesktopApp/     # Desktop layout shell (extracted from App.tsx)
+│       │   ├── MobileApp/      # Mobile layout shell with BottomNavigation tabs
 │       │   └── …               # (other existing components)
 │       ├── theme.ts            # MUI theme factory makeTheme(dark)
 │       └── types/ws.ts         # All WebSocket message TypeScript types
