@@ -14,14 +14,14 @@ Browser (any device)
       ▼
 FastAPI Backend  ──►  PulseAudio / sounddevice
       │                     │
-   Piper TTS            Whisper STT
+   Piper TTS            Whisper STT / CW Decoder
       │                     │
    Serial PTT          Silero VAD
       ▼                     ▼
     Radio               Spectrogram
 ```
 
-- **RX pipeline**: audio capture → VAD → squelch → segmentation → Whisper STT → callsign span detection → text broadcast to all clients (per-user profanity filter applied; streaming partials update every ~2 s so text appears while the operator is still talking; callsign spans included for chat highlighting)
+- **RX pipeline**: audio capture → VAD → squelch → segmentation → Whisper STT (or CW decoder) → callsign span detection → text broadcast to all clients (per-user profanity filter applied; streaming partials update every ~2 s so text appears while the operator is still talking; callsign spans included for chat highlighting)
 - **TX pipeline**: text input → abbreviation expansion → profanity filter → FCC ID wrapper → Piper TTS → PTT → audio output → `tx_echo` broadcast to all clients (includes sender, recipient callsign/name, and raw message text)
 - **Auth**: session tokens validated on WebSocket connect; unauthenticated connections are rejected
 
@@ -34,11 +34,16 @@ FastAPI Backend  ──►  PulseAudio / sounddevice
 - **Per-user settings** — dark mode, panel order, profanity filter, listen-only, read-aloud, notifications, spectrogram display, TTS voice, and speech speed are per-account and sync across devices
 - **Public family journal** — publish session logs to `/journal`, a no-login static page (last 10 entries, ADA-compliant)
 - Real-time spectrogram waterfall with VAD and squelch indicators; toggled on/off via the **WATERFALL** button
-- Speech-to-text receive using Whisper (`small.en` model)
+- **Speech-to-text receive** — Whisper STT (`small.en` model) for voice; switchable to CW (Morse code) decoder via `rx_mode` config key
+- **CW (Morse code) receive** — FFT-based tone detection (400–1200 Hz), bandpass filter, envelope extraction, adaptive WPM estimation, and full morse table including prosigns; switchable live via the Admin panel (requires STT worker restart)
 - Text-to-speech transmit using Piper neural voices
+- **Voice PTT (browser microphone)** — PTT button in the top bar streams browser mic audio (16 kHz int16, chunked as base64) to the server for radio output with PTT keying; Whisper transcribes the audio client-side and the text appears in chat as a TX echo; max 120 s per transmission
 - **Read Aloud** — per-user toggle that pipes finalized RX transcripts through Piper TTS and plays audio in the operator's browser; useful for eyes-busy operation
 - **Browser notifications** — opt-in Web Notifications for final RX transcripts and SKYWARN alerts when the tab is in the background
+- **Speaker recognition / enrollment** — ecapa-tdnn model identifies speakers; RX messages carry `speaker_callsign`, `speaker_name`, and `cluster_label` fields; users can enroll a voice cluster to a callsign from the chat UI; voiceprints stored in `data/voiceprints/`
 - **NCS / SKYWARN plugin** — Net Control Station mode (admin-only): roster with check-in/standby/log-out and traffic priority, BREAK BREAK emergency interrupt, 15-second rolling audio replay buffer, NWS CAP SKYWARN alert feed (polls every 5 min), periodic net ID announcements, and end-of-net auto-journal
+- **Server Config panel** — admin UI for VAD threshold, Whisper model selection, PTT mode/port/line, audio monitor passthrough, and attendance tracking toggle (separate from Admin Settings)
+- **Audio monitor passthrough** — when enabled (`monitor_passthrough`), audio captured from the radio input is simultaneously played back through the output device for monitoring
 - Automatic FCC station ID every 15 minutes (GMRS requirement)
 - FCC database callsign lookup and verification
 - Shared contacts list (GMRS + HAM cross-reference, FCC-verified)
@@ -47,9 +52,10 @@ FastAPI Backend  ──►  PulseAudio / sounddevice
 - Quick messages bar — one-tap access to customisable pre-set phrases; supports `{Name}` placeholder; per-browser
 - TTY abbreviation expansion and Q-signal support
 - NATO phonetic callsign spelling
-- Session attendance tracking
+- Session attendance tracking (enable/disable via Server Config panel or `attendance.enabled` in config)
 - AI-generated session journals (requires Gemini API key)
 - Admin panel for station identity and user management
+- Voices watcher — server polls the voices directory every 5 s and pushes `voices_list` updates to all clients when `.onnx` files are added or removed
 
 ---
 
@@ -206,15 +212,18 @@ Created from `data/config.json.example` on first install. Station-wide settings 
 | `system_monitor_sink` | `""` | PulseAudio sink name for loopback monitoring |
 | `whisper_model` | `"small.en"` | Whisper model name |
 | `vad_threshold` | `0.5` | Silero VAD sensitivity (0.0–1.0) |
-| `ptt_mode` | `"manual"` | `"manual"` or `"serial"` |
+| `rx_mode` | `"voice"` | `"voice"` (Whisper STT, default) or `"cw"` (Morse code decoder) |
+| `ptt_mode` | `"manual"` | `"manual"`, `"serial"`, or `"vox"` |
 | `ptt_serial_port` | `""` | e.g. `"/dev/ttyUSB0"` |
 | `ptt_serial_line` | `"RTS"` | `"RTS"` or `"DTR"` |
 | `fuzzy_callsign` | `false` | Fuzzy callsign matching in received text (station-wide) |
 | `monitor_enabled` | `false` | Audio monitor passthrough |
+| `monitor_passthrough` | `false` | Route captured audio to output device simultaneously (monitor passthrough) |
 | `spectro_freq_range` | `"full"` | `"voice"` (300–3400 Hz) or `"full"` (0–8 kHz) |
 | `gemini_api_key` | `""` | Google Gemini API key (for AI journals) |
 | `journals_dir` | `"/data/journals"` | Where session journals are saved |
 | `contacts_file` | `"/data/contacts.json"` | Shared contacts store |
+| `attendance` | `{"enabled": false}` | Session attendance tracking toggle |
 | `ncs_zone` | `""` | NWS county zone code for SKYWARN alerts (e.g. `"MIZ025"`); empty = disabled |
 | `ncs_announcement_interval` | `600` | Seconds between periodic net ID announcements when NCS mode is active |
 
@@ -262,9 +271,11 @@ Radio-TTY/
 │   │   ├── spectro_task.py     # SpectroTask — FFT → broadcast
 │   │   └── silence_watchdog.py
 │   ├── stt/
-│   │   ├── worker.py           # STTWorker — capture → VAD → segment → transcribe
+│   │   ├── worker.py           # STTWorker — capture → VAD → segment → transcribe (voice or CW)
 │   │   ├── segmenter.py        # SpeechSegmenter
 │   │   └── transcriber.py      # WhisperTranscriber + hallucination filter
+│   ├── cw/
+│   │   └── decoder.py          # CWDecoder — FFT tone detection, adaptive WPM, morse table
 │   ├── text/
 │   │   ├── shorthand.py        # TTY/TDD + Q-signal + CW abbreviation expansion
 │   │   ├── phonetics.py        # NATO phonetic alphabet conversion
@@ -312,6 +323,7 @@ Radio-TTY/
 │   ├── contacts.json           # Shared contacts (gitignored)
 │   ├── users.json              # User accounts (gitignored)
 │   ├── tokens.json             # Active session tokens (gitignored)
+│   ├── voiceprints/            # Speaker recognition voiceprint files (.npz)
 │   ├── journals/               # Saved session journals
 │   └── public/
 │       ├── journal.html        # Public family journal page
