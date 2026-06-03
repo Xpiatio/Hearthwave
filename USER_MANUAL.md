@@ -24,6 +24,10 @@ This manual covers day-to-day operation of Radio-TTY. For installation and serve
 16. [NCS — Net Control Station mode](#16-ncs--net-control-station-mode)
 17. [Browser notifications](#17-browser-notifications)
 18. [Text shortcuts reference](#18-text-shortcuts-reference)
+19. [Voice PTT (browser microphone)](#19-voice-ptt-browser-microphone)
+20. [CW (Morse code) receive mode](#20-cw-morse-code-receive-mode)
+21. [Speaker recognition and enrollment](#21-speaker-recognition-and-enrollment)
+22. [Server Config panel (admin)](#22-server-config-panel-admin)
 
 ---
 
@@ -137,7 +141,7 @@ Each received entry is labelled **[RX]** in the chat (in green). Outgoing entrie
 2. Press **Enter** or tap **SEND**.
 
 The system will:
-- Expand TTY abbreviations and Q-signals (see [Text shortcuts reference](#16-text-shortcuts-reference))
+- Expand TTY abbreviations and Q-signals (see [Text shortcuts reference](#18-text-shortcuts-reference))
 - Apply your profanity filter if enabled
 - Wrap the message with the station callsign per FCC rules
 - Synthesize speech using the configured Piper voice
@@ -512,11 +516,96 @@ You do not need to type phonetics manually.
 
 ---
 
+## 19. Voice PTT (browser microphone)
+
+Voice PTT lets you speak directly into your browser microphone and transmit through the radio, without typing.
+
+A **PTT** (push-to-talk) button appears in the top bar area when TX is enabled for your account. Listen-only mode hides the PTT button along with other TX controls.
+
+### Using Voice PTT
+
+1. Press and hold the **PTT** button.
+2. Speak into your browser microphone.
+3. Release to transmit. The server keys PTT, plays your audio through the radio's output device, and Whisper transcribes it.
+4. The transcript appears in chat as a **[TX]** entry (labeled with your name) visible to all connected users.
+
+### Limits and behavior
+
+| Parameter | Value |
+|-----------|-------|
+| Maximum recording length | 120 seconds |
+| Minimum recording length | ~300 ms (shorter recordings are rejected) |
+| Audio format sent to server | Raw PCM, 16 kHz, chunked base64 |
+
+If the radio's output device runs at a sample rate other than 16 kHz, the server resamples automatically before playback.
+
+---
+
+## 20. CW (Morse code) receive mode
+
+When the station is configured for CW mode, incoming audio is decoded by an FFT-based CW decoder instead of Whisper STT. This is useful for monitoring morse code transmissions.
+
+### Configuring CW mode (admin)
+
+1. Open the **Admin** panel.
+2. Set the `rx_mode` field to `"cw"` (voice mode uses `"voice"`).
+3. Changing this setting restarts the STT worker — expect a brief interruption in transcription.
+
+### How CW decoding works
+
+| Parameter | Value |
+|-----------|-------|
+| Tone detection range | 400–1200 Hz |
+| Bandpass filter | ±100 Hz around detected tone |
+| WPM estimation | Adaptive (adjusts to the operator's sending speed) |
+
+Decoded morse appears in chat as **[RX]** entries, identical in appearance to voice transcription.
+
+---
+
+## 21. Speaker recognition and enrollment
+
+The backend uses an ECAPA-TDNN speaker model to cluster voices heard on the air. This lets the system associate a voice with a known callsign over time.
+
+### How it works
+
+- As transmissions are received, voices are grouped into clusters automatically.
+- Finalized RX messages carry speaker cluster information visible in the chat display.
+
+### Enrolling a speaker
+
+1. When a finalized RX entry shows a speaker cluster, an **Enroll** action appears in the chat UI for that entry.
+2. Click **Enroll** and enter the operator's callsign.
+3. The voiceprint is saved and that speaker will be automatically identified in future transmissions.
+
+Voiceprints are stored in `data/voiceprints/` as `.npz` files, one per callsign.
+
+---
+
+## 22. Server Config panel (admin)
+
+The **Server Config** panel provides technical server-side settings, separate from the Admin Settings / Station Identity panel. It is accessible to admin accounts only via a button in the top bar.
+
+### Available settings
+
+| Setting | Description |
+|---------|-------------|
+| VAD threshold | Sensitivity of voice activity detection. Lower = more sensitive; higher = requires stronger signal. Changing this restarts the STT worker. |
+| Whisper model | Which Whisper model the server uses for transcription. Changing this restarts the STT worker. |
+| PTT mode | How PTT is keyed: `manual`, `serial`, or `vox` (voice-operated transmit — keys automatically based on audio level). |
+| PTT port / line | Serial port and control line used when PTT mode is `serial`. |
+| Monitor passthrough | When enabled, audio captured from the radio input is simultaneously played back through the output device. Useful when the radio is not directly audible at the operator position. Does not require a server restart. |
+| Attendance tracking | Enable or disable automatic callsign recording in the Stations panel. When disabled, the panel still exists but callsigns are not recorded automatically. |
+
+> Changes to VAD threshold or Whisper model trigger a live STT worker restart and will briefly interrupt transcription.
+
+---
+
 ## Tips
 
 - **Multiple users:** Each family member signs into their own account. All clients see the same chat in real time — both received audio (RX) and outgoing transmissions (TX) — but each person's profanity filter, listen-only mode, and display preferences are independent.
 - **Across devices:** Your settings follow you. Sign in on your phone and get the same preferences as your tablet.
 - **Dark environments:** Click the sun/moon icon in the top bar, or your browser's dark mode preference is respected automatically on the public `/journal` page.
-- **Slow or noisy transcription:** The VAD threshold can be adjusted in `config.json` (`vad_threshold`). Lower values (e.g. 0.3) are more sensitive; higher (e.g. 0.7) require a stronger signal.
+- **Slow or noisy transcription:** Adjust the VAD threshold in the **Server Config** panel (admin). Lower values (e.g. 0.3) are more sensitive; higher (e.g. 0.7) require a stronger signal. The setting can also be changed directly in `config.json` (`vad_threshold`).
 - **FCC lookups not working:** The online indicator (dot in the top bar) shows internet connectivity. If it is gray, FCC verification is unavailable until connectivity is restored.
 - **Session locked out?** Wait 15 minutes or ask an admin to use **Admin → Users → Reset lockout**.
