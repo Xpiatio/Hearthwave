@@ -1,5 +1,5 @@
 import { renderHook } from '@testing-library/react'
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { useMobileDetect } from '../useMobileDetect'
 
 function mockMatchMedia(pointer: boolean, maxWidth: boolean) {
