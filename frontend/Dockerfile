@@ -7,7 +7,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
 
 COPY src/ ./src/
-COPY index.html tsconfig.json vite.config.ts ./
+COPY index.html tsconfig.json tsconfig.build.json vite.config.ts ./
 
 RUN npm run build
 
