@@ -1,9 +1,7 @@
 import { useState, useCallback, useRef, useMemo } from 'react';
-import { DndContext } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
-import { DraggablePanel } from './components/DraggablePanel/DraggablePanel';
-import { ThemeProvider, CssBaseline, Box, CircularProgress, Snackbar, Alert } from '@mui/material';
+import { arrayMove } from '@dnd-kit/sortable';
+import { ThemeProvider, CssBaseline, Box, CircularProgress } from '@mui/material';
 import { makeTheme } from './theme';
 import { useAuth } from './hooks/useAuth';
 import { useWebSocket } from './hooks/useWebSocket';
@@ -24,27 +22,14 @@ import type {
   VoiceTxEndPayload,
   VoiceTxCancelPayload,
 } from './types/ws';
+import type { ChatEntry } from './components/ChatDisplay/ChatDisplay';
+import type { SpectrogramHandle } from './components/Spectrogram/Spectrogram';
+import type { ServerConfig } from './components/ServerConfigPanel/ServerConfigPanel';
 import { LoginScreen } from './components/LoginScreen/LoginScreen';
 import { SetupScreen } from './components/SetupScreen/SetupScreen';
-import { TopBar } from './components/TopBar/TopBar';
-import { ChatDisplay } from './components/ChatDisplay/ChatDisplay';
-import type { ChatEntry } from './components/ChatDisplay/ChatDisplay';
-import { StatusRow } from './components/StatusRow/StatusRow';
-import { MessageInput } from './components/MessageInput/MessageInput';
-import type { MessageInputHandle } from './components/MessageInput/MessageInput';
-import { AttendancePanel } from './components/AttendancePanel/AttendancePanel';
-import { JournalPanel } from './components/JournalPanel/JournalPanel';
-import { NCSPanel } from './components/NCSPanel/NCSPanel';
-import { Spectrogram } from './components/Spectrogram/Spectrogram';
-import type { SpectrogramHandle } from './components/Spectrogram/Spectrogram';
-import { QuickMessages } from './components/QuickMessages/QuickMessages';
-import { ContactsDialog } from './components/ContactsDialog/ContactsDialog';
-import { PendingStationsBar } from './components/PendingStationsBar/PendingStationsBar';
-import { ConfigPanel } from './components/ConfigPanel/ConfigPanel';
-import { AdminPanel } from './components/AdminPanel/AdminPanel';
-import { ServerConfigPanel } from './components/ServerConfigPanel/ServerConfigPanel';
-import type { ServerConfig } from './components/ServerConfigPanel/ServerConfigPanel';
-import { UsersPanel } from './components/UsersPanel/UsersPanel';
+import { DesktopApp } from './components/DesktopApp/DesktopApp';
+import { MobileApp } from './components/MobileApp/MobileApp';
+import { useMobileDetect } from './hooks/useMobileDetect';
 import './App.css';
 
 let entryCounter = 0;
@@ -95,17 +80,7 @@ function speakerLabel(callsign: string | null, name: string | null, cluster: str
   return undefined;
 }
 
-interface JournalResultDraft {
-  title: string;
-  summary: string;
-  callsigns_locations: Array<{ callsign: string; location: string }>;
-}
-
-interface PendingStation {
-  callsign: string;
-  name: string;
-  location: string;
-}
+import type { JournalResultDraft, PendingStation } from './types/appTypes';
 
 export default function App() {
   const { token, profile, setProfile, loading: authLoading, setupNeeded, setup, login, logout } = useAuth();
@@ -118,7 +93,6 @@ export default function App() {
   const inProgressRef = useRef<Map<string, string>>(new Map());
   const recentFinalIdsRef = useRef<Map<string, string>>(new Map());
   const sendRef = useRef<(p: unknown) => void>(() => {});
-  const messageInputRef = useRef<MessageInputHandle>(null);
   const spectroRef = useRef<SpectrogramHandle>(null);
   const profileRef = useRef(profile);
   profileRef.current = profile;
@@ -862,6 +836,38 @@ export default function App() {
   const stationStatus = connected ? 'READY' : 'OFFLINE';
   const showCallsignChips = serviceMode === 'GMRS';
 
+  function handleToggleAttendance() { setShowAttendance((v) => !v); }
+  function handleToggleJournal() { setShowJournal((v) => !v); }
+  function handleToggleContacts() {
+    if (showContacts) handleContactsClose();
+    else setShowContacts(true);
+  }
+  function handleToggleConfig() { setShowConfig((v) => !v); }
+  function handleToggleAdmin() { setShowAdmin((v) => !v); }
+  function handleToggleServerConfig() { setShowServerConfig((v) => !v); }
+  function handleToggleNcs() {
+    const next = !showNcs;
+    setShowNcs(next);
+    setPanelOrder((prev) =>
+      next && !prev.includes('ncs') ? [...prev, 'ncs'] : prev.filter((id) => id !== 'ncs' || next)
+    );
+  }
+  function handleDismissPending(cs: string) { send({ type: 'dismiss_pending', callsign: cs }); }
+  function handleDismissAllPending() { send({ type: 'dismiss_all_pending' }); }
+  function handleStandaloneId() {
+    send({
+      type: 'standalone_id',
+      operator: profile!.operator_name,
+      callsign: effectiveCallsign,
+      location: profile!.location,
+    });
+  }
+  function handleClosePublishSnack() { setPublishSnack(null); }
+  function handleCloseErrorSnack() { setErrorSnack(null); }
+  function handleVerifyAllDismiss() { setVerifyAllComplete(false); }
+
+  const isMobile = useMobileDetect();
+
   // Show a blank screen while validating existing token on startup.
   if (authLoading) {
     return (
@@ -894,256 +900,129 @@ export default function App() {
     );
   }
 
+  const sharedProps = {
+    profile: profile!,
+    profiles,
+    connected,
+    isOnline,
+    showCallsignChips,
+    messages,
+    contacts,
+    radioStatus,
+    transmitting,
+    lastMessage,
+    channelClear,
+    attendanceStations,
+    onClearAttendance: handleClearAttendance,
+    journals,
+    journalResult,
+    journalGenerating,
+    journalError,
+    rxTexts,
+    rxCallsigns,
+    onListJournals: handleListJournals,
+    onGenerate: handleGenerate,
+    onSaveJournal: handleSaveJournal,
+    onDeleteJournal: handleDeleteJournal,
+    onPublishJournal: handlePublishJournal,
+    onDismissJournalResult: handleDismissJournalResult,
+    listenOnly,
+    onSend: handleSend,
+    onStandaloneId: handleStandaloneId,
+    onVoicePttStart: handleVoicePttStart,
+    onVoicePttChunk: handleVoicePttChunk,
+    onVoicePttEnd: handleVoicePttEnd,
+    onVoicePttCancel: handleVoicePttCancel,
+    voices,
+    voicePreviewBusy,
+    onPreviewVoice: handlePreviewVoice,
+    onSaveTtsPrefs: handleSaveTtsPrefs,
+    onUpdateProfile: handleUpdateProfile,
+    onChangePassword: handleChangePassword,
+    onLogout: handleLogout,
+    serviceMode,
+    readAloud,
+    notificationsEnabled,
+    sttListening,
+    darkMode,
+    onToggleServiceMode: handleToggleServiceMode,
+    onToggleListenOnly: handleToggleListenOnly,
+    onToggleReadAloud: handleToggleReadAloud,
+    onToggleNotifications: handleToggleNotifications,
+    onToggleSttListening: handleToggleSttListening,
+    onToggleDark: handleToggleDark,
+    adminConfig,
+    serverConfig,
+    showConfig,
+    showAdmin,
+    showServerConfig,
+    onToggleConfig: handleToggleConfig,
+    onToggleAdmin: handleToggleAdmin,
+    onToggleServerConfig: handleToggleServerConfig,
+    onAdminSave: handleAdminSave,
+    onServerConfigSave: handleServerConfigSave,
+    showContacts,
+    pendingPrefilledCallsign,
+    pendingPrefilledName,
+    pendingPrefilledLocation,
+    fccLookupResult,
+    verifyAllComplete,
+    onContactsClose: handleContactsClose,
+    onVerifyAllDismiss: handleVerifyAllDismiss,
+    send,
+    pendingStations,
+    onAddPending: handleAddPending,
+    onDismissPending: handleDismissPending,
+    onDismissAllPending: handleDismissAllPending,
+    onEnrollCluster: handleEnrollCluster,
+    publishSnack,
+    errorSnack,
+    onClosePublishSnack: handleClosePublishSnack,
+    onCloseErrorSnack: handleCloseErrorSnack,
+  };
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Box
-        className="app-shell"
-        sx={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
-      >
-        <TopBar
-          profile={profile}
+      {isMobile ? (
+        <MobileApp
+          {...sharedProps}
+          effectiveCallsign={effectiveCallsign}
+        />
+      ) : (
+        <DesktopApp
+          {...sharedProps}
           stationStatus={stationStatus}
-          connected={connected}
-          isOnline={isOnline}
-          serviceMode={serviceMode}
-          listenOnly={listenOnly}
-          readAloud={readAloud}
-          onToggleReadAloud={handleToggleReadAloud}
-          notificationsEnabled={notificationsEnabled}
-          onToggleNotifications={handleToggleNotifications}
-          showAttendance={showAttendance}
-          onToggleAttendance={() => setShowAttendance((v) => !v)}
-          showJournal={showJournal}
-          onToggleJournal={() => setShowJournal((v) => !v)}
-          showContacts={showContacts}
-          onToggleContacts={() => {
-            if (showContacts) handleContactsClose();
-            else setShowContacts(true);
-          }}
-          showConfig={showConfig}
-          onToggleConfig={() => setShowConfig((v) => !v)}
-          showAdmin={showAdmin}
-          onToggleAdmin={() => setShowAdmin((v) => !v)}
-          showServerConfig={showServerConfig}
-          onToggleServerConfig={() => setShowServerConfig((v) => !v)}
-          showNcs={showNcs}
-          onToggleNcs={() => {
-            const next = !showNcs;
-            setShowNcs(next);
-            setPanelOrder((prev) =>
-              next && !prev.includes('ncs') ? [...prev, 'ncs'] : prev.filter((id) => id !== 'ncs' || next)
-            );
-          }}
+          filterProfanity={filterProfanity}
+          fuzzyCallsign={fuzzyCallsign}
+          inputDevice={inputDevice}
+          systemMonitorSink={systemMonitorSink}
+          inputDevices={inputDevices}
+          monitorSinks={monitorSinks}
+          spectroColormap={spectroColormap}
+          spectroFreqRange={spectroFreqRange}
+          spectroTimeWindowS={spectroTimeWindowS}
+          onToggleProfanity={handleToggleProfanity}
+          onToggleFuzzy={handleToggleFuzzy}
+          onInputDeviceChange={handleInputDeviceChange}
+          onSpectroColormapChange={handleSpectroColormapChange}
+          onSpectroFreqRangeChange={handleSpectroFreqRangeChange}
+          onSpectroTimeWindowChange={handleSpectroTimeWindowChange}
           showWaterfall={showWaterfall}
           onToggleWaterfall={handleToggleWaterfall}
-          darkMode={darkMode}
-          onToggleDark={handleToggleDark}
-          onToggleServiceMode={handleToggleServiceMode}
-          onToggleListenOnly={handleToggleListenOnly}
-          sttListening={sttListening}
-          onToggleSttListening={handleToggleSttListening}
+          showAttendance={showAttendance}
+          showJournal={showJournal}
+          showNcs={showNcs}
+          panelOrder={panelOrder}
+          onToggleAttendance={handleToggleAttendance}
+          onToggleJournal={handleToggleJournal}
+          onToggleContacts={handleToggleContacts}
+          onToggleNcs={handleToggleNcs}
+          onPanelDragEnd={handlePanelDragEnd}
           onClearChat={handleClearChat}
-          onUpdateProfile={handleUpdateProfile}
-          onChangePassword={handleChangePassword}
-          onLogout={handleLogout}
-          voices={voices}
-          voicePreviewBusy={voicePreviewBusy}
-          onPreviewVoice={handlePreviewVoice}
-          stationLengthScale={adminConfig.stationLengthScale}
-          onSaveTtsPrefs={handleSaveTtsPrefs}
-          transmitting={transmitting}
-          onVoicePttStart={handleVoicePttStart}
-          onVoicePttChunk={handleVoicePttChunk}
-          onVoicePttEnd={handleVoicePttEnd}
-          onVoicePttCancel={handleVoicePttCancel}
+          spectroRef={spectroRef}
         />
-
-        <DndContext onDragEnd={handlePanelDragEnd}>
-          <SortableContext items={panelOrder} strategy={verticalListSortingStrategy}>
-            {panelOrder.map((id) => {
-              if (id === 'config' && showConfig) {
-                return (
-                  <DraggablePanel key="config" id="config">
-                    <ConfigPanel
-                      filterProfanity={filterProfanity}
-                      fuzzyCallsign={fuzzyCallsign}
-                      inputDevice={inputDevice}
-                      systemMonitorSink={systemMonitorSink}
-                      inputDevices={inputDevices}
-                      monitorSinks={monitorSinks}
-                      spectroColormap={spectroColormap}
-                      spectroFreqRange={spectroFreqRange}
-                      spectroTimeWindowS={spectroTimeWindowS}
-                      onToggleProfanity={handleToggleProfanity}
-                      onToggleFuzzy={handleToggleFuzzy}
-                      onInputDeviceChange={handleInputDeviceChange}
-                      onSpectroColormapChange={handleSpectroColormapChange}
-                      onSpectroFreqRangeChange={handleSpectroFreqRangeChange}
-                      onSpectroTimeWindowChange={handleSpectroTimeWindowChange}
-                    />
-                  </DraggablePanel>
-                );
-              }
-              if (id === 'attendance' && showAttendance) {
-                return (
-                  <DraggablePanel key="attendance" id="attendance">
-                    <AttendancePanel
-                      stations={attendanceStations}
-                      onClear={handleClearAttendance}
-                    />
-                  </DraggablePanel>
-                );
-              }
-              if (id === 'journal' && showJournal) {
-                return (
-                  <DraggablePanel key="journal" id="journal">
-                    <JournalPanel
-                      journals={journals}
-                      pendingResult={journalResult}
-                      generating={journalGenerating}
-                      journalError={journalError}
-                      rxTexts={rxTexts}
-                      rxCallsigns={rxCallsigns}
-                      onListJournals={handleListJournals}
-                      onGenerate={handleGenerate}
-                      onSave={handleSaveJournal}
-                      onDelete={handleDeleteJournal}
-                      onPublish={handlePublishJournal}
-                      onDismissResult={handleDismissJournalResult}
-                    />
-                  </DraggablePanel>
-                );
-              }
-              if (id === 'ncs' && showNcs) {
-                return (
-                  <DraggablePanel key="ncs" id="ncs">
-                    <NCSPanel
-                      send={send}
-                      lastMessage={lastMessage}
-                      contacts={contacts}
-                      channelClear={channelClear}
-                      transmitting={transmitting}
-                    />
-                  </DraggablePanel>
-                );
-              }
-              return null;
-            })}
-          </SortableContext>
-        </DndContext>
-
-        <PendingStationsBar
-          stations={pendingStations}
-          onAdd={handleAddPending}
-          onDismiss={(cs) => send({ type: 'dismiss_pending', callsign: cs })}
-          onDismissAll={() => send({ type: 'dismiss_all_pending' })}
-        />
-
-        <Box sx={{ display: 'flex', flexDirection: 'row', flex: '1 1 auto', overflow: 'hidden' }}>
-          {showWaterfall && (
-            <Spectrogram
-              ref={spectroRef}
-              colormap={spectroColormap}
-              timeWindowS={spectroTimeWindowS}
-            />
-          )}
-          <ChatDisplay
-            entries={messages}
-            contacts={contacts}
-            showCallsignChips={showCallsignChips}
-            onEnrollCluster={handleEnrollCluster}
-          />
-        </Box>
-
-        <StatusRow status={radioStatus} />
-
-        {!listenOnly && (
-          <QuickMessages
-            operatorName={profile.operator_name}
-            onSelect={(text) => messageInputRef.current?.setText(text)}
-          />
-        )}
-
-        {!listenOnly && (
-          <MessageInput
-            ref={messageInputRef}
-            transmitting={transmitting}
-            contacts={contacts}
-            onSend={handleSend}
-            onStandaloneId={() => {
-              send({
-                type: 'standalone_id',
-                operator: profile.operator_name,
-                callsign: effectiveCallsign,
-                location: profile.location,
-              });
-            }}
-          />
-        )}
-
-        <ContactsDialog
-          open={showContacts}
-          onClose={handleContactsClose}
-          contacts={contacts}
-          prefilledCallsign={pendingPrefilledCallsign}
-          prefilledName={pendingPrefilledName}
-          prefilledLocation={pendingPrefilledLocation}
-          fccLookupResult={fccLookupResult}
-          verifyAllComplete={verifyAllComplete}
-          onSend={send}
-          onVerifyAllDismiss={() => setVerifyAllComplete(false)}
-        />
-
-        <AdminPanel
-          open={showAdmin}
-          onClose={() => setShowAdmin(false)}
-          config={adminConfig}
-          voices={voices}
-          voicePreviewBusy={voicePreviewBusy}
-          onSave={handleAdminSave}
-          onPreviewVoice={handlePreviewVoice}
-        >
-          {profile.is_admin && (
-            <UsersPanel
-              profiles={profiles}
-              currentUserId={profile.id}
-              onCreateProfile={(data) => send({ type: 'create_profile', ...data })}
-              onDeleteProfile={(userId) => send({ type: 'delete_profile', user_id: userId })}
-              onResetLockout={(userId) => send({ type: 'reset_lockout', user_id: userId })}
-            />
-          )}
-        </AdminPanel>
-
-        <ServerConfigPanel
-          open={showServerConfig}
-          onClose={() => setShowServerConfig(false)}
-          config={serverConfig}
-          onSave={handleServerConfigSave}
-        />
-
-        <Snackbar
-          open={publishSnack !== null}
-          autoHideDuration={5000}
-          onClose={() => setPublishSnack(null)}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-        >
-          <Alert onClose={() => setPublishSnack(null)} severity="success" sx={{ width: '100%' }}>
-            {publishSnack}
-          </Alert>
-        </Snackbar>
-
-        <Snackbar
-          open={errorSnack !== null}
-          autoHideDuration={7000}
-          onClose={() => setErrorSnack(null)}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-        >
-          <Alert onClose={() => setErrorSnack(null)} severity="error" sx={{ width: '100%' }}>
-            {errorSnack}
-          </Alert>
-        </Snackbar>
-      </Box>
+      )}
     </ThemeProvider>
   );
 }

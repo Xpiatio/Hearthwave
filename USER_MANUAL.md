@@ -8,6 +8,7 @@ This manual covers day-to-day operation of Radio-TTY. For installation and serve
 
 1. [Signing in](#1-signing-in)
 2. [The interface](#2-the-interface)
+   - [2a. Mobile interface](#2a-mobile-interface)
 3. [Receiving transmissions (RX)](#3-receiving-transmissions-rx)
 4. [Sending a message (TX)](#4-sending-a-message-tx)
 5. [Quick messages](#5-quick-messages)
@@ -110,6 +111,47 @@ If the server is unreachable, the status bar shows **OFFLINE** in amber. Refresh
 **UI utilities:**
 - **Trash icon** — clear the chat log
 - **Sun/moon icon** — toggle dark/light mode
+
+---
+
+## 2a. Mobile interface
+
+On smartphones and tablets, Radio-TTY automatically switches to a touch-optimized layout after sign-in. No setting is required — the app detects touch devices and applies the mobile interface for the duration of that session.
+
+```
+┌─────────────────────────┐
+│ ≡  W1TEST  ●    [PTT]   │  ← Top bar
+├─────────────────────────┤
+│ [Pending stations bar]  │  (hidden when empty)
+├─────────────────────────┤
+│                         │
+│   Chat / Stations /     │
+│   Journal content       │
+│                         │
+├─────────────────────────┤
+│  Chat   Stations Journal │  ← Bottom navigation
+└─────────────────────────┘
+```
+
+**Top bar:**
+- **≡ Menu** — opens a side drawer with toggle switches (Dark mode, Listen only, STT listening, Read aloud, Notifications) and your account menu (Edit Profile, Change Password, Admin, Sign Out)
+- **Station callsign** — the current station callsign with a color dot: green = connected, red = offline
+- **PTT** — push-and-hold to transmit via your device microphone (Voice PTT); hidden in listen-only mode
+
+**Bottom navigation tabs:**
+| Tab | Contents |
+|-----|----------|
+| **Chat** | Message log, quick messages bar, and message input (send by text) |
+| **Stations** | Session attendance list |
+| **Journal** | Session journal generation and log |
+
+**Differences from desktop:**
+- The spectrogram waterfall is not shown on mobile (CPU/battery considerations)
+- Panel drag-and-drop reordering is not available on mobile
+- NCS Mode is not accessible from mobile
+- All other features — TX, RX, contacts, journals, dark mode, notifications, Voice PTT — work identically
+
+> **Tip:** If you sign in on a touch device and want the full desktop layout, open the browser's desktop mode (site settings or "Request desktop site") and reload the page.
 
 ---
 
@@ -609,3 +651,4 @@ The **Server Config** panel provides technical server-side settings, separate fr
 - **Slow or noisy transcription:** Adjust the VAD threshold in the **Server Config** panel (admin). Lower values (e.g. 0.3) are more sensitive; higher (e.g. 0.7) require a stronger signal. The setting can also be changed directly in `config.json` (`vad_threshold`).
 - **FCC lookups not working:** The online indicator (dot in the top bar) shows internet connectivity. If it is gray, FCC verification is unavailable until connectivity is restored.
 - **Session locked out?** Wait 15 minutes or ask an admin to use **Admin → Users → Reset lockout**.
+- **On a phone or tablet:** The app automatically shows the mobile interface — bottom tabs for Chat, Stations, and Journal. Tap the ≡ menu for settings and your account.
