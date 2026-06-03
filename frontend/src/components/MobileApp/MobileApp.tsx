@@ -73,6 +73,7 @@ export interface MobileAppProps {
   ) => void;
   onDeleteJournal: (file_path: string) => void;
   onPublishJournal: (file_path: string) => void;
+  onUnpublishJournal: (file_path: string) => void;
   onDismissJournalResult: () => void;
 
   // TX / PTT
@@ -186,6 +187,7 @@ export function MobileApp({
   onSaveJournal,
   onDeleteJournal,
   onPublishJournal,
+  onUnpublishJournal,
   onDismissJournalResult,
   listenOnly,
   onSend,
@@ -341,6 +343,7 @@ export function MobileApp({
             onSave={onSaveJournal}
             onDelete={onDeleteJournal}
             onPublish={onPublishJournal}
+            onUnpublish={onUnpublishJournal}
             onDismissResult={onDismissJournalResult}
           />
         </Box>

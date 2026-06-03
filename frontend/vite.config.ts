@@ -12,6 +12,7 @@ export default defineConfig({
         ws: true,
       },
       '/auth': { target: backendUrl },
+      '/journal': { target: backendUrl },
     },
   },
 });

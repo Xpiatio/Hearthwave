@@ -57,6 +57,7 @@ function makeProps(overrides: Partial<Parameters<typeof JournalPanel>[0]> = {}) 
     onSave: vi.fn(),
     onDelete: vi.fn(),
     onPublish: vi.fn(),
+    onUnpublish: vi.fn(),
     onDismissResult: vi.fn(),
     ...overrides,
   }

@@ -23,6 +23,7 @@ import {
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PublishIcon from '@mui/icons-material/Publish';
+import UnpublishedIcon from '@mui/icons-material/Unpublished';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import type { JournalEntry } from '../../types/ws';
 
@@ -44,6 +45,7 @@ interface Props {
   onSave: (title: string, summary: string, callsigns_locations: Array<{ callsign: string; location: string }>, transcript: string) => void;
   onDelete: (file_path: string) => void;
   onPublish: (file_path: string) => void;
+  onUnpublish: (file_path: string) => void;
   onDismissResult: () => void;
 }
 
@@ -82,6 +84,7 @@ export function JournalPanel({
   onSave,
   onDelete,
   onPublish,
+  onUnpublish,
   onDismissResult,
 }: Props) {
   const [selected, setSelected] = useState<JournalEntry | null>(null);
@@ -89,7 +92,9 @@ export function JournalPanel({
   const [editSummary, setEditSummary] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmPublish, setConfirmPublish] = useState<string | null>(null);
+  const [confirmUnpublish, setConfirmUnpublish] = useState<string | null>(null);
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const unpublishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     onListJournals();
@@ -98,6 +103,7 @@ export function JournalPanel({
   useEffect(() => {
     return () => {
       if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+      if (unpublishTimerRef.current) clearTimeout(unpublishTimerRef.current);
     };
   }, []);
 
@@ -135,9 +141,20 @@ export function JournalPanel({
       if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
     } else {
       setConfirmPublish(file);
-      // Auto-cancel confirm state after 4 seconds if user doesn't click again
       if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
       resetTimerRef.current = setTimeout(() => setConfirmPublish((cur) => cur === file ? null : cur), 4000);
+    }
+  }
+
+  function handleUnpublish(file: string) {
+    if (confirmUnpublish === file) {
+      onUnpublish(file);
+      setConfirmUnpublish(null);
+      if (unpublishTimerRef.current) clearTimeout(unpublishTimerRef.current);
+    } else {
+      setConfirmUnpublish(file);
+      if (unpublishTimerRef.current) clearTimeout(unpublishTimerRef.current);
+      unpublishTimerRef.current = setTimeout(() => setConfirmUnpublish((cur) => cur === file ? null : cur), 4000);
     }
   }
 
@@ -184,15 +201,27 @@ export function JournalPanel({
                   disablePadding
                   secondaryAction={
                     <Box sx={{ display: 'flex' }}>
-                      <IconButton
-                        size="small"
-                        onClick={(e) => { e.stopPropagation(); handlePublish(j._file); }}
-                        color={confirmPublish === j._file ? 'primary' : 'default'}
-                        title={confirmPublish === j._file ? 'Click again to publish to /journal' : 'Publish to family journal'}
-                        aria-label={confirmPublish === j._file ? 'Confirm publish' : 'Publish to family journal'}
-                      >
-                        <PublishIcon fontSize="small" />
-                      </IconButton>
+                      {j.published ? (
+                        <IconButton
+                          size="small"
+                          onClick={(e) => { e.stopPropagation(); handleUnpublish(j._file); }}
+                          color={confirmUnpublish === j._file ? 'warning' : 'success'}
+                          title={confirmUnpublish === j._file ? 'Click again to remove from /journal' : 'Published — click to remove from family journal'}
+                          aria-label={confirmUnpublish === j._file ? 'Confirm remove from journal' : 'Remove from family journal'}
+                        >
+                          <UnpublishedIcon fontSize="small" />
+                        </IconButton>
+                      ) : (
+                        <IconButton
+                          size="small"
+                          onClick={(e) => { e.stopPropagation(); handlePublish(j._file); }}
+                          color={confirmPublish === j._file ? 'primary' : 'default'}
+                          title={confirmPublish === j._file ? 'Click again to publish to /journal' : 'Publish to family journal'}
+                          aria-label={confirmPublish === j._file ? 'Confirm publish' : 'Publish to family journal'}
+                        >
+                          <PublishIcon fontSize="small" />
+                        </IconButton>
+                      )}
                       <IconButton
                         edge="end"
                         size="small"
@@ -209,7 +238,7 @@ export function JournalPanel({
                   <ListItemButton
                     selected={selected?._file === j._file}
                     onClick={() => { setSelected(j); onDismissResult(); }}
-                    sx={{ pr: 9 }}
+                    sx={{ pr: 11 }}
                   >
                     <ListItemText
                       primary={j.title || '(untitled)'}

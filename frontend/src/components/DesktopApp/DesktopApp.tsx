@@ -75,6 +75,7 @@ export interface DesktopAppProps {
   ) => void;
   onDeleteJournal: (file_path: string) => void;
   onPublishJournal: (file_path: string) => void;
+  onUnpublishJournal: (file_path: string) => void;
   onDismissJournalResult: () => void;
 
   // TX / PTT
@@ -228,6 +229,7 @@ export function DesktopApp({
   onSaveJournal,
   onDeleteJournal,
   onPublishJournal,
+  onUnpublishJournal,
   onDismissJournalResult,
   listenOnly,
   onSend,
@@ -418,6 +420,7 @@ export function DesktopApp({
                     onSave={onSaveJournal}
                     onDelete={onDeleteJournal}
                     onPublish={onPublishJournal}
+                    onUnpublish={onUnpublishJournal}
                     onDismissResult={onDismissJournalResult}
                   />
                 </DraggablePanel>

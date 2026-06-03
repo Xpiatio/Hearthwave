@@ -470,6 +470,11 @@ export default function App() {
 
       case 'journal_published':
         setPublishSnack(`"${msg.title}" published to /journal`);
+        sendRef.current({ type: 'list_journals' });
+        break;
+
+      case 'journal_unpublished':
+        sendRef.current({ type: 'list_journals' });
         break;
 
       case 'journal_deleted':
@@ -824,6 +829,10 @@ export default function App() {
     send({ type: 'publish_journal', file_path });
   }, [send]);
 
+  const handleUnpublishJournal = useCallback((file_path: string) => {
+    send({ type: 'unpublish_journal', file_path });
+  }, [send]);
+
   const handleDismissJournalResult = useCallback(() => {
     setJournalResult(null);
   }, []);
@@ -925,6 +934,7 @@ export default function App() {
     onSaveJournal: handleSaveJournal,
     onDeleteJournal: handleDeleteJournal,
     onPublishJournal: handlePublishJournal,
+    onUnpublishJournal: handleUnpublishJournal,
     onDismissJournalResult: handleDismissJournalResult,
     listenOnly,
     onSend: handleSend,
