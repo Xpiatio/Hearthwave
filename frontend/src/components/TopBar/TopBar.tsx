@@ -35,6 +35,8 @@ interface Props {
   onToggleConfig: () => void;
   showAdmin: boolean;
   onToggleAdmin: () => void;
+  showServerConfig: boolean;
+  onToggleServerConfig: () => void;
   showNcs: boolean;
   onToggleNcs: () => void;
   showWaterfall: boolean;
@@ -82,6 +84,8 @@ export function TopBar({
   onToggleConfig,
   showAdmin,
   onToggleAdmin,
+  showServerConfig,
+  onToggleServerConfig,
   showNcs,
   onToggleNcs,
   showWaterfall,
@@ -122,6 +126,8 @@ export function TopBar({
           onToggleConfig={onToggleConfig}
           showAdmin={showAdmin}
           onToggleAdmin={onToggleAdmin}
+          showServerConfig={showServerConfig}
+          onToggleServerConfig={onToggleServerConfig}
         />
 
         <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
