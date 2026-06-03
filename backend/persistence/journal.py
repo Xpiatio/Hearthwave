@@ -135,6 +135,20 @@ def publish_journal(file_path: str, published_by: str, journals_dir: Path) -> di
     return entry
 
 
+def unpublish_journal(source_file: str, journals_dir: Path) -> None:
+    """Remove a journal entry from the public manifest by its source filename.
+
+    Regenerates journal.html from the updated manifest.  No-op if not found.
+    """
+    manifest = load_published_manifest(journals_dir)
+    updated = [e for e in manifest if e.get("source_file") != source_file]
+    if len(updated) == len(manifest):
+        return
+    pub_dir = _public_dir(journals_dir)
+    atomic_json_write(pub_dir / "journal-manifest.json", updated)
+    atomic_text_write(pub_dir / "journal.html", _render_public_html(updated))
+
+
 def _fmt_date(iso: str) -> str:
     """Format an ISO timestamp as a readable date string, gracefully."""
     try:

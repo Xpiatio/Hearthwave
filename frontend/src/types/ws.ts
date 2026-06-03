@@ -130,6 +130,7 @@ export interface JournalEntry {
   transcript: string;
   summary: string;
   _file: string;
+  published?: boolean;
 }
 
 export interface JournalsMsg {
@@ -162,6 +163,11 @@ export interface JournalDeletedMsg {
 export interface JournalPublishedMsg {
   type: 'journal_published';
   title: string;
+}
+
+export interface JournalUnpublishedMsg {
+  type: 'journal_unpublished';
+  file_path: string;
 }
 
 // FCC & callsign features (server → client)
@@ -374,6 +380,7 @@ export type WsMessage =
   | UserProfileMsg
   | ProfilesMsg
   | JournalPublishedMsg
+  | JournalUnpublishedMsg
   | VoicesListMsg
   | VoicePreviewAudioMsg
   | TxAudioMsg

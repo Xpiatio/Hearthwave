@@ -91,6 +91,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, Response
 
 from backend.ai.gemini_client import GeminiError
 from backend.ai.gemini_client import generate_journal as _gemini_generate
@@ -117,7 +118,7 @@ from backend.persistence.contacts import (
     known_callsigns,
     normalize_callsign,
 )
-from backend.persistence.journal import delete_journal, load_journals, publish_journal, save_journal
+from backend.persistence.journal import delete_journal, load_journals, load_published_manifest, publish_journal, save_journal, unpublish_journal
 from backend.persistence.tokens import TokenStore
 from backend.persistence.users import DEFAULT_PREFS, SENSITIVE_PROFILE_FIELDS, UsersStore
 from backend.ptt.factory import make_ptt
@@ -1095,6 +1096,16 @@ async def health() -> dict:
     return {"ok": True}
 
 
+@app.get("/journal")
+async def public_journal() -> Response:
+    if _config is None:
+        return Response("Service starting up.", media_type="text/html", status_code=503)
+    path = _config.journals_dir.parent / "public" / "journal.html"
+    if not path.exists():
+        return Response("No journals have been published yet.", media_type="text/html", status_code=404)
+    return FileResponse(path, media_type="text/html")
+
+
 # ---------------------------------------------------------------------------
 # WebSocket endpoint
 # ---------------------------------------------------------------------------
@@ -1405,6 +1416,12 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                     await _manager.send_to(ws, {"type": "journals", "journals": []})
                     continue
                 journals = load_journals(_config.journals_dir)
+                published = {
+                    e.get("source_file")
+                    for e in load_published_manifest(_config.journals_dir)
+                }
+                for j in journals:
+                    j["published"] = Path(j["_file"]).name in published
                 await _manager.send_to(ws, {"type": "journals", "journals": journals})
 
             elif msg_type == "generate_journal":
@@ -1478,6 +1495,20 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                     await _manager.send_to(ws, {
                         "type": "journal_published",
                         "title": entry["title"],
+                    })
+                except (ValueError, OSError) as exc:
+                    await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
+
+            elif msg_type == "unpublish_journal":
+                if _config is None:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Server not ready."})
+                    continue
+                file_path = (data.get("file_path") or "").strip()
+                try:
+                    unpublish_journal(Path(file_path).name, _config.journals_dir)
+                    await _manager.send_to(ws, {
+                        "type": "journal_unpublished",
+                        "file_path": file_path,
                     })
                 except (ValueError, OSError) as exc:
                     await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
