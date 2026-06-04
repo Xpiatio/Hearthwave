@@ -2,21 +2,32 @@
 # Radio-TTY prerequisite setup — run once on the Docker host BEFORE deploying
 # the Portainer stack.
 #
-# Downloads Whisper STT and Piper TTS voices into the Docker named volumes the
-# stack expects. Requires only docker — no Python or pip needed on the host.
+# Populates the three named volumes the stack expects with models and voices.
+# Requires only docker — no Python or pip needed on the host.
 #
 # Usage:
-#   bash prereq.sh              # full setup: models + voices
-#   bash prereq.sh --voice-only # add/update voices only (skip Whisper)
+#   bash prereq.sh                   # full setup: Whisper small.en + all voices
+#   bash prereq.sh --model base.en   # use a smaller/faster Whisper model
+#   bash prereq.sh --model medium.en # use a higher-accuracy Whisper model
+#   bash prereq.sh --voice-only      # add/update voices only (skip Whisper)
 
 set -euo pipefail
 
 VOICE_ONLY=false
-for arg in "$@"; do
-  [[ "$arg" == "--voice-only" ]] && VOICE_ONLY=true
+WHISPER_MODEL="small.en"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --model)
+      [[ $# -lt 2 ]] && { echo "Error: --model requires a value." >&2; exit 1; }
+      WHISPER_MODEL="$2"; shift 2 ;;
+    --voice-only) VOICE_ONLY=true; shift ;;
+    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
+    *) echo "Unknown argument: $1  (try --help)" >&2; exit 1 ;;
+  esac
 done
 
-BACKEND_IMAGE="ghcr.io/xpiatio/radio-tty-backend:v1.1.0"
+BACKEND_IMAGE="ghcr.io/xpiatio/radio-tty-backend:v2.1.0"
 VOICES_VOL="radio-tty-voices"
 MODELS_VOL="radio-tty-models"
 DATA_VOL="radio-tty-data"
@@ -36,7 +47,18 @@ VOICES=(
   "en_US-libritts-high|en/en_US/libritts/high/en_US-libritts-high"
 )
 
-# ── 1. Check prerequisites ─────────────────────────────────────────────────────
+# ── 0. Validate model choice ─────────────────────────────────────────────────
+
+WHISPER_REPOS=(tiny.en base.en small.en medium.en large-v3)
+VALID=false
+for m in "${WHISPER_REPOS[@]}"; do [[ "$m" == "$WHISPER_MODEL" ]] && VALID=true; done
+if ! $VALID; then
+  echo "Error: unknown model '$WHISPER_MODEL'." >&2
+  echo "Valid choices: ${WHISPER_REPOS[*]}" >&2
+  exit 1
+fi
+
+# ── 1. Check prerequisites ────────────────────────────────────────────────────
 
 if ! command -v docker &>/dev/null; then
   echo "Error: docker not found in PATH." >&2
@@ -65,27 +87,41 @@ done
 # ── 3. Whisper STT model ──────────────────────────────────────────────────────
 
 if ! $VOICE_ONLY; then
+  # Map model name → HuggingFace repo
+  case "$WHISPER_MODEL" in
+    tiny.en)   REPO_ID="Systran/faster-whisper-tiny.en"   ;;
+    base.en)   REPO_ID="Systran/faster-whisper-base.en"   ;;
+    small.en)  REPO_ID="Systran/faster-whisper-small.en"  ;;
+    medium.en) REPO_ID="Systran/faster-whisper-medium.en" ;;
+    large-v3)  REPO_ID="Systran/faster-whisper-large-v3"  ;;
+  esac
+
   echo ""
-  echo "==> Whisper STT model (small.en, ~464 MB)..."
+  echo "==> Whisper STT model (${WHISPER_MODEL})..."
   echo "  Pulling backend image..."
   docker pull "$BACKEND_IMAGE" --quiet
 
   docker run --rm --user root \
     -v "${MODELS_VOL}:/app/backend/Models" \
+    -e "WHISPER_MODEL=${WHISPER_MODEL}" \
+    -e "REPO_ID=${REPO_ID}" \
     "$BACKEND_IMAGE" \
     python3 -c "
 import os, sys
 from huggingface_hub import snapshot_download
 
-target = '/app/backend/Models/STT/small.en'
+model = os.environ['WHISPER_MODEL']
+repo  = os.environ['REPO_ID']
+target = f'/app/backend/Models/STT/{model}'
+
 if os.path.isdir(target) and os.listdir(target):
-    print('  small.en already present, skipping.')
+    print(f'  {model} already present, skipping.')
     sys.exit(0)
 
 os.makedirs(target, exist_ok=True)
-print('  Downloading from HuggingFace (Systran/faster-whisper-small.en)...')
-snapshot_download('Systran/faster-whisper-small.en', local_dir=target)
-print('  Whisper download complete.')
+print(f'  Downloading {repo} from HuggingFace...')
+snapshot_download(repo, local_dir=target)
+print(f'  Whisper {model} download complete.')
 "
 fi
 
@@ -121,7 +157,7 @@ docker run --rm -v "${VOICES_VOL}:/v" alpine sh -c "$VOICE_SCRIPT"
 echo ""
 echo "Done. Volumes ready:"
 if ! $VOICE_ONLY; then
-echo "  ${MODELS_VOL}  Whisper small.en STT model"
+  echo "  ${MODELS_VOL}  Whisper ${WHISPER_MODEL} STT model"
 fi
 VOICE_NAMES=""
 for entry in "${VOICES[@]}"; do VOICE_NAMES+=" ${entry%%|*}"; done

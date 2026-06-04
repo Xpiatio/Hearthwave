@@ -4,12 +4,13 @@ services:
       context: .
       dockerfile: backend/Dockerfile
       args:
-        COMPUTE_BACKEND: cpu
+        COMPUTE_BACKEND: ${COMPUTE_BACKEND:-cpu}
     volumes:
       - ./data:/data
       - ./Voices:/app/Voices:ro
       - ./Models:/app/backend/Models:ro
-      - ${XDG_RUNTIME_DIR:-/run/user/1000}/pulse:/run/pulse:ro
+      # setup.sh writes PULSE_UID to .env — run it once before docker compose up
+      - /run/user/${PULSE_UID:-1000}/pulse:/run/pulse:ro
     environment:
       - PULSE_SERVER=unix:/run/pulse/native
     devices:

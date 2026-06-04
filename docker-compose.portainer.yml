@@ -16,9 +16,9 @@
 #    radio-tty-voices     | Piper ONNX voice files (*.onnx + *.onnx.json)
 #    radio-tty-models     | faster-whisper + speaker recognition model dirs
 #
-# 2. Adjust the PulseAudio socket path if your host user is not UID 1000:
-#       - /run/user/<YOUR_UID>/pulse:/run/pulse:ro
-#    Check with: id -u
+# 2. Set PULSE_UID to your host user's UID (run 'id -u' on the host to check).
+#    The default below is 1000. In Portainer: Stack → Environment variables → add PULSE_UID.
+#    Or edit the volume line directly:  - /run/user/<YOUR_UID>/pulse:/run/pulse:ro
 #
 # 3. Stacks → Add stack → Web editor → paste this file → Deploy.
 #
@@ -55,7 +55,7 @@ services:
       - radio-tty-data:/data
       - radio-tty-voices:/app/Voices:ro
       - radio-tty-models:/app/backend/Models:ro
-      - /run/user/1000/pulse:/run/pulse:ro
+      - /run/user/${PULSE_UID:-1000}/pulse:/run/pulse:ro
     environment:
       - PULSE_SERVER=unix:/run/pulse/native
       # Uncomment to create the admin account headlessly on first run:
