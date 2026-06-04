@@ -57,5 +57,8 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 8765
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8765/health')" || exit 1
+
 ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["uvicorn", "backend.server:app", "--host", "0.0.0.0", "--port", "8765"]
