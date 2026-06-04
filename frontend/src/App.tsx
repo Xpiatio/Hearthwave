@@ -511,6 +511,7 @@ export default function App() {
         // tx_audio routes transmitted speech through the local audio output
         // (e.g. 3.5mm jack to radio); voice_preview_audio does the same for previews.
         // rx_audio plays incoming RX transcripts aloud (read_aloud pref).
+        const isTxAudio = msg.type === 'tx_audio';
         try {
           const binary = atob(msg.data);
           const bytes = new Uint8Array(binary.length);
@@ -524,10 +525,14 @@ export default function App() {
           const src = ctx.createBufferSource();
           src.buffer = buf;
           src.connect(ctx.destination);
-          src.onended = () => ctx.close();
+          src.onended = () => {
+            ctx.close();
+            if (isTxAudio) sendRef.current({ type: 'tx_audio_complete' });
+          };
           src.start();
         } catch (e) {
           console.error('audio playback error', e);
+          if (isTxAudio) sendRef.current({ type: 'tx_audio_complete' });
         }
         break;
       }

@@ -9,11 +9,12 @@ WebSocket message types (client → server):
     standalone_id     — {"type": "standalone_id"}
     voice_preview     — {"type": "voice_preview", "text"?: str}
     add_contact       — {"type": "add_contact", "callsign": str, ...contact fields...}
+    update_contact    — {"type": "update_contact", "callsign": str, "original_name"?: str, ...updates...}
     fcc_lookup        — {"type": "fcc_lookup", "callsign": str, "name"?: str}
     verify_all        — {"type": "verify_all"}
     dismiss_pending   — {"type": "dismiss_pending", "callsign": str}
     dismiss_all_pending — {"type": "dismiss_all_pending"}
-    delete_contact    — {"type": "delete_contact", "callsign": str}
+    delete_contact    — {"type": "delete_contact", "callsign": str, "name"?: str}
     set_service_mode  — {"type": "set_service_mode", "service": "GMRS" | "FRS"}
     set_listen_only   — {"type": "set_listen_only", "listen_only": bool}
     list_input_devices — {"type": "list_input_devices"}
@@ -145,6 +146,7 @@ _users_store: UsersStore | None = None
 _token_store: TokenStore | None = None
 _stt_worker: STTWorker | None = None
 _synthesizer: TTSSynthesizer | None = None
+_tx_audio_complete_event: asyncio.Event | None = None
 _monitor: "Any | None" = None  # AudioMonitor, lazy-imported
 _spectro: SpectroTask | None = None
 
@@ -643,6 +645,7 @@ async def _tx_pump() -> None:
                 )
                 if audio is not None:
                     audio_b64 = base64.b64encode(audio.tobytes()).decode("ascii")
+                    _tx_audio_complete_event = asyncio.Event()
                     try:
                         ptt.key()
                         await _manager.broadcast({
@@ -668,12 +671,27 @@ async def _tx_pump() -> None:
             _log.error("TX synthesis error: %s", exc)
             await _manager.broadcast({"type": "error", "detail": f"TX error: {exc}"})
         finally:
-            if not is_preview and _stt_worker is not None and _stt_listening:
-                _stt_worker.resume()
             if is_preview:
                 await _manager.broadcast({"type": "voice_preview_done"})
             else:
                 await _manager.broadcast({"type": "tx_status", "status": "idle"})
+                if _stt_worker is not None and _stt_listening:
+                    # Wait for the browser to confirm audio playback has ended
+                    # before resuming STT.  The duration-based sleep above only
+                    # covers synthesis length; browser Web Audio API buffering +
+                    # PulseAudio loopback latency means audio is still playing
+                    # when that sleep expires.  We fall back to a 2 s timeout
+                    # in case the browser never sends the signal (tab hidden,
+                    # WS drop, etc.), then add a short tail for loopback drain.
+                    evt = _tx_audio_complete_event
+                    if evt is not None:
+                        try:
+                            await asyncio.wait_for(evt.wait(), timeout=2.0)
+                        except asyncio.TimeoutError:
+                            pass
+                    await asyncio.sleep(0.2)
+                    _stt_worker.resume()
+            _tx_audio_complete_event = None
 
 
 # ---------------------------------------------------------------------------
@@ -735,9 +753,10 @@ async def _handle_voice_tx(payload: dict) -> None:
         _log.error("_handle_voice_tx: %s", exc)
         await _manager.broadcast({"type": "error", "detail": f"Voice TX error: {exc}"})
     finally:
-        if _stt_worker is not None and _stt_listening:
-            _stt_worker.resume()
         await _manager.broadcast({"type": "tx_status", "status": "idle"})
+        if _stt_worker is not None and _stt_listening:
+            await asyncio.sleep(0.3)  # let PulseAudio output buffer drain
+            _stt_worker.resume()
 
 
 def _play_voice_blocking(audio: "np.ndarray", sample_rate: int, output_device) -> None:
@@ -1039,6 +1058,10 @@ async def _lifespan(app: FastAPI):
         tx_queue=_tx_queue,
         config_getter=lambda: _config,
         channel_clear_fn=lambda: _channel_clear,
+        contacts_getter=lambda: _contacts_store.get_all() if _contacts_store else [],
+        add_contact_fn=lambda c: _contacts_store.add_contact(c) if _contacts_store else [],
+        update_contact_fn=lambda cs, u, original_name=None: _contacts_store.update_contact(cs, u, original_name=original_name) if _contacts_store else [],
+        broadcast_contacts_fn=lambda contacts: _manager.broadcast({"type": "contacts", "contacts": contacts}),
     ))
 
     _synthesizer = TTSSynthesizer(
@@ -1316,6 +1339,11 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                 name="plugin-client-msg",
             )
 
+            if msg_type == "tx_audio_complete":
+                if _tx_audio_complete_event is not None:
+                    _tx_audio_complete_event.set()
+                continue
+
             if msg_type == "tx_message":
                 callsign = (data.get("callsign") or "").strip()
                 if not callsign:
@@ -1371,6 +1399,25 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                     updated = _contacts_store.add_contact(contact)
                     await _manager.broadcast({"type": "contacts", "contacts": updated})
                 except ValueError as exc:
+                    await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
+
+            elif msg_type == "update_contact":
+                if _contacts_store is None:
+                    await _manager.send_to(ws, {
+                        "type": "error",
+                        "detail": "Contacts store not initialised.",
+                    })
+                    continue
+                cs = normalize_callsign(data.get("callsign", ""))
+                if not cs:
+                    await _manager.send_to(ws, {"type": "error", "detail": "update_contact requires 'callsign'."})
+                    continue
+                original_name = (data.get("original_name") or "").strip() or None
+                updates = {k: v for k, v in data.items() if k not in ("type", "callsign", "original_name")}
+                try:
+                    updated = _contacts_store.update_contact(cs, updates, original_name=original_name)
+                    await _manager.broadcast({"type": "contacts", "contacts": updated})
+                except KeyError as exc:
                     await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
 
             elif msg_type == "set_monitor":
@@ -1578,7 +1625,7 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                         updated = apply_verification(contact, result, now_iso)
                         if updated != contact:
                             try:
-                                _contacts_store.update_contact(cs, updated)
+                                _contacts_store.update_contact(cs, updated, original_name=name or None)
                                 updated_any = True
                             except Exception as exc:
                                 _log.warning("verify_all: update failed for %s: %s", cs, exc)
@@ -1614,8 +1661,9 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                 if not cs:
                     await _manager.send_to(ws, {"type": "error", "detail": "delete_contact requires a non-empty 'callsign' field."})
                     continue
+                contact_name = (data.get("name") or "").strip() or None
                 try:
-                    updated = _contacts_store.delete_contact(cs)
+                    updated = _contacts_store.delete_contact(cs, name=contact_name)
                     await _manager.broadcast({"type": "contacts", "contacts": updated})
                 except KeyError as exc:
                     await _manager.send_to(ws, {"type": "error", "detail": str(exc)})

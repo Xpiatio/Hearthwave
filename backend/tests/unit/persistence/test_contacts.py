@@ -81,24 +81,35 @@ class TestAddContact:
         empty_store.add_contact({"callsign": "  W1AW  "})
         assert empty_store.get_all()[0]["callsign"] == "W1AW"
 
-    def test_deduplicates_by_callsign_last_write_wins(self, store_path: Path, empty_store: ContactsStore):
-        empty_store.add_contact({"callsign": "W1AW", "name": "First"})
-        empty_store.add_contact({"callsign": "W1AW", "name": "Second"})
+    def test_same_callsign_different_name_keeps_both(self, store_path: Path, empty_store: ContactsStore):
+        """GMRS family members share a callsign — both records must be kept."""
+        empty_store.add_contact({"callsign": "W1AW", "name": "John Smith"})
+        empty_store.add_contact({"callsign": "W1AW", "name": "Jane Smith"})
+        contacts = empty_store.get_all()
+        assert len(contacts) == 2
+        names = {c["name"] for c in contacts}
+        assert names == {"John Smith", "Jane Smith"}
+
+    def test_same_callsign_same_name_deduplicates_last_write_wins(self, store_path: Path, empty_store: ContactsStore):
+        """Exact duplicate (callsign + name) keeps only the last-written entry."""
+        empty_store.add_contact({"callsign": "W1AW", "name": "John Smith", "location": "Old"})
+        empty_store.add_contact({"callsign": "W1AW", "name": "John Smith", "location": "New"})
         contacts = empty_store.get_all()
         assert len(contacts) == 1
-        assert contacts[0]["name"] == "Second"
+        assert contacts[0]["location"] == "New"
 
     def test_deduplication_is_case_insensitive(self, empty_store: ContactsStore):
-        empty_store.add_contact({"callsign": "W1AW", "name": "First"})
-        empty_store.add_contact({"callsign": "w1aw", "name": "Second"})
+        """Callsign case differences do not create a second record for the same person."""
+        empty_store.add_contact({"callsign": "W1AW", "name": "John Smith"})
+        empty_store.add_contact({"callsign": "w1aw", "name": "John Smith"})
         assert len(empty_store.get_all()) == 1
 
     def test_deduplication_persisted_to_disk(self, store_path: Path, empty_store: ContactsStore):
-        empty_store.add_contact({"callsign": "W1AW", "name": "First"})
-        empty_store.add_contact({"callsign": "W1AW", "name": "Second"})
+        empty_store.add_contact({"callsign": "W1AW", "name": "John Smith", "location": "Old"})
+        empty_store.add_contact({"callsign": "W1AW", "name": "John Smith", "location": "New"})
         on_disk = json.loads(store_path.read_text(encoding="utf-8"))
         assert len(on_disk) == 1
-        assert on_disk[0]["name"] == "Second"
+        assert on_disk[0]["location"] == "New"
 
     def test_multiple_distinct_contacts_are_kept(self, empty_store: ContactsStore):
         empty_store.add_contact({"callsign": "W1AW"})

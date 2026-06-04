@@ -119,6 +119,7 @@ export function ContactsDialog({
   const [sortBySuffix, setSortBySuffix] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingCallsign, setEditingCallsign] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
   const [fccLoading, setFccLoading] = useState(false);
   const [verifyLoading, setVerifyLoading] = useState(false);
@@ -167,6 +168,7 @@ export function ContactsDialog({
   function openAdd() {
     setForm(EMPTY_FORM);
     setEditingCallsign(null);
+    setEditingName(null);
     setFccLoading(false);
     setEditOpen(true);
   }
@@ -180,6 +182,7 @@ export function ContactsDialog({
       ham_callsign: c.ham_callsign ?? '',
     });
     setEditingCallsign(c.callsign);
+    setEditingName(c.name ?? '');
     setFccLoading(false);
     setEditOpen(true);
   }
@@ -187,19 +190,31 @@ export function ContactsDialog({
   function handleSaveContact() {
     const callsign = form.callsign.trim().toUpperCase();
     if (!callsign) return;
-    onSend({
-      type: 'add_contact',
-      callsign,
-      name: form.name.trim(),
-      location: form.location.trim(),
-      gmrs_callsign: form.gmrs_callsign.trim().toUpperCase(),
-      ham_callsign: form.ham_callsign.trim().toUpperCase(),
-    });
+    if (editingCallsign !== null) {
+      onSend({
+        type: 'update_contact',
+        callsign: editingCallsign,
+        original_name: editingName ?? '',
+        name: form.name.trim(),
+        location: form.location.trim(),
+        gmrs_callsign: form.gmrs_callsign.trim().toUpperCase(),
+        ham_callsign: form.ham_callsign.trim().toUpperCase(),
+      });
+    } else {
+      onSend({
+        type: 'add_contact',
+        callsign,
+        name: form.name.trim(),
+        location: form.location.trim(),
+        gmrs_callsign: form.gmrs_callsign.trim().toUpperCase(),
+        ham_callsign: form.ham_callsign.trim().toUpperCase(),
+      });
+    }
     setEditOpen(false);
   }
 
-  function handleDelete(callsign: string) {
-    onSend({ type: 'delete_contact', callsign });
+  function handleDelete(c: Contact) {
+    onSend({ type: 'delete_contact', callsign: c.callsign, name: c.name ?? '' });
   }
 
   function handleFccLookup() {
@@ -341,7 +356,7 @@ export function ContactsDialog({
                   </TableRow>
                 )}
                 {sorted.map((c) => (
-                  <TableRow key={c.callsign} hover>
+                  <TableRow key={`${c.callsign}|${c.name ?? ''}`} hover>
                     <TableCell sx={{ fontWeight: 700, fontFamily: 'monospace' }}>
                       {c.callsign}
                     </TableCell>
@@ -363,7 +378,7 @@ export function ContactsDialog({
                       <IconButton
                         size="small"
                         color="error"
-                        onClick={() => handleDelete(c.callsign)}
+                        onClick={() => handleDelete(c)}
                         aria-label={`Delete ${c.callsign}`}
                       >
                         <DeleteIcon fontSize="small" />
