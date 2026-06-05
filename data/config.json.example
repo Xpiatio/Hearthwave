@@ -5,7 +5,7 @@
 
     "radio_service": "GMRS",
 
-    "voice": "ryan-high",
+    "voice": "/app/Voices/en_US-ryan-high.onnx",
     "tts_length_scale": 1.0,
 
     "input_device": -1,
