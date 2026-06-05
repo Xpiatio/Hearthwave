@@ -35,7 +35,7 @@ services:
       - ./data:/data:ro
     depends_on:
       backend:
-        condition: service_healthy
+        condition: service_started
     restart: unless-stopped
     networks:
       - radio
