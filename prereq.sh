@@ -102,11 +102,12 @@ if ! $VOICE_ONLY; then
   docker pull "$BACKEND_IMAGE" --quiet
 
   docker run --rm --user root \
+    --entrypoint python3 \
     -v "${MODELS_VOL}:/app/backend/Models" \
     -e "WHISPER_MODEL=${WHISPER_MODEL}" \
     -e "REPO_ID=${REPO_ID}" \
     "$BACKEND_IMAGE" \
-    python3 -c "
+    -c "
 import os, sys
 from huggingface_hub import snapshot_download
 
