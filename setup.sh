@@ -150,7 +150,7 @@ if ! $VOICE_ONLY; then
     docker run --rm \
       -v "$(pwd)/Models:/models" \
       python:3.13-slim \
-      bash -c "pip install -q huggingface_hub && python3 -c \"
+      bash -c "pip install -q --root-user-action=ignore huggingface_hub && python3 -c \"
 import os
 from huggingface_hub import snapshot_download
 os.makedirs('/models/STT/${WHISPER_MODEL}', exist_ok=True)
