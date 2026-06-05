@@ -89,7 +89,14 @@ class ServerConfig(dict):
         if raw:
             return Path(raw)
         if self.voice:
-            return Path(self.voice).parent
+            # Only derive the directory from `voice` when it is a real path.
+            # A bare stem like "ryan-high" has parent "." which would collapse
+            # the voices directory to the CWD and hide every installed voice
+            # (a chicken-and-egg lockout: the picker is empty so no valid voice
+            # can ever be selected). Fall through to the default in that case.
+            parent = Path(self.voice).parent
+            if str(parent) not in ("", "."):
+                return parent
         return Path("/app/Voices")
 
     # ---- text / content --------------------------------------------------
