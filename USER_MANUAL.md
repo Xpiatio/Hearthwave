@@ -29,6 +29,7 @@ This manual covers day-to-day operation of Radio-TTY as a GMRS family hub — a 
 20. [CW (Morse code) receive mode](#20-cw-morse-code-receive-mode)
 21. [Server Config panel (admin)](#21-server-config-panel-admin)
 22. [Plugin system](#22-plugin-system)
+23. [FCC compliance and remote access](#23-fcc-compliance-and-remote-access)
 
 ---
 
@@ -746,3 +747,39 @@ These are examples of capabilities that could be added as self-contained plugins
 | **AI call summarizer** | Generate a one-sentence briefing for each received transmission and push it alongside the transcript so operators can scan a busy channel at a glance |
 
 If you are a developer and want to build a plugin, see `backend/plugins/base.py` for the `BasePlugin` interface and `backend/plugins/ncs.py` for a complete working example.
+
+---
+
+## 23. FCC compliance and remote access
+
+Radio-TTY allows family members to send text-to-speech messages to the base station over the internet. This section explains how that is designed to comply with FCC Part 95 GMRS regulations and what it means for your licence.
+
+### What it is: remote control, not an internet gateway
+
+An internet repeater gateway (sometimes called RoIP or a VoIP bridge) takes audio received from a radio in one location, streams it across the public internet, and retransmits it from a different radio elsewhere. The FCC prohibits this type of internet interconnection on GMRS under Part 95.1749 — GMRS is licensed as a localized family and community service, not a globally-linked network.
+
+Radio-TTY does not do this. When a family member sends a message from a phone or browser over the internet, that message travels to your local base station server and is spoken by the TTS engine through the local radio. Nothing received from the air is forwarded across the internet to another transmitter. The base station is the end destination, not a bridge.
+
+This is equivalent to a licensed operator sitting at the base station microphone — except the "microphone" is a text input accessed remotely. The FCC calls this a **remote control point** (§ 95.1745), which is permitted provided the station is protected against unauthorized transmissions.
+
+### Access controls
+
+Because family members can trigger transmissions from outside the home, Radio-TTY requires authentication for every connection:
+
+- Each family member has their own password-protected account
+- Session tokens are validated before any radio access is granted
+- Accounts can be restricted to listen-only mode to prevent TX entirely
+- Accounts lock after three incorrect password attempts
+- Only your administrator can create new accounts
+
+Do not share your password or admin credentials with anyone outside your licensed family unit. Under a GMRS licence, only family members covered by that licence may initiate transmissions.
+
+### What administrators should verify
+
+If you expose Radio-TTY to the public internet (outside your home network):
+
+1. **Use TLS** — run a reverse proxy (nginx, Caddy) with a valid HTTPS certificate in front of the app; without it, session tokens travel in plaintext
+2. **Restrict accounts to your licensed family unit** — do not create TX-capable accounts for unlicensed individuals
+3. **Use listen-only accounts for monitoring** — if anyone outside the licence needs to hear the station, create a listen-only account so they can listen but cannot key the radio
+
+The NCS plugin contacts `api.weather.gov` for SKYWARN alerts and the FCC API for callsign verification. Both are outbound read-only requests from your server and do not create any radio interconnection.

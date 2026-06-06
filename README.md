@@ -29,6 +29,43 @@ FastAPI Backend  ──►  PulseAudio / sounddevice
 
 ---
 
+## FCC compliance
+
+Radio-TTY is designed as a **remote control point** for a single local station, not an internet repeater gateway or RoIP bridge. This distinction matters for GMRS operation under Part 95.
+
+### What Radio-TTY is not
+
+An internet repeater gateway (RoIP/VoIP bridge) creates an RF-to-internet-to-RF loop — audio received from a radio in one location is streamed across the public internet and retransmitted from a different radio elsewhere:
+
+```
+Radio RX → internet → remote gateway → Radio TX (different location)
+```
+
+EchoLink, AllStar Link, and IRLP work this way. Under FCC Part 95.1749, this type of internet interconnection is prohibited on GMRS — the service is intended as a localized family and community radio service, not a globally-linked network.
+
+### What Radio-TTY is
+
+The internet connection in Radio-TTY runs in one direction only — from a family member's browser to the local base station server — and terminates there:
+
+```
+Family member (internet) → text / TTS request → Base station server → Local radio TX
+```
+
+Nothing received over the air is forwarded across the internet to another transmitter. The server is the terminal destination. When a family member sends a TTS message from a phone or laptop, they are acting as a **remote control point** (§ 95.1745) — a licensed family member remotely operating their own local transmitter, equivalent to sitting at the base station microphone.
+
+### Built-in safeguards
+
+Radio-TTY enforces the access controls that § 95.1745 requires for remotely-operated GMRS stations:
+
+- **Authenticated sessions only** — all WebSocket connections must present a valid session token; unauthenticated connections are rejected before any radio access is granted (PBKDF2-SHA256 passwords, 3-attempt lockout)
+- **No RF-to-internet forwarding** — the RX pipeline terminates at transcription; received audio is never routed to a remote transmitter
+- **Single-point topology** — one server, one radio; no routing layer exists to propagate transmissions across stations in different locations
+- **Per-account listen-only mode** — individual users can be restricted to receive-only at the server level, preventing TX entirely
+
+> **Note:** The EchoLink / AllStar gateway entry in the [future plugins table](#potential-future-plugins) describes a capability that would apply to **amateur radio use only**. Connecting a GMRS station to those internet-linked networks would violate Part 95.1749 and is not supported by Radio-TTY's default configuration.
+
+---
+
 ## Features
 
 ### GMRS family hub
