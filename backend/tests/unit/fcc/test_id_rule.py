@@ -204,6 +204,63 @@ class TestFrsModeSkipsCallsignFraming:
         assert text == "Hello channel. WSLZ233."
 
 
+class TestFrsCallerContract:
+    """Two-part contract that server._tx_pump depends on to preserve the GMRS
+    15-minute ID clock during FRS transmissions.
+
+    Part 1 (tested here): format_outgoing_message returns None for
+    new_last_id_time in FRS mode.
+
+    Part 2 (in server._tx_pump, lines ~597-598): the caller guards with
+    `if new_id_time is not None: _last_id_time = new_id_time` so the FRS
+    None return leaves _last_id_time untouched.
+
+    If Part 1 changes (FRS stops returning None), this test fails and signals
+    that the server.py guard must be updated together.
+    """
+
+    def test_frs_untargeted_returns_none_new_last(self, now, me):
+        _, new_last = format_outgoing_message(
+            "anything",
+            target_call="ALL",
+            target_name="",
+            my_call=me["call"],
+            my_name=me["name"],
+            now=now,
+            service=SERVICE_FRS,
+        )
+        assert new_last is None
+
+    def test_frs_targeted_returns_none_new_last(self, now, me):
+        _, new_last = format_outgoing_message(
+            "anything",
+            target_call="KAE1234",
+            target_name="Alice",
+            my_call=me["call"],
+            my_name=me["name"],
+            now=now,
+            service=SERVICE_FRS,
+        )
+        assert new_last is None
+
+    def test_none_return_combined_with_guard_preserves_prior_time(self, now, me):
+        prior = now - datetime.timedelta(minutes=3)
+        _, new_last = format_outgoing_message(
+            "anything",
+            target_call="ALL",
+            target_name="",
+            my_call=me["call"],
+            my_name=me["name"],
+            now=now,
+            service=SERVICE_FRS,
+        )
+        # Reproduce the guard from server._tx_pump:
+        last_id_time = prior
+        if new_last is not None:
+            last_id_time = new_last
+        assert last_id_time == prior
+
+
 class TestStandaloneId:
     def test_with_location(self, now, me):
         text, new_last = format_standalone_id(
