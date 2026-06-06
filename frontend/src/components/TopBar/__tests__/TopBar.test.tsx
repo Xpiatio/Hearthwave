@@ -91,6 +91,7 @@ function makeProps(overrides: Partial<Parameters<typeof TopBar>[0]> = {}) {
     onVoicePttChunk: vi.fn(),
     onVoicePttEnd: vi.fn(),
     onVoicePttCancel: vi.fn(),
+    onTxAbort: vi.fn(),
     ...overrides,
   }
 }
@@ -270,6 +271,38 @@ describe('TopBar', () => {
       render(<TopBar {...makeProps({ onToggleNotifications })} />)
       fireEvent.click(screen.getByText('NOTIFY'))
       expect(onToggleNotifications).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('ABORT TX button', () => {
+    it('renders the ABORT TX button', () => {
+      render(<TopBar {...makeProps()} />)
+      expect(screen.getByRole('button', { name: /abort transmission/i })).toBeInTheDocument()
+    })
+
+    it('is disabled when not transmitting', () => {
+      render(<TopBar {...makeProps({ transmitting: false })} />)
+      expect(screen.getByRole('button', { name: /abort transmission/i })).toBeDisabled()
+    })
+
+    it('is enabled when transmitting', () => {
+      render(<TopBar {...makeProps({ transmitting: true })} />)
+      expect(screen.getByRole('button', { name: /abort transmission/i })).not.toBeDisabled()
+    })
+
+    it('calls onTxAbort when clicked while transmitting', () => {
+      const onTxAbort = vi.fn()
+      render(<TopBar {...makeProps({ transmitting: true, onTxAbort })} />)
+      fireEvent.click(screen.getByRole('button', { name: /abort transmission/i }))
+      expect(onTxAbort).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not call onTxAbort when clicked while disabled', () => {
+      const onTxAbort = vi.fn()
+      render(<TopBar {...makeProps({ transmitting: false, onTxAbort })} />)
+      // disabled buttons ignore click events
+      fireEvent.click(screen.getByRole('button', { name: /abort transmission/i }))
+      expect(onTxAbort).not.toHaveBeenCalled()
     })
   })
 
