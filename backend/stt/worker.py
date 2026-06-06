@@ -121,6 +121,7 @@ class STTWorker:
         self._on_status = on_status
         self._on_error = on_error
 
+        self.channel_busy = threading.Event()  # set=channel occupied, clear=idle
         self._stop_event = threading.Event()
         self._pause_event = threading.Event()  # set = paused
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -212,6 +213,13 @@ class STTWorker:
     def _emit_capture_event(self, event: str) -> None:
         if self._on_capture_event:
             self._on_capture_event(event)
+
+    def _apply_squelch_event(self, event: str) -> None:
+        """Update channel_busy based on squelch state transitions."""
+        if event == "squelch_opened":
+            self.channel_busy.set()
+        elif event == "squelch_closed":
+            self.channel_busy.clear()
 
     # ------------------------------------------------------------------
     # Worker body — runs in a thread-pool thread
@@ -336,6 +344,7 @@ class STTWorker:
 
                 segments, events = segmenter.feed(chunk, peak)
                 for event in events:
+                    self._apply_squelch_event(event)
                     self._emit_capture_event(event)
                 for uid, audio, is_final in segments:
                     transcribe_queue.put((uid, audio, is_final))
