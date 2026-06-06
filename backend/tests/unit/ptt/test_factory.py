@@ -66,3 +66,18 @@ class TestVoxTailSilence:
         ptt = VoxPTT()
         assert ptt.lead_in_seconds == pytest.approx(0.35)
         assert ptt.tail_seconds == 0.15
+
+
+class TestLeadInPassthrough:
+    def test_vox_factory_passes_lead_in_ms(self):
+        ptt = make_ptt({"ptt_mode": "vox", "ptt_lead_in_ms": 400})
+        assert ptt.lead_in_seconds == pytest.approx(0.4)
+
+    def test_vox_factory_uses_default_when_absent(self):
+        ptt = make_ptt({"ptt_mode": "vox"})
+        assert ptt.lead_in_seconds == pytest.approx(0.35)
+
+    def test_lead_in_ms_over_1000_is_clamped(self, caplog):
+        ptt = make_ptt({"ptt_mode": "vox", "ptt_lead_in_ms": 5000})
+        assert ptt.lead_in_seconds == pytest.approx(1.0)
+        assert "clamping" in caplog.text
