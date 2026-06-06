@@ -5,6 +5,10 @@ from backend.text.locations import expand_trailing_state
 ID_INTERVAL_SECONDS = 15 * 60  # FCC Part 95: identify at least every 15 minutes when in use.
 
 
+def format_tail_id(my_call: str) -> str:
+    return f"{my_call}."
+
+
 def format_outgoing_message(
     text,
     target_call,
