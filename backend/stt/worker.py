@@ -34,7 +34,7 @@ import numpy as np
 _log = logging.getLogger(__name__)
 
 from backend.audio.capture import open_input_source
-from backend.audio.dsp import bandpass, denoise, lowpass, make_bandpass_sos, make_lowpass_sos, normalize_rms
+from backend.audio.dsp import bandpass, denoise, dynamic_agc, lowpass, make_bandpass_sos, make_lowpass_sos
 from backend.audio.squelch import SquelchDetector
 from backend.audio.vad import load_vad_model, make_vad_iterator
 from backend.stt.segmenter import SpeechSegmenter
@@ -482,8 +482,8 @@ class STTWorker:
             try:
                 filtered = bandpass(audio, bandpass_sos)
                 denoised = denoise(filtered, self.SAMPLE_RATE, prop_decrease=0.7)
-                normalize_rms(denoised)
-                text = transcriber.transcribe(denoised)
+                agc_audio = dynamic_agc(denoised, self.SAMPLE_RATE)
+                text = transcriber.transcribe(agc_audio)
                 if text:
                     self._emit_result(uid, text, not is_final)
             except Exception as e:
