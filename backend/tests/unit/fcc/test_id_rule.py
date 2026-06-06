@@ -158,7 +158,7 @@ class TestTargetedPreface:
             my_name=me["name"],
             now=now,
         )
-        assert "WSLZ233." not in text.split(". ", 1)[-1]
+        assert text == "WSLZ233 Bob calling KAE1234 Alice. hello"
 
 
 class TestFrsModeSkipsCallsignFraming:
