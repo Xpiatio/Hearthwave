@@ -1,5 +1,6 @@
 """Tests for backend.audio.dsp — DSP helper functions."""
 import numpy as np
+import scipy.signal  # noqa: F401 — must be imported before cw/test_decoder.py injects its fake
 
 from backend.audio.dsp import make_lowpass_sos, lowpass, dynamic_agc
 
