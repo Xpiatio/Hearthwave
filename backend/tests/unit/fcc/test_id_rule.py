@@ -20,6 +20,16 @@ def me():
     return {"call": "WSLZ233", "name": "Bob"}
 
 
+class TestFormatTailId:
+    def test_returns_call_with_period(self):
+        from backend.fcc.id_rule import format_tail_id
+        assert format_tail_id("WQXX123") == "WQXX123."
+
+    def test_blank_call_returns_period_only(self):
+        from backend.fcc.id_rule import format_tail_id
+        assert format_tail_id("") == "."
+
+
 class TestUntargetedNoIdYet:
     def test_first_ever_send_appends_id(self, now, me):
         text, new_last = format_outgoing_message(
