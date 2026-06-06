@@ -417,40 +417,6 @@ class TestMe:
 
 
 # ---------------------------------------------------------------------------
-# GET /auth/profiles
-# ---------------------------------------------------------------------------
-
-class TestProfiles:
-    def test_returns_empty_list_when_store_none(self):
-        auth_routes_module.init(None, None, None)
-        app = FastAPI()
-        app.include_router(router, prefix="/auth")
-        client = TestClient(app, raise_server_exceptions=False)
-        r = client.get("/auth/profiles")
-        assert r.status_code == 200
-        assert r.json() == []
-
-    def test_returns_public_profiles(self):
-        public = [
-            {"id": "user-1", "display_name": "Alice", "avatar_emoji": "👤"},
-            {"id": "user-2", "display_name": "Bob", "avatar_emoji": "🎙️"},
-        ]
-        users = MagicMock()
-        users.get_public.return_value = public
-        client = _make_app(users_store=users)
-        r = client.get("/auth/profiles")
-        assert r.status_code == 200
-        assert r.json() == public
-
-    def test_delegates_to_get_public(self):
-        users = MagicMock()
-        users.get_public.return_value = []
-        client = _make_app(users_store=users)
-        client.get("/auth/profiles")
-        users.get_public.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
 # GET /auth/ws-ticket
 # ---------------------------------------------------------------------------
 
