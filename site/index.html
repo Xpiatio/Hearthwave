@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Radio-TTY — Your family radio station, in every browser</title>
+  <meta name="description" content="Radio-TTY turns any home server into a shared GMRS hub. Live transcription, multi-user profiles, FCC-compliant, Docker-ready.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --navy-darkest: #0f2540;
+      --navy-dark: #1a3a5c;
+      --navy-mid: #1e4976;
+      --blue-cta: #2563eb;
+      --text-muted: #94a3b8;
+      --surface-light: #f8fafc;
+    }
+    * { font-family: 'Inter', sans-serif; }
+    html { scroll-behavior: smooth; }
+
+    /* Sticky nav shadow on scroll */
+    #navbar { transition: box-shadow 0.2s; }
+    #navbar.scrolled { box-shadow: 0 2px 16px rgba(0,0,0,0.4); }
+
+    /* Chat mockup */
+    .chat-msg { border-radius: 10px; padding: 10px 12px; }
+
+    /* Spectrogram bars */
+    .spectro-bar { border-radius: 2px 2px 0 0; transition: height 0.3s; }
+
+    /* Feature card hover */
+    .feature-card { transition: transform 0.15s, box-shadow 0.15s; }
+    .feature-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
+
+    /* Code block */
+    .code-block { background: #0d1117; border: 1px solid #30363d; border-radius: 10px; padding: 20px; font-family: 'Courier New', monospace; font-size: 13px; line-height: 1.8; }
+    .code-comment { color: #8b949e; }
+    .code-text { color: #e6edf3; }
+    .code-blue { color: #79c0ff; }
+
+    /* Responsive grid fallback */
+    @media (max-width: 768px) {
+      .feature-grid { grid-template-columns: repeat(2, 1fr) !important; }
+      .hero-inner { flex-direction: column !important; }
+      .hero-chat { display: none !important; }
+      .plugin-grid { grid-template-columns: 1fr !important; }
+      .install-grid { grid-template-columns: 1fr !important; }
+      .flow-row { flex-wrap: wrap; justify-content: center; }
+    }
+    @media (max-width: 480px) {
+      .feature-grid { grid-template-columns: 1fr !important; }
+    }
+  </style>
+</head>
+<body style="margin:0;background:#fff;color:#0f172a;">
+
+  <!-- ── NAVBAR ── -->
+  <nav id="navbar" style="position:sticky;top:0;z-index:50;background:#0f2540;padding:0 32px;">
+    <div style="max-width:1100px;margin:0 auto;display:flex;align-items:center;height:60px;justify-content:space-between;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:20px;">📡</span>
+        <span style="color:#fff;font-weight:700;font-size:16px;letter-spacing:-0.3px;">Radio-TTY</span>
+        <span style="background:#1e4976;color:#7dd3fc;font-size:11px;padding:2px 8px;border-radius:10px;">v2.2.0</span>
+      </div>
+      <div style="display:flex;gap:24px;align-items:center;">
+        <a href="#features" style="color:#94a3b8;font-size:14px;text-decoration:none;font-weight:500;">Features</a>
+        <a href="#install" style="color:#94a3b8;font-size:14px;text-decoration:none;font-weight:500;">Install</a>
+        <a href="https://github.com/Xpiatio/Radio-TTY" target="_blank" rel="noopener"
+           style="background:#1d4ed8;color:#fff;font-size:13px;font-weight:600;padding:7px 16px;border-radius:20px;text-decoration:none;">GitHub →</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── HERO ── -->
+  <section style="background:linear-gradient(160deg,#0f2540 0%,#1a3a5c 50%,#1e4976 100%);padding:72px 32px 64px;">
+    <div style="max-width:1100px;margin:0 auto;">
+      <!-- Trust pill -->
+      <div style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:20px;padding:5px 14px;margin-bottom:24px;">
+        <span style="font-size:13px;">🔒</span>
+        <span style="color:#93c5fd;font-size:12px;font-weight:500;">FCC Part 95 compliant · Self-hosted · No cloud</span>
+      </div>
+
+      <div class="hero-inner" style="display:flex;gap:48px;align-items:center;">
+        <!-- Copy -->
+        <div style="flex:1;min-width:0;">
+          <h1 style="color:#fff;font-size:40px;font-weight:800;line-height:1.15;margin:0 0 18px;letter-spacing:-0.5px;">
+            Your family radio station,<br>
+            <span style="color:#7dd3fc;">in every browser</span>
+          </h1>
+          <p style="color:#94a3b8;font-size:16px;line-height:1.7;margin:0 0 32px;max-width:480px;">
+            Radio-TTY turns any home server into a shared GMRS hub. Incoming transmissions are transcribed live. Outgoing messages are synthesized and broadcast over the air — automatically tagged with your station callsign.
+          </p>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:28px;">
+            <a href="#how-it-works"
+               style="background:#2563eb;color:#fff;font-size:15px;font-weight:600;padding:12px 28px;border-radius:24px;text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
+              See how it works ↓
+            </a>
+            <a href="https://github.com/Xpiatio/Radio-TTY" target="_blank" rel="noopener"
+               style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.25);color:#fff;font-size:15px;font-weight:500;padding:12px 22px;border-radius:24px;text-decoration:none;">
+              View on GitHub
+            </a>
+          </div>
+          <!-- Capability chips -->
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <span style="background:rgba(255,255,255,0.07);color:#cbd5e1;font-size:12px;padding:4px 12px;border-radius:10px;">No app install</span>
+            <span style="background:rgba(255,255,255,0.07);color:#cbd5e1;font-size:12px;padding:4px 12px;border-radius:10px;">Docker-ready</span>
+            <span style="background:rgba(255,255,255,0.07);color:#cbd5e1;font-size:12px;padding:4px 12px;border-radius:10px;">WCAG 2.1 AA</span>
+            <span style="background:rgba(255,255,255,0.07);color:#cbd5e1;font-size:12px;padding:4px 12px;border-radius:10px;">Multi-user</span>
+            <span style="background:rgba(255,255,255,0.07);color:#cbd5e1;font-size:12px;padding:4px 12px;border-radius:10px;">Whisper STT</span>
+          </div>
+        </div>
+
+        <!-- Chat mockup -->
+        <div class="hero-chat" style="flex:0 0 300px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:14px;padding:18px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.1);">
+            <span style="width:9px;height:9px;background:#22c55e;border-radius:50%;display:inline-block;flex-shrink:0;"></span>
+            <span style="color:#94a3b8;font-size:12px;">W5ABC — Channel clear</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div class="chat-msg" style="background:rgba(255,255,255,0.05);">
+              <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px;">
+                <span style="font-size:15px;">👴</span>
+                <span style="color:#7dd3fc;font-size:12px;font-weight:600;">Dad · W5ABC</span>
+                <span style="color:#475569;font-size:11px;margin-left:auto;">2:14 PM</span>
+              </div>
+              <p style="color:#e2e8f0;margin:0;font-size:13px;line-height:1.5;">Heading back from the hardware store, be home in 20.</p>
+            </div>
+            <div class="chat-msg" style="background:rgba(37,99,235,0.25);border:1px solid rgba(37,99,235,0.4);">
+              <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px;">
+                <span style="font-size:15px;">👩</span>
+                <span style="color:#93c5fd;font-size:12px;font-weight:600;">Mom · W5ABC</span>
+                <span style="color:#475569;font-size:11px;margin-left:auto;">2:15 PM</span>
+              </div>
+              <p style="color:#e2e8f0;margin:0;font-size:13px;line-height:1.5;">Copy that, dinner's at 6. Kids are at the park.</p>
+            </div>
+            <div class="chat-msg" style="background:rgba(255,255,255,0.05);">
+              <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px;">
+                <span style="font-size:15px;">🧒</span>
+                <span style="color:#86efac;font-size:12px;font-weight:600;">Junior · W5ABC</span>
+                <span style="color:#475569;font-size:11px;margin-left:auto;">2:16 PM</span>
+              </div>
+              <p style="color:#e2e8f0;margin:0;font-size:13px;line-height:1.5;">On my way home now!</p>
+            </div>
+          </div>
+          <div style="margin-top:14px;background:rgba(255,255,255,0.08);border-radius:8px;padding:8px 12px;display:flex;align-items:center;gap:10px;">
+            <span style="color:#475569;font-size:12px;flex:1;">Type a message...</span>
+            <span style="background:#2563eb;color:#fff;font-size:11px;padding:3px 10px;border-radius:10px;font-weight:600;">TX</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── HOW IT WORKS ── -->
+  <section id="how-it-works" style="background:#f8fafc;padding:72px 32px;">
+    <div style="max-width:900px;margin:0 auto;">
+      <div style="text-align:center;margin-bottom:48px;">
+        <h2 style="font-size:30px;font-weight:800;color:#0f172a;margin:0 0 10px;">Simple for everyone in the family</h2>
+        <p style="color:#64748b;font-size:16px;max-width:500px;margin:0 auto;line-height:1.6;">No radio knowledge needed. Radio-TTY handles the technical side — you just read and type.</p>
+      </div>
+
+      <!-- Incoming flow -->
+      <div style="margin-bottom:40px;">
+        <div style="text-align:center;margin-bottom:20px;">
+          <span style="background:#dbeafe;color:#1d4ed8;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:5px 14px;border-radius:10px;">Incoming transmission</span>
+        </div>
+        <div class="flow-row" style="display:flex;align-items:center;justify-content:center;gap:0;">
+          <div style="text-align:center;padding:20px 24px;background:#fff;border-radius:14px;border:1px solid #e2e8f0;min-width:130px;">
+            <div style="font-size:36px;margin-bottom:10px;">📻</div>
+            <div style="font-weight:700;color:#0f172a;font-size:14px;">Radio signal</div>
+            <div style="color:#64748b;font-size:12px;margin-top:5px;line-height:1.4;">Voice arrives at<br>your antenna</div>
+          </div>
+          <div style="padding:0 16px;color:#cbd5e1;font-size:24px;font-weight:300;">→</div>
+          <div style="text-align:center;padding:20px 24px;background:#fff;border-radius:14px;border:1px solid #e2e8f0;min-width:130px;">
+            <div style="font-size:36px;margin-bottom:10px;">🤖</div>
+            <div style="font-weight:700;color:#0f172a;font-size:14px;">AI transcription</div>
+            <div style="color:#64748b;font-size:12px;margin-top:5px;line-height:1.4;">Whisper converts<br>speech to text</div>
+          </div>
+          <div style="padding:0 16px;color:#cbd5e1;font-size:24px;font-weight:300;">→</div>
+          <div style="text-align:center;padding:20px 24px;background:#fff;border-radius:14px;border:1px solid #e2e8f0;min-width:130px;">
+            <div style="font-size:36px;margin-bottom:10px;">📱</div>
+            <div style="font-weight:700;color:#0f172a;font-size:14px;">Everyone sees it</div>
+            <div style="color:#64748b;font-size:12px;margin-top:5px;line-height:1.4;">Live on every<br>phone, tablet, laptop</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="border-top:1px dashed #e2e8f0;margin:0 0 40px;"></div>
+
+      <!-- Outgoing flow -->
+      <div style="margin-bottom:40px;">
+        <div style="text-align:center;margin-bottom:20px;">
+          <span style="background:#dcfce7;color:#166534;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:5px 14px;border-radius:10px;">Outgoing message</span>
+        </div>
+        <div class="flow-row" style="display:flex;align-items:center;justify-content:center;gap:0;">
+          <div style="text-align:center;padding:20px 24px;background:#fff;border-radius:14px;border:1px solid #e2e8f0;min-width:130px;">
+            <div style="font-size:36px;margin-bottom:10px;">⌨️</div>
+            <div style="font-weight:700;color:#0f172a;font-size:14px;">Type a message</div>
+            <div style="color:#64748b;font-size:12px;margin-top:5px;line-height:1.4;">In your browser,<br>any device</div>
+          </div>
+          <div style="padding:0 16px;color:#cbd5e1;font-size:24px;font-weight:300;">→</div>
+          <div style="text-align:center;padding:20px 24px;background:#fff;border-radius:14px;border:1px solid #e2e8f0;min-width:130px;">
+            <div style="font-size:36px;margin-bottom:10px;">🔊</div>
+            <div style="font-weight:700;color:#0f172a;font-size:14px;">Spoken aloud</div>
+            <div style="color:#64748b;font-size:12px;margin-top:5px;line-height:1.4;">Piper TTS gives<br>it a natural voice</div>
+          </div>
+          <div style="padding:0 16px;color:#cbd5e1;font-size:24px;font-weight:300;">→</div>
+          <div style="text-align:center;padding:20px 24px;background:#fff;border-radius:14px;border:1px solid #e2e8f0;min-width:130px;">
+            <div style="font-size:36px;margin-bottom:10px;">📡</div>
+            <div style="font-weight:700;color:#0f172a;font-size:14px;">Broadcast over the air</div>
+            <div style="color:#64748b;font-size:12px;margin-top:5px;line-height:1.4;">Callsign tagged<br>automatically</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- FCC callout -->
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:16px 22px;display:flex;align-items:flex-start;gap:14px;">
+        <span style="font-size:22px;flex-shrink:0;margin-top:1px;">🔒</span>
+        <p style="margin:0;font-size:14px;color:#1e40af;line-height:1.6;">
+          <strong>Fully FCC-compliant:</strong> Radio-TTY automatically appends your station callsign to every transmission and announces your ID every 15 minutes — no manual action needed.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FEATURES ── -->
+  <section id="features" style="background:#fff;padding:72px 32px;">
+    <div style="max-width:1100px;margin:0 auto;">
+      <div style="text-align:center;margin-bottom:48px;">
+        <h2 style="font-size:30px;font-weight:800;color:#0f172a;margin:0 0 10px;">Everything your household needs</h2>
+        <p style="color:#64748b;font-size:16px;max-width:480px;margin:0 auto;line-height:1.6;">Built for real families — from first-time radio operators to licensed net control stations.</p>
+      </div>
+
+      <!-- 4-col feature grid -->
+      <div class="feature-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:20px;">
+
+        <div class="feature-card" style="padding:22px 18px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;">
+          <div style="font-size:30px;margin-bottom:12px;">🗣️</div>
+          <div style="font-weight:700;color:#0f172a;font-size:14px;margin-bottom:7px;">Live transcription</div>
+          <p style="color:#64748b;font-size:13px;margin:0;line-height:1.5;">Incoming voice hits text in real time via Whisper — partials appear while the operator is still talking.</p>
+        </div>
+
+        <div class="feature-card" style="padding:22px 18px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;">
+          <div style="font-size:30px;margin-bottom:12px;">👥</div>
+          <div style="font-weight:700;color:#0f172a;font-size:14px;margin-bottom:7px;">Multi-user profiles</div>
+          <p style="color:#64748b;font-size:13px;margin:0;line-height:1.5;">Each family member has their own login, avatar, voice, and preferences. No shared account juggling.</p>
+        </div>
+
+        <div class="feature-card" style="padding:22px 18px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;">
+          <div style="font-size:30px;margin-bottom:12px;">🎙️</div>
+          <div style="font-weight:700;color:#0f172a;font-size:14px;margin-bottom:7px;">Voice PTT</div>
+          <p style="color:#64748b;font-size:13px;margin:0;line-height:1.5;">Speak into your browser mic. The server transcribes your voice, synthesizes it with Piper TTS, then broadcasts it over the air — callsign included.</p>
+        </div>
+
+        <div class="feature-card" style="padding:22px 18px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;">
+          <div style="font-size:30px;margin-bottom:12px;">♿</div>
+          <div style="font-weight:700;color:#0f172a;font-size:14px;margin-bottom:7px;">Senior-friendly design</div>
+          <p style="color:#64748b;font-size:13px;margin:0;line-height:1.5;">WCAG 2.1 AA, large touch targets, Read Aloud mode, and plain-language status messages — no jargon.</p>
+        </div>
+
+        <div class="feature-card" style="padding:22px 18px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;">
+          <div style="font-size:30px;margin-bottom:12px;">🌦️</div>
+          <div style="font-weight:700;color:#0f172a;font-size:14px;margin-bottom:7px;">SKYWARN weather alerts</div>
+          <p style="color:#64748b;font-size:13px;margin:0;line-height:1.5;">National Weather Service alerts for your county push to every connected device and auto-announce over the air.</p>
+        </div>
+
+        <div class="feature-card" style="padding:22px 18px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;">
+          <div style="font-size:30px;margin-bottom:12px;">📔</div>
+          <div style="font-weight:700;color:#0f172a;font-size:14px;margin-bottom:7px;">Session journals</div>
+          <p style="color:#64748b;font-size:13px;margin:0;line-height:1.5;">Save and publish transcripts from each radio session. Optional AI summaries powered by Gemini.</p>
+        </div>
+
+        <div class="feature-card" style="padding:22px 18px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;">
+          <div style="font-size:30px;margin-bottom:12px;">📞</div>
+          <div style="font-weight:700;color:#0f172a;font-size:14px;margin-bottom:7px;">FCC callsign lookup</div>
+          <p style="color:#64748b;font-size:13px;margin:0;line-height:1.5;">Verify GMRS and amateur callsigns against the FCC database. Contacts show a green ✓ badge when confirmed.</p>
+        </div>
+
+        <div class="feature-card" style="padding:22px 18px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;">
+          <div style="font-size:30px;margin-bottom:12px;">🐳</div>
+          <div style="font-weight:700;color:#0f172a;font-size:14px;margin-bottom:7px;">One-command install</div>
+          <p style="color:#64748b;font-size:13px;margin:0;line-height:1.5;">Docker Compose on any Linux server. No database to manage — flat-file storage keeps it simple and crash-resistant.</p>
+        </div>
+
+      </div>
+
+      <!-- Spectrogram callout -->
+      <div style="background:linear-gradient(135deg,#0f2540,#1a3a5c);border-radius:14px;padding:22px 28px;display:flex;align-items:center;gap:24px;flex-wrap:wrap;">
+        <div style="font-size:32px;">📊</div>
+        <div style="flex:1;min-width:200px;">
+          <div style="font-weight:700;color:#fff;font-size:15px;margin-bottom:5px;">Real-time spectrogram</div>
+          <p style="color:#94a3b8;font-size:13px;margin:0;line-height:1.5;">A live waterfall display shows radio activity with squelch and voice activity indicators — switch between viridis and grayscale colormaps.</p>
+        </div>
+        <!-- Fake spectrogram bars -->
+        <div style="background:rgba(0,0,0,0.3);border-radius:10px;padding:12px 16px;flex-shrink:0;">
+          <div style="display:flex;gap:3px;height:48px;align-items:flex-end;">
+            <div class="spectro-bar" style="width:14px;height:15%;background:linear-gradient(to top,#4ade80,#22d3ee);opacity:0.6;"></div>
+            <div class="spectro-bar" style="width:14px;height:35%;background:linear-gradient(to top,#4ade80,#22d3ee);opacity:0.7;"></div>
+            <div class="spectro-bar" style="width:14px;height:80%;background:linear-gradient(to top,#facc15,#f97316);"></div>
+            <div class="spectro-bar" style="width:14px;height:100%;background:linear-gradient(to top,#ef4444,#f97316);"></div>
+            <div class="spectro-bar" style="width:14px;height:90%;background:linear-gradient(to top,#f97316,#facc15);"></div>
+            <div class="spectro-bar" style="width:14px;height:70%;background:linear-gradient(to top,#4ade80,#22d3ee);opacity:0.8;"></div>
+            <div class="spectro-bar" style="width:14px;height:45%;background:linear-gradient(to top,#4ade80,#22d3ee);opacity:0.7;"></div>
+            <div class="spectro-bar" style="width:14px;height:20%;background:linear-gradient(to top,#4ade80,#22d3ee);opacity:0.5;"></div>
+          </div>
+          <div style="color:#475569;font-size:10px;margin-top:6px;text-align:center;">300 Hz — 3.4 kHz</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── PLUGINS ── -->
+  <section style="background:#f8fafc;padding:72px 32px;">
+    <div style="max-width:1100px;margin:0 auto;">
+      <div style="text-align:center;margin-bottom:48px;">
+        <h2 style="font-size:30px;font-weight:800;color:#0f172a;margin:0 0 10px;">Extend it for your net</h2>
+        <p style="color:#64748b;font-size:16px;max-width:480px;margin:0 auto;line-height:1.6;">Radio-TTY ships with two plugins built in. More can be added without touching the core server.</p>
+      </div>
+
+      <div class="plugin-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:20px;">
+
+        <!-- NCS Plugin -->
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;">
+          <div style="background:linear-gradient(135deg,#0f2540,#1a3a5c);padding:22px 26px;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+              <span style="font-size:26px;">🎛️</span>
+              <span style="color:#fff;font-weight:700;font-size:17px;">Net Control Station</span>
+              <span style="background:#1e4976;color:#7dd3fc;font-size:10px;font-weight:600;padding:2px 10px;border-radius:10px;margin-left:auto;">Built-in</span>
+            </div>
+            <p style="color:#94a3b8;font-size:13px;margin:0;line-height:1.5;">Full-featured NCS panel for managing radio nets — roster, emergency interrupt, and audio replay.</p>
+          </div>
+          <div style="padding:22px 26px;">
+            <ul style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:12px;">
+              <li style="display:flex;align-items:flex-start;gap:12px;">
+                <span style="color:#2563eb;font-size:16px;flex-shrink:0;margin-top:0px;">✦</span>
+                <div>
+                  <div style="font-weight:600;color:#0f172a;font-size:14px;">Live roster</div>
+                  <div style="color:#64748b;font-size:13px;margin-top:2px;">Check operators in and out with traffic priority levels — Routine through Emergency.</div>
+                </div>
+              </li>
+              <li style="display:flex;align-items:flex-start;gap:12px;">
+                <span style="color:#2563eb;font-size:16px;flex-shrink:0;">✦</span>
+                <div>
+                  <div style="font-weight:600;color:#0f172a;font-size:14px;">BREAK BREAK interrupt</div>
+                  <div style="color:#64748b;font-size:13px;margin-top:2px;">Drains the TX queue and broadcasts an emergency interrupt to clear the channel instantly.</div>
+                </div>
+              </li>
+              <li style="display:flex;align-items:flex-start;gap:12px;">
+                <span style="color:#2563eb;font-size:16px;flex-shrink:0;">✦</span>
+                <div>
+                  <div style="font-weight:600;color:#0f172a;font-size:14px;">15-second audio replay</div>
+                  <div style="color:#64748b;font-size:13px;margin-top:2px;">Replay the last 15 seconds of received audio when you need to catch a missed transmission.</div>
+                </div>
+              </li>
+              <li style="display:flex;align-items:flex-start;gap:12px;">
+                <span style="color:#2563eb;font-size:16px;flex-shrink:0;">✦</span>
+                <div>
+                  <div style="font-weight:600;color:#0f172a;font-size:14px;">Auto net ID</div>
+                  <div style="color:#64748b;font-size:13px;margin-top:2px;">Periodic station announcements at a configurable interval — FCC-compliant by default.</div>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- SKYWARN Plugin -->
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;">
+          <div style="background:linear-gradient(135deg,#1c3a1c,#1a5c2a);padding:22px 26px;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+              <span style="font-size:26px;">🌩️</span>
+              <span style="color:#fff;font-weight:700;font-size:17px;">SKYWARN Alerts</span>
+              <span style="background:#14532d;color:#86efac;font-size:10px;font-weight:600;padding:2px 10px;border-radius:10px;margin-left:auto;">Built-in</span>
+            </div>
+            <p style="color:#94a3b8;font-size:13px;margin:0;line-height:1.5;">Monitors your NWS county zone every 5 minutes and pushes severe weather alerts to the whole household.</p>
+          </div>
+          <div style="padding:22px 26px;">
+            <ul style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:12px;">
+              <li style="display:flex;align-items:flex-start;gap:12px;">
+                <span style="color:#16a34a;font-size:16px;flex-shrink:0;">✦</span>
+                <div>
+                  <div style="font-weight:600;color:#0f172a;font-size:14px;">Red alert banner</div>
+                  <div style="color:#64748b;font-size:13px;margin-top:2px;">Active NWS warnings appear at the top of every connected browser immediately.</div>
+                </div>
+              </li>
+              <li style="display:flex;align-items:flex-start;gap:12px;">
+                <span style="color:#16a34a;font-size:16px;flex-shrink:0;">✦</span>
+                <div>
+                  <div style="font-weight:600;color:#0f172a;font-size:14px;">Browser notifications</div>
+                  <div style="color:#64748b;font-size:13px;margin-top:2px;">Opt-in push notifications reach family members on background tabs or locked screens.</div>
+                </div>
+              </li>
+              <li style="display:flex;align-items:flex-start;gap:12px;">
+                <span style="color:#16a34a;font-size:16px;flex-shrink:0;">✦</span>
+                <div>
+                  <div style="font-weight:600;color:#0f172a;font-size:14px;">Auto-announce over the air</div>
+                  <div style="color:#64748b;font-size:13px;margin-top:2px;">When the channel is clear, alerts are automatically read aloud over GMRS via TTS.</div>
+                </div>
+              </li>
+              <li style="display:flex;align-items:flex-start;gap:12px;">
+                <span style="color:#16a34a;font-size:16px;flex-shrink:0;">✦</span>
+                <div>
+                  <div style="font-weight:600;color:#0f172a;font-size:14px;">Per-county targeting</div>
+                  <div style="color:#64748b;font-size:13px;margin-top:2px;">Set your NWS zone code once in config — only alerts relevant to your area come through.</div>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Extensibility teaser -->
+      <div style="border:1px dashed #cbd5e1;border-radius:14px;padding:22px 26px;display:flex;align-items:center;gap:18px;background:#fff;flex-wrap:wrap;">
+        <span style="font-size:30px;flex-shrink:0;">🔌</span>
+        <div style="flex:1;min-width:200px;">
+          <div style="font-weight:700;color:#0f172a;font-size:15px;margin-bottom:5px;">Build your own plugin</div>
+          <p style="color:#64748b;font-size:13px;margin:0;line-height:1.5;">Plugins hook into five events: <code style="background:#f1f5f9;padding:1px 6px;border-radius:4px;font-size:12px;font-family:monospace;">on_rx_final</code>, <code style="background:#f1f5f9;padding:1px 6px;border-radius:4px;font-size:12px;font-family:monospace;">on_audio_rx_chunk</code>, <code style="background:#f1f5f9;padding:1px 6px;border-radius:4px;font-size:12px;font-family:monospace;">on_audio_tx_pre_queue</code>, and more. Subclass <code style="background:#f1f5f9;padding:1px 6px;border-radius:4px;font-size:12px;font-family:monospace;">BasePlugin</code> and drop it in — no core changes needed.</p>
+        </div>
+        <a href="https://github.com/Xpiatio/Radio-TTY#plugins" target="_blank" rel="noopener"
+           style="flex-shrink:0;background:#0f172a;color:#fff;font-size:13px;font-weight:600;padding:10px 18px;border-radius:10px;text-decoration:none;white-space:nowrap;">Plugin docs →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── INSTALL ── -->
+  <section id="install" style="background:linear-gradient(160deg,#0f2540 0%,#1a3a5c 100%);padding:72px 32px;">
+    <div style="max-width:1100px;margin:0 auto;">
+      <div style="text-align:center;margin-bottom:48px;">
+        <h2 style="font-size:30px;font-weight:800;color:#fff;margin:0 0 10px;">Up and running in minutes</h2>
+        <p style="color:#94a3b8;font-size:16px;max-width:500px;margin:0 auto;line-height:1.6;">Radio-TTY runs anywhere Docker runs — any Linux server on your home network. No cloud accounts, no monthly fees.</p>
+      </div>
+
+      <div class="install-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:28px;max-width:900px;margin:0 auto 40px;">
+
+        <!-- Snippet -->
+        <div>
+          <div style="color:#7dd3fc;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px;">Quick install</div>
+          <div class="code-block">
+            <div class="code-comment"># 1. Clone the repo</div>
+            <div class="code-text">git clone https://github.com/Xpiatio/Radio-TTY</div>
+            <div class="code-text">cd Radio-TTY</div>
+            <br>
+            <div class="code-comment"># 2. Run setup (creates .env)</div>
+            <div class="code-text">./setup.sh</div>
+            <br>
+            <div class="code-comment"># 3. Start the stack</div>
+            <div class="code-text">docker compose up -d</div>
+            <br>
+            <div class="code-comment"># 4. Open in your browser</div>
+            <div><span class="code-blue">http://</span><span class="code-text">your-server-ip</span></div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:14px;">
+            <a href="https://github.com/Xpiatio/Radio-TTY#installation" target="_blank" rel="noopener"
+               style="flex:1;background:#2563eb;color:#fff;font-size:14px;font-weight:600;padding:11px 0;border-radius:22px;text-decoration:none;text-align:center;display:block;">Full install guide →</a>
+            <a href="https://github.com/Xpiatio/Radio-TTY" target="_blank" rel="noopener"
+               style="flex:1;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:#fff;font-size:14px;padding:11px 0;border-radius:22px;text-decoration:none;text-align:center;display:block;">View on GitHub</a>
+          </div>
+        </div>
+
+        <!-- Requirements -->
+        <div>
+          <div style="color:#7dd3fc;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px;">What you need</div>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+
+            <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:14px 18px;display:flex;gap:14px;align-items:flex-start;">
+              <span style="font-size:22px;flex-shrink:0;">🖥️</span>
+              <div>
+                <div style="color:#fff;font-weight:600;font-size:14px;">Any Linux server</div>
+                <div style="color:#94a3b8;font-size:13px;margin-top:3px;">x86, ARM, old laptop, NAS — if it runs Docker, it runs Radio-TTY.</div>
+              </div>
+            </div>
+
+            <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:14px 18px;display:flex;gap:14px;align-items:flex-start;">
+              <span style="font-size:22px;flex-shrink:0;">🎙️</span>
+              <div>
+                <div style="color:#fff;font-weight:600;font-size:14px;">USB audio interface</div>
+                <div style="color:#94a3b8;font-size:13px;margin-top:3px;">A USB sound card connected to your GMRS radio's speaker and mic jacks.</div>
+              </div>
+            </div>
+
+            <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:14px 18px;display:flex;gap:14px;align-items:flex-start;">
+              <span style="font-size:22px;flex-shrink:0;">📻</span>
+              <div>
+                <div style="color:#fff;font-weight:600;font-size:14px;">GMRS radio + license</div>
+                <div style="color:#94a3b8;font-size:13px;margin-top:3px;">A Part 95-certified GMRS radio and an FCC GMRS license (covers your whole family).</div>
+              </div>
+            </div>
+
+            <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:14px 18px;display:flex;gap:14px;align-items:flex-start;">
+              <span style="font-size:22px;flex-shrink:0;">🌐</span>
+              <div>
+                <div style="color:#fff;font-weight:600;font-size:14px;">Local network</div>
+                <div style="color:#94a3b8;font-size:13px;margin-top:3px;">Family members connect from any device on your home Wi-Fi — no port forwarding needed.</div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer badges -->
+      <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;">
+        <span style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#cbd5e1;font-size:12px;padding:5px 14px;border-radius:20px;">Open source · MIT license</span>
+        <span style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#cbd5e1;font-size:12px;padding:5px 14px;border-radius:20px;">FCC Part 95 compliant</span>
+        <span style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#cbd5e1;font-size:12px;padding:5px 14px;border-radius:20px;">WCAG 2.1 AA accessible</span>
+        <span style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#cbd5e1;font-size:12px;padding:5px 14px;border-radius:20px;">No cloud · no fees</span>
+        <span style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#cbd5e1;font-size:12px;padding:5px 14px;border-radius:20px;">v2.2.0</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FOOTER ── -->
+  <footer style="background:#0a1a2e;padding:24px 32px;text-align:center;">
+    <p style="color:#475569;font-size:13px;margin:0;">
+      Radio-TTY is an open-source project. Not affiliated with the FCC or ARRL.
+      <a href="https://github.com/Xpiatio/Radio-TTY" target="_blank" rel="noopener" style="color:#7dd3fc;text-decoration:none;margin-left:8px;">GitHub →</a>
+    </p>
+  </footer>
+
+  <script>
+    // Sticky nav shadow
+    const navbar = document.getElementById('navbar');
+    window.addEventListener('scroll', () => {
+      navbar.classList.toggle('scrolled', window.scrollY > 10);
+    });
+  </script>
+
+</body>
+</html>
