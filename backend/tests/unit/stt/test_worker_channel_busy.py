@@ -49,3 +49,31 @@ class TestChannelBusySetClear:
         w._apply_squelch_event("squelch_opened")
         w._apply_squelch_event("vad_end")
         assert w.channel_busy.is_set()  # unchanged by vad_end
+
+
+class TestHandleRawSquelchEvent:
+    """Verify the string mapping between SquelchDetector.update() return values
+    ('opened'/'closed') and _apply_squelch_event's expected strings
+    ('squelch_opened'/'squelch_closed'). This is the mapping _run_cw relies on."""
+
+    def test_opened_sets_busy(self):
+        w = _make_worker()
+        w._handle_raw_squelch_event("opened")
+        assert w.channel_busy.is_set()
+
+    def test_closed_clears_busy(self):
+        w = _make_worker()
+        w._handle_raw_squelch_event("opened")
+        w._handle_raw_squelch_event("closed")
+        assert not w.channel_busy.is_set()
+
+    def test_none_is_no_op(self):
+        """SquelchDetector.update() returns None when state is unchanged."""
+        w = _make_worker()
+        w._handle_raw_squelch_event(None)
+        assert not w.channel_busy.is_set()
+
+    def test_unknown_event_is_no_op(self):
+        w = _make_worker()
+        w._handle_raw_squelch_event("something_else")
+        assert not w.channel_busy.is_set()

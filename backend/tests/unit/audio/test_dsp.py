@@ -20,6 +20,18 @@ class TestMakeLowpassSos:
         assert sos.shape[0] == 1  # order=2 → 1 section
 
 
+class TestMakeLowpassSosFallback:
+    def test_raises_on_impossible_cutoff(self):
+        """make_lowpass_sos raises when cutoff exceeds Nyquist.
+
+        This confirms the exception path in STTWorker._run() is reachable —
+        the try/except that sets lowpass_sos=None depends on this raising.
+        """
+        import pytest
+        with pytest.raises(Exception):
+            make_lowpass_sos(16000, cutoff_hz=99999)  # Wn = cutoff/nyquist > 1.0
+
+
 class TestLowpass:
     def test_attenuates_high_frequency(self):
         """Sine well above 2700 Hz cutoff must be attenuated by > 20 dB."""
@@ -69,7 +81,7 @@ class TestDynamicAgc:
         rms_out = float(np.sqrt(np.mean(out ** 2)))
         dbfs_out = 20 * np.log10(rms_out)
         # Should be within 10 dB of target (AGC converges gradually)
-        assert dbfs_out > -35.0, f"Expected AGC to boost quiet signal, got {dbfs_out:.1f} dBFS"
+        assert dbfs_out > -25.0, f"Expected AGC to boost quiet signal, got {dbfs_out:.1f} dBFS"
 
     def test_skips_near_silence(self):
         """Near-zero input must not be amplified to noise."""

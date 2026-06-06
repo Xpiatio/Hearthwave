@@ -224,6 +224,17 @@ class STTWorker:
         elif event == "squelch_closed":
             self.channel_busy.clear()
 
+    def _handle_raw_squelch_event(self, sq_event: "str | None") -> None:
+        """Map SquelchDetector.update() return value to _apply_squelch_event.
+
+        SquelchDetector emits 'opened'/'closed'; _apply_squelch_event expects
+        the prefixed form 'squelch_opened'/'squelch_closed'.
+        """
+        if sq_event == "opened":
+            self._apply_squelch_event("squelch_opened")
+        elif sq_event == "closed":
+            self._apply_squelch_event("squelch_closed")
+
     # ------------------------------------------------------------------
     # Worker body — runs in a thread-pool thread
     # ------------------------------------------------------------------
@@ -434,11 +445,7 @@ class STTWorker:
                     self._emit_status("Listening (CW)...")
                     was_paused = False
 
-                sq_event = squelch.update(peak)
-                if sq_event == "opened":
-                    self._apply_squelch_event("squelch_opened")
-                elif sq_event == "closed":
-                    self._apply_squelch_event("squelch_closed")
+                self._handle_raw_squelch_event(squelch.update(peak))
 
                 if squelch.is_open:
                     buffer.append(chunk)
