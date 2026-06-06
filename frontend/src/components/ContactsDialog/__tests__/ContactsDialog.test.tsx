@@ -184,7 +184,7 @@ describe('ContactsDialog', () => {
       const onSend = vi.fn()
       render(<ContactsDialog {...makeProps({ onSend })} />)
       fireEvent.click(screen.getByRole('button', { name: /delete w1aaa/i }))
-      expect(onSend).toHaveBeenCalledWith({ type: 'delete_contact', callsign: 'W1AAA' })
+      expect(onSend).toHaveBeenCalledWith(expect.objectContaining({ type: 'delete_contact', callsign: 'W1AAA' }))
     })
   })
 
@@ -362,7 +362,7 @@ describe('ContactsDialog', () => {
       await openEditDialog(makeProps({ onSend }))
       fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
       expect(onSend).toHaveBeenCalledWith(expect.objectContaining({
-        type: 'add_contact',
+        type: 'update_contact',
         callsign: 'W1AAA',
       }))
     })

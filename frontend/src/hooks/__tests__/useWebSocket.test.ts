@@ -87,6 +87,9 @@ describe('useWebSocket', () => {
   beforeEach(() => {
     instances = []
     vi.stubGlobal('WebSocket', FakeWebSocket)
+    // connect() fetches a WS ticket before opening; mock fetch to reject fast
+    // so fetchWsTicket returns null and falls back to the raw token.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }))
     vi.useFakeTimers()
   })
 
@@ -104,19 +107,21 @@ describe('useWebSocket', () => {
     expect(instances).toHaveLength(0)
   })
 
-  it('creates a WebSocket connection when token is provided', () => {
+  it('creates a WebSocket connection when token is provided', async () => {
     renderHook(() =>
       useWebSocket({ onMessage: vi.fn(), token: 'tok-123' })
     )
+    await act(async () => {})
     expect(instances).toHaveLength(1)
     expect(instances[0].url).toContain('tok-123')
   })
 
-  it('url contains wss when location is https', () => {
+  it('url contains wss when location is https', async () => {
     // jsdom defaults to http so this test verifies the ws: branch
     renderHook(() =>
       useWebSocket({ onMessage: vi.fn(), token: 'tok-abc' })
     )
+    await act(async () => {})
     expect(instances[0].url).toMatch(/^ws:/)
   })
 
@@ -124,6 +129,7 @@ describe('useWebSocket', () => {
     const { result } = renderHook(() =>
       useWebSocket({ onMessage: vi.fn(), token: 'tok-1' })
     )
+    await act(async () => {})
     expect(result.current.connected).toBe(false)
     act(() => { instances[0]._triggerOpen() })
     expect(result.current.connected).toBe(true)
@@ -133,25 +139,28 @@ describe('useWebSocket', () => {
     const { result } = renderHook(() =>
       useWebSocket({ onMessage: vi.fn(), token: 'tok-1' })
     )
+    await act(async () => {})
     act(() => { instances[0]._triggerOpen() })
     act(() => { instances[0]._triggerClose() })
     expect(result.current.connected).toBe(false)
   })
 
-  it('calls onOpen callback when connection opens', () => {
+  it('calls onOpen callback when connection opens', async () => {
     const onOpen = vi.fn()
     renderHook(() =>
       useWebSocket({ onMessage: vi.fn(), token: 'tok-1', onOpen })
     )
+    await act(async () => {})
     act(() => { instances[0]._triggerOpen() })
     expect(onOpen).toHaveBeenCalledOnce()
   })
 
-  it('closes existing connection when token becomes null', () => {
+  it('closes existing connection when token becomes null', async () => {
     const { rerender } = renderHook(
       ({ token }) => useWebSocket({ onMessage: vi.fn(), token }),
       { initialProps: { token: 'tok-1' as string | null } }
     )
+    await act(async () => {})
     act(() => { instances[0]._triggerOpen() })
     rerender({ token: null })
     expect(instances[0].readyState).toBe(FakeWebSocket.CLOSED)
@@ -159,9 +168,10 @@ describe('useWebSocket', () => {
 
   // -- Message handling ----------------------------------------------------
 
-  it('calls onMessage with parsed WsMessage on incoming data', () => {
+  it('calls onMessage with parsed WsMessage on incoming data', async () => {
     const onMessage = vi.fn()
     renderHook(() => useWebSocket({ onMessage, token: 'tok-1' }))
+    await act(async () => {})
     act(() => { instances[0]._triggerOpen() })
 
     const msg: Pick<WsMessage, 'type'> = { type: 'status' }
@@ -170,9 +180,10 @@ describe('useWebSocket', () => {
     expect(onMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'status' }))
   })
 
-  it('silently ignores invalid JSON messages', () => {
+  it('silently ignores invalid JSON messages', async () => {
     const onMessage = vi.fn()
     renderHook(() => useWebSocket({ onMessage, token: 'tok-1' }))
+    await act(async () => {})
     act(() => { instances[0]._triggerOpen() })
 
     act(() => {
@@ -186,13 +197,14 @@ describe('useWebSocket', () => {
     expect(onMessage).not.toHaveBeenCalled()
   })
 
-  it('uses updated onMessage callback without reconnecting', () => {
+  it('uses updated onMessage callback without reconnecting', async () => {
     const first = vi.fn()
     const second = vi.fn()
     const { rerender } = renderHook(
       ({ cb }) => useWebSocket({ onMessage: cb, token: 'tok-1' }),
       { initialProps: { cb: first } }
     )
+    await act(async () => {})
     act(() => { instances[0]._triggerOpen() })
 
     rerender({ cb: second })
@@ -206,10 +218,11 @@ describe('useWebSocket', () => {
 
   // -- send() method -------------------------------------------------------
 
-  it('send() transmits JSON when connection is open', () => {
+  it('send() transmits JSON when connection is open', async () => {
     const { result } = renderHook(() =>
       useWebSocket({ onMessage: vi.fn(), token: 'tok-1' })
     )
+    await act(async () => {})
     act(() => { instances[0]._triggerOpen() })
 
     act(() => {
@@ -221,10 +234,11 @@ describe('useWebSocket', () => {
     expect(sent).toMatchObject({ type: 'tx_message', text: 'Hello' })
   })
 
-  it('send() does nothing when not connected', () => {
+  it('send() does nothing when not connected', async () => {
     const { result } = renderHook(() =>
       useWebSocket({ onMessage: vi.fn(), token: 'tok-1' })
     )
+    await act(async () => {})
     // Not open yet — send should be a no-op
     act(() => {
       result.current.send({ type: 'tx_message', text: 'Hello' })
@@ -235,52 +249,60 @@ describe('useWebSocket', () => {
 
   // -- Reconnect behavior --------------------------------------------------
 
-  it('schedules reconnect after normal close', () => {
+  it('schedules reconnect after normal close', async () => {
     renderHook(() =>
       useWebSocket({ onMessage: vi.fn(), token: 'tok-1' })
     )
+    await act(async () => {})
     act(() => { instances[0]._triggerOpen() })
     act(() => { instances[0]._triggerClose(1000) })
 
     expect(instances).toHaveLength(1)
     // Advance past MIN_BACKOFF_MS (1000ms)
     act(() => { vi.advanceTimersByTime(1100) })
+    await act(async () => {})
     expect(instances).toHaveLength(2)
   })
 
-  it('does NOT reconnect after auth failure (code 4001)', () => {
+  it('does NOT reconnect after auth failure (code 4001)', async () => {
     renderHook(() =>
       useWebSocket({ onMessage: vi.fn(), token: 'tok-1' })
     )
+    await act(async () => {})
     act(() => { instances[0]._triggerOpen() })
     act(() => { instances[0]._triggerClose(4001) })
 
     act(() => { vi.advanceTimersByTime(5000) })
+    await act(async () => {})
     expect(instances).toHaveLength(1)
   })
 
-  it('calls close then reopens on error', () => {
+  it('calls close then reopens on error', async () => {
     renderHook(() =>
       useWebSocket({ onMessage: vi.fn(), token: 'tok-1' })
     )
+    await act(async () => {})
     act(() => { instances[0]._triggerOpen() })
     act(() => { instances[0]._triggerError() })
 
     // Error handler calls ws.close(), which triggers onclose => reconnect timer
     act(() => { vi.advanceTimersByTime(1100) })
+    await act(async () => {})
     expect(instances).toHaveLength(2)
   })
 
-  it('backoff doubles on repeated failures without successful open', () => {
+  it('backoff doubles on repeated failures without successful open', async () => {
     // If the socket NEVER opens (immediate failure), backoff should double.
     // Trigger close without open so the backoff is NOT reset.
     renderHook(() =>
       useWebSocket({ onMessage: vi.fn(), token: 'tok-1' })
     )
+    await act(async () => {})
 
     // First close without open: backoff stays at 1000ms, fires after 1000ms
     act(() => { instances[0]._triggerClose(1000) })
     act(() => { vi.advanceTimersByTime(1100) })
+    await act(async () => {})
     expect(instances).toHaveLength(2)
 
     // Second close without open: backoff doubled to 2000ms
@@ -289,35 +311,39 @@ describe('useWebSocket', () => {
     // 1100ms < 2000ms — timer has NOT fired yet
     expect(instances).toHaveLength(2)
     act(() => { vi.advanceTimersByTime(1000) })
+    await act(async () => {})
     // Now 2100ms total — timer fires
     expect(instances).toHaveLength(3)
   })
 
   // -- Cleanup on unmount --------------------------------------------------
 
-  it('closes WebSocket on unmount', () => {
+  it('closes WebSocket on unmount', async () => {
     const { unmount } = renderHook(() =>
       useWebSocket({ onMessage: vi.fn(), token: 'tok-1' })
     )
+    await act(async () => {})
     act(() => { instances[0]._triggerOpen() })
     unmount()
     expect(instances[0].readyState).toBe(FakeWebSocket.CLOSED)
   })
 
-  it('does not reconnect after unmount', () => {
+  it('does not reconnect after unmount', async () => {
     const { unmount } = renderHook(() =>
       useWebSocket({ onMessage: vi.fn(), token: 'tok-1' })
     )
+    await act(async () => {})
     act(() => { instances[0]._triggerOpen() })
     unmount()
     act(() => { vi.advanceTimersByTime(5000) })
     expect(instances).toHaveLength(1)
   })
 
-  it('cancels pending reconnect timer on unmount', () => {
+  it('cancels pending reconnect timer on unmount', async () => {
     const { unmount } = renderHook(() =>
       useWebSocket({ onMessage: vi.fn(), token: 'tok-1' })
     )
+    await act(async () => {})
     act(() => { instances[0]._triggerOpen() })
     act(() => { instances[0]._triggerClose(1000) })
     unmount()

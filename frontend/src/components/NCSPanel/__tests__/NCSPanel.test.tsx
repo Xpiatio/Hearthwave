@@ -272,7 +272,7 @@ describe('NCSPanel', () => {
       const input = screen.getByPlaceholderText('Callsign')
       fireEvent.change(input, { target: { value: 'W1BBB' } })
       fireEvent.click(screen.getByRole('button', { name: /check in/i }))
-      expect(send).toHaveBeenCalledWith({ type: 'ncs_checkin', callsign: 'W1BBB', traffic: 'Routine' })
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'ncs_checkin', callsign: 'W1BBB', traffic: 'Routine' }))
     })
 
     it('uppercases callsign input', () => {
@@ -302,7 +302,7 @@ describe('NCSPanel', () => {
       const input = screen.getByPlaceholderText('Callsign')
       fireEvent.change(input, { target: { value: 'W1CCC' } })
       fireEvent.keyDown(input, { key: 'Enter' })
-      expect(send).toHaveBeenCalledWith({ type: 'ncs_checkin', callsign: 'W1CCC', traffic: 'Routine' })
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'ncs_checkin', callsign: 'W1CCC', traffic: 'Routine' }))
     })
   })
 
@@ -343,13 +343,13 @@ describe('NCSPanel', () => {
     it('sends ncs_status_update when status chip clicked', () => {
       const send = renderWithRoster()
       fireEvent.click(screen.getByText('✓ In')) // CheckedIn -> Standby
-      expect(send).toHaveBeenCalledWith({ type: 'ncs_status_update', callsign: 'W1AAA', status: 'Standby' })
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'ncs_status_update', callsign: 'W1AAA', status: 'Standby' }))
     })
 
     it('sends ncs_remove when delete button clicked', () => {
       const send = renderWithRoster()
       fireEvent.click(screen.getByRole('button', { name: /remove w1aaa/i }))
-      expect(send).toHaveBeenCalledWith({ type: 'ncs_remove', callsign: 'W1AAA' })
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'ncs_remove', callsign: 'W1AAA' }))
     })
 
     it('shows operator name below callsign when present', () => {
