@@ -143,6 +143,11 @@ class ServerConfig(dict):
         """Max time to wait for TTS synthesis before aborting without keying PTT."""
         return int(self.get("tx_synthesis_timeout_seconds", 30))
 
+    @property
+    def ptt_lead_in_ms(self) -> int:
+        """Silence to prepend after PTT key before TTS audio plays (ms)."""
+        return int(self.get("ptt_lead_in_ms", 350))
+
     # ---- receive mode ----------------------------------------------------
 
     @property
