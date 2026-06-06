@@ -3,6 +3,7 @@ import {
   AppBar,
   Toolbar,
   Box,
+  Button,
   IconButton,
   Typography,
   SwipeableDrawer,
@@ -42,6 +43,7 @@ interface MobileTopBarProps {
   onVoicePttChunk: (b64: string) => void;
   onVoicePttEnd: () => void;
   onVoicePttCancel: () => void;
+  onTxAbort: () => void;
   onUpdateProfile: (updates: {
     operator_name?: string;
     callsign?: string;
@@ -82,6 +84,7 @@ export function MobileTopBar({
   onVoicePttChunk,
   onVoicePttEnd,
   onVoicePttCancel,
+  onTxAbort,
   onUpdateProfile,
   onChangePassword,
   onLogout,
@@ -123,6 +126,18 @@ export function MobileTopBar({
           onEnd={onVoicePttEnd}
           onCancel={onVoicePttCancel}
         />
+
+        <Button
+          color="error"
+          variant="contained"
+          size="large"
+          disabled={!transmitting}
+          onClick={onTxAbort}
+          sx={{ fontWeight: 700, minWidth: 90 }}
+          aria-label="Abort transmission"
+        >
+          ABORT TX
+        </Button>
       </Toolbar>
 
       <SwipeableDrawer

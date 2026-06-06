@@ -84,6 +84,7 @@ export interface MobileAppProps {
   onVoicePttChunk: (b64: string) => void;
   onVoicePttEnd: () => void;
   onVoicePttCancel: () => void;
+  onTxAbort: () => void;
 
   // User prefs
   sttListening: boolean;
@@ -196,6 +197,7 @@ export function MobileApp({
   onVoicePttChunk,
   onVoicePttEnd,
   onVoicePttCancel,
+  onTxAbort,
   sttListening,
   readAloud,
   notificationsEnabled,
@@ -274,6 +276,7 @@ export function MobileApp({
         onVoicePttChunk={onVoicePttChunk}
         onVoicePttEnd={onVoicePttEnd}
         onVoicePttCancel={onVoicePttCancel}
+        onTxAbort={onTxAbort}
         onUpdateProfile={onUpdateProfile}
         onChangePassword={onChangePassword}
         onLogout={onLogout}

@@ -148,6 +148,7 @@ _token_store: TokenStore | None = None
 _stt_worker: STTWorker | None = None
 _synthesizer: TTSSynthesizer | None = None
 _tx_audio_complete_event: asyncio.Event | None = None
+_tx_abort_event: asyncio.Event = asyncio.Event()
 _monitor: "Any | None" = None  # AudioMonitor, lazy-imported
 _spectro: SpectroTask | None = None
 
@@ -532,13 +533,18 @@ async def _rx_pump() -> None:
 
 async def _tx_pump() -> None:
     """Drain tx_queue; apply text pipeline, FCC formatting, synthesize, play."""
-    global _last_id_time, _has_transmitted
+    global _last_id_time, _has_transmitted, _tx_audio_complete_event
 
     while True:
         try:
             payload = await _tx_queue.get()
         except asyncio.CancelledError:
             break
+
+        if _tx_abort_event.is_set():
+            _tx_abort_event.clear()
+            await _manager.broadcast({"type": "tx_status", "status": "idle"})
+            continue
 
         if payload.get("_voice_tx"):
             await _handle_voice_tx(payload)
@@ -641,14 +647,24 @@ async def _tx_pump() -> None:
                 # server-side, then stream PCM to the browser so it plays through
                 # the local audio device connected to the radio.
                 ptt = make_ptt(_config)
-                audio, sample_rate = await _synthesizer.synthesize_to_buffer(
-                    voice, text, length_scale=length_scale,
-                    lead_in_seconds=ptt.lead_in_seconds,
-                    tail_seconds=ptt.tail_seconds,
-                )
+                synth_timeout = _config.tx_synthesis_timeout_seconds
+                try:
+                    audio, sample_rate = await asyncio.wait_for(
+                        _synthesizer.synthesize_to_buffer(
+                            voice, text, length_scale=length_scale,
+                            lead_in_seconds=ptt.lead_in_seconds,
+                            tail_seconds=ptt.tail_seconds,
+                        ),
+                        timeout=synth_timeout,
+                    )
+                except asyncio.TimeoutError:
+                    _log.warning("TX synthesis timed out after %ds — PTT not keyed", synth_timeout)
+                    await _manager.broadcast({"type": "error", "detail": f"TX aborted: TTS synthesis exceeded {synth_timeout}s."})
+                    audio = None
                 if audio is not None:
                     audio_b64 = base64.b64encode(audio.tobytes()).decode("ascii")
                     _tx_audio_complete_event = asyncio.Event()
+                    max_tx = _config.tx_max_duration_seconds
                     try:
                         ptt.key()
                         await _manager.broadcast({
@@ -656,9 +672,32 @@ async def _tx_pump() -> None:
                             "data": audio_b64,
                             "sample_rate": sample_rate,
                         })
-                        # Sleep for the audio duration so serial PTT timing is
-                        # approximate even though playback happens in the browser.
-                        await asyncio.sleep(len(audio) / sample_rate)
+                        # Race the audio-duration sleep against the operator abort
+                        # event and the hard PTT cap.  Whichever fires first wins;
+                        # PTT is always released in the finally block below.
+                        sleep_task = asyncio.create_task(asyncio.sleep(len(audio) / sample_rate))
+                        abort_task = asyncio.create_task(_tx_abort_event.wait())
+                        done, pending = await asyncio.wait(
+                            {sleep_task, abort_task},
+                            timeout=max_tx,
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
+                        # Capture outcome BEFORE cancellation: after gather() the
+                        # tasks are marked done (CancelledError), so post-gather
+                        # checks would always find sleep_task.done() == True.
+                        operator_aborted = abort_task in done
+                        watchdog_fired = not operator_aborted and sleep_task not in done
+                        for t in pending:
+                            t.cancel()
+                        if pending:
+                            await asyncio.gather(*pending, return_exceptions=True)
+                        if operator_aborted:
+                            _tx_abort_event.clear()
+                            _log.warning("TX aborted by operator kill switch")
+                            await _manager.broadcast({"type": "error", "detail": "TX aborted by operator."})
+                        elif watchdog_fired:
+                            _log.warning("TX exceeded max duration (%ds) — forcing PTT unkey", max_tx)
+                            await _manager.broadcast({"type": "error", "detail": f"TX aborted: exceeded {max_tx}s limit."})
                     finally:
                         ptt.unkey()
 
@@ -746,9 +785,17 @@ async def _handle_voice_tx(payload: dict) -> None:
         # Key PTT and play raw voice audio
         ptt = make_ptt(_config)
         out_dev = _config.output_device if (_config and _config.output_device != -1) else None
+        max_tx = _config.tx_max_duration_seconds
         try:
             ptt.key()
-            await asyncio.to_thread(_play_voice_blocking, int16_arr, sample_rate, out_dev)
+            try:
+                await asyncio.wait_for(
+                    asyncio.to_thread(_play_voice_blocking, int16_arr, sample_rate, out_dev),
+                    timeout=max_tx,
+                )
+            except asyncio.TimeoutError:
+                _log.warning("Voice TX exceeded max duration (%ds) — forcing PTT unkey", max_tx)
+                await _manager.broadcast({"type": "error", "detail": f"Voice TX aborted: exceeded {max_tx}s limit."})
         finally:
             ptt.unkey()
 
@@ -945,7 +992,7 @@ async def _voices_watcher_pump() -> None:
 async def _lifespan(app: FastAPI):
     """Startup / shutdown wiring."""
     global _config, _contacts_store, _users_store, _token_store, _stt_worker, _synthesizer, _monitor
-    global _stt_out_queue, _tx_queue, _tts_event_queue, _background_tasks
+    global _stt_out_queue, _tx_queue, _tts_event_queue, _background_tasks, _tx_abort_event
     global _audio_level, _radio_error, _channel_clear, _last_id_time, _has_transmitted
     global _level_window, _attendance, _spectro, _monitor_chunk_cb
     global _pending_stations, _auto_add_tasks, _event_loop
@@ -999,6 +1046,7 @@ async def _lifespan(app: FastAPI):
     _stt_out_queue = asyncio.Queue()
     _tx_queue = asyncio.Queue()
     _tts_event_queue = asyncio.Queue()
+    _tx_abort_event = asyncio.Event()
 
     # Reset transient state on each startup.
     _audio_level = 0
@@ -1983,6 +2031,28 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                 state.voice_tx_bytes    = 0
                 state.voice_tx_callsign = ""
                 state.voice_tx_operator = ""
+
+            elif msg_type == "tx_abort":
+                _tx_abort_event.set()
+                drained = 0
+                while not _tx_queue.empty():
+                    try:
+                        _tx_queue.get_nowait()
+                        drained += 1
+                    except asyncio.QueueEmpty:
+                        break
+                if drained:
+                    _log.info("tx_abort: drained %d queued TX item(s)", drained)
+                _log.warning("tx_abort: operator kill switch activated")
+                await _manager.broadcast({"type": "tx_status", "status": "idle"})
+                # Yield two event-loop cycles so any task already waiting on
+                # _tx_abort_event (the PTT race's abort_task) can fire and be
+                # consumed before we clear the event.  Without this, the event
+                # would stay set and cause the next legitimate TX to be
+                # silently discarded by the top-of-loop abort check.
+                await asyncio.sleep(0)
+                await asyncio.sleep(0)
+                _tx_abort_event.clear()
 
             else:
                 _log.debug("Unknown message type from client: %r", msg_type)

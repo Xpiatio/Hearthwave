@@ -67,6 +67,7 @@ interface Props {
   onVoicePttChunk: (b64: string) => void;
   onVoicePttEnd: () => void;
   onVoicePttCancel: () => void;
+  onTxAbort: () => void;
 }
 
 export function TopBar({
@@ -116,6 +117,7 @@ export function TopBar({
   onVoicePttChunk,
   onVoicePttEnd,
   onVoicePttCancel,
+  onTxAbort,
 }: Props) {
   return (
     <AppBar position="static" color="default" elevation={0}
@@ -312,6 +314,22 @@ export function TopBar({
           onEnd={onVoicePttEnd}
           onCancel={onVoicePttCancel}
         />
+
+        <Tooltip title={transmitting ? 'Abort current transmission immediately' : 'No active transmission'}>
+          <span>
+            <Button
+              color="error"
+              variant="contained"
+              size="small"
+              disabled={!transmitting}
+              onClick={onTxAbort}
+              sx={{ fontWeight: 700, minWidth: 90 }}
+              aria-label="Abort transmission"
+            >
+              ABORT TX
+            </Button>
+          </span>
+        </Tooltip>
 
         <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
 

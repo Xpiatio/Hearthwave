@@ -21,6 +21,7 @@ import type {
   VoiceTxChunkPayload,
   VoiceTxEndPayload,
   VoiceTxCancelPayload,
+  TxAbortPayload,
 } from './types/ws';
 import type { ChatEntry } from './components/ChatDisplay/ChatDisplay';
 import type { SpectrogramHandle } from './components/Spectrogram/Spectrogram';
@@ -621,6 +622,12 @@ export default function App() {
     send({ type: 'voice_tx_cancel' } satisfies VoiceTxCancelPayload);
   }
 
+  function handleTxAbort() {
+    send({ type: 'tx_abort' } satisfies TxAbortPayload);
+    send({ type: 'voice_tx_cancel' } satisfies VoiceTxCancelPayload);
+    setTransmitting(false);
+  }
+
   function handleToggleServiceMode() {
     const next = serviceMode === 'GMRS' ? 'FRS' : 'GMRS';
     send({ type: 'set_service_mode', service: next });
@@ -948,6 +955,7 @@ export default function App() {
     onVoicePttChunk: handleVoicePttChunk,
     onVoicePttEnd: handleVoicePttEnd,
     onVoicePttCancel: handleVoicePttCancel,
+    onTxAbort: handleTxAbort,
     voices,
     voicePreviewBusy,
     onPreviewVoice: handlePreviewVoice,

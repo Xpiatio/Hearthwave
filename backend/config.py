@@ -133,6 +133,16 @@ class ServerConfig(dict):
     def ptt_serial_line(self) -> str:
         return self.get("ptt_serial_line", "RTS")
 
+    @property
+    def tx_max_duration_seconds(self) -> int:
+        """Hard cap on how long PTT may remain keyed for any single transmission."""
+        return int(self.get("tx_max_duration_seconds", 60))
+
+    @property
+    def tx_synthesis_timeout_seconds(self) -> int:
+        """Max time to wait for TTS synthesis before aborting without keying PTT."""
+        return int(self.get("tx_synthesis_timeout_seconds", 30))
+
     # ---- receive mode ----------------------------------------------------
 
     @property
