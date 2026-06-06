@@ -10,6 +10,19 @@ interface UseWebSocketOptions {
   onOpen?: () => void;
 }
 
+async function fetchWsTicket(token: string): Promise<string | null> {
+  try {
+    const resp = await fetch('/auth/ws-ticket', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json() as { ticket?: string };
+    return data.ticket ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function useWebSocket({ onMessage, token, onOpen }: UseWebSocketOptions) {
   const [connected, setConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
@@ -25,11 +38,22 @@ export function useWebSocket({ onMessage, token, onOpen }: UseWebSocketOptions) 
   useEffect(() => { onOpenRef.current = onOpen; }, [onOpen]);
   useEffect(() => { tokenRef.current = token; }, [token]);
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     if (unmountedRef.current || !tokenRef.current) return;
 
+    const currentToken = tokenRef.current;
+
+    // Fetch a one-time ticket so the long-lived token never appears in the
+    // WS upgrade URL (and therefore never in nginx access logs).
+    // Fall back to the raw token if the ticket endpoint is unreachable.
+    const ticket = await fetchWsTicket(currentToken);
+    if (unmountedRef.current || tokenRef.current !== currentToken) return;
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const url = `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(tokenRef.current)}`;
+    const param = ticket
+      ? `ticket=${encodeURIComponent(ticket)}`
+      : `token=${encodeURIComponent(currentToken)}`;
+    const url = `${protocol}//${window.location.host}/ws?${param}`;
 
     const ws = new WebSocket(url);
     wsRef.current = ws;
@@ -60,7 +84,7 @@ export function useWebSocket({ onMessage, token, onOpen }: UseWebSocketOptions) 
       if (event.code === 4001) return;
       const delay = backoffRef.current;
       backoffRef.current = Math.min(backoffRef.current * 2, MAX_BACKOFF_MS);
-      reconnectTimerRef.current = setTimeout(connect, delay);
+      reconnectTimerRef.current = setTimeout(() => { void connect(); }, delay);
     };
 
     ws.onerror = () => {
@@ -83,7 +107,7 @@ export function useWebSocket({ onMessage, token, onOpen }: UseWebSocketOptions) 
 
     unmountedRef.current = false;
     backoffRef.current = MIN_BACKOFF_MS;
-    connect();
+    void connect();
 
     return () => {
       unmountedRef.current = true;

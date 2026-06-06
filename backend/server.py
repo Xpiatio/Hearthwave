@@ -120,6 +120,8 @@ from backend.persistence.contacts import (
     known_callsigns,
     normalize_callsign,
 )
+from backend.persistence.audit import AuditLog
+from backend.auth_ratelimit import _extract_ip, get_client_ip
 from backend.persistence.journal import delete_journal, load_journals, load_published_manifest, publish_journal, save_journal, unpublish_journal
 from backend.persistence.tokens import TokenStore
 from backend.persistence.users import DEFAULT_PREFS, SENSITIVE_PROFILE_FIELDS, UsersStore
@@ -145,6 +147,7 @@ _config: ServerConfig | None = None
 _contacts_store: ContactsStore | None = None
 _users_store: UsersStore | None = None
 _token_store: TokenStore | None = None
+_audit_log: AuditLog | None = None
 _stt_worker: STTWorker | None = None
 _synthesizer: TTSSynthesizer | None = None
 _tx_audio_complete_event: asyncio.Event | None = None
@@ -277,6 +280,16 @@ class ConnectionManager:
         for ws, state in list(self._clients.items()):
             if state.user_id == user_id:
                 await self.send_to(ws, msg)
+
+    async def disconnect_user(self, user_id: str) -> None:
+        """Close all active WebSocket connections for *user_id* with code 4001."""
+        targets = [ws for ws, state in list(self._clients.items()) if state.user_id == user_id]
+        for ws in targets:
+            try:
+                await ws.close(code=4001)
+            except Exception:
+                pass
+            self._clients.pop(ws, None)
 
 
 _manager = ConnectionManager()
@@ -672,6 +685,15 @@ async def _tx_pump() -> None:
                     max_tx = _config.tx_max_duration_seconds
                     try:
                         ptt.key()
+                        if _audit_log:
+                            _audit_log.log(
+                                "tx",
+                                user_id=payload.get("_user_id", ""),
+                                detail=(
+                                    f"callsign={payload.get('callsign', '')} "
+                                    f"text={payload.get('text', '')!r}"
+                                ),
+                            )
                         await _manager.broadcast({
                             "type": "tx_audio",
                             "data": audio_b64,
@@ -1000,7 +1022,7 @@ async def _lifespan(app: FastAPI):
     global _stt_out_queue, _tx_queue, _tts_event_queue, _background_tasks, _tx_abort_event
     global _audio_level, _radio_error, _channel_clear, _last_id_time, _has_transmitted
     global _level_window, _attendance, _spectro, _monitor_chunk_cb
-    global _pending_stations, _auto_add_tasks, _event_loop
+    global _pending_stations, _auto_add_tasks, _event_loop, _audit_log
 
     # --- startup -----------------------------------------------------------
     _event_loop = asyncio.get_running_loop()
@@ -1018,6 +1040,8 @@ async def _lifespan(app: FastAPI):
     purged = _token_store.purge_expired()
     if purged:
         _log.info("Purged %d expired session tokens.", purged)
+
+    _audit_log = AuditLog()
 
     # Headless bootstrap: if RADIO_TTY_ADMIN_PASS is set and no users exist, create admin now.
     # Without the env var, the browser first-run setup flow handles account creation.
@@ -1046,7 +1070,13 @@ async def _lifespan(app: FastAPI):
             _log.info("No users found — first-run setup required via browser.")
 
     # Wire auth routes with the live stores.
-    auth_routes.init(_users_store, _token_store, _config)
+    auth_routes.init(
+        _users_store,
+        _token_store,
+        _config,
+        audit_log=_audit_log,
+        disconnect_user_fn=_manager.disconnect_user,
+    )
 
     _stt_out_queue = asyncio.Queue()
     _tx_queue = asyncio.Queue()
@@ -1346,11 +1376,22 @@ async def _check_listen_only(ws: WebSocket, state: "ConnectionState") -> bool:
 
 
 @app.websocket("/ws")
-async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=None)) -> None:
+async def websocket_endpoint(
+    ws: WebSocket,
+    ticket: str | None = Query(default=None),
+    token:  str | None = Query(default=None),
+) -> None:
     global _stt_worker, _stt_listening
 
-    # Validate session token — accept first so we can send a close frame.
-    user_id = _token_store.validate(token) if (_token_store and token) else None
+    # Prefer a one-time ticket (keeps long-lived token out of access logs).
+    # Fall back to raw token for backward compatibility during rolling deploys.
+    if _token_store and ticket:
+        user_id = _token_store.validate_ticket(ticket)
+    elif _token_store and token:
+        user_id = _token_store.validate(token)
+    else:
+        user_id = None
+
     profile = _users_store.get(user_id) if (_users_store and user_id) else None
     if not user_id or not profile:
         await ws.accept()
@@ -1364,7 +1405,10 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
         prefs={**DEFAULT_PREFS, **profile.get("prefs", {})},
     )
     _manager.add(ws, state)
+    client_ip = _extract_ip(ws.headers, str(ws.client.host) if ws.client else "unknown")
     _log.info("Client connected: %s (user=%s)", ws.client, user_id)
+    if _audit_log:
+        _audit_log.log("ws_connect", user_id=user_id, ip=client_ip)
 
     # Send initial state to the newly connected client.
     await _manager.send_to(ws, _build_status())
@@ -1436,6 +1480,7 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
                     "_voice_name": state.prefs.get("tts_voice") or None,
                     "_length_scale": state.prefs.get("tts_length_scale") or None,
                     "_display_name": _tx_sender_display,
+                    "_user_id": state.user_id,
                 })
                 if tx_payload is None:
                     continue  # TX blocked by a plugin
@@ -2068,3 +2113,5 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = Query(default=No
         _log.error("WebSocket error for %s: %s", ws.client, exc)
     finally:
         _manager.remove(ws)
+        if _audit_log:
+            _audit_log.log("ws_disconnect", user_id=user_id, ip=client_ip)
