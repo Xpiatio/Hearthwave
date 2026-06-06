@@ -1,3 +1,4 @@
+import pytest
 import backend.ptt.factory as ptt_factory
 from backend.ptt import ManualPTT, VoxPTT, make_ptt
 
@@ -63,5 +64,5 @@ class TestVoxTailSilence:
 
     def test_vox_has_tail_silence(self):
         ptt = VoxPTT()
-        assert ptt.lead_in_seconds == 0.0
+        assert ptt.lead_in_seconds == pytest.approx(0.35)
         assert ptt.tail_seconds == 0.15
