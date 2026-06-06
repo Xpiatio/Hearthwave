@@ -86,6 +86,7 @@ export interface DesktopAppProps {
   onVoicePttChunk: (b64: string) => void;
   onVoicePttEnd: () => void;
   onVoicePttCancel: () => void;
+  onTxAbort: () => void;
 
   // Config panel
   filterProfanity: boolean;
@@ -238,6 +239,7 @@ export function DesktopApp({
   onVoicePttChunk,
   onVoicePttEnd,
   onVoicePttCancel,
+  onTxAbort,
   filterProfanity,
   fuzzyCallsign,
   inputDevice,
@@ -367,6 +369,7 @@ export function DesktopApp({
         onVoicePttChunk={onVoicePttChunk}
         onVoicePttEnd={onVoicePttEnd}
         onVoicePttCancel={onVoicePttCancel}
+        onTxAbort={onTxAbort}
       />
 
       <DndContext onDragEnd={onPanelDragEnd}>

@@ -428,6 +428,10 @@ export interface VoiceTxCancelPayload {
   type: 'voice_tx_cancel';
 }
 
+export interface TxAbortPayload {
+  type: 'tx_abort';
+}
+
 // Voice PTT — Server → Client messages (part of WsMessage union)
 export interface VoiceTxAckMsg {
   type: 'voice_tx_ack';

@@ -10,6 +10,8 @@ Running:
 """
 from __future__ import annotations
 
+import threading
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -41,18 +43,42 @@ def _make_mocks():
     mock_stt = MagicMock()
     mock_stt.join = AsyncMock()
     mock_tts = MagicMock()
-    mock_tts.synthesize = AsyncMock(return_value=None)
+    mock_tts.synthesize_to_buffer = AsyncMock(return_value=(None, None))
     return mock_stt, mock_tts
+
+
+def _make_auth_mocks(*, listen_only: bool = False):
+    mock_users = MagicMock()
+    mock_users.is_empty.return_value = False
+    mock_users.get.return_value = {
+        "id": "test-user",
+        "display_name": "Test Operator",
+        "is_admin": True,
+        "prefs": {"listen_only": listen_only} if listen_only else {},
+    }
+    mock_users.get_public_one.return_value = {"display_name": "Test Operator"}
+
+    mock_tokens = MagicMock()
+    mock_tokens.validate.return_value = "test-user"
+    mock_tokens.purge_expired.return_value = 0
+    return mock_users, mock_tokens
+
+
+WS_URL = "/ws?token=test"
 
 
 @pytest.fixture
 def client(tmp_path):
     cfg = _minimal_cfg(tmp_path)
     mock_stt, mock_tts = _make_mocks()
+    mock_users, mock_tokens = _make_auth_mocks()
     with (
         patch("backend.server.ServerConfig.load", return_value=cfg),
         patch("backend.server.STTWorker", return_value=mock_stt),
         patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+        patch("backend.server.UsersStore", return_value=mock_users),
+        patch("backend.server.TokenStore", return_value=mock_tokens),
+        patch("backend.auth_routes.init"),
     ):
         with TestClient(app) as tc:
             yield tc
@@ -62,10 +88,14 @@ def client(tmp_path):
 def listen_only_client(tmp_path):
     cfg = _minimal_cfg(tmp_path, listen_only=True)
     mock_stt, mock_tts = _make_mocks()
+    mock_users, mock_tokens = _make_auth_mocks(listen_only=True)
     with (
         patch("backend.server.ServerConfig.load", return_value=cfg),
         patch("backend.server.STTWorker", return_value=mock_stt),
         patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+        patch("backend.server.UsersStore", return_value=mock_users),
+        patch("backend.server.TokenStore", return_value=mock_tokens),
+        patch("backend.auth_routes.init"),
     ):
         with TestClient(app) as tc:
             yield tc
@@ -75,10 +105,31 @@ def listen_only_client(tmp_path):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _drain_initial(ws, count: int = 4):
-    """Consume the status + contacts + session_attendance + pending_stations frames
-    every new connection receives."""
-    return [ws.receive_json() for _ in range(count)]
+def _drain_initial(ws, limit: int = 10) -> list[dict]:
+    """Drain the burst of initial frames every new connection receives.
+
+    The server sends: status, user_profile, contacts, session_attendance,
+    pending_stations, voices_list (and optionally online_status).  Stop when
+    voices_list is seen so tests start from a clean slate.
+    """
+    frames = []
+    for _ in range(limit):
+        msg = ws.receive_json()
+        frames.append(msg)
+        if msg.get("type") == "voices_list":
+            break
+    return frames
+
+
+def _drain_until_idle(ws, limit: int = 25) -> list[dict]:
+    """Collect frames until tx_status:idle arrives; return all collected."""
+    collected = []
+    for _ in range(limit):
+        msg = ws.receive_json()
+        collected.append(msg)
+        if msg.get("type") == "tx_status" and msg.get("status") == "idle":
+            break
+    return collected
 
 
 # ---------------------------------------------------------------------------
@@ -98,7 +149,7 @@ class TestHealth:
 
 class TestWebSocketConnection:
     def test_initial_message_is_status(self, client):
-        with client.websocket_connect("/ws") as ws:
+        with client.websocket_connect(WS_URL) as ws:
             msg = ws.receive_json()
             assert msg["type"] == "status"
             assert "radio_connected" in msg
@@ -107,23 +158,28 @@ class TestWebSocketConnection:
             assert "monitor_enabled" in msg
 
     def test_radio_connected_reflects_mock_stt_healthy(self, client):
-        with client.websocket_connect("/ws") as ws:
+        with client.websocket_connect(WS_URL) as ws:
             msg = ws.receive_json()
             # STTWorker is running (mock, no error) → connected = True
             assert msg["radio_connected"] is True
 
-    def test_second_message_is_contacts_list(self, client):
-        with client.websocket_connect("/ws") as ws:
+    def test_second_message_is_user_profile(self, client):
+        with client.websocket_connect(WS_URL) as ws:
             ws.receive_json()  # status
             msg = ws.receive_json()
-            assert msg["type"] == "contacts"
-            assert isinstance(msg["contacts"], list)
+            assert msg["type"] == "user_profile"
+
+    def test_contacts_message_is_sent_on_connect(self, client):
+        with client.websocket_connect(WS_URL) as ws:
+            frames = _drain_initial(ws)
+            types = [f["type"] for f in frames]
+            assert "contacts" in types
 
     def test_initial_contacts_list_is_empty(self, client):
-        with client.websocket_connect("/ws") as ws:
-            ws.receive_json()  # status
-            msg = ws.receive_json()
-            assert msg["contacts"] == []
+        with client.websocket_connect(WS_URL) as ws:
+            frames = _drain_initial(ws)
+            contacts_frame = next(f for f in frames if f["type"] == "contacts")
+            assert contacts_frame["contacts"] == []
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +188,7 @@ class TestWebSocketConnection:
 
 class TestTxMessageValidation:
     def test_missing_callsign_field_returns_error(self, client):
-        with client.websocket_connect("/ws") as ws:
+        with client.websocket_connect(WS_URL) as ws:
             _drain_initial(ws)
             ws.send_json({"type": "tx_message", "text": "hello"})
             msg = ws.receive_json()
@@ -140,14 +196,14 @@ class TestTxMessageValidation:
             assert "callsign" in msg["detail"].lower()
 
     def test_whitespace_only_callsign_returns_error(self, client):
-        with client.websocket_connect("/ws") as ws:
+        with client.websocket_connect(WS_URL) as ws:
             _drain_initial(ws)
             ws.send_json({"type": "tx_message", "callsign": "   ", "text": "hello"})
             msg = ws.receive_json()
             assert msg["type"] == "error"
 
     def test_listen_only_mode_rejects_tx(self, listen_only_client):
-        with listen_only_client.websocket_connect("/ws") as ws:
+        with listen_only_client.websocket_connect(WS_URL) as ws:
             _drain_initial(ws)
             ws.send_json({"type": "tx_message", "callsign": "W5TST", "text": "hello"})
             msg = ws.receive_json()
@@ -161,13 +217,17 @@ class TestTxMessageValidation:
 
 class TestTxMessageFlow:
     def test_valid_tx_broadcasts_transmitting_then_idle(self, client):
-        with client.websocket_connect("/ws") as ws:
+        with client.websocket_connect(WS_URL) as ws:
             _drain_initial(ws)
             ws.send_json({"type": "tx_message", "callsign": "W5TST", "text": "hello"})
-            msg1 = ws.receive_json()
-            assert msg1 == {"type": "tx_status", "status": "transmitting"}
-            msg2 = ws.receive_json()
-            assert msg2 == {"type": "tx_status", "status": "idle"}
+            # tx_status:transmitting arrives from the WS handler immediately;
+            # tx_echo arrives from the pump before synthesis; tx_status:idle
+            # arrives from the finally block after synthesis completes.
+            frames = _drain_until_idle(ws)
+            types = [f["type"] for f in frames]
+            assert "tx_status" in types
+            assert frames[0] == {"type": "tx_status", "status": "transmitting"}
+            assert frames[-1] == {"type": "tx_status", "status": "idle"}
 
     def test_stt_worker_paused_during_tx_and_resumed_after(self, tmp_path):
         """STTWorker.pause() must be called before synthesis and .resume()
@@ -175,32 +235,53 @@ class TestTxMessageFlow:
         back through the radio while transmitting."""
         cfg = _minimal_cfg(tmp_path)
         mock_stt, mock_tts = _make_mocks()
-        pause_order = []
+        mock_users, mock_tokens = _make_auth_mocks()
+        pause_order: list[str] = []
+        resume_event = threading.Event()
+
         mock_stt.pause.side_effect = lambda: pause_order.append("pause")
-        mock_tts.synthesize.side_effect = (
-            lambda *a, **kw: pause_order.append("synth") or MagicMock()
-        )
-        mock_stt.resume.side_effect = lambda: pause_order.append("resume")
+
+        def _on_resume():
+            pause_order.append("resume")
+            resume_event.set()
+
+        mock_stt.resume.side_effect = _on_resume
+
+        async def _synth_with_order(*_args, **_kwargs):
+            pause_order.append("synth")
+            return None, None
+
+        mock_tts.synthesize_to_buffer = _synth_with_order
+
         with (
             patch("backend.server.ServerConfig.load", return_value=cfg),
             patch("backend.server.STTWorker", return_value=mock_stt),
             patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
             patch("backend.server.make_ptt", return_value=MagicMock()),
             patch("piper.PiperVoice"),
         ):
             with TestClient(app) as tc:
-                with tc.websocket_connect("/ws") as ws:
+                with tc.websocket_connect(WS_URL) as ws:
                     _drain_initial(ws)
                     ws.send_json({"type": "tx_message", "callsign": "W5TST", "text": "hello"})
-                    ws.receive_json()  # transmitting
-                    ws.receive_json()  # idle
+                    _drain_until_idle(ws)
+                # WS closed; wait for the server's 0.2 s post-TX sleep then resume().
+                # resume_event is set by _on_resume() inside the background event loop.
+                resume_event.wait(timeout=2.0)
+
+        assert "pause" in pause_order, "pause() was never called"
+        assert "synth" in pause_order, "synthesize_to_buffer was never called"
+        assert "resume" in pause_order, "resume() was never called"
         assert pause_order.index("pause") < pause_order.index("synth")
         assert pause_order.index("synth") < pause_order.index("resume")
 
     def test_tx_broadcast_reaches_second_client(self, client):
         with (
-            client.websocket_connect("/ws") as ws1,
-            client.websocket_connect("/ws") as ws2,
+            client.websocket_connect(WS_URL) as ws1,
+            client.websocket_connect(WS_URL) as ws2,
         ):
             _drain_initial(ws1)
             _drain_initial(ws2)
@@ -220,7 +301,7 @@ class TestTxMessageFlow:
 
 class TestAddContact:
     def test_valid_contact_is_broadcast_to_client(self, client):
-        with client.websocket_connect("/ws") as ws:
+        with client.websocket_connect(WS_URL) as ws:
             _drain_initial(ws)
             ws.send_json({
                 "type": "add_contact",
@@ -233,7 +314,7 @@ class TestAddContact:
             assert "W9FOO" in callsigns
 
     def test_callsign_is_uppercased_in_store(self, client):
-        with client.websocket_connect("/ws") as ws:
+        with client.websocket_connect(WS_URL) as ws:
             _drain_initial(ws)
             ws.send_json({"type": "add_contact", "callsign": "w9foo", "name": "Lower"})
             msg = ws.receive_json()
@@ -242,7 +323,7 @@ class TestAddContact:
             assert "W9FOO" in callsigns
 
     def test_add_contact_without_callsign_returns_error(self, client):
-        with client.websocket_connect("/ws") as ws:
+        with client.websocket_connect(WS_URL) as ws:
             _drain_initial(ws)
             ws.send_json({"type": "add_contact", "name": "No Callsign"})
             msg = ws.receive_json()
@@ -250,8 +331,8 @@ class TestAddContact:
 
     def test_add_contact_broadcast_reaches_second_client(self, client):
         with (
-            client.websocket_connect("/ws") as ws1,
-            client.websocket_connect("/ws") as ws2,
+            client.websocket_connect(WS_URL) as ws1,
+            client.websocket_connect(WS_URL) as ws2,
         ):
             _drain_initial(ws1)
             _drain_initial(ws2)
