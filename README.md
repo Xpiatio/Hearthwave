@@ -62,8 +62,6 @@ Radio-TTY enforces the access controls that § 95.1745 requires for remotely-ope
 - **Single-point topology** — one server, one radio; no routing layer exists to propagate transmissions across stations in different locations
 - **Per-account listen-only mode** — individual users can be restricted to receive-only at the server level, preventing TX entirely
 
-> **Note:** The EchoLink / AllStar gateway entry in the [future plugins table](#potential-future-plugins) describes a capability that would apply to **amateur radio use only**. Connecting a GMRS station to those internet-linked networks would violate Part 95.1749 and is not supported by Radio-TTY's default configuration.
-
 ---
 
 ## Features
@@ -148,9 +146,7 @@ The frontend mirrors this pattern: `frontend/src/plugins/index.ts` defines `Plug
 
 | Plugin | Hooks | What it would do |
 |--------|-------|-----------------|
-| **Meshtastic bridge** | `on_rx_final`, `on_audio_tx_pre_queue` | Forward GMRS transcripts to a LoRa mesh network; relay inbound mesh messages as TTS transmissions |
-| **Repeater controller** | `on_audio_rx_start`, `on_audio_rx_chunk` | Auto-ID on interval, transmit timeout timer, courtesy tone, autopatch logic |
-| **EchoLink / AllStar gateway** | `on_rx_final`, `on_audio_tx_pre_queue` | Bridge GMRS audio to internet-linked repeater networks via VoIP |
+| **Repeater controller** | `on_audio_rx_start`, `on_audio_rx_chunk` | Auto-ID on interval, transmit timeout timer, courtesy tone |
 | **Scheduled voice briefing** | *(timer)* | Announce NWS hourly forecasts or custom reminders at configured times — without entering NCS mode |
 | **DTMF decoder / paging** | `on_audio_rx_chunk` | Detect DTMF touch-tones and trigger macros, alerts, or automations |
 | **Transmission logger** | `on_audio_rx_start`, `on_rx_final` | Write each transmission — timestamp, duration, detected callsigns, and transcript — to a log file or SQLite database |

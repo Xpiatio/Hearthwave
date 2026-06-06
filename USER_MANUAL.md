@@ -737,9 +737,7 @@ These are examples of capabilities that could be added as self-contained plugins
 
 | Plugin | What it would do |
 |--------|-----------------|
-| **Meshtastic bridge** | Forward received GMRS transcripts to a LoRa mesh network (Meshtastic / Meshcore); relay inbound mesh text messages back as TTS transmissions over GMRS |
-| **Repeater controller** | Manage a GMRS repeater installation — auto-ID on interval, transmit timeout timer, courtesy tone, autopatch logic |
-| **EchoLink / AllStar gateway** | Bridge GMRS audio to internet-linked repeater networks via VoIP protocols |
+| **Repeater controller** | Manage a GMRS repeater installation — auto-ID on interval, transmit timeout timer, courtesy tone |
 | **Scheduled voice briefing** | Announce NWS hourly forecasts or custom station reminders at configured times, independent of NCS mode |
 | **DTMF decoder / paging** | Detect DTMF touch-tones sent over the air and trigger alerts, macros, or gate automations |
 | **Transmission logger** | Write every received transmission — timestamp, duration, callsigns, and transcript — to a structured log file or SQLite database for later analysis |
