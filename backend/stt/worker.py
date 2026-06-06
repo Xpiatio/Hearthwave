@@ -434,7 +434,11 @@ class STTWorker:
                     self._emit_status("Listening (CW)...")
                     was_paused = False
 
-                squelch.update(peak)
+                sq_event = squelch.update(peak)
+                if sq_event == "opened":
+                    self._apply_squelch_event("squelch_opened")
+                elif sq_event == "closed":
+                    self._apply_squelch_event("squelch_closed")
 
                 if squelch.is_open:
                     buffer.append(chunk)
