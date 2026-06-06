@@ -42,6 +42,7 @@ def _minimal_cfg(tmp_path: Path, *, listen_only: bool = False) -> ServerConfig:
 def _make_mocks():
     mock_stt = MagicMock()
     mock_stt.join = AsyncMock()
+    mock_stt.channel_busy = MagicMock(is_set=MagicMock(return_value=False))
     mock_tts = MagicMock()
     mock_tts.synthesize_to_buffer = AsyncMock(return_value=(None, None))
     return mock_stt, mock_tts

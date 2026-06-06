@@ -132,6 +132,7 @@ def _drain_until_idle(ws, limit: int = 25) -> list[dict]:
 def _make_base_mocks():
     mock_stt = MagicMock()
     mock_stt.join = AsyncMock()
+    mock_stt.channel_busy = MagicMock(is_set=MagicMock(return_value=False))
     mock_tts = MagicMock()
     return mock_stt, mock_tts
 

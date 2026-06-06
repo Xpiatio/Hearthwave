@@ -110,7 +110,7 @@ fi
 
 # ── 6. Data directory ────────────────────────────────────────────────────────
 
-mkdir -p data/voiceprints data/journals
+mkdir -p data/journals
 
 if [ ! -f data/config.json ]; then
     echo "==> Copying seed config..."

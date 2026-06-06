@@ -1,6 +1,6 @@
 # Radio-TTY User Manual
 
-This manual covers day-to-day operation of Radio-TTY. For installation and server setup, see [README.md](README.md).
+This manual covers day-to-day operation of Radio-TTY as a GMRS family hub — a shared radio operating station where every household member connects from their own device. For installation and server setup, see [README.md](README.md).
 
 ---
 
@@ -27,8 +27,8 @@ This manual covers day-to-day operation of Radio-TTY. For installation and serve
 18. [Text shortcuts reference](#18-text-shortcuts-reference)
 19. [Voice PTT (browser microphone)](#19-voice-ptt-browser-microphone)
 20. [CW (Morse code) receive mode](#20-cw-morse-code-receive-mode)
-21. [Speaker recognition and enrollment](#21-speaker-recognition-and-enrollment)
-22. [Server Config panel (admin)](#22-server-config-panel-admin)
+21. [Server Config panel (admin)](#21-server-config-panel-admin)
+22. [Plugin system](#22-plugin-system)
 
 ---
 
@@ -677,26 +677,7 @@ Decoded morse appears in chat as **[RX]** entries, identical in appearance to vo
 
 ---
 
-## 21. Speaker recognition and enrollment
-
-The backend uses an ECAPA-TDNN speaker model to cluster voices heard on the air. This lets the system associate a voice with a known callsign over time.
-
-### How it works
-
-- As transmissions are received, voices are grouped into clusters automatically.
-- Finalized RX messages carry speaker cluster information visible in the chat display.
-
-### Enrolling a speaker
-
-1. When a finalized RX entry shows a speaker cluster, an **Enroll** action appears in the chat UI for that entry.
-2. Click **Enroll** and enter the operator's callsign.
-3. The voiceprint is saved and that speaker will be automatically identified in future transmissions.
-
-Voiceprints are stored in `data/voiceprints/` as `.npz` files, one per callsign.
-
----
-
-## 22. Server Config panel (admin)
+## 21. Server Config panel (admin)
 
 The **Server Config** panel provides technical server-side settings, separate from the Admin Settings / Station Identity panel. It is accessible to admin accounts only via a button in the top bar.
 
@@ -726,3 +707,42 @@ The **Server Config** panel provides technical server-side settings, separate fr
 - **Session locked out?** Wait 15 minutes or ask an admin to use **Admin → Users → Reset lockout**.
 - **On a phone or tablet:** The app automatically shows the mobile interface — bottom tabs for Chat, Stations, and Journal. Tap the ≡ menu for settings and your account.
 - **NCS traffic levels:** Use **IN-n-Out** for stations who only have a moment; use **Short Term** for those who can stay a few minutes but need to leave soon. Both are tracked in the roster and included in the end-of-net journal.
+
+---
+
+## 22. Plugin system
+
+Radio-TTY is built around a plugin architecture. New capabilities attach to the radio pipeline at defined hook points without requiring changes to the core server. The **NCS / SKYWARN** feature described in [section 16](#16-ncs--net-control-station-mode) is itself a plugin — it demonstrates what the system can do and serves as the template for future extensions.
+
+### How plugins work
+
+A plugin is a Python class (`BasePlugin`) that overrides one or more async methods. The server calls these methods at fixed points in the RX and TX pipelines:
+
+| Hook | When it fires |
+|------|--------------|
+| `on_client_message_received` | Any WebSocket message arrives from a connected client |
+| `on_audio_rx_start` | Squelch opens — a transmission is beginning |
+| `on_audio_rx_chunk` | Each audio chunk segmented by voice activity detection |
+| `on_rx_final` | Final transcript and detected callsigns are ready |
+| `on_audio_tx_pre_queue` | Synthesized audio is about to be sent to the radio |
+
+Plugins can read data at any hook, inject TX audio, send WebSocket messages to clients, or interact with the contacts and attendance stores — all without modifying the core server.
+
+On the frontend, plugins can register a React panel via `registerPlugin` in `frontend/src/plugins/index.ts`. The NCS panel (`NCSPanel/`) is an example: it receives WebSocket messages broadcast by the backend plugin and renders the roster, SKYWARN alerts, and controls.
+
+### Potential future plugins
+
+These are examples of capabilities that could be added as self-contained plugins:
+
+| Plugin | What it would do |
+|--------|-----------------|
+| **Meshtastic bridge** | Forward received GMRS transcripts to a LoRa mesh network (Meshtastic / Meshcore); relay inbound mesh text messages back as TTS transmissions over GMRS |
+| **Repeater controller** | Manage a GMRS repeater installation — auto-ID on interval, transmit timeout timer, courtesy tone, autopatch logic |
+| **EchoLink / AllStar gateway** | Bridge GMRS audio to internet-linked repeater networks via VoIP protocols |
+| **Scheduled voice briefing** | Announce NWS hourly forecasts or custom station reminders at configured times, independent of NCS mode |
+| **DTMF decoder / paging** | Detect DTMF touch-tones sent over the air and trigger alerts, macros, or gate automations |
+| **Transmission logger** | Write every received transmission — timestamp, duration, callsigns, and transcript — to a structured log file or SQLite database for later analysis |
+| **EAS tone detector** | Recognize Emergency Alert System two-tone attention signals and surface an immediate on-screen and audio alert to all connected users |
+| **AI call summarizer** | Generate a one-sentence briefing for each received transmission and push it alongside the transcript so operators can scan a busy channel at a glance |
+
+If you are a developer and want to build a plugin, see `backend/plugins/base.py` for the `BasePlugin` interface and `backend/plugins/ncs.py` for a complete working example.

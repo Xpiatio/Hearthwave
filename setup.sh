@@ -87,7 +87,7 @@ fi
 # ── 1. Local directories ──────────────────────────────────────────────────────
 
 echo "==> Creating directories..."
-mkdir -p data/voiceprints data/journals data/public
+mkdir -p data/journals data/public
 mkdir -p Voices
 mkdir -p "Models/STT"
 echo "  data/  Voices/  Models/  — OK"

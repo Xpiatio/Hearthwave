@@ -12,7 +12,6 @@ export interface ChatEntry {
   text: string;
   speaker?: string;
   partial?: boolean;
-  cluster_label?: string | null;
   // Server-computed [start, end, canonical_callsign] tuples — handles NATO phonetic,
   // spaced, hyphenated, and compact forms. Falls back to frontend regex when absent.
   callsign_spans?: Array<[number, number, string]>;
@@ -23,7 +22,6 @@ interface Props {
   entries: ChatEntry[];
   contacts: Contact[];
   showCallsignChips: boolean;
-  onEnrollCluster?: (clusterLabel: string, callsign: string) => void;
 }
 
 // Fallback regex for compact callsign forms when the server hasn't sent spans.
@@ -177,7 +175,7 @@ function MessageText({
   );
 }
 
-export function ChatDisplay({ entries, contacts, showCallsignChips, onEnrollCluster }: Props) {
+export function ChatDisplay({ entries, contacts, showCallsignChips }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
@@ -331,21 +329,6 @@ export function ChatDisplay({ entries, contacts, showCallsignChips, onEnrollClus
               <Typography component="span" sx={{ opacity: 0.5, color: KIND_COLOR[entry.kind] }}> …</Typography>
             )}
 
-            {entry.cluster_label && !entry.partial && onEnrollCluster && (
-              <Button
-                size="small"
-                variant="outlined"
-                sx={{ fontSize: '0.875rem', py: 0, px: 0.75, minHeight: 0, opacity: 0.7 }}
-                onClick={() => {
-                  const callsign = window.prompt(`Assign ${entry.cluster_label} to callsign:`);
-                  if (callsign?.trim()) {
-                    onEnrollCluster(entry.cluster_label!, callsign.trim().toUpperCase());
-                  }
-                }}
-              >
-                Identify {entry.cluster_label}
-              </Button>
-            )}
           </Box>
         ))}
 

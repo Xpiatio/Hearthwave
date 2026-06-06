@@ -1,6 +1,8 @@
 # Radio-TTY
 
-A web-based TTY/TDD radio communication system for GMRS and amateur radio operators. Family members each sign in with their own account and operate from any tablet, phone, or browser — no software installation required on client devices.
+A GMRS family hub that turns a Raspberry Pi or home server into a shared radio operating station for every member of your household. Incoming transmissions are transcribed by speech-to-text and streamed to all connected devices; outgoing messages are synthesized to speech, automatically wrapped with the FCC station callsign (§95.1751), and transmitted over the air. Each family member signs in from their own phone, tablet, or laptop — no app install required.
+
+Built-in plugins add Net Control Station mode with a live check-in roster and six traffic priority levels, SKYWARN weather alerts sourced directly from the National Weather Service, and an instant audio replay buffer. The plugin architecture is open — additional capabilities wire into the radio pipeline without touching core server logic.
 
 Radio-TTY is a fork of GMRS-TTY that replaces the desktop PySide6 UI with a browser-based React frontend communicating over WebSocket.
 
@@ -29,35 +31,94 @@ FastAPI Backend  ──►  PulseAudio / sounddevice
 
 ## Features
 
+### GMRS family hub
+
 - **Multi-user accounts** — named family member profiles, each with their own password and per-user preferences
-- **Mobile-optimized interface** — smartphones and tablets automatically receive a touch-friendly layout with bottom tab navigation (Chat, Stations, Journal), a compact top bar showing the station callsign and connection status, and the Voice PTT button accessible at all times; the full desktop panel layout is preserved for mouse/keyboard devices
+- **GMRS family callsign support** — a single GMRS licence covers the whole household; multiple contacts and NCS check-ins can share the same callsign, each identified by a distinct name (John Smith / WQZE123 and Jane Smith / WQZE123 appear as separate, independently editable records)
+- **Mobile-optimized interface** — smartphones and tablets automatically receive a touch-friendly layout with bottom tab navigation (Chat, Stations, Journal); the full desktop panel layout is preserved for mouse/keyboard devices
 - **Shared TX chat** — outgoing transmissions appear in every connected user's chat stream labeled `[TX]`; directed messages show `→ CALLSIGN — Name` between the sender and message text
 - **Per-user settings** — dark mode, panel order, profanity filter, listen-only, read-aloud, notifications, spectrogram display, TTS voice, and speech speed are per-account and sync across devices
-- **Public family journal** — publish session logs to `/journal`, a no-login static page (last 10 entries, ADA-compliant)
-- Real-time spectrogram waterfall with VAD and squelch indicators; toggled on/off via the **WATERFALL** button
-- **Speech-to-text receive** — Whisper STT (`small.en` model) for voice; switchable to CW (Morse code) decoder via `rx_mode` config key
-- **CW (Morse code) receive** — FFT-based tone detection (400–1200 Hz), bandpass filter, envelope extraction, adaptive WPM estimation, and full morse table including prosigns; switchable live via the Admin panel (requires STT worker restart)
-- Text-to-speech transmit using Piper neural voices
-- **Voice PTT (browser microphone)** — PTT button in the top bar streams browser mic audio (16 kHz int16, chunked as base64) to the server for radio output with PTT keying; Whisper transcribes the audio client-side and the text appears in chat as a TX echo; max 120 s per transmission; a browser playback completion signal prevents the system from re-transcribing its own TTS output
-- **Read Aloud** — per-user toggle that pipes finalized RX transcripts through Piper TTS and plays audio in the operator's browser; useful for eyes-busy operation
-- **Browser notifications** — opt-in Web Notifications for final RX transcripts and SKYWARN alerts when the tab is in the background
-- **Speaker recognition / enrollment** — ecapa-tdnn model identifies speakers; RX messages carry `speaker_callsign`, `speaker_name`, and `cluster_label` fields; users can enroll a voice cluster to a callsign from the chat UI; voiceprints stored in `data/voiceprints/`
-- **GMRS family callsign support** — a single GMRS licence covers the whole household; multiple contacts and NCS check-ins can share the same callsign, each identified by a distinct name (John Smith / WQZE123 and Jane Smith / WQZE123 appear as separate, independently editable records)
-- **NCS / SKYWARN plugin** — Net Control Station mode (admin-only): roster with per-operator name, location, check-in/standby/log-out, and six traffic priority levels (Routine, Priority, Emergency, General, Short Term, IN-n-Out); automatic FCC verification badge per roster entry; auto-adds unknown check-in callsigns to contacts with background FCC lookup; BREAK BREAK emergency interrupt; 15-second rolling audio replay buffer; NWS CAP SKYWARN alert feed (polls every 5 min); periodic net ID announcements; end-of-net auto-journal
-- **Server Config panel** — admin UI for VAD threshold, Whisper model selection, PTT mode/port/line, audio monitor passthrough, and attendance tracking toggle (separate from Admin Settings)
-- **Audio monitor passthrough** — when enabled (`monitor_passthrough`), audio captured from the radio input is simultaneously played back through the output device for monitoring
-- Automatic FCC station ID every 15 minutes (GMRS requirement)
-- FCC database callsign lookup and verification; **Verify All** batch-checks every contact against the FCC database
+- Automatic FCC station ID every 15 minutes (GMRS §95.1751); callsigns spelled in NATO phonetics
 - **Shared contacts list** — GMRS + HAM cross-reference, FCC-verified; supports import/export as JSON or CSV; multiple records per callsign for GMRS family licences
-- Callsign highlighting in chat — amber chips with tooltip; handles compact, NATO phonetic, spaced, and hyphenated forms; detects callsigns that span two consecutive transmissions; verified contacts show a green ✓ badge; fuzzy correction snaps STT near-misses to known callsigns
-- WCAG 2.1 AA accessible pending stations bar — live region announces new detections to screen readers; per-callsign dismiss labels; name/location context in accessible chip labels
+- FCC database callsign lookup and verification; **Verify All** batch-checks every contact simultaneously
+- Callsign highlighting in chat — amber chips with tooltip; handles compact, NATO phonetic, spaced, and hyphenated forms; verified contacts show a green ✓ badge; fuzzy correction snaps STT near-misses to known callsigns
+- **Pending stations bar** — WCAG 2.1 AA accessible; auto-detects unrecognized callsigns from received audio and prompts to add them; screen-reader friendly live region
 - Quick messages bar — one-tap access to customisable pre-set phrases; supports `{Name}` placeholder; per-browser
-- TTY abbreviation expansion and Q-signal support
-- NATO phonetic callsign spelling
-- Session attendance tracking (enable/disable via Server Config panel or `attendance.enabled` in config)
-- AI-generated session journals (requires Gemini API key)
+- **Public family journal** — publish session logs to `/journal`, a no-login static page (last 10 entries, ADA-compliant)
+- Session attendance tracking; AI-generated session journals (requires Gemini API key)
 - Admin panel for station identity and user management
-- Voices watcher — server polls the voices directory every 5 s and pushes `voices_list` updates to all clients when `.onnx` files are added or removed
+
+### Net Control Station + SKYWARN (built-in plugin)
+
+NCS mode is admin-only and activates on demand. It is the reference implementation of the plugin architecture.
+
+- **Live roster** — per-operator check-in with name, location, and six traffic priority levels (Routine, Priority, Emergency, General, Short Term, IN-n-Out); status toggling (Checked In / Standby / Out)
+- **GMRS family roster** — multiple operators sharing a callsign appear as distinct roster rows; FCC verification badge updates live as background lookups complete
+- **BREAK BREAK interrupt** — immediately drains the TX queue and broadcasts an emergency interrupt to all connected clients
+- **15-second audio replay buffer** — click replay in the NCS panel to re-listen to the last 15 seconds of received audio at any time
+- **Automatic contact handling** — unknown check-in callsigns are auto-added to contacts and FCC-verified in the background; ✓ badge appears in the roster when verification completes
+- **SKYWARN weather alerts** — polls api.weather.gov every 5 minutes for Extreme/Severe alerts on a configured NWS county zone; triggers a red banner, browser notification, and auto-TX announcement (listen-before-talk enforced)
+- **Periodic net ID announcements** — broadcasts a net ID at a configurable interval (default 10 min) with listen-before-talk check
+- **End-of-net journal** — automatically saves a session journal with the full roster and transcript when NCS mode is deactivated
+
+### Plugin system
+
+Plugins subclass `BasePlugin` and receive async hook calls at five points in the radio pipeline — without modifying `server.py`. See [Plugin system](#plugin-system) for hook documentation and future plugin ideas.
+
+### Core radio pipeline
+
+- **Speech-to-text receive** — Whisper STT (`small.en` model) for voice; switchable to CW (Morse code) decoder via `rx_mode` config key
+- **CW (Morse code) receive** — FFT-based tone detection (400–1200 Hz), bandpass filter, envelope extraction, adaptive WPM estimation, and full morse table including prosigns
+- Text-to-speech transmit using Piper neural voices; voices watcher hot-reloads `.onnx` files without restart
+- **Voice PTT (browser microphone)** — streams browser mic audio to the server for radio output with PTT keying; Whisper transcribes the audio and it appears in chat as a TX echo; max 120 s; self-echo prevention via STT mute during TX
+- **Read Aloud** — per-user toggle that pipes finalized RX transcripts through Piper TTS and plays audio in the operator's browser
+- **Browser notifications** — opt-in Web Notifications for final RX transcripts and SKYWARN alerts when the tab is in the background
+- Real-time spectrogram waterfall with VAD and squelch indicators
+- PTT modes: manual (UI-controlled), serial (RTS/DTR hardware line), or VOX (voice-operated)
+- TTY/TDD abbreviation expansion and Q-signal support
+- **Server Config panel** — admin UI for VAD threshold, Whisper model, PTT mode/port, audio monitor passthrough, and attendance tracking
+
+---
+
+## Plugin system
+
+Plugins subclass `BasePlugin` (`backend/plugins/base.py`), register with the `PluginRegistry` singleton, and receive async hook calls at defined points in the RX and TX pipelines. No core files need modification to add a plugin.
+
+### Hook points
+
+| Hook | When it fires |
+|------|--------------|
+| `on_client_message_received` | A WebSocket message arrives from any connected client |
+| `on_audio_rx_start` | Squelch opens — audio capture begins |
+| `on_audio_rx_chunk` | Each VAD-segmented audio chunk delivered to STT |
+| `on_rx_final` | Final Whisper transcript and detected callsign spans are ready |
+| `on_audio_tx_pre_queue` | Synthesized audio is about to be sent to the PTT/TX queue |
+
+### Reference implementation: NCS / SKYWARN
+
+`backend/plugins/ncs.py` is the built-in reference plugin. It uses `on_rx_final` to detect callsigns in check-in transmissions, maintains a live roster broadcast over WebSocket, polls NWS CAP for weather alerts, and injects emergency announcements directly into the TX queue — all without touching `server.py`.
+
+The frontend mirrors this pattern: `frontend/src/plugins/index.ts` defines `PluginDefinition` and `registerPlugin`, and `frontend/src/components/NCSPanel/` is the NCS plugin's React panel, mounted via `PluginSlot`.
+
+### Adding a plugin
+
+1. Create `backend/plugins/your_plugin.py` subclassing `BasePlugin`.
+2. Override whichever async hook methods you need.
+3. Register the plugin instance in `server.py` alongside the existing NCS registration.
+4. Optionally create a React panel under `frontend/src/plugins/` and register it with `registerPlugin`.
+
+### Potential future plugins
+
+| Plugin | Hooks | What it would do |
+|--------|-------|-----------------|
+| **Meshtastic bridge** | `on_rx_final`, `on_audio_tx_pre_queue` | Forward GMRS transcripts to a LoRa mesh network; relay inbound mesh messages as TTS transmissions |
+| **Repeater controller** | `on_audio_rx_start`, `on_audio_rx_chunk` | Auto-ID on interval, transmit timeout timer, courtesy tone, autopatch logic |
+| **EchoLink / AllStar gateway** | `on_rx_final`, `on_audio_tx_pre_queue` | Bridge GMRS audio to internet-linked repeater networks via VoIP |
+| **Scheduled voice briefing** | *(timer)* | Announce NWS hourly forecasts or custom reminders at configured times — without entering NCS mode |
+| **DTMF decoder / paging** | `on_audio_rx_chunk` | Detect DTMF touch-tones and trigger macros, alerts, or automations |
+| **Transmission logger** | `on_audio_rx_start`, `on_rx_final` | Write each transmission — timestamp, duration, detected callsigns, and transcript — to a log file or SQLite database |
+| **EAS tone detector** | `on_audio_rx_chunk` | Recognize Emergency Alert System two-tone attention signals and surface an immediate visual/audio alert |
+| **AI call summarizer** | `on_rx_final` | Generate a one-sentence briefing for each received transmission and push it alongside the transcript to all clients |
 
 ---
 
@@ -68,7 +129,7 @@ FastAPI Backend  ──►  PulseAudio / sounddevice
 - PulseAudio (for audio routing)
 - `/dev/snd` access (USB audio adapter or built-in)
 - Serial port for hardware PTT (optional — manual PTT also supported)
-- 4 GB RAM minimum (Whisper `small.en` ~464 MB, speaker model ~86 MB)
+- 2 GB RAM minimum (Whisper `small.en` ~464 MB)
 
 **Models (not included in repo — downloaded by `setup.sh` before first run):**
 
@@ -140,7 +201,7 @@ This creates the three named volumes and populates them with the Whisper STT mod
 |---|---|
 | `radio-tty-data` | Config, contacts, users, tokens, journals (auto-created on first run) |
 | `radio-tty-voices` | Piper ONNX voice files (`*.onnx` + `*.onnx.json`) |
-| `radio-tty-models` | faster-whisper and speaker recognition model directories |
+| `radio-tty-models` | faster-whisper model directory |
 
 **2. In Portainer: Stacks → Add stack → Web editor**, paste the contents of [`docker-compose.portainer.yml`](docker-compose.portainer.yml) from this repository.
 
@@ -337,7 +398,6 @@ Radio-TTY/
 │   ├── contacts.json           # Shared contacts (gitignored)
 │   ├── users.json              # User accounts (gitignored)
 │   ├── tokens.json             # Active session tokens (gitignored)
-│   ├── voiceprints/            # Speaker recognition voiceprint files (.npz)
 │   ├── journals/               # Saved session journals
 │   └── public/
 │       ├── journal.html        # Public family journal page

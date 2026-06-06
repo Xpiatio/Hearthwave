@@ -21,14 +21,19 @@ except ImportError:
 for _name in ("sounddevice", "piper"):
     sys.modules.setdefault(_name, MagicMock())
 
-# scipy.signal.resample_poly is used by capture.py for resampling; stub it
-# so the integration tests don't require a full scipy install.
-_scipy_signal = MagicMock()
-_scipy_signal.resample_poly = lambda x, up, down: x  # identity passthrough
-_scipy_stub = MagicMock()
-_scipy_stub.signal = _scipy_signal
-sys.modules.setdefault("scipy", _scipy_stub)
-sys.modules.setdefault("scipy.signal", _scipy_signal)
+# scipy.signal.resample_poly is used by capture.py; use the real library when
+# available so unit tests in the same pytest run get real numpy/scipy behaviour.
+# Only stub when scipy is not installed.
+try:
+    import scipy  # noqa: F401
+    import scipy.signal  # noqa: F401
+except ImportError:
+    _scipy_signal = MagicMock()
+    _scipy_signal.resample_poly = lambda x, up, down: x  # identity passthrough
+    _scipy_stub = MagicMock()
+    _scipy_stub.signal = _scipy_signal
+    sys.modules["scipy"] = _scipy_stub
+    sys.modules["scipy.signal"] = _scipy_signal
 
 # tts/synthesizer.py does `from piper.config import SynthesisConfig` at
 # module level, so the sub-module and the attribute both need to exist.

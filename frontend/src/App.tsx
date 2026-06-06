@@ -74,13 +74,6 @@ function pruneMap<K, V>(map: Map<K, V>, maxSize: number): void {
   }
 }
 
-function speakerLabel(callsign: string | null, name: string | null, cluster: string | null): string | undefined {
-  if (callsign && name) return `${callsign} — ${name}`;
-  if (callsign) return callsign;
-  if (cluster) return cluster;
-  return undefined;
-}
-
 import type { JournalResultDraft, PendingStation } from './types/appTypes';
 
 export default function App() {
@@ -236,7 +229,6 @@ export default function App() {
         } else {
           const existingId = inProgressRef.current.get(uid);
           inProgressRef.current.delete(uid);
-          const speaker = speakerLabel(msg.speaker_callsign, msg.speaker_name, msg.cluster_label);
           if (existingId) {
             recentFinalIdsRef.current.set(uid, existingId);
             pruneMap(recentFinalIdsRef.current, 10);
@@ -247,8 +239,6 @@ export default function App() {
                       ...e,
                       text: msg.text,
                       partial: false,
-                      speaker,
-                      cluster_label: msg.cluster_label,
                       callsign_spans: msg.callsign_spans,
                       source: msg.source,
                     }
@@ -267,8 +257,6 @@ export default function App() {
                 kind: 'rx',
                 sender: msg.from || msg.callsign || undefined,
                 text: msg.text,
-                speaker,
-                cluster_label: msg.cluster_label,
                 callsign_spans: msg.callsign_spans,
                 source: msg.source,
               },
@@ -403,21 +391,6 @@ export default function App() {
 
       case 'contacts':
         setContacts(msg.contacts);
-        break;
-
-      case 'speaker_enrolled':
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: nextId(),
-            timestamp: formatTime(),
-            kind: 'system',
-            text: `${msg.callsign} enrolled as a known speaker`,
-          },
-        ]);
-        break;
-
-      case 'speaker_reset':
         break;
 
       case 'prompt_token': {
@@ -591,9 +564,6 @@ export default function App() {
   });
   sendRef.current = send;
 
-  const handleEnrollCluster = useCallback((clusterLabel: string, callsign: string) => {
-    sendRef.current({ type: 'enroll_speaker', callsign, cluster_label: clusterLabel });
-  }, []);
 
   function handleSend(text: string, targetCall: string, targetName: string) {
     if (!profile) return;
@@ -997,7 +967,6 @@ export default function App() {
     onAddPending: handleAddPending,
     onDismissPending: handleDismissPending,
     onDismissAllPending: handleDismissAllPending,
-    onEnrollCluster: handleEnrollCluster,
     publishSnack,
     errorSnack,
     onClosePublishSnack: handleClosePublishSnack,

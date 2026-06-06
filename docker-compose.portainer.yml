@@ -14,7 +14,7 @@
 #    -------------------- | -----------------------------------------------
 #    radio-tty-data       | Config, contacts, users, tokens, journals (auto-created on first run)
 #    radio-tty-voices     | Piper ONNX voice files (*.onnx + *.onnx.json)
-#    radio-tty-models     | faster-whisper + speaker recognition model dirs
+#    radio-tty-models     | faster-whisper model dir
 #
 # 2. Set PULSE_UID to your host user's UID (run 'id -u' on the host to check).
 #    The default below is 1000. In Portainer: Stack → Environment variables → add PULSE_UID.

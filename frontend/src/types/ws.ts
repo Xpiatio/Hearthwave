@@ -18,9 +18,6 @@ export interface RxMessageMsg {
   text: string;
   utterance_id: string;
   partial: boolean;
-  speaker_callsign: string | null;
-  speaker_name: string | null;
-  cluster_label: string | null;
   // [start, end, canonical_callsign] tuples computed by the backend.
   // Spans reference original character positions in `text`, handling NATO-phonetic,
   // spaced, hyphenated, and compact callsign forms.
@@ -32,18 +29,6 @@ export interface RxMessagePatchMsg {
   type: 'rx_message_patch';
   utterance_id: string;
   callsign_spans: Array<[number, number, string]>;
-}
-
-export interface SpeakerEnrolledMsg {
-  type: 'speaker_enrolled';
-  callsign: string;
-  name: string;
-  sample_count: number;
-}
-
-export interface SpeakerResetMsg {
-  type: 'speaker_reset';
-  callsign: string;
 }
 
 export interface StatusMsg {
@@ -362,8 +347,6 @@ export type WsMessage =
   | TxStatusMsg
   | TxEchoMsg
   | SystemMsgMsg
-  | SpeakerEnrolledMsg
-  | SpeakerResetMsg
   | SessionAttendanceMsg
   | JournalsMsg
   | JournalResultMsg

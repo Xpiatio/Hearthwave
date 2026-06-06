@@ -49,7 +49,7 @@ COPY backend/ /app/backend/
 
 # Pre-create data dirs with correct ownership; volume mounts may shadow these,
 # so docker-entrypoint.sh re-creates them at runtime after the mount is visible.
-RUN mkdir -p /data/voiceprints /data/journals /data/public \
+RUN mkdir -p /data/journals /data/public \
     && chown -R appuser:appuser /app /data
 
 COPY backend/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
