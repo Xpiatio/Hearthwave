@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import {
   Box,
   Card,
@@ -8,8 +8,6 @@ import {
   Button,
   Alert,
   CircularProgress,
-  Avatar,
-  Tooltip,
 } from '@mui/material';
 import type { AuthError } from '../../hooks/useAuth';
 
@@ -17,44 +15,21 @@ interface Props {
   onLogin: (displayName: string, password: string) => Promise<unknown>;
 }
 
-interface PublicProfile {
-  id: string;
-  display_name: string;
-  avatar_emoji: string;
-}
-
 export function LoginScreen({ onLogin }: Props) {
-  const [profiles, setProfiles] = useState<PublicProfile[]>([]);
-  const [selected, setSelected] = useState<string>('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [lockedUntil, setLockedUntil] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const passwordRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    fetch('/auth/profiles')
-      .then((r) => r.ok ? r.json() : [])
-      .then((data: PublicProfile[]) => setProfiles(data))
-      .catch(() => {});
-  }, []);
-
-  function handleSelectProfile(displayName: string) {
-    setSelected(displayName);
-    setError(null);
-    setLockedUntil(null);
-    setPassword('');
-    setTimeout(() => passwordRef.current?.focus(), 50);
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!selected || !password) return;
+    if (!username || !password) return;
     setLoading(true);
     setError(null);
     setLockedUntil(null);
     try {
-      await onLogin(selected, password);
+      await onLogin(username, password);
     } catch (err: unknown) {
       const status = (err as Partial<AuthError>)?.status;
       const detail = (err as Partial<AuthError>)?.detail ?? '';
@@ -97,63 +72,25 @@ export function LoginScreen({ onLogin }: Props) {
             Radio-TTY
           </Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', mb: 3 }}>
-            Select your profile to sign in
+            Sign in to continue
           </Typography>
 
-          {/* Profile picker */}
-          {profiles.length > 0 && (
-            <Box sx={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 1, justifyContent: 'center', mb: 3 }}>
-              {profiles.map((p) => (
-                <Tooltip key={p.id} title={p.display_name}>
-                  <Box
-                    onClick={() => handleSelectProfile(p.display_name)}
-                    sx={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      cursor: 'pointer',
-                      gap: 0.5,
-                      p: 1,
-                      borderRadius: 2,
-                      border: 2,
-                      borderColor: selected === p.display_name ? 'primary.main' : 'transparent',
-                      bgcolor: selected === p.display_name ? 'action.selected' : 'transparent',
-                      transition: 'all 0.15s',
-                      '&:hover': { bgcolor: 'action.hover' },
-                    }}
-                  >
-                    <Avatar sx={{ width: 48, height: 48, fontSize: '1.5rem', bgcolor: 'primary.light' }}>
-                      {p.avatar_emoji}
-                    </Avatar>
-                    <Typography variant="caption" sx={{ fontWeight: selected === p.display_name ? 700 : 400 }}>
-                      {p.display_name}
-                    </Typography>
-                  </Box>
-                </Tooltip>
-              ))}
-            </Box>
-          )}
-
-          {/* Login form */}
           <Box component="form" onSubmit={handleSubmit} noValidate>
-            {profiles.length === 0 && (
-              <TextField
-                label="Display Name"
-                value={selected}
-                onChange={(e) => { setSelected(e.target.value); setError(null); }}
-                fullWidth
-                autoFocus
-                sx={{ mb: 2 }}
-              />
-            )}
             <TextField
-              inputRef={passwordRef}
+              label="Username"
+              value={username}
+              onChange={(e) => { setUsername(e.target.value); setError(null); }}
+              fullWidth
+              autoFocus
+              autoComplete="username"
+              sx={{ mb: 2 }}
+            />
+            <TextField
               label="Password"
               type="password"
               value={password}
               onChange={(e) => { setPassword(e.target.value); setError(null); }}
               fullWidth
-              disabled={!selected}
               autoComplete="current-password"
               sx={{ mb: 2 }}
             />
@@ -170,7 +107,7 @@ export function LoginScreen({ onLogin }: Props) {
               variant="contained"
               fullWidth
               size="large"
-              disabled={!selected || !password || loading}
+              disabled={!username || !password || loading}
               startIcon={loading ? <CircularProgress size={16} color="inherit" /> : undefined}
             >
               {loading ? 'Signing in…' : 'Sign In'}

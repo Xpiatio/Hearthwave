@@ -5,7 +5,6 @@ POST /auth/setup                   — create the initial admin account (first-r
 POST /auth/login                   — verify credentials, issue session token
 POST /auth/logout                  — revoke session token
 GET  /auth/me                      — return current user profile (sensitive fields stripped)
-GET  /auth/profiles                — public list of profiles for the login screen
 GET  /auth/ws-ticket               — issue a one-time, 60s WS connection ticket
 POST /auth/admin/revoke-user/{id}  — (admin) revoke all sessions for a user
 GET  /auth/admin/audit             — (admin) tail the audit log
@@ -211,13 +210,6 @@ async def me(authorization: str | None = Header(default=None)):
         raise HTTPException(status_code=404, detail="Profile not found")
     return _safe(profile)
 
-
-@router.get("/profiles")
-async def profiles():
-    """Public endpoint — profile list without sensitive fields, for login screen."""
-    if _users_store is None:
-        return []
-    return _users_store.get_public()
 
 
 @router.get("/ws-ticket")
