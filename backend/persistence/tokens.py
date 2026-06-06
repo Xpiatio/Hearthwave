@@ -32,6 +32,8 @@ class TokenStore:
     def __init__(self, path: Path = _DEFAULT_PATH) -> None:
         self._path = Path(path)
         self._tokens: dict[str, dict] = self._load()
+        # WS tickets: single-use, short-lived, in-memory only (not persisted).
+        self._tickets: dict[str, dict] = {}
 
     def _load(self) -> dict[str, dict]:
         if not self._path.exists():
@@ -72,6 +74,45 @@ class TokenStore:
         if token in self._tokens:
             self._tokens.pop(token)
             self._save()
+
+    def revoke_all_for_user(self, user_id: str) -> int:
+        """Remove every session token belonging to *user_id*. Returns count removed."""
+        to_remove = [t for t, e in self._tokens.items() if e.get("user_id") == user_id]
+        for t in to_remove:
+            del self._tokens[t]
+        if to_remove:
+            self._save()
+        return len(to_remove)
+
+    # ------------------------------------------------------------------
+    # WS tickets — single-use, in-memory, 60-second TTL by default
+    # ------------------------------------------------------------------
+
+    def create_ticket(self, user_id: str, ttl_seconds: int = 60) -> str:
+        """Issue a one-time WS connection ticket.  Not persisted; lost on restart."""
+        # Prune expired unconsumed tickets so the dict doesn't grow indefinitely.
+        now = datetime.now(timezone.utc)
+        self._tickets = {
+            k: v for k, v in self._tickets.items()
+            if datetime.fromisoformat(v["expires_at"]) > now
+        }
+        ticket = secrets.token_urlsafe(24)
+        expires_at = (now + timedelta(seconds=ttl_seconds)).isoformat()
+        self._tickets[ticket] = {"user_id": user_id, "expires_at": expires_at}
+        return ticket
+
+    def validate_ticket(self, ticket: str) -> str | None:
+        """Consume a ticket (single-use).  Returns user_id or None if invalid/expired."""
+        entry = self._tickets.pop(ticket, None)
+        if not entry:
+            return None
+        try:
+            expires_at = datetime.fromisoformat(entry["expires_at"])
+        except (KeyError, ValueError, TypeError):
+            return None
+        if datetime.now(timezone.utc) >= expires_at:
+            return None
+        return entry.get("user_id")
 
     def purge_expired(self) -> int:
         now = datetime.now(timezone.utc)

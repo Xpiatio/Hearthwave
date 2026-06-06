@@ -448,3 +448,167 @@ class TestProfiles:
         client = _make_app(users_store=users)
         client.get("/auth/profiles")
         users.get_public.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# GET /auth/ws-ticket
+# ---------------------------------------------------------------------------
+
+class TestWsTicket:
+    def _valid_client(self):
+        tokens = MagicMock()
+        tokens.validate.return_value = "user-1"
+        tokens.create_ticket.return_value = "the-ticket"
+        return _make_app(token_store=tokens), tokens
+
+    def test_missing_auth_returns_401(self):
+        tokens = MagicMock()
+        tokens.validate.return_value = None
+        client = _make_app(token_store=tokens)
+        r = client.get("/auth/ws-ticket")
+        assert r.status_code == 401
+
+    def test_invalid_token_returns_401(self):
+        tokens = MagicMock()
+        tokens.validate.return_value = None
+        client = _make_app(token_store=tokens)
+        r = client.get("/auth/ws-ticket", headers={"Authorization": "Bearer bad"})
+        assert r.status_code == 401
+
+    def test_valid_token_returns_ticket(self):
+        client, tokens = self._valid_client()
+        r = client.get("/auth/ws-ticket", headers={"Authorization": "Bearer good"})
+        assert r.status_code == 200
+        assert r.json()["ticket"] == "the-ticket"
+
+    def test_calls_create_ticket_with_user_id(self):
+        client, tokens = self._valid_client()
+        client.get("/auth/ws-ticket", headers={"Authorization": "Bearer good"})
+        tokens.create_ticket.assert_called_once_with("user-1")
+
+    def test_token_store_none_returns_503(self):
+        client = _make_app(token_store=None)
+        r = client.get("/auth/ws-ticket", headers={"Authorization": "Bearer x"})
+        assert r.status_code == 503
+
+
+# ---------------------------------------------------------------------------
+# POST /auth/admin/revoke-user/{user_id}
+# ---------------------------------------------------------------------------
+
+class TestAdminRevokeUser:
+    def _admin_client(self, target_exists=True, revoked_count=2):
+        admin = _mock_user(user_id="admin-1", display_name="Admin", is_admin=True)
+        target = _mock_user(user_id="target-1", display_name="Target")
+        tokens = MagicMock()
+        tokens.validate.return_value = "admin-1"
+        tokens.revoke_all_for_user.return_value = revoked_count
+        users = MagicMock()
+        users.get.side_effect = lambda uid: (
+            admin if uid == "admin-1" else (target if (uid == "target-1" and target_exists) else None)
+        )
+        return _make_app(users_store=users, token_store=tokens), tokens
+
+    def test_non_admin_returns_403(self):
+        non_admin = _mock_user(user_id="user-1", display_name="Alice", is_admin=False)
+        tokens = MagicMock()
+        tokens.validate.return_value = "user-1"
+        users = MagicMock()
+        users.get.return_value = non_admin
+        client = _make_app(users_store=users, token_store=tokens)
+        r = client.post("/auth/admin/revoke-user/target-1",
+                        headers={"Authorization": "Bearer tok"})
+        assert r.status_code == 403
+
+    def test_missing_auth_returns_401(self):
+        client, _ = self._admin_client()
+        r = client.post("/auth/admin/revoke-user/target-1")
+        assert r.status_code == 401
+
+    def test_unknown_target_user_returns_404(self):
+        client, _ = self._admin_client(target_exists=False)
+        r = client.post("/auth/admin/revoke-user/no-such-user",
+                        headers={"Authorization": "Bearer tok"})
+        assert r.status_code == 404
+
+    def test_success_returns_revoked_count(self):
+        client, _ = self._admin_client(revoked_count=3)
+        r = client.post("/auth/admin/revoke-user/target-1",
+                        headers={"Authorization": "Bearer tok"})
+        assert r.status_code == 200
+        assert r.json()["revoked"] == 3
+
+    def test_calls_revoke_all_for_user(self):
+        client, tokens = self._admin_client()
+        client.post("/auth/admin/revoke-user/target-1",
+                    headers={"Authorization": "Bearer tok"})
+        tokens.revoke_all_for_user.assert_called_once_with("target-1")
+
+    def test_token_store_none_returns_503(self):
+        client = _make_app(token_store=None)
+        r = client.post("/auth/admin/revoke-user/x",
+                        headers={"Authorization": "Bearer tok"})
+        assert r.status_code == 503
+
+
+# ---------------------------------------------------------------------------
+# GET /auth/admin/audit
+# ---------------------------------------------------------------------------
+
+class TestAdminAudit:
+    def _admin_client_with_audit(self, entries=None):
+        admin = _mock_user(user_id="admin-1", display_name="Admin", is_admin=True)
+        tokens = MagicMock()
+        tokens.validate.return_value = "admin-1"
+        users = MagicMock()
+        users.get.return_value = admin
+        audit = MagicMock()
+        audit.tail.return_value = entries or []
+        client = _make_app(users_store=users, token_store=tokens)
+        import backend.auth_routes as m
+        m._audit_log = audit
+        return client, audit
+
+    def test_non_admin_returns_403(self):
+        non_admin = _mock_user(user_id="user-1", is_admin=False)
+        tokens = MagicMock()
+        tokens.validate.return_value = "user-1"
+        users = MagicMock()
+        users.get.return_value = non_admin
+        client = _make_app(users_store=users, token_store=tokens)
+        r = client.get("/auth/admin/audit", headers={"Authorization": "Bearer tok"})
+        assert r.status_code == 403
+
+    def test_missing_auth_returns_401(self):
+        client, _ = self._admin_client_with_audit()
+        r = client.get("/auth/admin/audit")
+        assert r.status_code == 401
+
+    def test_returns_audit_entries(self):
+        entries = [{"event": "login_success", "user_id": "alice"}]
+        client, _ = self._admin_client_with_audit(entries=entries)
+        r = client.get("/auth/admin/audit", headers={"Authorization": "Bearer tok"})
+        assert r.status_code == 200
+        assert r.json() == entries
+
+    def test_passes_limit_to_tail(self):
+        client, audit = self._admin_client_with_audit()
+        client.get("/auth/admin/audit?limit=50", headers={"Authorization": "Bearer tok"})
+        audit.tail.assert_called_once_with(50)
+
+    def test_limit_capped_at_1000(self):
+        client, audit = self._admin_client_with_audit()
+        client.get("/auth/admin/audit?limit=9999", headers={"Authorization": "Bearer tok"})
+        audit.tail.assert_called_once_with(1000)
+
+    def test_audit_log_none_returns_503(self):
+        admin = _mock_user(user_id="admin-1", is_admin=True)
+        tokens = MagicMock()
+        tokens.validate.return_value = "admin-1"
+        users = MagicMock()
+        users.get.return_value = admin
+        client = _make_app(users_store=users, token_store=tokens)
+        import backend.auth_routes as m
+        m._audit_log = None
+        r = client.get("/auth/admin/audit", headers={"Authorization": "Bearer tok"})
+        assert r.status_code == 503

@@ -217,3 +217,77 @@ class TestPurgeExpired:
         ts = TokenStore(path=store_path)
         count = ts.purge_expired()
         assert count == 1
+
+
+# ---------------------------------------------------------------------------
+# Tests: revoke_all_for_user
+# ---------------------------------------------------------------------------
+
+class TestRevokeAllForUser:
+    def test_removes_all_tokens_for_user(self, store: TokenStore):
+        t1 = store.create("alice")
+        t2 = store.create("alice")
+        count = store.revoke_all_for_user("alice")
+        assert count == 2
+        assert store.validate(t1) is None
+        assert store.validate(t2) is None
+
+    def test_does_not_affect_other_users(self, store: TokenStore):
+        store.create("alice")
+        bob_token = store.create("bob")
+        store.revoke_all_for_user("alice")
+        assert store.validate(bob_token) == "bob"
+
+    def test_returns_zero_when_user_has_no_tokens(self, store: TokenStore):
+        assert store.revoke_all_for_user("nobody") == 0
+
+    def test_persists_removal_to_disk(self, store_path: Path, store: TokenStore):
+        t = store.create("alice")
+        store.revoke_all_for_user("alice")
+        on_disk = json.loads(store_path.read_text(encoding="utf-8"))
+        assert t not in on_disk
+
+
+# ---------------------------------------------------------------------------
+# Tests: WS tickets (create_ticket / validate_ticket)
+# ---------------------------------------------------------------------------
+
+class TestTickets:
+    def test_valid_ticket_returns_user_id(self, store: TokenStore):
+        ticket = store.create_ticket("alice")
+        assert store.validate_ticket(ticket) == "alice"
+
+    def test_ticket_is_single_use(self, store: TokenStore):
+        ticket = store.create_ticket("alice")
+        store.validate_ticket(ticket)
+        assert store.validate_ticket(ticket) is None
+
+    def test_unknown_ticket_returns_none(self, store: TokenStore):
+        assert store.validate_ticket("no-such-ticket") is None
+
+    def test_expired_ticket_returns_none(self, store: TokenStore):
+        ticket = store.create_ticket("alice", ttl_seconds=0)
+        # ttl=0 means already expired at create time
+        assert store.validate_ticket(ticket) is None
+
+    def test_expired_unconsumed_ticket_pruned_on_next_create(self, store: TokenStore):
+        store.create_ticket("alice", ttl_seconds=0)  # immediately expired
+        assert len(store._tickets) == 1 or len(store._tickets) == 0  # may or may not be pruned yet
+        store.create_ticket("bob")  # triggers prune
+        assert all(
+            v["user_id"] != "alice"
+            for v in store._tickets.values()
+        ), "expired alice ticket should have been pruned"
+
+    def test_tickets_are_not_persisted(self, store_path: Path, store: TokenStore):
+        store.create_ticket("alice")
+        on_disk = json.loads(store_path.read_text(encoding="utf-8")) if store_path.exists() else {}
+        # Session tokens file must not contain ticket entries
+        assert all("_ticket" not in k for k in on_disk)
+        # A freshly loaded store has no knowledge of the ticket
+        fresh = TokenStore(path=store_path)
+        assert len(fresh._tickets) == 0
+
+    def test_tickets_are_unique(self, store: TokenStore):
+        tickets = {store.create_ticket("alice") for _ in range(20)}
+        assert len(tickets) == 20
