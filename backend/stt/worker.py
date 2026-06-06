@@ -21,6 +21,7 @@ stop()   — thread-safe; safe to call from any thread or coroutine.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import queue
 import threading
@@ -30,8 +31,10 @@ from typing import Callable
 
 import numpy as np
 
+_log = logging.getLogger(__name__)
+
 from backend.audio.capture import open_input_source
-from backend.audio.dsp import bandpass, denoise, make_bandpass_sos, normalize_rms
+from backend.audio.dsp import bandpass, denoise, lowpass, make_bandpass_sos, make_lowpass_sos, normalize_rms
 from backend.audio.squelch import SquelchDetector
 from backend.audio.vad import load_vad_model, make_vad_iterator
 from backend.stt.segmenter import SpeechSegmenter
@@ -268,6 +271,13 @@ class STTWorker:
             self._emit_error(f"Failed to initialize STT models: {e}")
             return
 
+        # Construct once; failure is non-fatal (fall back to unfiltered path).
+        try:
+            lowpass_sos = make_lowpass_sos(self.SAMPLE_RATE, cutoff_hz=2700)
+        except Exception as e:
+            _log.error("Failed to construct lowpass filter: %s — proceeding without LPF", e)
+            lowpass_sos = None
+
         if self._stop_event.is_set():
             return
 
@@ -316,11 +326,15 @@ class STTWorker:
                     self._emit_error(f"Audio read error: {e}")
                     break
 
+                # Apply lowpass filter to the chunk for squelch/VAD processing.
+                # Raw chunk is kept for the level meter and waterfall so the
+                # operator sees the true unfiltered signal.
+                chunk_for_vad = lowpass(np.asarray(chunk, dtype=np.float32), lowpass_sos) if lowpass_sos is not None else chunk
+                peak = float(np.max(np.abs(chunk_for_vad))) if chunk_for_vad.size else 0.0
                 # Emit input level before any pause/VAD gating so a stuck or
                 # disconnected mic shows up as a flat-zero meter regardless
                 # of transmit state. Peak (not RMS) matches what users expect
                 # from a VU-style indicator and reacts fast to short syllables.
-                peak = float(np.max(np.abs(chunk))) if chunk.size else 0.0
                 self._emit_audio_level(min(100, int(peak * 100)))
                 # Fan the raw chunk out to any spectrometer consumer. Done
                 # before the pause / VAD branches so the waterfall keeps
@@ -328,7 +342,7 @@ class STTWorker:
                 # carrier and any breakthrough RX while transmitting).
                 # Receivers are responsible for dropping frames if they
                 # can't keep up — this emit must stay non-blocking.
-                self._emit_audio_chunk(chunk)
+                self._emit_audio_chunk(chunk)  # raw — waterfall sees unfiltered signal
 
                 if self._pause_event.is_set():
                     if not was_paused:
@@ -342,7 +356,7 @@ class STTWorker:
                     self._emit_status("Listening...")
                     was_paused = False
 
-                segments, events = segmenter.feed(chunk, peak)
+                segments, events = segmenter.feed(chunk_for_vad, peak)
                 for event in events:
                     self._apply_squelch_event(event)
                     self._emit_capture_event(event)
