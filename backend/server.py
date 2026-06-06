@@ -607,6 +607,11 @@ async def _tx_pump() -> None:
                 text = spell_digits_in_callsigns(text)
                 chat_text = raw_text
 
+            # Discard transmission if the channel is already occupied.
+            if not is_preview and _stt_worker is not None and _stt_worker.channel_busy.is_set():
+                _log.warning("TX discarded: channel busy (squelch open)")
+                continue
+
             if not is_preview and chat_text is not None:
                 await _manager.broadcast({
                     "type": "tx_echo",

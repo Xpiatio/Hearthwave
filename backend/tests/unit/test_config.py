@@ -440,3 +440,22 @@ class TestConfigFileEnvVar:
         config_file.write_text(json.dumps({"callsign": "N0ENV"}))
         cfg = ServerConfig.load(config_file)
         assert cfg.callsign == "N0ENV"
+
+
+# ---------------------------------------------------------------------------
+# PTT Lead-in
+# ---------------------------------------------------------------------------
+
+class TestPttLeadInMs:
+    def test_default_is_350(self):
+        cfg = ServerConfig()
+        assert cfg.ptt_lead_in_ms == 350
+
+    def test_reads_from_dict(self):
+        cfg = ServerConfig({"ptt_lead_in_ms": 400})
+        assert cfg.ptt_lead_in_ms == 400
+
+    def test_returns_int(self):
+        cfg = ServerConfig({"ptt_lead_in_ms": "500"})
+        assert isinstance(cfg.ptt_lead_in_ms, int)
+        assert cfg.ptt_lead_in_ms == 500

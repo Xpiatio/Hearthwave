@@ -1,4 +1,5 @@
 """Tests for backend.ptt.vox — VoxPTT."""
+import pytest
 from backend.ptt.base import PTT
 from backend.ptt.manual import ManualPTT
 from backend.ptt.vox import VoxPTT
@@ -24,18 +25,28 @@ class TestVoxPTTPadding:
         ptt = VoxPTT()
         assert ptt.tail_seconds == 0.15
 
-    def test_lead_in_seconds_is_zero(self):
-        """VOX detects audio itself; no software lead-in needed."""
+    def test_lead_in_seconds_default_is_350ms(self):
+        """Default pre-roll gives slow radio TX chains time to open."""
         ptt = VoxPTT()
-        assert ptt.lead_in_seconds == 0.0
+        assert ptt.lead_in_seconds == pytest.approx(0.35)
 
     def test_tail_seconds_is_class_attribute(self):
         """Attribute must be on the class so subclasses can read it without
         instantiation (factory introspection pattern)."""
         assert VoxPTT.tail_seconds == 0.15
 
-    def test_lead_in_is_class_attribute(self):
-        assert VoxPTT.lead_in_seconds == 0.0
+    def test_lead_in_seconds_is_instance_attribute(self):
+        """lead_in_seconds is set per-instance so lead_in_ms can vary."""
+        ptt = VoxPTT()
+        assert hasattr(ptt, "lead_in_seconds")
+
+    def test_custom_lead_in_ms(self):
+        ptt = VoxPTT(lead_in_ms=500)
+        assert ptt.lead_in_seconds == pytest.approx(0.5)
+
+    def test_zero_lead_in_ms(self):
+        ptt = VoxPTT(lead_in_ms=0)
+        assert ptt.lead_in_seconds == pytest.approx(0.0)
 
 
 class TestVoxPTTOperations:
@@ -81,8 +92,9 @@ class TestVoxVsManualPadding:
     def test_vox_tail_differs_from_manual(self):
         assert VoxPTT().tail_seconds != ManualPTT().tail_seconds
 
-    def test_both_lead_in_are_zero(self):
-        assert VoxPTT().lead_in_seconds == ManualPTT().lead_in_seconds == 0.0
+    def test_vox_lead_in_differs_from_manual(self):
+        """VoxPTT now has a default lead-in; ManualPTT does not."""
+        assert VoxPTT().lead_in_seconds != ManualPTT().lead_in_seconds
 
 
 class TestVoxPTTIndependentInstances:
