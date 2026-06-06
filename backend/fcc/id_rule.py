@@ -6,6 +6,7 @@ ID_INTERVAL_SECONDS = 15 * 60  # FCC Part 95: identify at least every 15 minutes
 
 
 def format_tail_id(my_call: str) -> str:
+    """Return the short tail-ID string appended to every untargeted GMRS transmission."""
     return f"{my_call}."
 
 

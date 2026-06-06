@@ -7,6 +7,7 @@ from backend.fcc.id_rule import (
     ID_INTERVAL_SECONDS,
     format_outgoing_message,
     format_standalone_id,
+    format_tail_id,
 )
 
 
@@ -22,11 +23,9 @@ def me():
 
 class TestFormatTailId:
     def test_returns_call_with_period(self):
-        from backend.fcc.id_rule import format_tail_id
         assert format_tail_id("WQXX123") == "WQXX123."
 
     def test_blank_call_returns_period_only(self):
-        from backend.fcc.id_rule import format_tail_id
         assert format_tail_id("") == "."
 
 
