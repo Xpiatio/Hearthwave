@@ -106,6 +106,7 @@ from backend.fcc.id_rule import (
     ID_INTERVAL_SECONDS,
     format_outgoing_message,
     format_standalone_id,
+    format_tail_id,
 )
 from backend.hw_detect import detect as detect_compute
 from backend.net.online import invalidate as _invalidate_online
@@ -583,16 +584,18 @@ async def _tx_pump() -> None:
                 processed = expand_tty_abbreviations(raw_text)
                 if payload.get("_filter_profanity", True):
                     processed = mask_profanity(processed)
-                text, _last_id_time = format_outgoing_message(
+                service = normalize_service(_config.radio_service)
+                text, new_id_time = format_outgoing_message(
                     processed,
                     target_call=payload.get("target_call") or "ALL",
                     target_name=payload.get("target_name") or "",
                     my_call=payload.get("callsign") or _config.callsign,
                     my_name=payload.get("operator") or _config.name,
-                    last_id_time=_last_id_time,
                     now=now,
-                    service=normalize_service(_config.radio_service),
+                    service=service,
                 )
+                if new_id_time is not None:  # FRS returns None; preserve GMRS timer
+                    _last_id_time = new_id_time
                 _has_transmitted = True
                 # Space-isolate digits in callsigns so TTS reads them individually.
                 text = spell_digits_in_callsigns(text)
@@ -879,10 +882,9 @@ async def _id_rule_pump() -> None:
             now = datetime.datetime.now(datetime.timezone.utc)
             elapsed = (now - _last_id_time).total_seconds() if _last_id_time else float("inf")
             if elapsed > ID_INTERVAL_SECONDS:
-                spoken, new_ts = format_standalone_id(
-                    _config.callsign, _config.name, _config.location, now
-                )
-                _last_id_time = new_ts
+                tail = format_tail_id(_config.callsign)
+                spoken = spell_digits_in_callsigns(f"This is {tail}")
+                _last_id_time = now
                 _has_transmitted = False
                 _log.info("FCC ID rule: broadcasting station identification.")
                 await _manager.broadcast({"type": "tx_status", "status": "transmitting"})
