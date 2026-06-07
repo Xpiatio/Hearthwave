@@ -74,7 +74,8 @@ function pruneMap<K, V>(map: Map<K, V>, maxSize: number): void {
   }
 }
 
-import type { JournalResultDraft, PendingStation } from './types/appTypes';
+import type { JournalResultDraft, PendingStation, PromptState } from './types/appTypes';
+import { TokenPromptDialog } from './components/TokenPromptDialog/TokenPromptDialog';
 
 export default function App() {
   const { token, profile, setProfile, loading: authLoading, setupNeeded, setup, login, logout } = useAuth();
@@ -147,6 +148,9 @@ export default function App() {
   const [isOnline, setIsOnline] = useState<boolean | null>(null);
   const [fccLookupResult, setFccLookupResult] = useState<FccLookupResultMsg | null>(null);
   const [verifyAllComplete, setVerifyAllComplete] = useState(false);
+
+  // Token prompt dialog state
+  const [promptState, setPromptState] = useState<PromptState | null>(null);
   const [pendingPrefilledCallsign, setPendingPrefilledCallsign] = useState<string | undefined>();
   const [pendingPrefilledName, setPendingPrefilledName] = useState<string | undefined>();
   const [pendingPrefilledLocation, setPendingPrefilledLocation] = useState<string | undefined>();
@@ -393,27 +397,16 @@ export default function App() {
         setContacts(msg.contacts);
         break;
 
-      case 'prompt_token': {
-        const tokens = msg.tokens;
-        let resolvedText = msg.original_text;
-        let cancelled = false;
-        for (const token of tokens) {
-          const val = window.prompt(`Enter value for {${token}}:`);
-          if (val === null) { cancelled = true; break; }
-          resolvedText = resolvedText.replaceAll(`{${token}}`, val);
-        }
-        if (!cancelled) {
-          sendRef.current({
-            type: 'tx_message',
-            text: resolvedText,
-            operator: msg.operator,
-            callsign: msg.callsign,
-            target_call: msg.target_call,
-            target_name: msg.target_name,
-          });
-        }
+      case 'prompt_token':
+        setPromptState({
+          tokens: msg.tokens,
+          originalText: msg.original_text,
+          operator: msg.operator,
+          callsign: msg.callsign,
+          targetCall: msg.target_call,
+          targetName: msg.target_name,
+        });
         break;
-      }
 
       case 'session_attendance':
         setAttendanceStations(msg.stations);
@@ -724,6 +717,23 @@ export default function App() {
     setMessages([]);
   }
 
+  function handleTokenSubmit(resolvedText: string) {
+    if (!promptState) return;
+    send({
+      type: 'tx_message',
+      text: resolvedText,
+      operator: promptState.operator,
+      callsign: promptState.callsign,
+      target_call: promptState.targetCall,
+      target_name: promptState.targetName,
+    });
+    setPromptState(null);
+  }
+
+  function handleTokenCancel() {
+    setPromptState(null);
+  }
+
   function handleAddPending(station: PendingStation) {
     setPendingPrefilledCallsign(station.callsign);
     setPendingPrefilledName(station.name || undefined);
@@ -976,6 +986,13 @@ export default function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
+      <TokenPromptDialog
+        open={promptState !== null}
+        tokens={promptState?.tokens ?? []}
+        originalText={promptState?.originalText ?? ''}
+        onSubmit={handleTokenSubmit}
+        onCancel={handleTokenCancel}
+      />
       {isMobile ? (
         <MobileApp
           {...sharedProps}
