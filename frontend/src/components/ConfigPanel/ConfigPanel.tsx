@@ -1,7 +1,8 @@
 import {
-  Box, Paper, Typography, FormControlLabel, Switch, Divider,
-  ToggleButtonGroup, ToggleButton, FormControl, InputLabel, Select, MenuItem,
+  Box, Paper, FormControlLabel, Switch, Divider,
+  ToggleButtonGroup, ToggleButton, FormControl, InputLabel, Select, MenuItem, Typography,
 } from '@mui/material';
+import { PanelHeader } from '../PanelHeader/PanelHeader';
 import type { InputDeviceOption, MonitorSinkOption } from '../../types/ws';
 
 interface Props {
@@ -53,15 +54,13 @@ export function ConfigPanel({
     <Paper
       elevation={0}
       square
-      sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: 'divider' }}
+      sx={{ borderBottom: 1, borderColor: 'divider', overflow: 'hidden' }}
       role="region"
       aria-label="Configuration"
     >
-      <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700, textTransform: 'uppercase' }}>
-        Configuration
-      </Typography>
+      <PanelHeader title="Configuration" gradient="linear-gradient(135deg, #1A3A5C 0%, #1E4976 100%)" />
 
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center', px: 2, py: 1.5 }}>
 
         {/* Text / content toggles */}
         <FormControlLabel
