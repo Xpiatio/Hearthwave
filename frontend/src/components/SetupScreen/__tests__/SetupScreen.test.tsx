@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { ThemeProvider } from '@mui/material/styles'
 import { makeTheme } from '../../../theme'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { axe } from 'jest-axe'
 import { SetupScreen } from '../SetupScreen'
 
 function render(ui: React.ReactElement) {
@@ -350,6 +351,13 @@ describe('SetupScreen', () => {
       render(<SetupScreen onSetup={vi.fn()} />)
       await userEvent.type(screen.getByLabelText(/call sign/i), 'kd9abc')
       expect(screen.getByLabelText(/call sign/i)).toHaveValue('KD9ABC')
+    })
+  })
+
+  describe('accessibility', () => {
+    it('has no violations in idle state', async () => {
+      const { container } = render(<SetupScreen onSetup={vi.fn()} />)
+      expect(await axe(container)).toHaveNoViolations()
     })
   })
 })
