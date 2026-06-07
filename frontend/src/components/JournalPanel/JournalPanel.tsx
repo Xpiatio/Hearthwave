@@ -184,8 +184,18 @@ export function JournalPanel({
           flexShrink: 0,
         }}
       >
-        <Box sx={{ px: 1.5, py: 1, borderBottom: 1, borderColor: 'divider' }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>JOURNALS</Typography>
+        <Box
+          sx={{
+            background: 'linear-gradient(135deg, #1A3A5C 0%, #1E4976 100%)',
+            px: 1.5,
+            py: 1,
+            borderBottom: 1,
+            borderColor: 'divider',
+          }}
+        >
+          <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#F9FAFB' }}>
+            JOURNALS
+          </Typography>
         </Box>
 
         <Box sx={{ flex: 1, overflowY: 'auto' }}>

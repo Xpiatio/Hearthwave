@@ -144,9 +144,20 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
   return (
     <Paper elevation={0} square sx={{ borderBottom: 1, borderColor: 'divider', minWidth: 320 }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1, borderBottom: 1, borderColor: 'divider' }}>
+      <Box
+        sx={{
+          background: 'linear-gradient(135deg, #1E4976 0%, #2563EB 100%)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          px: 2,
+          py: 1,
+          borderBottom: 1,
+          borderColor: 'divider',
+        }}
+      >
         <CampaignIcon fontSize="small" color={active ? 'error' : 'disabled'} />
-        <Typography variant="subtitle2" sx={{ fontWeight: 700, flex: 1 }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 700, flex: 1, color: '#F9FAFB' }}>
           NET CONTROL STATION
         </Typography>
         <Chip

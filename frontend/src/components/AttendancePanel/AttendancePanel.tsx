@@ -19,9 +19,18 @@ interface Props {
 
 export function AttendancePanel({ stations, onClear }: Props) {
   return (
-    <Paper square elevation={0} sx={{ borderBottom: 1, borderColor: 'divider', px: 2, py: 1 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-        <Typography variant="h6" sx={{ fontWeight: 700 }}>
+    <Paper square elevation={0} sx={{ borderBottom: 1, borderColor: 'divider', overflow: 'hidden' }}>
+      <Box
+        sx={{
+          background: 'linear-gradient(135deg, #1A3A5C 0%, #1E4976 100%)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          px: 2,
+          py: 1,
+        }}
+      >
+        <Typography variant="h6" sx={{ fontWeight: 700, color: '#F9FAFB' }}>
           STATIONS HEARD THIS SESSION
         </Typography>
         <Button
@@ -29,41 +38,44 @@ export function AttendancePanel({ stations, onClear }: Props) {
           variant="outlined"
           onClick={onClear}
           disabled={stations.length === 0}
+          sx={{ color: '#F9FAFB', borderColor: 'rgba(255,255,255,0.4)' }}
         >
           CLEAR
         </Button>
       </Box>
 
-      {stations.length === 0 ? (
-        <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
-          No stations heard yet.
-        </Typography>
-      ) : (
-        <TableContainer>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ fontWeight: 700 }}>Callsign</TableCell>
-                <TableCell>Name</TableCell>
-                <TableCell>Location</TableCell>
-                <TableCell>GMRS</TableCell>
-                <TableCell>HAM</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {stations.map((s) => (
-                <TableRow key={s.callsign} hover>
-                  <TableCell sx={{ fontWeight: 700 }}>{s.callsign}</TableCell>
-                  <TableCell>{s.name}</TableCell>
-                  <TableCell>{s.location}</TableCell>
-                  <TableCell>{s.gmrs}</TableCell>
-                  <TableCell>{s.ham}</TableCell>
+      <Box sx={{ px: 2, py: 1 }}>
+        {stations.length === 0 ? (
+          <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
+            No stations heard yet.
+          </Typography>
+        ) : (
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 700 }}>Callsign</TableCell>
+                  <TableCell>Name</TableCell>
+                  <TableCell>Location</TableCell>
+                  <TableCell>GMRS</TableCell>
+                  <TableCell>HAM</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      )}
+              </TableHead>
+              <TableBody>
+                {stations.map((s) => (
+                  <TableRow key={s.callsign} hover>
+                    <TableCell sx={{ fontWeight: 700 }}>{s.callsign}</TableCell>
+                    <TableCell>{s.name}</TableCell>
+                    <TableCell>{s.location}</TableCell>
+                    <TableCell>{s.gmrs}</TableCell>
+                    <TableCell>{s.ham}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+      </Box>
     </Paper>
   );
 }
