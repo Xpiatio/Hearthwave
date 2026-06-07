@@ -242,15 +242,16 @@ describe('UsersPanel', () => {
     render(<UsersPanel {...makeDefaultProps()} />)
     await user.click(screen.getByRole('button', { name: /new user/i }))
 
-    expect(screen.getByLabelText(/display name/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/operator name/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/call sign/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/location/i)).toBeInTheDocument()
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByLabelText(/display name/i)).toBeInTheDocument()
+    expect(within(dialog).getByLabelText(/operator name/i)).toBeInTheDocument()
+    expect(within(dialog).getByLabelText(/call sign/i)).toBeInTheDocument()
+    expect(within(dialog).getByLabelText(/location/i)).toBeInTheDocument()
     // Password fields
-    expect(screen.getByLabelText(/^password \*/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/confirm password/i)).toBeInTheDocument()
+    expect(within(dialog).getByLabelText(/^password \*/i)).toBeInTheDocument()
+    expect(within(dialog).getByLabelText(/confirm password/i)).toBeInTheDocument()
     // Admin checkbox
-    expect(screen.getByLabelText(/admin/i)).toBeInTheDocument()
+    expect(within(dialog).getByLabelText(/admin/i)).toBeInTheDocument()
   })
 
   it('renders emoji avatar picker in the create dialog', async () => {
@@ -370,7 +371,7 @@ describe('UsersPanel', () => {
     await user.type(screen.getByLabelText(/display name/i), 'Frank')
     await user.type(screen.getByLabelText(/^password \*/i), 'password123')
     await user.type(screen.getByLabelText(/confirm password/i), 'password123')
-    await user.click(screen.getByLabelText(/admin/i))
+    await user.click(within(screen.getByRole('dialog')).getByLabelText(/admin/i))
     await user.click(screen.getByRole('button', { name: /^create$/i }))
 
     expect(props.onCreateProfile).toHaveBeenCalledWith(

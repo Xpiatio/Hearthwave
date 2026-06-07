@@ -165,18 +165,22 @@ export function QuickMessages({ operatorName, onSelect }: Props) {
             '&::-webkit-scrollbar': { height: 4 },
           }}
         >
-          {phrases.map((p, i) => (
-            <Button
-              key={i}
-              size="small"
-              variant="outlined"
-              onClick={() => handleSelect(p)}
-              title={p}
-              sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
-            >
-              {p.replace(/{Name}/gi, operatorName || 'Operator')}
-            </Button>
-          ))}
+          {phrases.map((p, i) => {
+            const resolved = p.replace(/{Name}/gi, operatorName || 'Operator');
+            return (
+              <Button
+                key={i}
+                size="small"
+                variant="outlined"
+                onClick={() => handleSelect(p)}
+                title={p}
+                aria-label={`Send quick message: ${resolved}`}
+                sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+              >
+                {resolved}
+              </Button>
+            );
+          })}
         </Box>
 
         <Tooltip title="Edit quick messages">

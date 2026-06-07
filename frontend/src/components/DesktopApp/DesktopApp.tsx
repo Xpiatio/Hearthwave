@@ -193,8 +193,6 @@ export interface DesktopAppProps {
   onAddPending: (station: PendingStation) => void;
   onDismissPending: (callsign: string) => void;
   onDismissAllPending: () => void;
-  onEnrollCluster: (clusterLabel: string, callsign: string) => void;
-
   // Spectrogram ref (owned by App.tsx because the WS handler pushes rows to it)
   spectroRef: React.RefObject<SpectrogramHandle>;
 
@@ -310,7 +308,6 @@ export function DesktopApp({
   onAddPending,
   onDismissPending,
   onDismissAllPending,
-  onEnrollCluster,
   spectroRef,
   publishSnack,
   errorSnack,
@@ -492,7 +489,6 @@ export function DesktopApp({
           entries={messages}
           contacts={contacts}
           showCallsignChips={showCallsignChips}
-          onEnrollCluster={onEnrollCluster}
         />
       </Box>
 

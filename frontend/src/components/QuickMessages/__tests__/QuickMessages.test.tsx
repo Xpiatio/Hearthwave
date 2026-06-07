@@ -95,7 +95,7 @@ describe('QuickMessages', () => {
         return null
       })
       render(<QuickMessages operatorName="Alice" onSelect={vi.fn()} />)
-      expect(screen.getByRole('button', { name: 'Hello Alice' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /hello alice/i })).toBeInTheDocument()
     })
 
     it('substitutes {Name} (case-insensitive) in onSelect call', async () => {
@@ -106,10 +106,10 @@ describe('QuickMessages', () => {
       const onSelect = vi.fn()
       render(<QuickMessages operatorName="Bob" onSelect={onSelect} />)
 
-      await userEvent.click(screen.getByRole('button', { name: 'Hello Bob' }))
+      await userEvent.click(screen.getByRole('button', { name: /hello bob/i }))
       expect(onSelect).toHaveBeenCalledWith('Hello Bob')
 
-      await userEvent.click(screen.getByRole('button', { name: 'Hi Bob' }))
+      await userEvent.click(screen.getByRole('button', { name: /hi bob/i }))
       expect(onSelect).toHaveBeenCalledWith('Hi Bob')
     })
 
@@ -119,7 +119,7 @@ describe('QuickMessages', () => {
         return null
       })
       render(<QuickMessages operatorName="" onSelect={vi.fn()} />)
-      expect(screen.getByRole('button', { name: 'Operator is ready' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /operator is ready/i })).toBeInTheDocument()
     })
 
     it('passes substituted text to onSelect when operatorName is empty', async () => {
@@ -129,7 +129,7 @@ describe('QuickMessages', () => {
       })
       const onSelect = vi.fn()
       render(<QuickMessages operatorName="" onSelect={onSelect} />)
-      await userEvent.click(screen.getByRole('button', { name: 'Operator standing by' }))
+      await userEvent.click(screen.getByRole('button', { name: /operator standing by/i }))
       expect(onSelect).toHaveBeenCalledWith('Operator standing by')
     })
   })
@@ -354,7 +354,8 @@ describe('QuickMessages', () => {
       // QSY to channel {N} has no {Name}, so it renders as-is
       DEFAULTS.forEach((phrase) => {
         const display = phrase.replace(/{Name}/gi, 'Alice')
-        expect(screen.getByRole('button', { name: display })).toBeInTheDocument()
+        // aria-label is "Send quick message: <display>" — use regex to match substring
+        expect(screen.getByRole('button', { name: new RegExp(display.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') })).toBeInTheDocument()
       })
     })
   })

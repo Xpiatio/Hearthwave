@@ -59,13 +59,13 @@ afterEach(() => {
 describe('Spectrogram — rendering', () => {
   it('renders a canvas element', () => {
     render(<Spectrogram colormap="viridis" timeWindowS={30} />)
-    const canvas = screen.getByLabelText('Live audio spectrogram waterfall')
+    const canvas = screen.getByLabelText('Audio spectrogram display')
     expect(canvas.tagName).toBe('CANVAS')
   })
 
   it('canvas has correct intrinsic dimensions', () => {
     render(<Spectrogram colormap="viridis" timeWindowS={30} />)
-    const canvas = screen.getByLabelText('Live audio spectrogram waterfall') as HTMLCanvasElement
+    const canvas = screen.getByLabelText('Audio spectrogram display') as HTMLCanvasElement
     expect(canvas.width).toBe(256)
     expect(canvas.height).toBe(128)
   })

@@ -1,18 +1,15 @@
 import { createTheme } from '@mui/material/styles';
 
-// WCAG 2.2 AA color palettes from GMRS-TTY constants
-// Light: dark colors on white for ≥4.5:1 contrast
-// Dark: light colors on #1F2937 for ≥4.5:1 contrast
-
 export function makeTheme(dark: boolean) {
   return createTheme({
     palette: {
       mode: dark ? 'dark' : 'light',
       primary: {
-        main: dark ? '#4ADE80' : '#005f00',
+        main: dark ? '#60A5FA' : '#2563EB',
+        dark: dark ? '#2563EB' : '#1D4ED8',
       },
       info: {
-        main: dark ? '#60A5FA' : '#003d9e',
+        main: dark ? '#93C5FD' : '#1E4976',
       },
       warning: {
         main: dark ? '#FBBF24' : '#7a4a00',
@@ -24,12 +21,13 @@ export function makeTheme(dark: boolean) {
         main: dark ? '#4ADE80' : '#15803D',
       },
       background: {
-        default: dark ? '#1F2937' : '#ffffff',
-        paper: dark ? '#111827' : '#f0f0f0',
+        default: dark ? '#0F2540' : '#E8EEF7',
+        paper: dark ? '#1A3A5C' : '#C8D8EC',
       },
       text: {
-        primary: dark ? '#F9FAFB' : '#111111',
+        primary: dark ? '#F9FAFB' : '#0F2540',
       },
+      divider: dark ? 'rgba(37,99,235,0.3)' : 'rgba(30,73,118,0.25)',
     },
     typography: {
       htmlFontSize: 16,
@@ -65,6 +63,46 @@ export function makeTheme(dark: boolean) {
           root: {
             fontSize: '1.125rem',
           },
+        },
+      },
+      MuiPaper: {
+        styleOverrides: {
+          root: ({ theme }) => ({
+            border: `1px solid ${theme.palette.divider}`,
+          }),
+          rounded: {
+            borderRadius: 8,
+          },
+        },
+      },
+      MuiCard: {
+        styleOverrides: {
+          root: {
+            overflow: 'hidden',
+          },
+        },
+      },
+      MuiAppBar: {
+        styleOverrides: {
+          root: ({ theme }) => ({
+            backgroundColor:
+              theme.palette.mode === 'dark' ? '#0F2540' : '#1A3A5C',
+            border: 'none',
+            borderRadius: 0,
+            color: '#F9FAFB',
+          }),
+        },
+      },
+      MuiDialogTitle: {
+        styleOverrides: {
+          root: ({ theme }) => ({
+            background:
+              theme.palette.mode === 'dark'
+                ? 'linear-gradient(135deg, #0F2540 0%, #1E4976 100%)'
+                : 'linear-gradient(135deg, #1A3A5C 0%, #1E4976 100%)',
+            color: '#F9FAFB',
+            fontWeight: 700,
+          }),
         },
       },
     },
