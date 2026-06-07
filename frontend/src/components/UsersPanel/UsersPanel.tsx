@@ -130,14 +130,14 @@ export function UsersPanel({
                 {p.is_admin && <Chip label="Admin" size="small" color="primary" variant="outlined" />}
               </TableCell>
               <TableCell align="right">
-                <Tooltip title="Reset lockout">
-                  <IconButton size="small" onClick={() => onResetLockout(p.id)}>
+                <Tooltip title={`Reset lockout for ${p.display_name}`}>
+                  <IconButton size="small" aria-label={`Reset lockout for ${p.display_name}`} onClick={() => onResetLockout(p.id)}>
                     <LockOpenIcon fontSize="small" />
                   </IconButton>
                 </Tooltip>
                 {p.id !== currentUserId && (
-                  <Tooltip title="Delete user">
-                    <IconButton size="small" color="error" onClick={() => onDeleteProfile(p.id)}>
+                  <Tooltip title={`Delete user ${p.display_name}`}>
+                    <IconButton size="small" color="error" aria-label={`Delete user ${p.display_name}`} onClick={() => onDeleteProfile(p.id)}>
                       <DeleteIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
@@ -163,6 +163,9 @@ export function UsersPanel({
                     key={e}
                     size="small"
                     onClick={() => setAvatarEmoji(e)}
+                    onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setAvatarEmoji(e); } }}
+                    aria-label={`Select avatar ${e}`}
+                    aria-pressed={avatarEmoji === e}
                     sx={{
                       border: 2,
                       borderColor: avatarEmoji === e ? 'primary.main' : 'transparent',

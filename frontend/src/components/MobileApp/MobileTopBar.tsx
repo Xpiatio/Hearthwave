@@ -146,6 +146,7 @@ export function MobileTopBar({
         open={drawerOpen}
         onOpen={() => setDrawerOpen(true)}
         onClose={() => setDrawerOpen(false)}
+        aria-label="Settings menu"
       >
         <Box sx={{ width: 280, pt: 1 }} role="presentation">
           <List disablePadding>

@@ -273,7 +273,7 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
       {/* Roster table */}
       {roster.length > 0 ? (
         <Box sx={{ overflowX: 'auto', maxHeight: 260, overflowY: 'auto' }}>
-          <Table size="small" stickyHeader>
+          <Table size="small" stickyHeader aria-label="NCS roster">
             <TableHead>
               <TableRow>
                 <TableCell sx={{ fontWeight: 700, py: 0.5 }}>Callsign</TableCell>
