@@ -3,6 +3,7 @@ import { ThemeProvider } from '@mui/material/styles'
 import { makeTheme } from '../../../theme'
 import { describe, it, expect, vi } from 'vitest'
 import { DraggablePanel } from '../DraggablePanel'
+import { axe } from 'jest-axe'
 
 vi.mock('@dnd-kit/sortable', () => ({
   useSortable: () => ({
@@ -78,5 +79,43 @@ describe('DraggablePanel', () => {
     // The outer Box (first child of container) should have opacity 1 in MUI sx
     // We check the style attribute via the rendered DOM structure
     expect(container.firstChild).toBeInTheDocument()
+  })
+
+  describe('accessibility', () => {
+    it('has no violations when used standalone (no buttons)', async () => {
+      const { container } = render(
+        <DraggablePanel id="test">
+          <div>content</div>
+        </DraggablePanel>
+      )
+      expect(await axe(container)).toHaveNoViolations()
+    })
+
+    it('has no violations mid-list (both buttons enabled)', async () => {
+      const { container } = render(
+        <DraggablePanel id="config" onMoveUp={vi.fn()} onMoveDown={vi.fn()}>
+          <div>content</div>
+        </DraggablePanel>
+      )
+      expect(await axe(container)).toHaveNoViolations()
+    })
+
+    it('has no violations at top of list (up button disabled)', async () => {
+      const { container } = render(
+        <DraggablePanel id="config" onMoveDown={vi.fn()}>
+          <div>content</div>
+        </DraggablePanel>
+      )
+      expect(await axe(container)).toHaveNoViolations()
+    })
+
+    it('has no violations at bottom of list (down button disabled)', async () => {
+      const { container } = render(
+        <DraggablePanel id="config" onMoveUp={vi.fn()}>
+          <div>content</div>
+        </DraggablePanel>
+      )
+      expect(await axe(container)).toHaveNoViolations()
+    })
   })
 })
