@@ -1,6 +1,6 @@
 import { createTheme } from '@mui/material/styles';
 
-// WCAG 2.1 AA color palettes from GMRS-TTY constants
+// WCAG 2.2 AA color palettes from GMRS-TTY constants
 // Light: dark colors on white for ≥4.5:1 contrast
 // Dark: light colors on #1F2937 for ≥4.5:1 contrast
 
