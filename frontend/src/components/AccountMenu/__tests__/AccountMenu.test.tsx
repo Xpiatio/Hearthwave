@@ -203,8 +203,8 @@ describe('AccountMenu', () => {
     it('shows emoji picker options', async () => {
       await openEditDialog()
       // EMOJI_OPTIONS has 10 emojis — check first two
-      expect(screen.getByRole('button', { name: '👤' })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: '👨' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Select avatar 👤' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Select avatar 👨' })).toBeInTheDocument()
     })
 
     it('calls onUpdateProfile and onSaveTtsPrefs when Save clicked', async () => {

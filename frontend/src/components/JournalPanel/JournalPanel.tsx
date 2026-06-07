@@ -55,8 +55,8 @@ function CallsignsTable({ rows }: { rows: Array<{ callsign: string; location: st
       <Table size="small">
         <TableHead>
           <TableRow>
-            <TableCell sx={{ fontWeight: 700 }}>Callsign</TableCell>
-            <TableCell sx={{ fontWeight: 700 }}>Location</TableCell>
+            <TableCell scope="col" sx={{ fontWeight: 700 }}>Callsign</TableCell>
+            <TableCell scope="col" sx={{ fontWeight: 700 }}>Location</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -204,7 +204,7 @@ export function JournalPanel({
               No saved journals.
             </Typography>
           ) : (
-            <List dense disablePadding>
+            <List dense disablePadding aria-label="Journal entries">
               {journals.map((j) => (
                 <ListItem
                   key={j._file}

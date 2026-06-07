@@ -357,7 +357,7 @@ describe('ChatDisplay — scroll-to-bottom button', () => {
         showCallsignChips={false}
       />
     )
-    const container = screen.getByRole('main')
+    const container = screen.getByRole('log')
     // Simulate being scrolled away from bottom
     Object.defineProperty(container, 'scrollHeight', { configurable: true, value: 1000 })
     Object.defineProperty(container, 'scrollTop', { configurable: true, value: 0 })
@@ -380,7 +380,7 @@ describe('ChatDisplay — accessibility', () => {
         showCallsignChips={false}
       />
     )
-    expect(screen.getByRole('main', { name: 'Message history' })).toBeInTheDocument()
+    expect(screen.getByRole('log', { name: 'Radio chat messages' })).toBeInTheDocument()
   })
 
   it('has aria-live="polite" on the container', () => {
@@ -391,7 +391,7 @@ describe('ChatDisplay — accessibility', () => {
         showCallsignChips={false}
       />
     )
-    const container = screen.getByRole('main')
+    const container = screen.getByRole('log')
     expect(container).toHaveAttribute('aria-live', 'polite')
   })
 

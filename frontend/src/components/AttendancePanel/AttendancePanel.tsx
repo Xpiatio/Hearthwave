@@ -51,14 +51,14 @@ export function AttendancePanel({ stations, onClear }: Props) {
           </Typography>
         ) : (
           <TableContainer>
-            <Table size="small">
+            <Table size="small" aria-label="Stations heard this session">
               <TableHead>
                 <TableRow>
-                  <TableCell sx={{ fontWeight: 700 }}>Callsign</TableCell>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Location</TableCell>
-                  <TableCell>GMRS</TableCell>
-                  <TableCell>HAM</TableCell>
+                  <TableCell scope="col" sx={{ fontWeight: 700 }}>Callsign</TableCell>
+                  <TableCell scope="col">Name</TableCell>
+                  <TableCell scope="col">Location</TableCell>
+                  <TableCell scope="col">GMRS</TableCell>
+                  <TableCell scope="col">HAM</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>

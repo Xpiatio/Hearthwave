@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Typography, Button, Fab, Chip, Tooltip } from '@mui/material';
+import { Box, Typography, Fab, Chip, Tooltip } from '@mui/material';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import type { Contact } from '../../types/ws';
 
@@ -22,6 +22,7 @@ interface Props {
   entries: ChatEntry[];
   contacts: Contact[];
   showCallsignChips: boolean;
+  onEnrollCluster?: (clusterLabel: string, callsign: string) => void;
 }
 
 // Fallback regex for compact callsign forms when the server hasn't sent spans.
@@ -204,10 +205,10 @@ export function ChatDisplay({ entries, contacts, showCallsignChips }: Props) {
   return (
     <Box sx={{ flex: '1 1 auto', position: 'relative', overflow: 'hidden' }}>
       <Box
-        component="main"
         ref={containerRef}
         onScroll={handleScroll}
-        aria-label="Message history"
+        role="log"
+        aria-label="Radio chat messages"
         aria-live="polite"
         aria-relevant="additions"
         sx={{
