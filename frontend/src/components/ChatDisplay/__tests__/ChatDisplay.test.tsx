@@ -5,6 +5,7 @@ import { makeTheme } from '../../../theme'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ChatDisplay, ChatEntry } from '../ChatDisplay'
 import type { Contact } from '../../../types/ws'
+import { axe } from 'jest-axe'
 
 // jsdom doesn't implement scrollIntoView — provide a no-op stub globally.
 window.HTMLElement.prototype.scrollIntoView = vi.fn()
@@ -392,5 +393,17 @@ describe('ChatDisplay — accessibility', () => {
     )
     const container = screen.getByRole('main')
     expect(container).toHaveAttribute('aria-live', 'polite')
+  })
+
+  it('has no violations with mixed message types', async () => {
+    const entries: ChatEntry[] = [
+      makeEntry({ id: 'a1', kind: 'rx', text: 'Received message', sender: 'W1AAA' }),
+      makeEntry({ id: 'a2', kind: 'tx', text: 'Sent message', sender: 'W2BBB' }),
+      makeEntry({ id: 'a3', kind: 'system', text: 'System notification' }),
+    ]
+    const { container } = render(
+      <ChatDisplay entries={entries} contacts={NO_CONTACTS} showCallsignChips={false} />
+    )
+    expect(await axe(container)).toHaveNoViolations()
   })
 })

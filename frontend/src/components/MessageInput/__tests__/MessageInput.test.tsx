@@ -4,6 +4,7 @@ import { ThemeProvider } from '@mui/material/styles'
 import { makeTheme } from '../../../theme'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { useRef } from 'react'
+import { axe } from 'jest-axe'
 import { MessageInput } from '../MessageInput'
 import type { MessageInputHandle } from '../MessageInput'
 import type { Contact } from '../../../types/ws'
@@ -272,6 +273,19 @@ describe('MessageInput', () => {
       await waitFor(() => {
         expect(screen.getByRole('button', { name: /press to send message/i })).toBeEnabled()
       })
+    })
+  })
+
+  describe('accessibility', () => {
+    it('has no violations with contacts list', async () => {
+      const { container } = render(
+        <MessageInput
+          transmitting={false}
+          contacts={CONTACTS}
+          onSend={vi.fn()}
+        />
+      )
+      expect(await axe(container)).toHaveNoViolations()
     })
   })
 })

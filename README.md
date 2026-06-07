@@ -1,6 +1,6 @@
 # Radio-TTY
 
-A GMRS family hub that turns a Raspberry Pi or home server into a shared radio operating station for every member of your household. Incoming transmissions are transcribed by speech-to-text and streamed to all connected devices; outgoing messages are synthesized to speech, automatically wrapped with the FCC station callsign (§95.1751), and transmitted over the air. Each family member signs in from their own phone, tablet, or laptop — no app install required.
+A GMRS family hub that turns a home server or x86 mini PC into a shared radio operating station for every member of your household. Incoming transmissions are transcribed by speech-to-text and streamed to all connected devices; outgoing messages are synthesized to speech, automatically wrapped with the FCC station callsign (§95.1751), and transmitted over the air. Each family member signs in from their own phone, tablet, or laptop — no app install required.
 
 Built-in plugins add Net Control Station mode with a live check-in roster and six traffic priority levels, SKYWARN weather alerts sourced directly from the National Weather Service, and an instant audio replay buffer. The plugin architecture is open — additional capabilities wire into the radio pipeline without touching core server logic.
 
@@ -158,11 +158,21 @@ The frontend mirrors this pattern: `frontend/src/plugins/index.ts` defines `Plug
 ## Requirements
 
 **Host machine:**
-- Linux (Debian/Ubuntu recommended)
+
+| Tier | Platform | CPU | RAM | Storage |
+|---|---|---|---|---|
+| **Minimum** | Intel N100 NUC or equivalent x86 mini PC | 4-core @ ≥1.5 GHz | 4 GB | 32 GB SSD |
+| **Recommended** | Intel N100/N305 NUC | 4-core @ ≥2.5 GHz | 8 GB | 64 GB SSD |
+| **GPU-accelerated** | Any x86 with NVIDIA GPU | 4+ cores | 16 GB | 128 GB SSD |
+
+- Linux (Debian 12 / Ubuntu 22.04 or later)
 - PulseAudio (for audio routing)
-- `/dev/snd` access (USB audio adapter or built-in)
-- Serial port for hardware PTT (optional — manual PTT also supported)
-- 2 GB RAM minimum (Whisper `small.en` ~464 MB)
+- USB audio adapter connected to your radio (`/dev/snd`)
+- Serial port for hardware PTT (optional — manual PTT and VOX also supported)
+
+> **Note on ARM:** Raspberry Pi and other ARM SBCs are not recommended. Whisper STT, Piper TTS, and the continuous VAD + DSP + spectrogram pipeline saturate a Pi 4's CPU and leave insufficient headroom for reliable real-time operation. An Intel N100 mini PC costs roughly the same as a Pi 5 kit with SSD and delivers 2–3× the transcription throughput.
+
+> **GPU optional:** CPU operation is fully supported with the default `small.en` model. Set `COMPUTE_BACKEND=cuda` or `COMPUTE_BACKEND=openvino` in `.env` to enable GPU acceleration — transcription and synthesis run 10–15× faster.
 
 **Models (not included in repo — downloaded by `setup.sh` before first run):**
 
@@ -311,6 +321,9 @@ Created from `data/config.json.example` on first install. Station-wide settings 
 | `ptt_mode` | `"manual"` | `"manual"`, `"serial"`, or `"vox"` |
 | `ptt_serial_port` | `""` | e.g. `"/dev/ttyUSB0"` |
 | `ptt_serial_line` | `"RTS"` | `"RTS"` or `"DTR"` |
+| `ptt_lead_in_ms` | `350` | Silence (ms) inserted before TTS audio — gives the radio time to key up |
+| `tx_max_duration_seconds` | `60` | Hard ceiling on TX duration; message is cut off if exceeded |
+| `tx_synthesis_timeout_seconds` | `30` | How long to wait for TTS synthesis before aborting TX |
 | `fuzzy_callsign` | `false` | Fuzzy callsign matching in received text (station-wide) |
 | `monitor_enabled` | `false` | Audio monitor passthrough |
 | `monitor_passthrough` | `false` | Route captured audio to output device simultaneously (monitor passthrough) |
@@ -467,6 +480,36 @@ cd frontend && npm run dev
 ```
 
 Set `VITE_WS_URL=ws://localhost:8765/ws` if the backend is not on the same host.
+
+---
+
+## Troubleshooting
+
+**Audio device not found:**
+Run `docker compose exec backend python -c "import sounddevice; print(sounddevice.query_devices())"` to list devices detected inside the container. Set `input_device` and `output_device` in `config.json` to the correct integer indices, then restart the backend.
+
+**PulseAudio not connecting:**
+The backend logs `PULSE_SERVER=unix:/run/pulse/native` at startup. If audio init fails, verify that `PULSE_UID` in `.env` matches the UID of the user whose PulseAudio session is running on the host (`id -u`). Start PulseAudio on the host if it is not running: `pulseaudio --start`.
+
+**Transcription is slow or cutting off:**
+Whisper `small.en` needs at least 4 CPU cores for near-real-time operation. If you see 5+ second lag, switch to `tiny.en` via `whisper_model` in `config.json`, or enable GPU acceleration with `COMPUTE_BACKEND=cuda` in `.env`.
+
+**FCC lookups always fail:**
+The online status dot in the app turns grey when the server cannot reach the internet. Verify the backend container has outbound internet access and that `ke8rxnwx.net` is reachable from the host.
+
+**Serial PTT not keying:**
+Confirm `/dev/ttyUSB0` (or your port) is mapped into the backend container — add a `devices` entry in `docker-compose.yml` if needed:
+```yaml
+devices:
+  - "/dev/ttyUSB0:/dev/ttyUSB0"
+```
+Then check `ptt_serial_port` and `ptt_serial_line` (`RTS` or `DTR`) in the Server Config panel or `config.json`.
+
+**First login — Setup screen not appearing:**
+If `RADIO_TTY_ADMIN_PASS` is set in `.env`, the admin account is created headlessly at startup and the browser Setup screen is skipped. Check the backend logs for `Admin account created` to confirm, then navigate to the login screen directly.
+
+**WebSocket not connecting (status dot stays red):**
+nginx proxies `/ws` to the backend on port 8765. Confirm the backend container is healthy (`docker compose ps`) and that nothing between the browser and the server strips the `Upgrade: websocket` header. If you place a reverse proxy in front, ensure it forwards WebSocket upgrade headers.
 
 ---
 

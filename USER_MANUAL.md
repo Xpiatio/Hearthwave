@@ -6,6 +6,7 @@ This manual covers day-to-day operation of Radio-TTY as a GMRS family hub — a 
 
 ## Table of contents
 
+0. [Quick start](#0-quick-start)
 1. [Signing in](#1-signing-in)
 2. [The interface](#2-the-interface)
    - [2a. Mobile interface](#2a-mobile-interface)
@@ -30,6 +31,21 @@ This manual covers day-to-day operation of Radio-TTY as a GMRS family hub — a 
 21. [Server Config panel (admin)](#21-server-config-panel-admin)
 22. [Plugin system](#22-plugin-system)
 23. [FCC compliance and remote access](#23-fcc-compliance-and-remote-access)
+
+---
+
+## 0. Quick start
+
+New to Radio-TTY? Here is what happens in your first five minutes.
+
+1. **Open the app** — navigate to `http://<server-ip>` in any browser on your home network. Your administrator gives you this address.
+2. **Create your account** — on first launch the Setup screen appears. Enter your name and a password; optionally add your operator name, callsign, and location. Click **Create Account**.
+3. **Check station status** — the top bar shows **READY ●** (green dot) when the radio is connected and the server is listening. If it shows **OFFLINE**, the audio hardware may not be connected — contact your administrator.
+4. **Send a test message** — type anything in the message box and press **Enter**. The status bar briefly shows **Transmitting**, then returns to idle. Your message appears in chat as a `[TX]` entry visible to all connected users.
+5. **Confirm audio** — you should hear the TTS voice through the radio's speaker. If nothing plays, open **Settings → Audio** to verify the correct device is selected.
+6. **Invite family members** — go to your account chip (top-left) → **Admin → Users** → **New User** to create accounts for each household member. Each person opens the same URL on their own device and signs in.
+
+That's it. The rest of this manual covers each feature in detail when you're ready.
 
 ---
 
