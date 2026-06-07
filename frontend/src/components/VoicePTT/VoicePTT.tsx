@@ -132,11 +132,15 @@ export function VoicePTT({ disabled, onStart, onChunk, onEnd, onCancel }: VoiceP
           color={recording ? 'error' : 'inherit'}
           size="small"
           disabled={disabled}
+          aria-label={recording ? 'PTT — recording, release to transmit' : 'Push to talk'}
+          aria-pressed={recording}
           onMouseDown={startRecording}
           onMouseUp={() => stopRecording(false)}
           onMouseLeave={() => { if (recording) stopRecording(false); }}
           onTouchStart={(e) => { e.preventDefault(); startRecording(); }}
           onTouchEnd={(e) => { e.preventDefault(); stopRecording(false); }}
+          onKeyDown={(e) => { if (e.key === ' ' && !e.repeat) { e.preventDefault(); startRecording(); } }}
+          onKeyUp={(e) => { if (e.key === ' ') { e.preventDefault(); stopRecording(false); } }}
           sx={{ fontFamily: 'monospace', fontWeight: 700 }}
         >
           {recording ? 'PTT●' : 'PTT'}

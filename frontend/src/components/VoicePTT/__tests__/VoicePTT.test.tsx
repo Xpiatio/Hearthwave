@@ -103,7 +103,7 @@ describe('VoicePTT — rendering', () => {
   it('renders PTT button in idle state', () => {
     const props = defaultProps()
     render(<VoicePTT {...props} />)
-    expect(screen.getByRole('button', { name: /PTT/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /push to talk/i })).toBeInTheDocument()
     expect(screen.getByRole('button')).toHaveTextContent('PTT')
   })
 

@@ -356,6 +356,7 @@ export function MobileApp({
         value={tab}
         onChange={(_, v) => setTab(v)}
         showLabels
+        aria-label="Main tabs"
         sx={{ borderTop: 1, borderColor: 'divider', flexShrink: 0 }}
       >
         <BottomNavigationAction label="Chat" icon={<ChatIcon />} />
