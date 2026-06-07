@@ -345,15 +345,14 @@ The **Journals** panel lets you generate and save AI-written session summaries. 
 
 **Generating a journal:**
 1. Open the Journals panel at the end of a session.
-2. Click **GENERATE FROM SESSION**. The system sends the transcript and detected callsigns to Gemini.
-3. Review and edit the title and summary.
-4. Click **SAVE JOURNAL** to persist it on the server.
+2. Click **GENERATE FROM SESSION**. The system sends the session transcript and detected callsigns to Gemini.
+3. The journal is saved automatically — a **"Journal saved"** snackbar confirms it. The new entry appears at the top of the list on the left.
 
-**Viewing saved journals:** Saved journals appear in the list on the left. Click one to read it.
+**Viewing saved journals:** Click any entry in the list to read its title, summary, stations on air, and session transcript.
 
-**Deleting a journal:** Click the **delete icon** (🗑) next to a journal. Click once to arm the delete, click again to confirm.
+**Deleting a journal:** Click the **delete icon** (🗑) next to a journal in the list. Click once to arm the delete, click again to confirm.
 
-**Publishing to the family journal:** Click the **publish icon** (⬆) next to a saved journal to post it to the public family journal page. Click once to arm, click again to confirm. A snackbar confirms publication and shows the URL (`/journal`). See [Family journal](#12-family-journal-public-page).
+**Publishing to the family journal:** Select a saved journal, then click the **PUBLISH TO FAMILY JOURNAL** button that appears in the detail view. Click once to arm, click again to confirm. A snackbar confirms publication. You can also publish directly from the list using the **publish icon** (⬆) next to each entry. See [Family journal](#12-family-journal-public-page).
 
 ---
 
