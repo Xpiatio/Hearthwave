@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { ThemeProvider } from '@mui/material/styles'
 import { makeTheme } from '../../../theme'
 import { describe, it, expect, vi } from 'vitest'
+import { axe } from 'jest-axe'
 import { LoginScreen } from '../LoginScreen'
 
 function render(ui: React.ReactElement) {
@@ -191,6 +192,13 @@ describe('LoginScreen', () => {
       await waitFor(() => {
         expect(screen.getByText(/account locked until a short time/i)).toBeInTheDocument()
       })
+    })
+  })
+
+  describe('accessibility', () => {
+    it('has no violations in idle state', async () => {
+      const { container } = render(<LoginScreen onLogin={vi.fn()} />)
+      expect(await axe(container)).toHaveNoViolations()
     })
   })
 })
