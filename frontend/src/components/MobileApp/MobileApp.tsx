@@ -157,8 +157,6 @@ export interface MobileAppProps {
   onAddPending: (station: PendingStation) => void;
   onDismissPending: (callsign: string) => void;
   onDismissAllPending: () => void;
-  onEnrollCluster: (clusterLabel: string, callsign: string) => void;
-
   // Snackbars
   publishSnack: string | null;
   errorSnack: string | null;
@@ -237,7 +235,6 @@ export function MobileApp({
   onAddPending,
   onDismissPending,
   onDismissAllPending,
-  onEnrollCluster,
   publishSnack,
   errorSnack,
   onClosePublishSnack,
@@ -301,7 +298,6 @@ export function MobileApp({
             entries={messages}
             contacts={contacts}
             showCallsignChips={showCallsignChips}
-            onEnrollCluster={onEnrollCluster}
           />
           {!listenOnly && (
             <QuickMessages
