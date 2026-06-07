@@ -85,6 +85,7 @@ export const Spectrogram = forwardRef<SpectrogramHandle, Props>(
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
+      // canvas background is intentionally black for spectrogram contrast
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       imageDataRef.current = null;
@@ -163,6 +164,7 @@ export const Spectrogram = forwardRef<SpectrogramHandle, Props>(
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
+      // canvas background is intentionally black for spectrogram contrast
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }, []);
@@ -176,6 +178,7 @@ export const Spectrogram = forwardRef<SpectrogramHandle, Props>(
           width: 72,
           height: '100%',
           overflow: 'hidden',
+          // canvas background is intentionally black for spectrogram contrast
           bgcolor: '#000',
           borderRight: 1,
           borderColor: 'divider',
@@ -184,10 +187,11 @@ export const Spectrogram = forwardRef<SpectrogramHandle, Props>(
       >
         <canvas
           ref={canvasRef}
+          role="img"
           style={{ display: 'block', width: '100%', height: '100%' }}
           width={256}
           height={CANVAS_HEIGHT}
-          aria-label="Live audio spectrogram waterfall"
+          aria-label="Audio spectrogram display"
         />
       </Paper>
     );
