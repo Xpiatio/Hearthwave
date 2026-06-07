@@ -535,7 +535,13 @@ export function DesktopApp({
         onClose={onClosePublishSnack}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert onClose={onClosePublishSnack} severity="success" sx={{ width: '100%' }}>
+        <Alert
+          onClose={onClosePublishSnack}
+          severity="success"
+          sx={{ width: '100%' }}
+          aria-live="polite"
+          aria-atomic="true"
+        >
           {publishSnack}
         </Alert>
       </Snackbar>
@@ -546,7 +552,13 @@ export function DesktopApp({
         onClose={onCloseErrorSnack}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert onClose={onCloseErrorSnack} severity="error" sx={{ width: '100%' }}>
+        <Alert
+          onClose={onCloseErrorSnack}
+          severity="error"
+          sx={{ width: '100%' }}
+          aria-live="assertive"
+          aria-atomic="true"
+        >
           {errorSnack}
         </Alert>
       </Snackbar>
