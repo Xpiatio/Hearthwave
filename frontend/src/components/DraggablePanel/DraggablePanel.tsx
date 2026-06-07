@@ -43,6 +43,7 @@ export function DraggablePanel({ id, children, onMoveUp, onMoveDown }: Props) {
           {...attributes}
           {...listeners}
           role="button"
+          tabIndex={0}
           aria-label={`Drag to reorder ${id} panel`}
           sx={{
             flex: 1,
