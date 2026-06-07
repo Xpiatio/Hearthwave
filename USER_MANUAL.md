@@ -199,7 +199,7 @@ The status bar shows **Transmitting** while the radio is keyed and returns to **
 | Broadcast | `[TX] [Dad]: Hello everyone` |
 | Directed | `[TX] [Dad] → WSLZ233 — Dave: Hello` |
 
-**Targeting a specific station:** Use the **To** dropdown above the message box to address a transmission. The list is sorted alphabetically by callsign; **ALL — Broadcast** is pinned at the top. Your own callsign appears in the list so you can address yourself (useful for testing or self-checks). Selecting a contact pre-fills the callsign and name; the outgoing message is addressed to that station and the recipient label appears in chat for all users.
+**Targeting a specific station:** Use the **To** dropdown above the message box to address a transmission. The list is sorted alphabetically by callsign; **ALL — Broadcast** is pinned at the top. Your own callsign appears in the list so you can address yourself (useful for testing or self-checks). Selecting a contact pre-fills the callsign and name; the outgoing message is addressed to that station and the recipient label appears in chat for all users. When multiple family members share the same GMRS callsign, each appears as a separate entry (`WQZE123 — Alice`, `WQZE123 — Bob`) and the correct person is always selected regardless of order.
 
 **Placeholder tokens:** Include `{1}`, `{2}`, etc. as fill-in-the-blank slots. When you send, the system prompts you to fill in each before transmitting. Useful for templates: `Heading to {1} — ETA {2} minutes`.
 

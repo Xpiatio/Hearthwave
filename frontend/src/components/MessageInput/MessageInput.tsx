@@ -27,7 +27,7 @@ interface Props {
 export const MessageInput = forwardRef<MessageInputHandle, Props>(
   ({ transmitting, contacts, onSend, onStandaloneId }, ref) => {
     const [draft, setDraft] = useState('');
-    const [targetCallsign, setTargetCallsign] = useState('');
+    const [targetKey, setTargetKey] = useState('');
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     useImperativeHandle(ref, () => ({
@@ -40,7 +40,8 @@ export const MessageInput = forwardRef<MessageInputHandle, Props>(
     const sortedContacts = [...contacts].sort((a, b) =>
       a.callsign.toUpperCase().localeCompare(b.callsign.toUpperCase())
     );
-    const selectedContact = sortedContacts.find((c) => c.callsign === targetCallsign);
+    const contactKey = (c: Contact) => `${c.callsign}||${c.name ?? ''}`;
+    const selectedContact = sortedContacts.find((c) => contactKey(c) === targetKey);
 
     function handleSend() {
       const text = draft.trim();
@@ -51,7 +52,7 @@ export const MessageInput = forwardRef<MessageInputHandle, Props>(
         selectedContact ? (selectedContact.name ?? '') : '',
       );
       setDraft('');
-      setTargetCallsign('');
+      setTargetKey('');
       textareaRef.current?.focus();
     }
 
@@ -76,13 +77,13 @@ export const MessageInput = forwardRef<MessageInputHandle, Props>(
             <Select
               labelId="target-label"
               label="To"
-              value={targetCallsign}
-              onChange={(e) => setTargetCallsign(e.target.value)}
+              value={targetKey}
+              onChange={(e) => setTargetKey(e.target.value)}
               disabled={transmitting}
             >
               <MenuItem value="">ALL — Broadcast</MenuItem>
               {sortedContacts.map((c) => (
-                <MenuItem key={c.callsign} value={c.callsign}>
+                <MenuItem key={contactKey(c)} value={contactKey(c)}>
                   {c.callsign}{c.name ? ` — ${c.name}` : ''}
                 </MenuItem>
               ))}
