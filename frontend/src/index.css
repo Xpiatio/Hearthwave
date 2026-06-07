@@ -6,6 +6,6 @@
 
 /* dvh fallback for full-height app shell */
 .app-shell {
-  height: 100dvh;
   height: 100vh; /* fallback for browsers without dvh */
+  height: 100dvh;
 }

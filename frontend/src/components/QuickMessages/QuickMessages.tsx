@@ -154,6 +154,8 @@ export function QuickMessages({ operatorName, onSelect }: Props) {
     <Paper square elevation={0} sx={{ borderTop: 1, borderColor: 'divider', px: 1, py: 0.5 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
         <Box
+          role="group"
+          aria-label="Quick messages"
           sx={{
             display: 'flex',
             flex: 1,

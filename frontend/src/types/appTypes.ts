@@ -21,3 +21,12 @@ export interface PendingStation {
   name: string;
   location: string;
 }
+
+export interface PromptState {
+  tokens: string[];
+  originalText: string;
+  operator: string;
+  callsign: string;
+  targetCall: string;
+  targetName: string;
+}

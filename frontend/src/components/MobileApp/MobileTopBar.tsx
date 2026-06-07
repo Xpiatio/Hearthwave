@@ -108,6 +108,7 @@ export function MobileTopBar({
             {effectiveCallsign}
           </Typography>
           <Box
+            role="img"
             aria-label={connected ? 'connected' : 'disconnected'}
             sx={{
               width: 10,
@@ -150,23 +151,23 @@ export function MobileTopBar({
           <List disablePadding>
             <ListItem>
               <ListItemText primary="Dark mode" />
-              <Switch edge="end" checked={darkMode} onChange={onToggleDark} />
+              <Switch edge="end" checked={darkMode} onChange={onToggleDark} slotProps={{ input: { 'aria-label': 'Dark mode' } }} />
             </ListItem>
             <ListItem>
               <ListItemText primary="Listen only" />
-              <Switch edge="end" checked={listenOnly} onChange={onToggleListenOnly} />
+              <Switch edge="end" checked={listenOnly} onChange={onToggleListenOnly} slotProps={{ input: { 'aria-label': 'Listen only' } }} />
             </ListItem>
             <ListItem>
               <ListItemText primary="STT listening" />
-              <Switch edge="end" checked={sttListening} onChange={onToggleSttListening} />
+              <Switch edge="end" checked={sttListening} onChange={onToggleSttListening} slotProps={{ input: { 'aria-label': 'STT listening' } }} />
             </ListItem>
             <ListItem>
               <ListItemText primary="Read aloud" />
-              <Switch edge="end" checked={readAloud} onChange={onToggleReadAloud} />
+              <Switch edge="end" checked={readAloud} onChange={onToggleReadAloud} slotProps={{ input: { 'aria-label': 'Read aloud' } }} />
             </ListItem>
             <ListItem>
               <ListItemText primary="Notifications" />
-              <Switch edge="end" checked={notificationsEnabled} onChange={onToggleNotifications} />
+              <Switch edge="end" checked={notificationsEnabled} onChange={onToggleNotifications} slotProps={{ input: { 'aria-label': 'Notifications' } }} />
             </ListItem>
           </List>
           <Divider />

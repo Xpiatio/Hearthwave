@@ -356,6 +356,7 @@ export function MobileApp({
         value={tab}
         onChange={(_, v) => setTab(v)}
         showLabels
+        aria-label="Main tabs"
         sx={{ borderTop: 1, borderColor: 'divider', flexShrink: 0 }}
       >
         <BottomNavigationAction label="Chat" icon={<ChatIcon />} />
@@ -409,7 +410,7 @@ export function MobileApp({
         onClose={onClosePublishSnack}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert onClose={onClosePublishSnack} severity="success" sx={{ width: '100%' }}>
+        <Alert onClose={onClosePublishSnack} severity="success" aria-live="polite" aria-atomic="true" sx={{ width: '100%' }}>
           {publishSnack}
         </Alert>
       </Snackbar>
@@ -420,7 +421,7 @@ export function MobileApp({
         onClose={onCloseErrorSnack}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert onClose={onCloseErrorSnack} severity="error" sx={{ width: '100%' }}>
+        <Alert onClose={onCloseErrorSnack} severity="error" aria-live="assertive" aria-atomic="true" sx={{ width: '100%' }}>
           {errorSnack}
         </Alert>
       </Snackbar>
