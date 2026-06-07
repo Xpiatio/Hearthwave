@@ -195,6 +195,7 @@ describe('ServerConfigPanel', () => {
       ptt_serial_line: 'RTS',
       monitor_passthrough: true,
       attendance_enabled: true,
+      saved_phrases: [],
     })
     expect(props.onClose).toHaveBeenCalledTimes(1)
   })
