@@ -64,6 +64,7 @@ export interface StatusMsg {
   ptt_serial_line?: string;
   monitor_passthrough?: boolean;
   attendance_enabled?: boolean;
+  saved_phrases?: string[];
 }
 
 export interface ContactsMsg {

@@ -16,7 +16,13 @@ import {
   Slider,
   FormControlLabel,
   Switch,
+  List,
+  ListItem,
+  ListItemText,
+  IconButton,
 } from '@mui/material';
+import DeleteIcon from '@mui/icons-material/Delete';
+import AddIcon from '@mui/icons-material/Add';
 
 const VAD_MARKS = [
   { value: 0.1, label: '0.1' },
@@ -42,6 +48,7 @@ export interface ServerConfig {
   pttSerialLine: string;
   monitorPassthrough: boolean;
   attendanceEnabled: boolean;
+  savedPhrases: string[];
 }
 
 interface Props {
@@ -56,6 +63,7 @@ interface Props {
     ptt_serial_line: string;
     monitor_passthrough: boolean;
     attendance_enabled: boolean;
+    saved_phrases: string[];
   }) => void;
 }
 
@@ -67,6 +75,8 @@ export function ServerConfigPanel({ open, onClose, config, onSave }: Props) {
   const [pttSerialLine, setPttSerialLine] = useState('RTS');
   const [monitorPassthrough, setMonitorPassthrough] = useState(false);
   const [attendanceEnabled, setAttendanceEnabled] = useState(false);
+  const [savedPhrases, setSavedPhrases] = useState<string[]>([]);
+  const [newPhrase, setNewPhrase] = useState('');
 
   // Re-initialize only when dialog opens — prevent live WS updates from
   // resetting in-progress edits.
@@ -79,8 +89,21 @@ export function ServerConfigPanel({ open, onClose, config, onSave }: Props) {
     setPttSerialLine(config.pttSerialLine);
     setMonitorPassthrough(config.monitorPassthrough);
     setAttendanceEnabled(config.attendanceEnabled);
+    setSavedPhrases(config.savedPhrases ?? []);
+    setNewPhrase('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  function handleAddPhrase() {
+    const trimmed = newPhrase.trim();
+    if (!trimmed || savedPhrases.includes(trimmed)) return;
+    setSavedPhrases((prev) => [...prev, trimmed]);
+    setNewPhrase('');
+  }
+
+  function handleRemovePhrase(phrase: string) {
+    setSavedPhrases((prev) => prev.filter((p) => p !== phrase));
+  }
 
   function handleSave() {
     onSave({
@@ -91,6 +114,7 @@ export function ServerConfigPanel({ open, onClose, config, onSave }: Props) {
       ptt_serial_line: pttSerialLine,
       monitor_passthrough: monitorPassthrough,
       attendance_enabled: attendanceEnabled,
+      saved_phrases: savedPhrases,
     });
     onClose();
   }
@@ -138,6 +162,58 @@ export function ServerConfigPanel({ open, onClose, config, onSave }: Props) {
             <Typography variant="caption" sx={{ color: 'text.secondary' }}>
               Higher = less sensitive (fewer false triggers). Lower = more sensitive (catches faint speech).
             </Typography>
+          </Box>
+
+          <Box>
+            <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
+              Saved Phrases
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
+              Phrases added here are passed to Whisper as vocabulary hints to improve recognition accuracy.
+            </Typography>
+            {savedPhrases.length > 0 && (
+              <List dense disablePadding sx={{ mb: 1, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                {savedPhrases.map((phrase) => (
+                  <ListItem
+                    key={phrase}
+                    disableGutters
+                    sx={{ px: 1.5 }}
+                    secondaryAction={
+                      <IconButton
+                        edge="end"
+                        size="small"
+                        onClick={() => handleRemovePhrase(phrase)}
+                        aria-label={`Remove phrase "${phrase}"`}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    }
+                  >
+                    <ListItemText primary={phrase} slotProps={{ primary: { variant: 'body2' } }} />
+                  </ListItem>
+                ))}
+              </List>
+            )}
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <TextField
+                size="small"
+                placeholder="e.g. roger that"
+                value={newPhrase}
+                onChange={(e) => setNewPhrase(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddPhrase(); } }}
+                fullWidth
+              />
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={handleAddPhrase}
+                disabled={!newPhrase.trim() || savedPhrases.includes(newPhrase.trim())}
+                startIcon={<AddIcon />}
+                sx={{ whiteSpace: 'nowrap' }}
+              >
+                Add
+              </Button>
+            </Box>
           </Box>
 
           <Divider />

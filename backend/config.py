@@ -109,6 +109,13 @@ class ServerConfig(dict):
     def fuzzy_callsign(self) -> bool:
         return bool(self.get("fuzzy_callsign", False))
 
+    @property
+    def saved_phrases(self) -> list:
+        return list(self.get("saved_phrases", [
+            "break break", "copy that", "go ahead", "over", "10-4", "clear",
+            "QSL", "QSY", "QRZ", "standing by",
+        ]))
+
     # ---- radio / service -------------------------------------------------
 
     @property

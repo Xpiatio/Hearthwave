@@ -101,6 +101,7 @@ class STTWorker:
         model_cache: "ModelCache | None" = None,
         system_monitor_sink: str = "",
         rx_mode: str = "voice",
+        saved_phrases: "list[str] | tuple" = (),
         # Optional event callbacks — all called from the worker thread;
         # implementations must be thread-safe (e.g. loop.call_soon_threadsafe).
         on_audio_level: "Callable[[int], None] | None" = None,
@@ -116,6 +117,7 @@ class STTWorker:
         self.whisper_model_path = str(self._MODELS_DIR / whisper_model)
         self.vad_threshold = float(vad_threshold)
         self.rx_mode = rx_mode
+        self.saved_phrases: list[str] = list(saved_phrases)
         self._model_cache: ModelCache | None = model_cache
 
         self._on_audio_level = on_audio_level
@@ -178,6 +180,16 @@ class STTWorker:
                 await self._task
             except asyncio.CancelledError:
                 pass
+
+    def update_phrases(self, phrases: "list[str]") -> None:
+        """Update the Whisper initial_prompt without restarting the worker.
+
+        Safe to call from any thread — the GIL protects the string assignment
+        inside WhisperTranscriber.update_prompt().
+        """
+        self.saved_phrases = list(phrases)
+        if self._model_cache is not None:
+            self._model_cache.whisper.update_prompt(self.saved_phrases)
 
     # ------------------------------------------------------------------
     # Private helpers — emit helpers bridge thread → asyncio queue/callbacks
@@ -268,6 +280,7 @@ class STTWorker:
                     model_name=self.whisper_model_name,
                 )
             transcriber = self._model_cache.whisper
+            transcriber.update_prompt(self.saved_phrases)
             vad_iter = make_vad_iterator(
                 self._model_cache.vad_model,
                 sample_rate=self.SAMPLE_RATE,
