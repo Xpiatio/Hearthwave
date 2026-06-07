@@ -20,6 +20,10 @@ SINGLE_CHAR_RUN_RE = re.compile(r'\b(?:[A-Za-z0-9][\s\-.,]+){2,}[A-Za-z0-9]\b')
 
 def convert_phonetics(text):
     """Replace NATO phonetic words and spelled-out digits with letters/digits."""
+    # Normalize digit-suffixed radio phonetic forms: '9er', '9-er' → '9'.
+    # These contain a leading digit so the word-level regex below won't reach them.
+    text = re.sub(r'\b9-?er\b', '9', text, flags=re.IGNORECASE)
+
     # 'X-ray' is the only NATO word with an internal separator; normalize
     # 'X-ray' / 'X ray' to 'Xray' so the word-level regex treats it as a
     # single token instead of 'X' + 'ray'.

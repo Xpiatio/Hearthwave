@@ -24,6 +24,11 @@ class TestConvertPhonetics:
     def test_niner_means_nine(self):
         assert convert_phonetics("niner") == "9"
 
+    def test_9er_means_nine(self):
+        assert convert_phonetics("9er") == "9"
+        assert convert_phonetics("9-er") == "9"
+        assert convert_phonetics("9ER") == "9"
+
     def test_alfa_alternate_spelling(self):
         # 'Alfa' is the international spelling; the table accepts both.
         assert convert_phonetics("Alfa") == "A"
