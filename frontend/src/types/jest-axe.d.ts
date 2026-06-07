@@ -1,3 +1,5 @@
+/// <reference types="vitest/globals" />
+
 declare module 'jest-axe' {
   import type { AxeResults, RunOptions, Spec, ImpactValue } from 'axe-core'
 
@@ -31,9 +33,4 @@ declare module '@vitest/expect' {
   interface AsymmetricMatchersContaining {
     toHaveNoViolations(): void
   }
-}
-
-declare function expect(actual: unknown, message?: string): import('@vitest/expect').Assertion
-declare namespace expect {
-  function extend(matchers: Record<string, unknown>): void
 }
