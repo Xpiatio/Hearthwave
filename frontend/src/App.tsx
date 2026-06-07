@@ -793,6 +793,15 @@ export default function App() {
     }
   }
 
+  function handlePanelMove(fromIndex: number, toIndex: number) {
+    setPanelOrder((prev) => {
+      const next = arrayMove(prev, fromIndex, toIndex);
+      localStorage.setItem('radio_tty_panel_order', JSON.stringify(next));
+      send({ type: 'save_user_prefs', prefs: { panel_order: next } });
+      return next;
+    });
+  }
+
   const handleListJournals = useCallback(() => {
     send({ type: 'list_journals' });
   }, [send]);
@@ -1028,6 +1037,7 @@ export default function App() {
           onToggleContacts={handleToggleContacts}
           onToggleNcs={handleToggleNcs}
           onPanelDragEnd={handlePanelDragEnd}
+          onPanelMove={handlePanelMove}
           onClearChat={handleClearChat}
           spectroRef={spectroRef}
         />
