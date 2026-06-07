@@ -35,7 +35,7 @@ browser-based React frontend communicating over WebSocket.
 - **SKYWARN alerts** — live National Weather Service alerts pushed to all users
   with browser notification support
 - **Journals** — AI-assisted session summaries with full transcript export
-- **Contacts** — per-user contact book with FCC license lookup
+- **Contacts** — shared contact book with FCC license lookup; multiple family members sharing the same GMRS callsign are stored as separate records and addressed individually by name
 - **Spectrogram** — real-time frequency display (voice or full range, viridis or
   grayscale colormaps)
 - **Attendance panel** — automatic log of every station heard this session
