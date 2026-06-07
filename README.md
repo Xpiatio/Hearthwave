@@ -1,11 +1,12 @@
 # Radio-TTY
 
-A GMRS family hub that turns a home server or x86 mini PC into a shared radio
-operating station for every member of your household. Incoming transmissions are
-transcribed by speech-to-text and streamed to all connected devices; outgoing
-messages are synthesized to speech, automatically wrapped with the FCC station
-callsign (§95.1751), and transmitted over the air. Each family member signs in
-from their own phone, tablet, or laptop — no app install required.
+A GMRS hub that turns a home server or x86 mini PC into a shared radio
+operating station for every member of your household or neighborhood watch group.
+Incoming transmissions are transcribed by speech-to-text and streamed to all
+connected devices; outgoing messages are synthesized to speech, automatically
+wrapped with the FCC station callsign (§95.1751), and transmitted over the air.
+Each family member or watch volunteer signs in from their own phone, tablet, or
+laptop — no app install required.
 
 Built-in plugins add Net Control Station (NCS) mode with a live check-in roster
 and six traffic priority levels, SKYWARN weather alerts sourced directly from the
@@ -17,6 +18,16 @@ Radio-TTY is a fork of GMRS-TTY that replaces the desktop PySide6 UI with a
 browser-based React frontend communicating over WebSocket.
 
 > **Latest release:** v2.4.1
+
+## Who uses it
+
+- **Families** — one GMRS license covers the whole household. Each person gets
+  their own account with their own voice and preferences. Kids on tablets, parents
+  on laptops, grandparents with large-touch mode — everyone on the same channel.
+- **Neighborhood watch groups** — deploy Radio-TTY as the watch's base station.
+  Assign listen-only accounts to patrol volunteers and TX-capable accounts to
+  designated net control operators. The NCS roster tracks who is active on each
+  patrol; SKYWARN alerts auto-announce over the air when severe weather approaches.
 
 ## Features
 

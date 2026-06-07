@@ -2,7 +2,7 @@
 
 > **Version:** v2.4.1
 
-This manual covers day-to-day operation of Radio-TTY as a GMRS family hub — a shared radio operating station where every household member connects from their own device. For installation and server setup, see [README.md](README.md).
+This manual covers day-to-day operation of Radio-TTY as a GMRS family hub or neighborhood watch base station — a shared radio operating station where every household member or watch volunteer connects from their own device. For installation and server setup, see [README.md](README.md).
 
 ---
 
@@ -717,6 +717,7 @@ The **Server Config** panel provides technical server-side settings, separate fr
 - **Session locked out?** Wait 15 minutes or ask an admin to use **Admin → Users → Reset lockout**.
 - **On a phone or tablet:** The app automatically shows the mobile interface — bottom tabs for Chat, NCS, Journals, Status, and Settings. Tap the ≡ menu for dark mode and your account.
 - **NCS traffic levels:** Use **IN-n-Out** for stations who only have a moment; use **Short Term** for those who can stay a few minutes but need to leave soon. Both are tracked in the roster and included in the end-of-net journal.
+- **Neighborhood watch groups:** Create one account per volunteer. Assign **listen-only** mode to members who should monitor but not transmit, and reserve TX-capable accounts for designated net control operators. The NCS roster and SKYWARN alerts work the same way they do for family nets — the watch's patrol log is automatically saved as a session journal at end of net.
 
 ---
 
