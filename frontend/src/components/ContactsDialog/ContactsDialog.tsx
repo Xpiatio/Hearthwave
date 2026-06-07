@@ -338,13 +338,13 @@ export function ContactsDialog({
             <Table size="small" stickyHeader>
               <TableHead>
                 <TableRow>
-                  <TableCell>Callsign</TableCell>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Location</TableCell>
-                  <TableCell>GMRS</TableCell>
-                  <TableCell>HAM</TableCell>
-                  <TableCell align="center">Verified</TableCell>
-                  <TableCell align="right">Actions</TableCell>
+                  <TableCell scope="col">Callsign</TableCell>
+                  <TableCell scope="col">Name</TableCell>
+                  <TableCell scope="col">Location</TableCell>
+                  <TableCell scope="col">GMRS</TableCell>
+                  <TableCell scope="col">HAM</TableCell>
+                  <TableCell scope="col" align="center">Verified</TableCell>
+                  <TableCell scope="col" align="right">Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
