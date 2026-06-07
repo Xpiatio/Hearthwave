@@ -55,8 +55,8 @@ function CallsignsTable({ rows }: { rows: Array<{ callsign: string; location: st
       <Table size="small">
         <TableHead>
           <TableRow>
-            <TableCell sx={{ fontWeight: 700 }}>Callsign</TableCell>
-            <TableCell sx={{ fontWeight: 700 }}>Location</TableCell>
+            <TableCell scope="col" sx={{ fontWeight: 700 }}>Callsign</TableCell>
+            <TableCell scope="col" sx={{ fontWeight: 700 }}>Location</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -184,8 +184,18 @@ export function JournalPanel({
           flexShrink: 0,
         }}
       >
-        <Box sx={{ px: 1.5, py: 1, borderBottom: 1, borderColor: 'divider' }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>JOURNALS</Typography>
+        <Box
+          sx={{
+            background: 'linear-gradient(135deg, #1A3A5C 0%, #1E4976 100%)',
+            px: 1.5,
+            py: 1,
+            borderBottom: 1,
+            borderColor: 'divider',
+          }}
+        >
+          <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#F9FAFB' }}>
+            JOURNALS
+          </Typography>
         </Box>
 
         <Box sx={{ flex: 1, overflowY: 'auto' }}>
@@ -194,7 +204,7 @@ export function JournalPanel({
               No saved journals.
             </Typography>
           ) : (
-            <List dense disablePadding>
+            <List dense disablePadding aria-label="Journal entries">
               {journals.map((j) => (
                 <ListItem
                   key={j._file}

@@ -208,6 +208,8 @@ export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogo
                     key={e}
                     size="small"
                     onClick={() => setAvatarEmoji(e)}
+                    aria-label={`Select avatar ${e}`}
+                    aria-pressed={avatarEmoji === e}
                     sx={{
                       border: 2,
                       borderColor: avatarEmoji === e ? 'primary.main' : 'transparent',

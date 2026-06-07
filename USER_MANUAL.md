@@ -36,6 +36,10 @@ This manual covers day-to-day operation of Radio-TTY as a GMRS family hub — a 
 
 ## 0. Quick start
 
+> **UI note:** The interface uses a navy/blue design. Dark mode is enabled by
+> default. Toggle between dark and light mode from Settings (hamburger menu on
+> mobile, or the account menu on desktop).
+
 New to Radio-TTY? Here is what happens in your first five minutes.
 
 1. **Open the app** — navigate to `http://<server-ip>` in any browser on your home network. Your administrator gives you this address.
@@ -80,95 +84,73 @@ If the server is unreachable, the status bar shows **OFFLINE** in amber. Refresh
 
 ## 2. The interface
 
+The Radio-TTY interface adapts to your screen size — desktop and mobile use
+different layouts but share the same feature set.
+
+### Desktop layout
+
+The desktop shows all panels simultaneously:
+
 ```
-┌────────────────────────────────────────────────────────────────────────────────┐
-│ [👤 Dad ▾] │ STATIONS  JOURNAL  CONTACTS  WATERFALL [NCS MODE] │ STATUS: READY ●│  ← Top bar
-│            [GMRS] [LISTENING] [TX ENABLED] [READ ALOUD] [NOTIFY] │ [🗑]  [☀/🌙] │
-├────────────────────────────────────────────────────────────────────────────────┤
-│  [Pending stations bar — amber chips, hidden when empty]                       │
-├────────────────────────────────────────────────────────────────────────────────┤
-│                │                                                                │
-│  Spectrogram   │           Chat display                                         │
-│  (waterfall)   │                                                                │
-│                │  [RX] WQZX999 — Dave > Hello this is Bravo                    │
-│                │  [TX] Dad > Good morning                                       │
-│                │                                                                │
-├────────────────────────────────────────────────────────────────────────────────┤
-│  Status: Radio connected · Volume OK · Channel clear                           │
-├────────────────────────────────────────────────────────────────────────────────┤
-│  [Standing by] [QSL] [Copy that] [QSY to channel {N}]  ⚙                      │  ← Quick messages
-├────────────────────────────────────────────────────────────────────────────────┤
-│  [THIS IS]  Message [_________________________] [SEND ↵]                       │
-└────────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────── TopBar ─────────────────────────────┐
+│ [≡ panels]  Callsign ●  [PTT]  [ABORT TX]  [Spectrogram]  [👤] │
+├───────────────┬──────────────────────────┬───────────────────────┤
+│ Draggable     │  Chat Display            │  Side panels          │
+│ panels        │  (scrollable RX/TX log)  │  NCS / Journals /     │
+│               │                          │  Attendance           │
+├───────────────┴──────────────────────────┴───────────────────────┤
+│ Status · Config · Pending Stations · Quick Messages              │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-**Account chip** (e.g. *👤 Dad*) — click to open a menu with:
-- **Edit Profile** — change operator name, call sign, location, avatar emoji, TTS voice, speech speed
-- **Change Password**
-- **Settings** — toggle your personal settings panel
-- **Admin** — toggle the Admin panel (admin accounts only)
-- **Sign Out**
+- **TopBar** — navy gradient bar. Shows your callsign, a green dot when
+  connected, the PTT button, the ABORT TX button, the spectrogram toggle, and
+  your account chip.
+- **Chat Display** — scrollable log of all RX (received) and TX (sent)
+  messages. Received messages appear with a green `[RX]` label; sent messages
+  with a blue `[TX]` label.
+- **Draggable panels** — NCS, Journals, Attendance, and any installed plugins.
+  Drag the panel handle to reorder. Each panel has a coloured gradient header:
+  NCS and Admin use a blue gradient; Config, Journals, and Attendance use a
+  darker navy gradient.
+- **StatusRow** — bottom bar showing radio status (READY / OFFLINE /
+  TRANSMITTING), audio device, and connection count.
 
-**Panel toggles** (highlighted when the panel is open):
-- **STATIONS** — session attendance panel
-- **JOURNAL** — journals panel
-- **CONTACTS** — shared contacts list
-- **WATERFALL** — spectrogram waterfall (preference saved per browser)
-- **NCS MODE** — Net Control Station panel (admin accounts only; red when active)
+### Colour language
 
-**Station status** (center) — current state (READY, Transmitting, etc.) with an FCC online indicator dot.
-
-**Radio controls** (right side of top bar):
-- **GMRS / FRS** — current service mode; click to toggle
-- **LISTENING / LISTEN** — STT active; click to pause automatic transcription
-- **TX ENABLED / LISTEN ONLY** — transmit status; click to toggle listen-only for your account
-- **READ ALOUD** — when active (blue), incoming RX transcripts are spoken aloud through your browser audio
-- **NOTIFY** — when active (blue), browser notifications fire for incoming RX and SKYWARN alerts while the tab is in the background (browser permission required on first enable)
-
-**UI utilities:**
-- **Trash icon** — clear the chat log
-- **Sun/moon icon** — toggle dark/light mode
+| Colour | Meaning |
+|---|---|
+| Green dot / indicator | Radio connected and ready |
+| Green `[RX]` label | Incoming transmission |
+| Blue button / highlight | Primary action (send, save, confirm) |
+| Amber / warning | Degraded state (connection issues) |
+| Red / error | Error or emergency state |
 
 ---
 
 ## 2a. Mobile interface
 
-On smartphones and tablets, Radio-TTY automatically switches to a touch-optimized layout after sign-in. No setting is required — the app detects touch devices and applies the mobile interface for the duration of that session.
+On phones and narrow tablets Radio-TTY shows a single-column view:
 
 ```
-┌─────────────────────────┐
-│ ≡  W1TEST  ●    [PTT]   │  ← Top bar
-├─────────────────────────┤
-│ [Pending stations bar]  │  (hidden when empty)
-├─────────────────────────┤
-│                         │
-│   Chat / Stations /     │
-│   Journal content       │
-│                         │
-├─────────────────────────┤
-│  Chat   Stations Journal │  ← Bottom navigation
-└─────────────────────────┘
+┌────────────────── TopBar (sticky) ──────────────────┐
+│ [≡]  Callsign ●        [PTT]  [ABORT TX]            │
+└──────────────────────────────────────────────────────┘
+│                                                      │
+│              Chat Display (scrollable)               │
+│                                                      │
+└──────────────────────────────────────────────────────┘
+┌────────── Bottom Navigation ─────────────────────────┐
+│ Chat  │  NCS  │  Journals  │  Status  │  Settings    │
+└──────────────────────────────────────────────────────┘
 ```
 
-**Top bar:**
-- **≡ Menu** — opens a side drawer with toggle switches (Dark mode, Listen only, STT listening, Read aloud, Notifications) and your account menu (Edit Profile, Change Password, Admin, Sign Out)
-- **Station callsign** — the current station callsign with a color dot: green = connected, red = offline
-- **PTT** — push-and-hold to transmit via your device microphone (Voice PTT); hidden in listen-only mode
-
-**Bottom navigation tabs:**
-| Tab | Contents |
-|-----|----------|
-| **Chat** | Message log, quick messages bar, and message input (send by text) |
-| **Stations** | Session attendance list |
-| **Journal** | Session journal generation and log |
-
-**Differences from desktop:**
-- The spectrogram waterfall is not shown on mobile (CPU/battery considerations)
-- Panel drag-and-drop reordering is not available on mobile
-- NCS Mode is not accessible from mobile
-- All other features — TX, RX, contacts, journals, dark mode, notifications, Voice PTT — work identically
-
-> **Tip:** If you sign in on a touch device and want the full desktop layout, open the browser's desktop mode (site settings or "Request desktop site") and reload the page.
+- Tap **[≡]** (top-left) to open the settings drawer: dark mode, listen-only,
+  STT, read-aloud, notifications.
+- The **PTT** button and **ABORT TX** button are always visible in the top bar.
+- Bottom navigation switches between Chat, NCS, Journals, Status, and Settings
+  views.
+- The account menu is accessible from the settings drawer.
 
 ---
 
@@ -430,6 +412,16 @@ The **callsign**, **name**, **location**, **default TTS voice**, **Gemini API ke
 
 The **Default TTS Voice** dropdown sets which Piper voice the station uses when a user has not chosen a personal voice. Click the **mic icon** next to the dropdown to preview the selected voice without keying the radio.
 
+### Dark / Light mode
+
+Toggle between dark mode (navy backgrounds, light text) and light mode
+(navy-tinted light backgrounds, dark text) from:
+
+- **Mobile:** Settings drawer (hamburger menu → Dark mode switch)
+- **Desktop:** Account menu → dark mode toggle
+
+The preference is saved per-user on the server and restored on next login.
+
 ---
 
 ## 14. Your account
@@ -647,28 +639,27 @@ You do not need to type phonetics manually.
 
 ## 19. Voice PTT (browser microphone)
 
-Voice PTT lets you speak directly into your browser microphone and transmit through the radio, without typing.
+The PTT button captures audio from your browser microphone and transmits it
+over the radio.
 
-A **PTT** (push-to-talk) button appears in the top bar area when TX is enabled for your account. Listen-only mode hides the PTT button along with other TX controls.
+**To use Voice PTT:**
 
-### Using Voice PTT
+1. Click and hold the **PTT** button (top bar) — or press and hold the **Space
+   bar** anywhere on the page.
+2. Speak your message. A pre-roll buffer captures the first ~200 ms before you
+   press, so the first syllable is never clipped.
+3. Release the button or Space bar. The audio is sent to the server, synthesised
+   to speech, and transmitted.
 
-1. Press and hold the **PTT** button.
-2. Speak into your browser microphone.
-3. Release to transmit. The server keys PTT, plays your audio through the radio's output device, and Whisper transcribes it.
-4. The transcript appears in chat as a **[TX]** entry (labeled with your name) visible to all connected users.
+**Keyboard PTT:** The Space bar triggers PTT when focus is not inside a text
+field. This lets you keep your hands on a keyboard during a net.
 
-> **Self-echo prevention:** The TTS voice playing through the radio output does not trigger the station's own STT listener. The system waits for the browser to signal that audio playback is complete before resuming transcription, preventing the station from transcribing its own transmissions.
-
-### Limits and behavior
-
-| Parameter | Value |
-|-----------|-------|
-| Maximum recording length | 120 seconds |
-| Minimum recording length | ~300 ms (shorter recordings are rejected) |
-| Audio format sent to server | Raw PCM, 16 kHz, chunked base64 |
-
-If the radio's output device runs at a sample rate other than 16 kHz, the server resamples automatically before playback.
+**Notes:**
+- The PTT button shows **PTT●** (with a dot) while recording.
+- The browser will ask for microphone permission on first use.
+- If the channel is busy (another user is transmitting), PTT is disabled until
+  the channel clears.
+- Listen-only mode disables PTT entirely.
 
 ---
 
@@ -718,11 +709,11 @@ The **Server Config** panel provides technical server-side settings, separate fr
 - **GMRS family licences:** One callsign covers your whole household. Add each person as a separate contact with the same callsign — only the name needs to differ. In NCS mode, each family member checks in as their own entry in the roster.
 - **Multiple users:** Each family member signs into their own account. All clients see the same chat in real time — both received audio (RX) and outgoing transmissions (TX) — but each person's profanity filter, listen-only mode, and display preferences are independent.
 - **Across devices:** Your settings follow you. Sign in on your phone and get the same preferences as your tablet.
-- **Dark environments:** Click the sun/moon icon in the top bar, or your browser's dark mode preference is respected automatically on the public `/journal` page.
+- **Dark environments:** Toggle dark/light mode from the account menu (desktop) or the hamburger settings drawer (mobile). The public `/journal` page automatically adapts to your browser's dark mode preference.
 - **Slow or noisy transcription:** Adjust the VAD threshold in the **Server Config** panel (admin). Lower values (e.g. 0.3) are more sensitive; higher (e.g. 0.7) require a stronger signal. The setting can also be changed directly in `config.json` (`vad_threshold`).
 - **FCC lookups not working:** The online indicator (dot in the top bar) shows internet connectivity. If it is gray, FCC verification is unavailable until connectivity is restored.
 - **Session locked out?** Wait 15 minutes or ask an admin to use **Admin → Users → Reset lockout**.
-- **On a phone or tablet:** The app automatically shows the mobile interface — bottom tabs for Chat, Stations, and Journal. Tap the ≡ menu for settings and your account.
+- **On a phone or tablet:** The app automatically shows the mobile interface — bottom tabs for Chat, NCS, Journals, Status, and Settings. Tap the ≡ menu for dark mode and your account.
 - **NCS traffic levels:** Use **IN-n-Out** for stations who only have a moment; use **Short Term** for those who can stay a few minutes but need to leave soon. Both are tracked in the roster and included in the end-of-net journal.
 
 ---
