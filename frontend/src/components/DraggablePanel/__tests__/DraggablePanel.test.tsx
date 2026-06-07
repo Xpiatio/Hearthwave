@@ -1,3 +1,4 @@
+import React from 'react'
 import { render as rtlRender, screen } from '@testing-library/react'
 import { ThemeProvider } from '@mui/material/styles'
 import { makeTheme } from '../../../theme'

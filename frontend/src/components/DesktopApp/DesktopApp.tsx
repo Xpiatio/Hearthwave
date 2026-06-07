@@ -1,7 +1,7 @@
 import { useRef } from 'react';
-import { DndContext } from '@dnd-kit/core';
+import { DndContext, useSensors, useSensor, PointerSensor, KeyboardSensor } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { SortableContext, verticalListSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { DraggablePanel } from '../DraggablePanel/DraggablePanel';
 import { Box, Snackbar, Alert } from '@mui/material';
 import { TopBar } from '../TopBar/TopBar';
@@ -176,6 +176,7 @@ export interface DesktopAppProps {
   onToggleServerConfig: () => void;
   onToggleNcs: () => void;
   onPanelDragEnd: (event: DragEndEvent) => void;
+  onPanelMove: (fromIndex: number, toIndex: number) => void;
 
   // Contacts dialog
   pendingPrefilledCallsign: string | undefined;
@@ -296,6 +297,7 @@ export function DesktopApp({
   onToggleServerConfig,
   onToggleNcs,
   onPanelDragEnd,
+  onPanelMove,
   pendingPrefilledCallsign,
   pendingPrefilledName,
   pendingPrefilledLocation,
@@ -316,6 +318,10 @@ export function DesktopApp({
   onCloseErrorSnack,
 }: DesktopAppProps) {
   const messageInputRef = useRef<MessageInputHandle>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
   return (
     <Box
@@ -372,12 +378,17 @@ export function DesktopApp({
         onTxAbort={onTxAbort}
       />
 
-      <DndContext onDragEnd={onPanelDragEnd}>
+      <DndContext sensors={sensors} onDragEnd={onPanelDragEnd}>
         <SortableContext items={panelOrder} strategy={verticalListSortingStrategy}>
-          {panelOrder.map((id) => {
+          {panelOrder.map((id, index) => {
             if (id === 'config' && showConfig) {
               return (
-                <DraggablePanel key="config" id="config">
+                <DraggablePanel
+                  key="config"
+                  id="config"
+                  onMoveUp={index > 0 ? () => onPanelMove(index, index - 1) : undefined}
+                  onMoveDown={index < panelOrder.length - 1 ? () => onPanelMove(index, index + 1) : undefined}
+                >
                   <ConfigPanel
                     filterProfanity={filterProfanity}
                     fuzzyCallsign={fuzzyCallsign}
@@ -400,7 +411,12 @@ export function DesktopApp({
             }
             if (id === 'attendance' && showAttendance) {
               return (
-                <DraggablePanel key="attendance" id="attendance">
+                <DraggablePanel
+                  key="attendance"
+                  id="attendance"
+                  onMoveUp={index > 0 ? () => onPanelMove(index, index - 1) : undefined}
+                  onMoveDown={index < panelOrder.length - 1 ? () => onPanelMove(index, index + 1) : undefined}
+                >
                   <AttendancePanel
                     stations={attendanceStations}
                     onClear={onClearAttendance}
@@ -410,7 +426,12 @@ export function DesktopApp({
             }
             if (id === 'journal' && showJournal) {
               return (
-                <DraggablePanel key="journal" id="journal">
+                <DraggablePanel
+                  key="journal"
+                  id="journal"
+                  onMoveUp={index > 0 ? () => onPanelMove(index, index - 1) : undefined}
+                  onMoveDown={index < panelOrder.length - 1 ? () => onPanelMove(index, index + 1) : undefined}
+                >
                   <JournalPanel
                     journals={journals}
                     pendingResult={journalResult}
@@ -431,7 +452,12 @@ export function DesktopApp({
             }
             if (id === 'ncs' && showNcs) {
               return (
-                <DraggablePanel key="ncs" id="ncs">
+                <DraggablePanel
+                  key="ncs"
+                  id="ncs"
+                  onMoveUp={index > 0 ? () => onPanelMove(index, index - 1) : undefined}
+                  onMoveDown={index < panelOrder.length - 1 ? () => onPanelMove(index, index + 1) : undefined}
+                >
                   <NCSPanel
                     send={send}
                     lastMessage={lastMessage}

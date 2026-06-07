@@ -4,6 +4,7 @@ import { makeTheme } from '../../../theme'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { TopBar } from '../TopBar'
 import type { UserProfile, VoiceOption } from '../../../types/ws'
+import { axe } from 'jest-axe'
 
 // VoicePTT uses AudioContext / MediaDevices — mock it at module level
 vi.mock('../../VoicePTT/VoicePTT', () => ({
@@ -348,6 +349,14 @@ describe('TopBar', () => {
       render(<TopBar {...makeProps({ showJournal: true })} />)
       const btn = screen.getByRole('button', { name: /toggle journal panel/i })
       expect(btn).toHaveAttribute('aria-pressed', 'true')
+    })
+  })
+
+  describe('accessibility', () => {
+    it('has no violations in connected state', async () => {
+      const { container } = render(<TopBar {...makeProps()} />)
+      const results = await axe(container)
+      expect(results.violations).toHaveLength(0)
     })
   })
 })

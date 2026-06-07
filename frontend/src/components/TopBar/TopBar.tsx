@@ -228,6 +228,7 @@ export function TopBar({
             <Tooltip title={isOnline ? 'FCC lookup: online' : 'FCC lookup: offline'}>
               <Box
                 component="span"
+                role="img"
                 sx={{
                   width: 10,
                   height: 10,
