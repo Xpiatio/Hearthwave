@@ -129,6 +129,7 @@ export interface DesktopAppProps {
     ptt_serial_line: string;
     monitor_passthrough: boolean;
     attendance_enabled: boolean;
+    saved_phrases: string[];
   }) => void;
   onPreviewVoice: (voiceId: string) => void;
   onSaveTtsPrefs: (prefs: { voice: string; length_scale: number }) => void;

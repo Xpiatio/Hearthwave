@@ -922,6 +922,7 @@ def _build_status() -> dict:
         "ptt_serial_line": (_config.ptt_serial_line if _config else "RTS"),
         "monitor_passthrough": bool(_config.monitor_passthrough) if _config else False,
         "attendance_enabled": bool(_config.attendance_enabled) if _config else False,
+        "saved_phrases": _config.saved_phrases if _config else [],
     }
 
 
@@ -1128,6 +1129,7 @@ async def _lifespan(app: FastAPI):
         vad_threshold=_config.vad_threshold,
         system_monitor_sink=_config.system_monitor_sink,
         rx_mode=_config.rx_mode,
+        saved_phrases=_config.saved_phrases,
         on_audio_level=_on_stt_audio_level,
         on_audio_chunk=_audio_chunk_fanout,
         on_capture_event=_on_stt_capture_event,
@@ -1266,6 +1268,7 @@ async def _ws_handle_set_admin_config(ws: WebSocket, data: dict, state: "Connect
             vad_threshold=_config.vad_threshold,
             system_monitor_sink=_config.system_monitor_sink,
             rx_mode=_config.rx_mode,
+            saved_phrases=_config.saved_phrases,
             on_audio_level=_on_stt_audio_level,
             on_audio_chunk=_audio_chunk_fanout,
             on_capture_event=_on_stt_capture_event,
@@ -1322,6 +1325,15 @@ async def _ws_handle_set_server_config(ws: WebSocket, data: dict, state: "Connec
     if "attendance_enabled" in data:
         _config.attendance_enabled = bool(data["attendance_enabled"])
 
+    if "saved_phrases" in data:
+        phrases = data["saved_phrases"]
+        if isinstance(phrases, list) and all(isinstance(p, str) for p in phrases):
+            _config["saved_phrases"] = [
+                p.strip()[:120] for p in phrases[:50] if p.strip()
+            ]
+            if _stt_worker is not None:
+                _stt_worker.update_phrases(_config.saved_phrases)
+
     _config.save()
     await _manager.broadcast(_build_status())
 
@@ -1335,6 +1347,7 @@ async def _ws_handle_set_server_config(ws: WebSocket, data: dict, state: "Connec
             vad_threshold=_config.vad_threshold,
             system_monitor_sink=_config.system_monitor_sink,
             rx_mode=_config.rx_mode,
+            saved_phrases=_config.saved_phrases,
             on_audio_level=_on_stt_audio_level,
             on_audio_chunk=_audio_chunk_fanout,
             on_capture_event=_on_stt_capture_event,
@@ -1837,6 +1850,7 @@ async def websocket_endpoint(
                     vad_threshold=_config.vad_threshold,
                     system_monitor_sink=new_sink,
                     rx_mode=_config.rx_mode,
+                    saved_phrases=_config.saved_phrases,
                     on_audio_level=_on_stt_audio_level,
                     on_audio_chunk=_audio_chunk_fanout,
                     on_capture_event=_on_stt_capture_event,

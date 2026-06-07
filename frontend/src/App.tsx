@@ -108,6 +108,7 @@ export default function App() {
     pttSerialLine: 'RTS',
     monitorPassthrough: false,
     attendanceEnabled: false,
+    savedPhrases: [],
   });
 
   // Panel order — initialized from localStorage to avoid FOUC; overridden by profile on load
@@ -329,6 +330,7 @@ export default function App() {
           pttSerialLine: msg.ptt_serial_line ?? prev.pttSerialLine,
           monitorPassthrough: msg.monitor_passthrough ?? prev.monitorPassthrough,
           attendanceEnabled: msg.attendance_enabled ?? prev.attendanceEnabled,
+          savedPhrases: msg.saved_phrases ?? prev.savedPhrases,
         }));
         break;
 
@@ -701,6 +703,7 @@ export default function App() {
     ptt_serial_line: string;
     monitor_passthrough: boolean;
     attendance_enabled: boolean;
+    saved_phrases: string[];
   }) {
     send({ type: 'set_server_config', ...values });
   }

@@ -12,11 +12,12 @@ class WhisperTranscriber:
     lines between transmissions.
     """
 
-    def __init__(self, model):
+    def __init__(self, model, saved_phrases=()):
         self.model = model
+        self.initial_prompt = self._build_prompt(saved_phrases)
 
     @classmethod
-    def load(cls, model_path):
+    def load(cls, model_path, saved_phrases=()):
         from faster_whisper import WhisperModel
 
         # Leave at least one core free for the asyncio event loop.
@@ -29,7 +30,8 @@ class WhisperTranscriber:
                 device="cpu",
                 compute_type="int8",
                 cpu_threads=cpu_threads,
-            )
+            ),
+            saved_phrases=saved_phrases,
         )
 
     # Segments where Whisper's own confidence that speech is present falls
@@ -42,6 +44,17 @@ class WhisperTranscriber:
     # token confidence and are almost always noise hallucinations.
     _AVG_LOGPROB_THRESHOLD = -1.0
 
+    @staticmethod
+    def _build_prompt(phrases) -> str:
+        base = "GMRS radio."
+        if phrases:
+            return f"{base} Phrases: {', '.join(phrases)}."
+        return base
+
+    def update_prompt(self, saved_phrases=()) -> None:
+        """Rebuild the initial_prompt from a new phrase list (thread-safe via GIL)."""
+        self.initial_prompt = self._build_prompt(saved_phrases)
+
     def transcribe(self, audio):
         """Return transcribed text, or None when the output is empty or
         matches a known Whisper-on-silence hallucination."""
@@ -52,10 +65,7 @@ class WhisperTranscriber:
             vad_filter=True,
             # Don't let a hallucination in one segment condition the next.
             condition_on_previous_text=False,
-            initial_prompt=(
-                "GMRS radio. Callsigns like WSLZ233, KAB9585, WRJG368, WSAC909. "
-                "Phrases: break break, copy that, go ahead, over, 10-4, clear."
-            ),
+            initial_prompt=self.initial_prompt,
         )
         kept = []
         for seg in segments:

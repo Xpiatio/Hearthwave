@@ -344,3 +344,75 @@ class TestAddContact:
             assert msg2["type"] == "contacts"
             assert any(c["callsign"] == "W9BAR" for c in msg1["contacts"])
             assert any(c["callsign"] == "W9BAR" for c in msg2["contacts"])
+
+
+# ---------------------------------------------------------------------------
+# set_server_config — saved_phrases
+# ---------------------------------------------------------------------------
+
+class TestSetServerConfigSavedPhrases:
+    """Validate saved_phrases handling in set_server_config.
+
+    _config.save() is patched throughout because /data is not writable in the
+    test environment.
+    """
+
+    def _send_and_get_status(self, ws, phrases):
+        with patch("backend.config.ServerConfig.save"):
+            ws.send_json({"type": "set_server_config", "saved_phrases": phrases})
+            return ws.receive_json()
+
+    def test_valid_phrases_reflected_in_status(self, client):
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            msg = self._send_and_get_status(ws, ["roger that", "QSL"])
+            assert msg["type"] == "status"
+            assert msg["saved_phrases"] == ["roger that", "QSL"]
+
+    def test_whitespace_only_entries_filtered_out(self, client):
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            msg = self._send_and_get_status(ws, ["  ", "over", ""])
+            assert msg["saved_phrases"] == ["over"]
+
+    def test_phrases_trimmed(self, client):
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            msg = self._send_and_get_status(ws, ["  roger that  "])
+            assert msg["saved_phrases"] == ["roger that"]
+
+    def test_non_list_payload_ignored(self, client):
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            initial = self._send_and_get_status(ws, ["baseline"])
+            assert initial["saved_phrases"] == ["baseline"]
+            # Send non-list — should be silently ignored
+            with patch("backend.config.ServerConfig.save"):
+                ws.send_json({"type": "set_server_config", "saved_phrases": "not a list"})
+                msg = ws.receive_json()
+            assert msg["saved_phrases"] == ["baseline"]
+
+    def test_list_with_non_string_entries_ignored(self, client):
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            initial = self._send_and_get_status(ws, ["baseline"])
+            assert initial["saved_phrases"] == ["baseline"]
+            with patch("backend.config.ServerConfig.save"):
+                ws.send_json({"type": "set_server_config", "saved_phrases": [1, 2, 3]})
+                msg = ws.receive_json()
+            assert msg["saved_phrases"] == ["baseline"]
+
+    def test_list_capped_at_fifty(self, client):
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            sixty = [f"phrase {i}" for i in range(60)]
+            msg = self._send_and_get_status(ws, sixty)
+            assert len(msg["saved_phrases"]) == 50
+            assert msg["saved_phrases"] == [f"phrase {i}" for i in range(50)]
+
+    def test_phrase_truncated_at_120_chars(self, client):
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            long_phrase = "x" * 200
+            msg = self._send_and_get_status(ws, [long_phrase])
+            assert msg["saved_phrases"] == ["x" * 120]

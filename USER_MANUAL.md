@@ -694,12 +694,13 @@ The **Server Config** panel provides technical server-side settings, separate fr
 |---------|-------------|
 | VAD threshold | Sensitivity of voice activity detection. Lower = more sensitive; higher = requires stronger signal. Changing this restarts the STT worker. |
 | Whisper model | Which Whisper model the server uses for transcription. Changing this restarts the STT worker. |
+| Saved Phrases | A list of phrases Whisper is pre-loaded with as vocabulary hints to improve recognition accuracy. Common radio phrases ("break break", "QSL", "copy that") are included by default. Add any group-specific phrases — net names, operator handles, local shorthand — to help Whisper recognise them consistently. Changes take effect immediately without an STT restart. |
 | PTT mode | How PTT is keyed: `manual`, `serial`, or `vox` (voice-operated transmit — keys automatically based on audio level). |
 | PTT port / line | Serial port and control line used when PTT mode is `serial`. |
 | Monitor passthrough | When enabled, audio captured from the radio input is simultaneously played back through the output device. Useful when the radio is not directly audible at the operator position. Does not require a server restart. |
 | Attendance tracking | Enable or disable automatic callsign recording in the Stations panel. When disabled, the panel still exists but callsigns are not recorded automatically. |
 
-> Changes to VAD threshold or Whisper model trigger a live STT worker restart and will briefly interrupt transcription.
+> Changes to VAD threshold or Whisper model trigger a live STT worker restart and will briefly interrupt transcription. Saved Phrases changes take effect immediately.
 
 ---
 

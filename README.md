@@ -19,7 +19,8 @@ browser-based React frontend communicating over WebSocket.
 ## Features
 
 - **Live transcription** — Whisper STT converts every received transmission to
-  text in real time and broadcasts it to all connected users
+  text in real time and broadcasts it to all connected users; admin-configurable
+  saved-phrases list biases recognition toward group-specific vocabulary
 - **Multi-user auth** — PBKDF2 password hashing, per-user session tokens, and
   per-user preferences stored server-side
 - **Voice PTT** — browser microphone button (or Space bar) captures and transmits
