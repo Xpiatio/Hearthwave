@@ -91,6 +91,7 @@ export default function App() {
   const spectroRef = useRef<SpectrogramHandle>(null);
   const profileRef = useRef(profile);
   profileRef.current = profile;
+  const pendingTranscriptRef = useRef<string>('');
 
   // Panel visibility
   const [showAttendance, setShowAttendance] = useState(false);
@@ -141,6 +142,7 @@ export default function App() {
   // Snackbars
   const [publishSnack, setPublishSnack] = useState<string | null>(null);
   const [errorSnack, setErrorSnack] = useState<string | null>(null);
+  const [journalSavedSnack, setJournalSavedSnack] = useState<string | null>(null);
   const [voicePreviewBusy, setVoicePreviewBusy] = useState(false);
 
   // FCC / Callsigns
@@ -417,10 +419,12 @@ export default function App() {
         break;
 
       case 'journal_result':
-        setJournalResult({
+        sendRef.current({
+          type: 'save_journal',
           title: msg.title,
           summary: msg.summary,
           callsigns_locations: msg.callsigns_locations,
+          transcript: pendingTranscriptRef.current,
         });
         setJournalGenerating(false);
         setJournalError(null);
@@ -432,6 +436,7 @@ export default function App() {
         break;
 
       case 'journal_saved':
+        setJournalSavedSnack('Journal saved');
         sendRef.current({ type: 'list_journals' });
         break;
 
@@ -810,6 +815,7 @@ export default function App() {
     setJournalGenerating(true);
     setJournalError(null);
     setJournalResult(null);
+    pendingTranscriptRef.current = transcript;
     send({ type: 'generate_journal', transcript, callsigns });
   }, [send]);
 
@@ -874,6 +880,7 @@ export default function App() {
   }
   function handleClosePublishSnack() { setPublishSnack(null); }
   function handleCloseErrorSnack() { setErrorSnack(null); }
+  function handleCloseJournalSavedSnack() { setJournalSavedSnack(null); }
   function handleVerifyAllDismiss() { setVerifyAllComplete(false); }
 
   const isMobile = useMobileDetect();
@@ -988,8 +995,10 @@ export default function App() {
     onDismissAllPending: handleDismissAllPending,
     publishSnack,
     errorSnack,
+    journalSavedSnack,
     onClosePublishSnack: handleClosePublishSnack,
     onCloseErrorSnack: handleCloseErrorSnack,
+    onCloseJournalSavedSnack: handleCloseJournalSavedSnack,
   };
 
   return (

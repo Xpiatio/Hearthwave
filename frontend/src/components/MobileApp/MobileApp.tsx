@@ -160,8 +160,10 @@ export interface MobileAppProps {
   // Snackbars
   publishSnack: string | null;
   errorSnack: string | null;
+  journalSavedSnack: string | null;
   onClosePublishSnack: () => void;
   onCloseErrorSnack: () => void;
+  onCloseJournalSavedSnack: () => void;
 }
 
 export function MobileApp({
@@ -237,8 +239,10 @@ export function MobileApp({
   onDismissAllPending,
   publishSnack,
   errorSnack,
+  journalSavedSnack,
   onClosePublishSnack,
   onCloseErrorSnack,
+  onCloseJournalSavedSnack,
 }: MobileAppProps) {
   const [tab, setTab] = useState(0);
   const messageInputRef = useRef<MessageInputHandle>(null);
@@ -419,6 +423,17 @@ export function MobileApp({
       >
         <Alert onClose={onCloseErrorSnack} severity="error" aria-live="assertive" aria-atomic="true" sx={{ width: '100%' }}>
           {errorSnack}
+        </Alert>
+      </Snackbar>
+
+      <Snackbar
+        open={journalSavedSnack !== null}
+        autoHideDuration={4000}
+        onClose={onCloseJournalSavedSnack}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={onCloseJournalSavedSnack} severity="success" aria-live="polite" aria-atomic="true" sx={{ width: '100%' }}>
+          {journalSavedSnack}
         </Alert>
       </Snackbar>
     </Box>

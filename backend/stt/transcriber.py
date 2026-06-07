@@ -36,7 +36,14 @@ class WhisperTranscriber:
         """Return transcribed text, or None when the output is empty or
         matches a known Whisper-on-silence hallucination."""
         segments, _ = self.model.transcribe(
-            audio, language="en", beam_size=1, vad_filter=False
+            audio,
+            language="en",
+            beam_size=5,
+            vad_filter=True,
+            initial_prompt=(
+                "GMRS radio. Callsigns like WSLZ233, KAB9585, WRJG368, WSAC909. "
+                "Phrases: break break, copy that, go ahead, over, 10-4, clear."
+            ),
         )
         text = " ".join(s.text.strip() for s in segments).strip()
         normalized = text.lower().strip(".,!?;: ")

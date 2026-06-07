@@ -199,8 +199,10 @@ export interface DesktopAppProps {
   // Snackbars
   publishSnack: string | null;
   errorSnack: string | null;
+  journalSavedSnack: string | null;
   onClosePublishSnack: () => void;
   onCloseErrorSnack: () => void;
+  onCloseJournalSavedSnack: () => void;
 }
 
 export function DesktopApp({
@@ -311,8 +313,10 @@ export function DesktopApp({
   spectroRef,
   publishSnack,
   errorSnack,
+  journalSavedSnack,
   onClosePublishSnack,
   onCloseErrorSnack,
+  onCloseJournalSavedSnack,
 }: DesktopAppProps) {
   const messageInputRef = useRef<MessageInputHandle>(null);
   const sensors = useSensors(
@@ -582,6 +586,23 @@ export function DesktopApp({
           aria-atomic="true"
         >
           {errorSnack}
+        </Alert>
+      </Snackbar>
+
+      <Snackbar
+        open={journalSavedSnack !== null}
+        autoHideDuration={4000}
+        onClose={onCloseJournalSavedSnack}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={onCloseJournalSavedSnack}
+          severity="success"
+          sx={{ width: '100%' }}
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {journalSavedSnack}
         </Alert>
       </Snackbar>
     </Box>

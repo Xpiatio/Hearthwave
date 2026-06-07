@@ -322,7 +322,7 @@ export function JournalPanel({
             )}
             <Typography variant="body1" sx={{ mb: 2 }}>{selected.summary}</Typography>
             {selected.transcript && (
-              <Accordion>
+              <Accordion sx={{ mb: 2 }}>
                 <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                   <Typography variant="body2">Session transcript</Typography>
                 </AccordionSummary>
@@ -335,6 +335,29 @@ export function JournalPanel({
                   </Box>
                 </AccordionDetails>
               </Accordion>
+            )}
+            {selected.published ? (
+              <Button
+                variant="outlined"
+                color={confirmUnpublish === selected._file ? 'warning' : 'success'}
+                startIcon={<UnpublishedIcon />}
+                size="small"
+                onClick={() => handleUnpublish(selected._file)}
+                title={confirmUnpublish === selected._file ? 'Click again to remove from /journal' : 'Published — click to remove from family journal'}
+              >
+                {confirmUnpublish === selected._file ? 'Confirm remove' : 'Remove from family journal'}
+              </Button>
+            ) : (
+              <Button
+                variant="contained"
+                color={confirmPublish === selected._file ? 'primary' : 'inherit'}
+                startIcon={<PublishIcon />}
+                size="small"
+                onClick={() => handlePublish(selected._file)}
+                title={confirmPublish === selected._file ? 'Click again to publish to /journal' : 'Publish to family journal'}
+              >
+                {confirmPublish === selected._file ? 'Confirm publish' : 'Publish to family journal'}
+              </Button>
             )}
           </Box>
         ) : (
