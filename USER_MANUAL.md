@@ -1,5 +1,7 @@
 # Radio-TTY User Manual
 
+> **Version:** v2.4.0
+
 This manual covers day-to-day operation of Radio-TTY as a GMRS family hub — a shared radio operating station where every household member connects from their own device. For installation and server setup, see [README.md](README.md).
 
 ---

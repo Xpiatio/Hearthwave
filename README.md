@@ -16,6 +16,8 @@ without touching core server logic.
 Radio-TTY is a fork of GMRS-TTY that replaces the desktop PySide6 UI with a
 browser-based React frontend communicating over WebSocket.
 
+> **Latest release:** v2.4.0
+
 ## Features
 
 - **Live transcription** — Whisper STT converts every received transmission to
