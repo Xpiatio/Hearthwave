@@ -75,6 +75,7 @@
       .flow-card { width: 100% !important; max-width: 300px; min-width: 0 !important; }
 
       .feature-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 12px !important; }
+      .compliance-grid { grid-template-columns: 1fr !important; }
       .spectro-bars { display: none !important; }
       .plugin-grid { grid-template-columns: 1fr !important; }
       .install-grid { grid-template-columns: 1fr !important; }
@@ -105,6 +106,7 @@
       <div class="nav-text-links" style="display:flex;gap:24px;align-items:center;">
         <a href="#templates" style="color:#94a3b8;font-size:14px;text-decoration:none;font-weight:500;">Templates</a>
         <a href="#features" style="color:#94a3b8;font-size:14px;text-decoration:none;font-weight:500;">Features</a>
+        <a href="#compliance" style="color:#94a3b8;font-size:14px;text-decoration:none;font-weight:500;">Compliance</a>
         <a href="#install" style="color:#94a3b8;font-size:14px;text-decoration:none;font-weight:500;">Install</a>
         <a href="https://github.com/Xpiatio/Radio-TTY/blob/master/USER_MANUAL.md" target="_blank" rel="noopener"
            aria-label="View user manual on GitHub (opens in new tab)"
@@ -113,9 +115,10 @@
            aria-label="View Radio-TTY on GitHub (opens in new tab)"
            style="background:#1d4ed8;color:#fff;font-size:13px;font-weight:600;padding:7px 16px;border-radius:20px;text-decoration:none;">GitHub →</a>
       </div>
-      <!-- Mobile: Templates link + GitHub button -->
+      <!-- Mobile: Templates + Compliance links + GitHub button -->
       <div class="nav-mobile-btn" style="display:none;gap:10px;align-items:center;">
         <a href="#templates" style="color:#94a3b8;font-size:14px;text-decoration:none;font-weight:500;">Templates</a>
+        <a href="#compliance" style="color:#94a3b8;font-size:14px;text-decoration:none;font-weight:500;">Compliance</a>
         <a href="https://github.com/Xpiatio/Radio-TTY" target="_blank" rel="noopener"
            aria-label="View Radio-TTY on GitHub (opens in new tab)"
            style="background:#1d4ed8;color:#fff;font-size:13px;font-weight:600;padding:7px 14px;border-radius:20px;text-decoration:none;">GitHub →</a>
@@ -376,11 +379,17 @@
       </div>
 
       <!-- FCC callout -->
-      <div role="note" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:16px 22px;display:flex;align-items:flex-start;gap:14px;">
+      <div role="note" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:18px 22px;display:flex;align-items:flex-start;gap:14px;">
         <span aria-hidden="true" style="font-size:22px;flex-shrink:0;margin-top:1px;">🔒</span>
-        <p style="margin:0;font-size:14px;color:#1e40af;line-height:1.6;">
-          <strong>Fully FCC-compliant:</strong> Radio-TTY automatically appends your station callsign to every transmission and announces your ID every 15 minutes — no manual action needed.
-        </p>
+        <div style="min-width:0;">
+          <p style="margin:0 0 10px;font-size:14px;color:#1e40af;font-weight:700;">Fully FCC-compliant — automatically</p>
+          <ul style="margin:0 0 10px;padding-left:18px;font-size:13px;color:#1e40af;line-height:1.7;">
+            <li>Your station callsign is appended to every outgoing transmission</li>
+            <li>A station ID is announced every 15 minutes during active use — no manual action needed</li>
+            <li>Radio-TTY is a remote control point for your own station, not a prohibited internet gateway</li>
+          </ul>
+          <a href="#compliance" style="font-size:13px;color:#1d4ed8;font-weight:600;text-decoration:underline;">How compliance works →</a>
+        </div>
       </div>
     </div>
   </section>
@@ -491,6 +500,53 @@
           </div>
           <div style="color:#475569;font-size:10px;margin-top:6px;text-align:center;">300 Hz — 3.4 kHz</div>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FCC COMPLIANCE ── -->
+  <section id="compliance" class="sec-pad" aria-labelledby="compliance-heading"
+           style="background:#f8fafc;padding:72px 32px;">
+    <div style="max-width:1100px;margin:0 auto;">
+      <div style="text-align:center;margin-bottom:48px;">
+        <h2 id="compliance-heading" class="sec-h2"
+            style="font-size:30px;font-weight:800;color:#0f172a;margin:0 0 10px;">Staying legal with GMRS</h2>
+        <p style="color:#64748b;font-size:16px;max-width:520px;margin:0 auto;line-height:1.6;">Radio-TTY is designed from the ground up for Part 95 compliance — here's what that means in plain language.</p>
+      </div>
+
+      <div class="compliance-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:24px;">
+
+        <article aria-labelledby="comp-license-heading"
+                 style="padding:28px 24px;border:1px solid #e2e8f0;border-radius:14px;background:#fff;">
+          <div aria-hidden="true" style="font-size:30px;margin-bottom:14px;">🪪</div>
+          <h3 id="comp-license-heading" style="font-weight:700;color:#0f172a;font-size:15px;margin:0 0 10px;">Get your GMRS license</h3>
+          <p style="color:#64748b;font-size:14px;margin:0 0 14px;line-height:1.6;">GMRS requires an FCC license, but there's no exam. A single $35 application covers your entire immediate family. Your callsign arrives within a few days and is valid for 10 years.</p>
+          <a href="https://www.fcc.gov/consumers/guides/getting-your-fcc-license" target="_blank" rel="noopener"
+             aria-label="Apply for a GMRS license at FCC.gov (opens in new tab)"
+             style="font-size:13px;color:#1d4ed8;font-weight:600;text-decoration:underline;">Apply at FCC.gov →</a>
+        </article>
+
+        <article aria-labelledby="comp-id-heading"
+                 style="padding:28px 24px;border:1px solid #e2e8f0;border-radius:14px;background:#fff;">
+          <div aria-hidden="true" style="font-size:30px;margin-bottom:14px;">📡</div>
+          <h3 id="comp-id-heading" style="font-weight:700;color:#0f172a;font-size:15px;margin:0 0 10px;">Automatic station identification</h3>
+          <p style="color:#64748b;font-size:14px;margin:0;line-height:1.6;">The FCC requires you to identify your station. Radio-TTY handles this without you lifting a finger. Your callsign is spoken at the end of every transmission, and a standalone ID announcement goes out every 15 minutes during active use. It can't be turned off.</p>
+        </article>
+
+        <article aria-labelledby="comp-rcp-heading"
+                 style="padding:28px 24px;border:1px solid #e2e8f0;border-radius:14px;background:#fff;">
+          <div aria-hidden="true" style="font-size:30px;margin-bottom:14px;">🏠</div>
+          <h3 id="comp-rcp-heading" style="font-weight:700;color:#0f172a;font-size:15px;margin:0 0 10px;">Remote control, not an internet gateway</h3>
+          <p style="color:#64748b;font-size:14px;margin:0;line-height:1.6;">The FCC prohibits using GMRS as an internet gateway — bridging audio between two separate radios over the internet. Radio-TTY doesn't do that. The radio stays at your home; you're simply controlling it remotely, the same way you'd control any home device from your phone. This is called a remote control point, and it's explicitly permitted.</p>
+        </article>
+
+        <article aria-labelledby="comp-tx-heading"
+                 style="padding:28px 24px;border:1px solid #e2e8f0;border-radius:14px;background:#fff;">
+          <div aria-hidden="true" style="font-size:30px;margin-bottom:14px;">👨‍👩‍👧</div>
+          <h3 id="comp-tx-heading" style="font-weight:700;color:#0f172a;font-size:15px;margin:0 0 10px;">Only licensed family members transmit</h3>
+          <p style="color:#64748b;font-size:14px;margin:0;line-height:1.6;">Your GMRS license covers your immediate family. Radio-TTY enforces transmit access through password-protected accounts — you decide which family members can key up. Non-licensed members can have a listen-only account. After three failed login attempts, the account locks automatically.</p>
+        </article>
+
       </div>
     </div>
   </section>
