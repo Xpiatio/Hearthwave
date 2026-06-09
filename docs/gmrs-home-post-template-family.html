@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GMRS Station Reference — Template</title>
+<style>
+  :root{
+    --ink:#1a1a1a;
+    --rule:#000;
+    --muted:#4a4a4a;
+    --hair:#bdbdbd;
+  }
+  *{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
+  body{
+    margin:0;background:#e9e9e9;color:var(--ink);
+    font-family:Georgia,"Times New Roman",serif;line-height:1.45;padding:24px 16px;
+  }
+
+  /* ---- Fill-out panel (screen only) ---- */
+  .setup{
+    max-width:720px;margin:0 auto 20px;background:#fff;border:2px solid var(--rule);
+    padding:18px 22px 20px;
+  }
+  .setup h2{
+    font-family:ui-monospace,"Courier New",monospace;font-size:.8rem;letter-spacing:.16em;
+    text-transform:uppercase;margin:0 0 4px;padding-bottom:6px;border-bottom:1px solid var(--rule);
+  }
+  .setup p{font-size:.9rem;color:var(--muted);margin:8px 0 14px;}
+  .f{display:flex;flex-direction:column;margin-bottom:10px;}
+  .f label{font-family:ui-monospace,"Courier New",monospace;font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;}
+  .f input{font-family:Georgia,serif;font-size:1rem;color:var(--ink);padding:8px 10px;border:1px solid var(--hair);background:#fff;}
+  .f input:focus{outline:2px solid var(--ink);outline-offset:1px;}
+  .chrow{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;border-top:1px solid var(--hair);padding-top:10px;}
+  .chrow .rl{font-family:ui-monospace,"Courier New",monospace;font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;font-weight:700;flex:0 0 100px;padding-bottom:14px;}
+  .chrow .num{flex:0 0 80px;}
+  .chrow .loc{flex:1;min-width:160px;}
+
+  /* ---- Card ---- */
+  .card{max-width:720px;margin:0 auto;background:#fff;border:2px solid var(--rule);padding:24px 28px 0;}
+
+  .banner{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;border-bottom:3px solid var(--rule);padding-bottom:14px;}
+  .banner .label{font-family:ui-monospace,"Courier New",monospace;font-size:.7rem;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);}
+  .callsign{font-family:ui-monospace,"Courier New",monospace;font-size:clamp(2.3rem,8vw,3.3rem);font-weight:700;letter-spacing:.1em;line-height:1;margin:3px 0 0;}
+  .banner .sub{font-family:ui-monospace,"Courier New",monospace;font-size:.76rem;letter-spacing:.12em;text-transform:uppercase;text-align:right;color:var(--muted);}
+
+  h2{font-family:ui-monospace,"Courier New",monospace;font-size:.76rem;letter-spacing:.18em;text-transform:uppercase;margin:20px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--rule);}
+
+  table{width:100%;border-collapse:collapse;font-size:1rem;}
+  caption{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);}
+  th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--hair);vertical-align:baseline;}
+  thead th{font-family:ui-monospace,"Courier New",monospace;font-size:.64rem;letter-spacing:.12em;text-transform:uppercase;border-bottom:2px solid var(--rule);}
+  .ch{font-family:ui-monospace,"Courier New",monospace;font-weight:700;font-size:1.35rem;width:56px;}
+  .role{display:inline-block;font-family:ui-monospace,"Courier New",monospace;font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border:1.5px solid var(--rule);border-radius:2px;white-space:nowrap;}
+  .role.primary{font-weight:700;}
+
+  .phrase{border:1px solid var(--hair);border-left:4px solid var(--rule);padding:10px 14px;margin:0 0 10px;}
+  .phrase .what{font-family:ui-monospace,"Courier New",monospace;font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;}
+  .phrase .say{font-size:1.12rem;line-height:1.4;}
+  .blank{border-bottom:1.5px solid var(--ink);padding:0 .5em;font-style:italic;}
+
+  .alert{border:2px solid var(--rule);padding:12px 16px;display:flex;gap:14px;align-items:center;margin-top:2px;}
+  .alert .clock{font-family:ui-monospace,"Courier New",monospace;font-weight:700;font-size:1.4rem;white-space:nowrap;line-height:1;border-right:2px solid var(--rule);padding-right:14px;}
+  .alert .msg{font-size:.98rem;}
+  .alert .msg strong{text-decoration:underline;}
+
+  /* dynamic fill spans */
+  .ph{color:var(--muted);font-style:italic;border-bottom:1px solid var(--hair);padding:0 .3em;}
+
+  footer{border-top:1px solid var(--rule);margin:22px -28px 0;padding:12px 28px 18px;font-size:.72rem;color:var(--muted);line-height:1.5;}
+  footer .stamp{font-family:ui-monospace,"Courier New",monospace;letter-spacing:.02em;margin-top:8px;}
+
+  @media print{
+    @page{margin:14mm;}
+    html,body{background:#fff;}
+    body{padding:0;font-size:11pt;line-height:1.35;}
+    .setup{display:none;}
+    .card{border:1.5pt solid #000;max-width:100%;padding:0 0 0;}
+    .card > .body-pad{padding:0 14pt;}
+    .banner{padding:14pt 14pt 10pt;}
+    footer{margin:18pt 0 0;padding:10pt 14pt 12pt;}
+    h2{margin:14pt 0 6pt;}
+    .phrase{margin-bottom:8pt;page-break-inside:avoid;}
+    .alert{page-break-inside:avoid;}
+    table{page-break-inside:avoid;}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  }
+</style>
+</head>
+<body>
+
+  <!-- FILL-OUT PANEL (screen only) -->
+  <section class="setup" aria-label="Fill out your station details">
+    <h2>Fill out your station</h2>
+    <p>Type your details below &mdash; the card fills in automatically, then print it. You can also print it blank and write by hand. The names in the phrases stay as write-on blanks, since they change with each call.</p>
+
+    <div class="f"><label for="in-callsign">Your call sign</label><input id="in-callsign" type="text" autocomplete="off" placeholder="Type your call sign"></div>
+
+    <div class="chrow">
+      <div class="rl">Neighborhood</div>
+      <div class="f num"><label for="in-ch1">Channel #</label><input id="in-ch1" type="text" autocomplete="off" placeholder="1&ndash;22"></div>
+      <div class="f loc"><label for="in-loc1">Name / location</label><input id="in-loc1" type="text" autocomplete="off" placeholder="Neighborhood name"></div>
+    </div>
+    <div class="chrow">
+      <div class="rl">Primary repeater</div>
+      <div class="f num"><label for="in-ch2">Channel #</label><input id="in-ch2" type="text" autocomplete="off" placeholder="1&ndash;22"></div>
+      <div class="f loc"><label for="in-loc2">Name / location</label><input id="in-loc2" type="text" autocomplete="off" placeholder="Repeater name"></div>
+    </div>
+    <div class="chrow">
+      <div class="rl">Secondary repeater</div>
+      <div class="f num"><label for="in-ch3">Channel #</label><input id="in-ch3" type="text" autocomplete="off" placeholder="1&ndash;22"></div>
+      <div class="f loc"><label for="in-loc3">Name / location</label><input id="in-loc3" type="text" autocomplete="off" placeholder="Repeater name"></div>
+    </div>
+  </section>
+
+  <!-- THE CARD -->
+  <main class="card">
+    <div class="body-pad">
+    <header class="banner">
+      <div>
+        <div class="label">Station Call Sign</div>
+        <div class="callsign"><span class="v-callsign ph">call sign</span></div>
+      </div>
+      <div class="sub">GMRS Home<br>Reference</div>
+    </header>
+
+    <h2>Key Channels</h2>
+    <table>
+      <caption>GMRS channels in use, with channel number, location, and role</caption>
+      <thead>
+        <tr><th scope="col">Ch</th><th scope="col">Name / Location</th><th scope="col">Role</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="ch"><span class="v-ch1 ph">#</span></td><td><span class="v-loc1 ph">neighborhood</span></td><td><span class="role">Neighborhood</span></td></tr>
+        <tr><td class="ch"><span class="v-ch2 ph">#</span></td><td><span class="v-loc2 ph">primary repeater</span></td><td><span class="role primary">Primary</span></td></tr>
+        <tr><td class="ch"><span class="v-ch3 ph">#</span></td><td><span class="v-loc3 ph">secondary repeater</span></td><td><span class="role">Secondary</span></td></tr>
+      </tbody>
+    </table>
+
+    <h2>Calling Someone</h2>
+    <div class="phrase">
+      <div class="what">To start a call</div>
+      <div class="say">&ldquo;This is <span class="v-callsign ph">call sign</span> &mdash; <span class="blank">your name</span> calling <span class="blank">their name</span>&rdquo;</div>
+      <div class="say" style="margin-top:8px;"><span style="font-family:ui-monospace,'Courier New',monospace;font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);">or</span> &ldquo;This is <span class="v-callsign ph">call sign</span> &mdash; <span class="blank">your name</span> calling <span class="blank">their callsign</span> &mdash; <span class="blank">their name</span>&rdquo;</div>
+    </div>
+
+    <h2>Identify Every 15 Minutes</h2>
+    <div class="alert">
+      <div class="clock">15:00</div>
+      <div class="msg">Say your call sign <strong>&ldquo;<span class="v-callsign ph">call sign</span>&rdquo;</strong> at least once every <strong>15 minutes</strong> during a conversation, and again when you finish. Keeps the station legal and identified on air.</div>
+    </div>
+
+    <h2>Listening / Standing By</h2>
+    <div class="phrase">
+      <div class="what">Monitoring the channel</div>
+      <div class="say">&ldquo;This is <span class="v-callsign ph">call sign</span> &mdash; <span class="blank">your name</span> and I&rsquo;ll be on the side&rdquo;</div>
+    </div>
+
+    <h2>Signing Off</h2>
+    <div class="phrase">
+      <div class="what">Ending your transmission</div>
+      <div class="say">&ldquo;This is <span class="v-callsign ph">call sign</span> &mdash; <span class="blank">your name</span> and I&rsquo;ll be clear&rdquo;</div>
+    </div>
+    </div>
+
+    <footer>
+      <div><strong>Reminders:</strong> Listen before you transmit. Wait a beat after keying up before you talk. Repeaters (Ch&nbsp;<span class="v-ch2 ph">#</span> / <span class="v-ch3 ph">#</span>) reach farther; Ch&nbsp;<span class="v-ch1 ph">#</span> is local simplex.</div>
+      <div class="stamp">Accessibility: WCAG&nbsp;2.2 Level&nbsp;AA. Compliant as of 2026-06-09.</div>
+    </footer>
+  </main>
+
+<script>
+  var fields = {
+    callsign: 'call sign',
+    ch1: '#', loc1: 'neighborhood',
+    ch2: '#', loc2: 'primary repeater',
+    ch3: '#', loc3: 'secondary repeater'
+  };
+  Object.keys(fields).forEach(function(key){
+    var input = document.getElementById('in-' + key);
+    var targets = document.querySelectorAll('.v-' + key);
+    function update(){
+      var val = input.value.trim();
+      for (var i = 0; i < targets.length; i++){
+        if (val){
+          targets[i].textContent = val;
+          targets[i].classList.remove('ph');
+        } else {
+          targets[i].textContent = fields[key];
+          targets[i].classList.add('ph');
+        }
+      }
+    }
+    input.addEventListener('input', update);
+    update();
+  });
+</script>
+</body>
+</html>

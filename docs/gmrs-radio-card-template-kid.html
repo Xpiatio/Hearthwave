@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Radio Card — Template</title>
+<style>
+  :root{
+    --page:#ece9e1;
+    --card:#faf8f3;
+    --ink:#2f2e2b;
+    --soft:#5a584f;
+    --accent:#41564c;
+    --quote:#eef2ee;
+    --line:#d8d4c8;
+  }
+  *{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
+  body{
+    margin:0;background:var(--page);color:var(--ink);
+    font-family:Verdana,Tahoma,"Trebuchet MS",sans-serif;
+    line-height:1.6;padding:28px 18px;
+  }
+  .wrap{max-width:620px;margin:0 auto;}
+
+  /* ---- Setup panel (screen only) ---- */
+  .setup{
+    background:var(--card);border:1px solid var(--line);border-radius:16px;
+    padding:20px 24px;margin-bottom:22px;
+  }
+  .setup h2{font-size:1.15rem;margin:0 0 4px;}
+  .setup p{font-size:.95rem;color:var(--soft);margin:0 0 16px;}
+  .field{display:flex;flex-direction:column;margin-bottom:14px;}
+  .field:last-child{margin-bottom:0;}
+  .field label{font-size:.95rem;font-weight:700;margin-bottom:5px;}
+  .field input{
+    font-family:inherit;font-size:1.05rem;color:var(--ink);
+    padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;
+  }
+  .field input:focus{outline:3px solid var(--accent);outline-offset:1px;}
+
+  /* ---- Card ---- */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:34px 32px 26px;}
+
+  .top{text-align:center;padding-bottom:22px;border-bottom:1px solid var(--line);}
+  .kicker{font-size:.95rem;color:var(--soft);margin-bottom:10px;}
+  .radio-mark{margin:0 auto 10px;width:74px;height:74px;color:var(--accent);}
+  .radio-mark svg{width:100%;height:100%;}
+  .channel{font-size:3rem;font-weight:700;line-height:1.05;margin:0;}
+  .place{font-size:1.05rem;color:var(--soft);margin-top:2px;}
+  .callsign{margin-top:16px;font-size:1.25rem;}
+  .callsign b{color:var(--accent);letter-spacing:.04em;}
+
+  ol{list-style:none;margin:0;padding:0;}
+  li{display:flex;gap:18px;align-items:flex-start;padding:22px 0;border-bottom:1px solid var(--line);}
+  li:last-child{border-bottom:none;}
+
+  .tile{
+    position:relative;flex:0 0 auto;width:66px;height:66px;border-radius:14px;
+    background:var(--quote);display:flex;align-items:center;justify-content:center;margin-top:2px;
+  }
+  .tile svg{width:38px;height:38px;color:var(--accent);}
+  .badge{
+    position:absolute;top:-9px;left:-9px;width:26px;height:26px;border-radius:50%;
+    background:var(--accent);color:#fff;font-size:.9rem;font-weight:700;
+    display:flex;align-items:center;justify-content:center;border:3px solid var(--card);
+  }
+
+  .step{flex:1;}
+  .when{font-size:1.15rem;margin:0 0 8px;}
+  .words{background:var(--quote);border-radius:12px;padding:14px 18px;font-size:1.3rem;line-height:1.5;}
+  .name{border-bottom:2px solid var(--soft);padding:0 .35em;}
+  .means{font-size:.95rem;color:var(--soft);margin-top:8px;}
+
+  footer{
+    margin-top:24px;padding-top:16px;border-top:1px solid var(--line);
+    font-size:.8rem;color:var(--soft);line-height:1.5;text-align:center;
+  }
+
+  @media print{
+    @page{margin:11mm;}
+    html,body{background:#fff;}
+    body{padding:0;line-height:1.4;}
+    .setup{display:none;}
+    .wrap{max-width:100%;}
+    .card{border:1px solid var(--line);max-width:100%;border-radius:12px;padding:16px 22px 12px;}
+    .top{padding-bottom:12px;}
+    .kicker{margin-bottom:5px;font-size:.85rem;}
+    .radio-mark{width:50px;height:50px;margin-bottom:5px;}
+    .channel{font-size:2.1rem;}
+    .place{font-size:.95rem;}
+    .callsign{margin-top:9px;font-size:1.1rem;}
+    ol{margin-top:2px;}
+    li{padding:11px 0;gap:14px;page-break-inside:avoid;}
+    .tile{width:50px;height:50px;border-radius:11px;}
+    .tile svg{width:28px;height:28px;}
+    .badge{width:21px;height:21px;font-size:.78rem;top:-7px;left:-7px;border-width:2px;}
+    .when{font-size:1rem;margin-bottom:5px;}
+    .words{font-size:1.1rem;padding:9px 13px;border-radius:9px;}
+    .means{font-size:.85rem;margin-top:5px;}
+    footer{margin-top:12px;padding-top:9px;font-size:.72rem;}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+
+    <!-- Fill-in panel: hidden when printing -->
+    <section class="setup" aria-label="Set up this card">
+      <h2>Set up this card</h2>
+      <p>Type your details below. The card fills in by itself. Then print it.</p>
+      <div class="field">
+        <label for="in-callsign">Your call sign</label>
+        <input id="in-callsign" type="text" placeholder="Type your call sign" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="in-channel">Channel number</label>
+        <input id="in-channel" type="text" placeholder="A number from 1 to 22" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="in-place">Neighborhood name</label>
+        <input id="in-place" type="text" placeholder="Type the neighborhood name" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="in-name">Radio user's name</label>
+        <input id="in-name" type="text" placeholder="Type the name" autocomplete="off">
+      </div>
+    </section>
+
+    <!-- The printable card -->
+    <main class="card">
+      <header class="top">
+        <div class="kicker">My radio card</div>
+        <div class="radio-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="6" y="8" width="12" height="13" rx="2.2"/>
+            <line x1="9.5" y1="8" x2="9.5" y2="3.5"/>
+            <circle cx="9.5" cy="3" r="0.9"/>
+            <rect x="8.5" y="10.5" width="7" height="3.4" rx="0.8"/>
+            <line x1="9.5" y1="17" x2="9.5" y2="17.01"/>
+            <line x1="12" y1="17" x2="12" y2="17.01"/>
+            <line x1="14.5" y1="17" x2="14.5" y2="17.01"/>
+            <line x1="9.5" y1="19" x2="9.5" y2="19.01"/>
+            <line x1="12" y1="19" x2="12" y2="19.01"/>
+            <line x1="14.5" y1="19" x2="14.5" y2="19.01"/>
+          </svg>
+        </div>
+        <h1 class="channel">Channel <span class="v-channel">__</span></h1>
+        <div class="place"><span class="v-place">(neighborhood)</span> neighborhood</div>
+        <div class="callsign">My call sign is <b class="v-callsign">(call sign)</b></div>
+      </header>
+
+      <ol>
+        <li>
+          <div class="tile">
+            <span class="badge" aria-hidden="true">1</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="6" y="6" width="12" height="14" rx="2.2"/>
+              <line x1="9.5" y1="6" x2="9.5" y2="2.5"/>
+              <circle cx="9.5" cy="2" r="0.9"/>
+              <circle cx="12" cy="13.5" r="2.6"/>
+              <line x1="12" y1="13.5" x2="13.4" y2="12.4"/>
+            </svg>
+          </div>
+          <div class="step">
+            <p class="when">Turn the radio to <strong>Channel <span class="v-channel">__</span></strong>.</p>
+          </div>
+        </li>
+
+        <li>
+          <div class="tile">
+            <span class="badge" aria-hidden="true">2</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 6 h16 a1.8 1.8 0 0 1 1.8 1.8 v7 a1.8 1.8 0 0 1 -1.8 1.8 H11 l-4 3 v-3 H4 a1.8 1.8 0 0 1 -1.8 -1.8 V7.8 A1.8 1.8 0 0 1 4 6 z"/>
+              <line x1="7" y1="10" x2="15" y2="10"/>
+              <line x1="7" y1="13" x2="12.5" y2="13"/>
+            </svg>
+          </div>
+          <div class="step">
+            <p class="when">When you want to talk to someone, say:</p>
+            <p class="words">&ldquo;This is <span class="v-callsign">(call sign)</span>. <span class="name v-name">(name)</span> calling <span class="name">their name</span>.&rdquo;</p>
+          </div>
+        </li>
+
+        <li>
+          <div class="tile">
+            <span class="badge" aria-hidden="true">3</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="8.2"/>
+              <line x1="12" y1="12" x2="12" y2="6.8"/>
+              <line x1="12" y1="12" x2="15.4" y2="13.2"/>
+            </svg>
+          </div>
+          <div class="step">
+            <p class="when">While you talk, say <strong>&ldquo;<span class="v-callsign">(call sign)</span>&rdquo;</strong> again every 15 minutes.</p>
+          </div>
+        </li>
+
+        <li>
+          <div class="tile">
+            <span class="badge" aria-hidden="true">4</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M6.5 10.5 a5.5 5.5 0 1 1 8.6 4.6 c-1.3 0.9 -1.9 1.6 -2.1 2.9 a2.2 2.2 0 0 1 -4.2 -0.5"/>
+              <path d="M9.7 10.2 a2.4 2.4 0 0 1 4.2 1.9"/>
+            </svg>
+          </div>
+          <div class="step">
+            <p class="when">When you are listening and waiting, say:</p>
+            <p class="words">&ldquo;This is <span class="v-callsign">(call sign)</span>. <span class="name v-name">(name)</span>, and I&rsquo;ll be on the side.&rdquo;</p>
+            <p class="means">This means: I am still here and listening, but not talking right now.</p>
+          </div>
+        </li>
+
+        <li>
+          <div class="tile">
+            <span class="badge" aria-hidden="true">5</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="8.2"/>
+              <path d="M8.3 12.4 l2.6 2.6 l4.8 -5.4"/>
+            </svg>
+          </div>
+          <div class="step">
+            <p class="when">When you are all done, say:</p>
+            <p class="words">&ldquo;This is <span class="v-callsign">(call sign)</span>. <span class="name v-name">(name)</span>, and I&rsquo;ll be clear.&rdquo;</p>
+            <p class="means">This means: I am finished talking now.</p>
+          </div>
+        </li>
+      </ol>
+
+      <footer>
+        Accessibility: WCAG&nbsp;2.2 Level&nbsp;AA. Compliant as of 2026-06-09.
+      </footer>
+    </main>
+  </div>
+
+<script>
+  var fields = {
+    callsign: {sel:'#in-callsign', ph:'(call sign)'},
+    channel:  {sel:'#in-channel',  ph:'__'},
+    place:    {sel:'#in-place',    ph:'(neighborhood)'},
+    name:     {sel:'#in-name',     ph:'(name)'}
+  };
+  Object.keys(fields).forEach(function(key){
+    var cfg = fields[key];
+    var input = document.querySelector(cfg.sel);
+    var targets = document.querySelectorAll('.v-' + key);
+    function update(){
+      var val = input.value.trim();
+      for (var i = 0; i < targets.length; i++){
+        targets[i].textContent = val || cfg.ph;
+      }
+    }
+    input.addEventListener('input', update);
+    update();
+  });
+</script>
+</body>
+</html>

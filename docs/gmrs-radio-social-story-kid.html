@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Radio Story</title>
+<style>
+  :root{
+    --page:#ece9e1;--card:#faf8f3;--ink:#2f2e2b;--soft:#5a584f;
+    --accent:#41564c;--quote:#eef2ee;--line:#d8d4c8;
+  }
+  *{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
+  body{margin:0;background:var(--page);color:var(--ink);font-family:Verdana,Tahoma,"Trebuchet MS",sans-serif;line-height:1.6;padding:28px 18px;}
+  .wrap{max-width:600px;margin:0 auto;}
+
+  .setup{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 24px;margin-bottom:22px;}
+  .setup h2{font-size:1.15rem;margin:0 0 4px;}
+  .setup p{font-size:.95rem;color:var(--soft);margin:0 0 16px;}
+  .field{display:flex;flex-direction:column;margin-bottom:14px;}
+  .field:last-child{margin-bottom:0;}
+  .field label{font-size:.95rem;font-weight:700;margin-bottom:5px;}
+  .field input{font-family:inherit;font-size:1.05rem;color:var(--ink);padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .field input:focus{outline:3px solid var(--accent);outline-offset:1px;}
+
+  .cover{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:26px 30px;text-align:center;margin-bottom:18px;}
+  .cover h1{font-size:2rem;margin:8px 0 0;}
+  .cover .sub{font-size:1.05rem;color:var(--soft);margin-top:8px;}
+
+  .page{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:24px 30px 28px;margin-bottom:16px;text-align:center;position:relative;}
+  .pnum{position:absolute;top:14px;right:18px;font-size:.85rem;font-weight:700;color:#fff;background:var(--accent);width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
+
+  .scene{width:100%;max-width:340px;margin:2px auto 16px;background:var(--quote);border:1px solid var(--line);border-radius:16px;padding:8px 10px;}
+  .scene svg{width:100%;height:auto;display:block;}
+
+  .ptext{font-size:1.22rem;line-height:1.7;margin:0;}
+  .say{display:block;background:var(--quote);border-radius:12px;padding:12px 16px;margin:12px 0;font-size:1.22rem;}
+  .name,.blank{border-bottom:2px solid var(--soft);padding:0 .35em;}
+  .blank{font-style:italic;}
+  .accent{color:var(--accent);font-weight:700;}
+
+  footer{margin-top:8px;padding-top:14px;border-top:1px solid var(--line);font-size:.8rem;color:var(--soft);text-align:center;}
+
+  @media print{
+    @page{margin:14mm;}
+    html,body{background:#fff;}
+    body{padding:0;}
+    .setup{display:none;}
+    .wrap{max-width:100%;}
+    .cover,.page{page-break-inside:avoid;}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== Reusable comic figures ===== -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="kid" viewBox="0 0 40 64">
+      <path d="M10 40 Q10 34 16 33 L24 33 Q30 34 30 40 L32 60 Q32 63 29 63 L11 63 Q8 63 8 60 Z" fill="#41564c" stroke="#2f2e2b" stroke-width="1"/>
+      <rect x="17" y="29" width="6" height="6" fill="#e7b48f"/>
+      <circle cx="20" cy="20" r="10" fill="#e7b48f" stroke="#2f2e2b" stroke-width="1"/>
+      <path d="M10 19 Q9 7 20 7 Q31 7 30 19 Q27 13 20 13 Q13 13 10 19 Z" fill="#6b4a2f"/>
+      <circle cx="16.5" cy="20" r="1.3" fill="#2f2e2b"/><circle cx="23.5" cy="20" r="1.3" fill="#2f2e2b"/>
+      <path d="M16.5 24 Q20 27.5 23.5 24" stroke="#2f2e2b" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="adult" viewBox="0 0 44 72">
+      <path d="M11 44 Q11 37 18 36 L26 36 Q33 37 33 44 L35 68 Q35 71 32 71 L12 71 Q9 71 9 68 Z" fill="#4a6b82" stroke="#2f2e2b" stroke-width="1"/>
+      <rect x="19" y="31" width="6" height="7" fill="#e7b48f"/>
+      <circle cx="22" cy="22" r="11" fill="#e7b48f" stroke="#2f2e2b" stroke-width="1"/>
+      <path d="M11 21 Q10 8 22 8 Q34 8 33 21 Q30 14 22 14 Q14 14 11 21 Z" fill="#3a2e22"/>
+      <circle cx="18" cy="22" r="1.4" fill="#2f2e2b"/><circle cx="26" cy="22" r="1.4" fill="#2f2e2b"/>
+      <path d="M18 27 Q22 30 26 27" stroke="#2f2e2b" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="adult2" viewBox="0 0 44 72">
+      <path d="M11 44 Q11 37 18 36 L26 36 Q33 37 33 44 L35 68 Q35 71 32 71 L12 71 Q9 71 9 68 Z" fill="#b9785f" stroke="#2f2e2b" stroke-width="1"/>
+      <rect x="19" y="31" width="6" height="7" fill="#cf9a6e"/>
+      <circle cx="22" cy="22" r="11" fill="#cf9a6e" stroke="#2f2e2b" stroke-width="1"/>
+      <path d="M10 24 Q9 7 22 7 Q35 7 34 24 Q34 16 30 14 Q28 13 22 13 Q16 13 14 14 Q10 16 10 24 Z" fill="#2f2e2b"/>
+      <circle cx="18" cy="22" r="1.4" fill="#2f2e2b"/><circle cx="26" cy="22" r="1.4" fill="#2f2e2b"/>
+      <path d="M18 27 Q22 30 26 27" stroke="#2f2e2b" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="radio" viewBox="0 0 28 40">
+      <rect x="9" y="2" width="2.6" height="8" rx="1.3" fill="#2f2e2b"/>
+      <rect x="5" y="9" width="18" height="29" rx="3.5" fill="#4a4a4a" stroke="#2f2e2b" stroke-width="1"/>
+      <rect x="8" y="13" width="12" height="7" rx="1.2" fill="#cfe3d6"/>
+      <rect x="9.5" y="15" width="9" height="1.3" rx="0.6" fill="#41564c"/>
+      <rect x="9.5" y="17.4" width="6" height="1.3" rx="0.6" fill="#41564c"/>
+      <rect x="2.6" y="17" width="3" height="9" rx="1.3" fill="#2f2e2b"/>
+      <g fill="#2f2e2b"><circle cx="10" cy="25" r="0.9"/><circle cx="14" cy="25" r="0.9"/><circle cx="18" cy="25" r="0.9"/><circle cx="10" cy="29" r="0.9"/><circle cx="14" cy="29" r="0.9"/><circle cx="18" cy="29" r="0.9"/></g>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="wrap">
+
+  <section class="setup" aria-label="Set up this story">
+    <h2>Set up this story</h2>
+    <p>Type your details below. The story fills in by itself. Then print it.</p>
+    <div class="field"><label for="in-callsign">Your call sign</label><input id="in-callsign" type="text" placeholder="Type your call sign" autocomplete="off"></div>
+    <div class="field"><label for="in-channel">Channel number</label><input id="in-channel" type="text" placeholder="A number from 1 to 22" autocomplete="off"></div>
+    <div class="field"><label for="in-name">My name</label><input id="in-name" type="text" placeholder="Type the name" autocomplete="off"></div>
+  </section>
+
+  <!-- COVER -->
+  <header class="cover">
+    <div class="scene">
+      <svg viewBox="0 0 160 110">
+        <use href="#kid" x="42" y="20" width="54" height="86"/>
+        <path d="M90 66 q14 2 20 5" stroke="#41564c" stroke-width="6" fill="none" stroke-linecap="round"/>
+        <circle cx="110" cy="71" r="3.5" fill="#e7b48f"/>
+        <use href="#radio" x="104" y="50" width="26" height="38"/>
+        <polygon points="118,16 121,24 130,24 123,29 125,38 118,33 111,38 113,29 106,24 115,24" fill="#c89b3c" stroke="#2f2e2b" stroke-width="0.7"/>
+      </svg>
+    </div>
+    <h1>My Radio Story</h1>
+    <div class="sub">A story about how I use my family&rsquo;s radio.</div>
+  </header>
+
+  <!-- 1 WHY / FAMILY -->
+  <article class="page">
+    <span class="pnum" aria-hidden="true">1</span>
+    <div class="scene">
+      <svg viewBox="0 0 200 110">
+        <use href="#adult" x="16" y="22" width="46" height="76"/>
+        <use href="#kid" x="80" y="38" width="42" height="66"/>
+        <use href="#adult2" x="138" y="22" width="46" height="76"/>
+        <path d="M101 34 C101 34 95 29 95 25 a3 3 0 0 1 6 -0.6 a3 3 0 0 1 6 0.6 C107 29 101 34 101 34 Z" fill="#b9785f" stroke="#2f2e2b" stroke-width="0.6"/>
+      </svg>
+    </div>
+    <p class="ptext">My family has radios. We use them to talk to each other when we are in different places. Talking on the radio can help me feel close to my family.</p>
+  </article>
+
+  <!-- 2 TURN ON / VOLUME -->
+  <article class="page">
+    <span class="pnum" aria-hidden="true">2</span>
+    <div class="scene">
+      <svg viewBox="0 0 160 110">
+        <use href="#radio" x="54" y="30" width="44" height="63"/>
+        <circle cx="92" cy="36" r="9" fill="#3a3a3a" stroke="#2f2e2b" stroke-width="1.2"/>
+        <line x1="92" y1="36" x2="92" y2="29" stroke="#cfe3d6" stroke-width="2.2" stroke-linecap="round"/>
+        <g stroke="#41564c" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M104 32 a11 11 0 0 1 -2 14"/><polyline points="104,32 105,27 99,29"/></g>
+        <path d="M128 42 q-12 -3 -24 -6" stroke="#e7b48f" stroke-width="9" fill="none" stroke-linecap="round"/>
+        <g stroke="#41564c" stroke-width="1.8" fill="none" stroke-linecap="round"><path d="M46 56 q4 6 0 12"/></g>
+      </svg>
+    </div>
+    <p class="ptext">To turn my radio on, I turn the knob. I hear a small click. Now my radio is on. The same knob makes the sound louder or softer. I turn it a little until the sound feels just right for me &mdash; not too loud. A grown-up can help me find a good sound level.</p>
+  </article>
+
+  <!-- 3 ONE CHANNEL -->
+  <article class="page">
+    <span class="pnum" aria-hidden="true">3</span>
+    <div class="scene">
+      <svg viewBox="0 0 160 110">
+        <use href="#kid" x="34" y="22" width="52" height="84"/>
+        <path d="M82 66 q14 3 22 6" stroke="#41564c" stroke-width="6" fill="none" stroke-linecap="round"/>
+        <circle cx="104" cy="72" r="3.5" fill="#e7b48f"/>
+        <use href="#radio" x="98" y="50" width="30" height="43"/>
+        <g stroke="#41564c" stroke-width="1.6" stroke-linecap="round"><line x1="134" y1="54" x2="139" y2="54"/><line x1="136.5" y1="51.5" x2="136.5" y2="56.5"/></g>
+      </svg>
+    </div>
+    <p class="ptext">My radio has one channel for me. It is <strong>Channel <span class="v-channel">__</span></strong>. First, I turn my radio to Channel <span class="v-channel">__</span>. Now my radio is ready.</p>
+  </article>
+
+  <!-- 4 SOUNDS -->
+  <article class="page">
+    <span class="pnum" aria-hidden="true">4</span>
+    <div class="scene">
+      <svg viewBox="0 0 180 110">
+        <use href="#radio" x="22" y="32" width="36" height="52"/>
+        <g stroke="#41564c" stroke-width="2" fill="none" stroke-linecap="round"><path d="M64 50 q7 10 0 22"/><path d="M74 42 q12 18 0 38"/></g>
+        <use href="#kid" x="110" y="28" width="48" height="78"/>
+      </svg>
+    </div>
+    <p class="ptext">Sometimes my radio is quiet. Sometimes it beeps. Sometimes it makes a soft &ldquo;shhhh&rdquo; sound. That sound is called static. The beeps and the static are okay. They do not mean anything is wrong. If my radio is too loud, I can turn it down. A grown-up can help me.</p>
+  </article>
+
+  <!-- 5 PUSH TO TALK -->
+  <article class="page">
+    <span class="pnum" aria-hidden="true">5</span>
+    <div class="scene">
+      <svg viewBox="0 0 160 110">
+        <use href="#radio" x="62" y="12" width="58" height="84"/>
+        <rect x="55" y="44" width="11" height="20" rx="3.5" fill="#b9785f" stroke="#2f2e2b" stroke-width="1"/>
+        <path d="M10 54 q24 0 40 0" stroke="#e7b48f" stroke-width="11" fill="none" stroke-linecap="round"/>
+        <path d="M10 54 q24 0 40 0" stroke="#2f2e2b" stroke-width="1" fill="none" stroke-linecap="round" opacity="0.25"/>
+        <g stroke="#41564c" stroke-width="2.2" stroke-linecap="round"><path d="M50 34 l5 6"/><path d="M58 31 l4 6"/></g>
+      </svg>
+    </div>
+    <p class="ptext">To talk, I press the button and hold it. While I hold the button, I talk. When I finish talking, I let the button go. When the button is up, I can hear other people. I talk, or I listen. I do one at a time.</p>
+  </article>
+
+  <!-- 6 TAKING TURNS -->
+  <article class="page">
+    <span class="pnum" aria-hidden="true">6</span>
+    <div class="scene">
+      <svg viewBox="0 0 200 110">
+        <use href="#kid" x="22" y="28" width="48" height="76"/>
+        <g><path d="M72 26 h30 a4 4 0 0 1 4 4 v12 a4 4 0 0 1 -4 4 h-16 l-5 5 v-5 h-9 a4 4 0 0 1 -4 -4 v-12 a4 4 0 0 1 4 -4 z" fill="#fff" stroke="#41564c" stroke-width="1.4"/><line x1="78" y1="34" x2="100" y2="34" stroke="#41564c" stroke-width="1.7" stroke-linecap="round"/><line x1="78" y1="39" x2="94" y2="39" stroke="#41564c" stroke-width="1.7" stroke-linecap="round"/></g>
+        <use href="#adult" x="128" y="22" width="48" height="80"/>
+        <g fill="#5a584f"><circle cx="150" cy="16" r="2.2"/><circle cx="159" cy="16" r="2.2"/><circle cx="168" cy="16" r="2.2"/></g>
+      </svg>
+    </div>
+    <p class="ptext">On the radio, one person talks at a time. When someone else is talking, I wait and listen. When they are done, it is my turn. Waiting is part of using the radio. I can wait.</p>
+  </article>
+
+  <!-- 7 CALL -->
+  <article class="page">
+    <span class="pnum" aria-hidden="true">7</span>
+    <div class="scene">
+      <svg viewBox="0 0 170 110">
+        <use href="#kid" x="34" y="22" width="52" height="84"/>
+        <path d="M82 64 q16 -6 22 -16" stroke="#41564c" stroke-width="6" fill="none" stroke-linecap="round"/>
+        <circle cx="104" cy="46" r="3.6" fill="#e7b48f"/>
+        <use href="#radio" x="96" y="28" width="27" height="39"/>
+        <g stroke="#41564c" stroke-width="1.9" fill="none" stroke-linecap="round"><path d="M128 40 q5 5 0 10"/><path d="M135 35 q9 10 0 20"/></g>
+      </svg>
+    </div>
+    <p class="ptext">When I want to talk to someone, I press the button and say:</p>
+    <span class="say">&ldquo;This is <span class="v-callsign">(call sign)</span>. <span class="name v-name">(name)</span> calling <span class="blank">name</span>.&rdquo;</span>
+    <p class="ptext">Then I let the button go and I listen.</p>
+  </article>
+
+  <!-- 8 CALL SIGN RULE -->
+  <article class="page">
+    <span class="pnum" aria-hidden="true">8</span>
+    <div class="scene">
+      <svg viewBox="0 0 200 110">
+        <use href="#adult" x="18" y="22" width="48" height="80"/>
+        <use href="#kid" x="108" y="32" width="46" height="74"/>
+        <path d="M104 66 q-8 2 -14 4" stroke="#41564c" stroke-width="6" fill="none" stroke-linecap="round"/>
+        <circle cx="90" cy="71" r="3.5" fill="#e7b48f"/>
+        <use href="#radio" x="78" y="50" width="24" height="35"/>
+        <g><circle cx="172" cy="30" r="12" fill="#fff" stroke="#41564c" stroke-width="1.7"/><line x1="172" y1="30" x2="172" y2="23" stroke="#41564c" stroke-width="1.7" stroke-linecap="round"/><line x1="172" y1="30" x2="177" y2="33" stroke="#41564c" stroke-width="1.7" stroke-linecap="round"/></g>
+      </svg>
+    </div>
+    <p class="ptext">Every little while, I say my call sign again. My call sign is <span class="accent v-callsign">(call sign)</span>. Saying it is a rule that helps everyone know who is talking. A grown-up can remind me. That is okay.</p>
+  </article>
+
+  <!-- 9 LISTENING -->
+  <article class="page">
+    <span class="pnum" aria-hidden="true">9</span>
+    <div class="scene">
+      <svg viewBox="0 0 160 110">
+        <use href="#kid" x="38" y="22" width="54" height="86"/>
+        <path d="M90 62 q15 -8 15 -22" stroke="#41564c" stroke-width="6" fill="none" stroke-linecap="round"/>
+        <circle cx="104" cy="38" r="3.6" fill="#e7b48f"/>
+        <use href="#radio" x="96" y="24" width="24" height="35"/>
+        <g stroke="#41564c" stroke-width="1.7" fill="none" stroke-linecap="round"><path d="M124 34 q5 6 0 13"/><path d="M131 30 q8 9 0 21"/></g>
+      </svg>
+    </div>
+    <p class="ptext">When I want to listen and wait, I press the button and say:</p>
+    <span class="say">&ldquo;This is <span class="v-callsign">(call sign)</span>. <span class="name v-name">(name)</span>, and I&rsquo;ll be on the side.&rdquo;</span>
+    <p class="ptext">This means I am still here. I am listening, but I am not talking right now.</p>
+  </article>
+
+  <!-- 10 DONE -->
+  <article class="page">
+    <span class="pnum" aria-hidden="true">10</span>
+    <div class="scene">
+      <svg viewBox="0 0 170 110">
+        <use href="#kid" x="20" y="18" width="50" height="80"/>
+        <rect x="92" y="72" width="62" height="6" rx="2" fill="#b9785f"/>
+        <rect x="98" y="78" width="5" height="20" fill="#a86b54"/>
+        <rect x="143" y="78" width="5" height="20" fill="#a86b54"/>
+        <use href="#radio" x="110" y="38" width="24" height="35"/>
+        <path d="M70 60 q14 4 24 8" stroke="#41564c" stroke-width="6" fill="none" stroke-linecap="round"/>
+        <circle cx="94" cy="68" r="3.4" fill="#e7b48f"/>
+      </svg>
+    </div>
+    <p class="ptext">When I am all done, I press the button and say:</p>
+    <span class="say">&ldquo;This is <span class="v-callsign">(call sign)</span>. <span class="name v-name">(name)</span>, and I&rsquo;ll be clear.&rdquo;</span>
+    <p class="ptext">This means I am finished talking. Then I can put my radio down.</p>
+  </article>
+
+  <!-- 11 MISTAKES / TRY AGAIN -->
+  <article class="page">
+    <span class="pnum" aria-hidden="true">11</span>
+    <div class="scene">
+      <svg viewBox="0 0 170 110">
+        <use href="#kid" x="40" y="22" width="54" height="86"/>
+        <g transform="translate(116,54)" stroke="#41564c" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M18 0 A18 18 0 1 1 12 -13"/><polyline points="12,-15 13,-4 2,-3"/></g>
+      </svg>
+    </div>
+    <p class="ptext">Sometimes I call and no one answers right away. That is okay. I can wait and try again later. Sometimes I say the words in a different order. That is okay too. I can try again. I am learning.</p>
+  </article>
+
+  <!-- 12 CLOSING -->
+  <article class="page">
+    <span class="pnum" aria-hidden="true">12</span>
+    <div class="scene">
+      <svg viewBox="0 0 160 110">
+        <use href="#kid" x="40" y="20" width="56" height="88"/>
+        <path d="M92 66 q12 2 18 5" stroke="#41564c" stroke-width="6" fill="none" stroke-linecap="round"/>
+        <circle cx="110" cy="72" r="3.5" fill="#e7b48f"/>
+        <use href="#radio" x="104" y="50" width="26" height="38"/>
+        <polygon points="70,12 73.5,21 83,21 75.5,27 78,37 70,31 62,37 64.5,27 57,21 66.5,21" fill="#c89b3c" stroke="#2f2e2b" stroke-width="0.8"/>
+      </svg>
+    </div>
+    <p class="ptext">I know how to use my radio. I press the button to talk. I let go to listen. I wait for my turn. My radio helps me stay close to my family. <strong>I can do this.</strong></p>
+  </article>
+
+  <footer>Accessibility: WCAG&nbsp;2.2 Level&nbsp;AA. Compliant as of 2026-06-09.</footer>
+</div>
+
+<script>
+  var fields = {
+    callsign: {sel:'#in-callsign', ph:'(call sign)'},
+    channel:  {sel:'#in-channel',  ph:'__'},
+    name:     {sel:'#in-name',     ph:'(name)'}
+  };
+  Object.keys(fields).forEach(function(key){
+    var cfg = fields[key];
+    var input = document.querySelector(cfg.sel);
+    var targets = document.querySelectorAll('.v-' + key);
+    function update(){
+      var val = input.value.trim();
+      for (var i = 0; i < targets.length; i++){ targets[i].textContent = val || cfg.ph; }
+    }
+    input.addEventListener('input', update);
+    update();
+  });
+</script>
+</body>
+</html>

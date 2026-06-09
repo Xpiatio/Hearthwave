@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<!-- saved from url=(0073)file:///C:/Users/benjamin.zomberg/Downloads/gmrs-radio-business-card.html -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Radio — Business Card</title>
+<style>
+  :root{
+    --page:#ece9e1;--card:#faf8f3;--ink:#2f2e2b;--soft:#5a584f;
+    --accent:#41564c;--quote:#eef2ee;--line:#d8d4c8;
+  }
+  *{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
+  body{
+    margin:0;background:var(--page);color:var(--ink);
+    font-family:Verdana,Tahoma,"Trebuchet MS",sans-serif;line-height:1.5;padding:28px 18px;
+  }
+  .wrap{max-width:560px;margin:0 auto;}
+
+  /* ---- Setup panel (screen only) ---- */
+  .setup{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 24px;margin-bottom:22px;}
+  .setup h2{font-size:1.15rem;margin:0 0 4px;}
+  .setup p{font-size:.95rem;color:var(--soft);margin:0 0 16px;}
+  .field{display:flex;flex-direction:column;margin-bottom:14px;}
+  .field:last-child{margin-bottom:0;}
+  .field label{font-size:.95rem;font-weight:700;margin-bottom:5px;}
+  .field input{font-family:inherit;font-size:1.05rem;color:var(--ink);padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .field input:focus{outline:3px solid var(--accent);outline-offset:1px;}
+
+  .cutnote{font-size:.9rem;color:var(--soft);text-align:center;margin:0 0 14px;}
+
+  /* ---- Business cards (3.5in x 2in) ---- */
+  .cards{display:flex;flex-direction:column;align-items:center;gap:16px;}
+  .bcard{
+    width:3.5in;height:2in;background:var(--card);
+    border:1.5px dashed var(--line);border-radius:0.12in;
+    padding:0.17in 0.2in;overflow:hidden;
+  }
+
+  /* Front */
+  .front{display:flex;flex-direction:column;}
+  .front .kicker{font-size:7pt;letter-spacing:.12em;text-transform:uppercase;color:var(--soft);}
+  .front .hero{display:flex;align-items:center;gap:0.12in;margin-top:0.04in;}
+  .front .hero svg{width:0.42in;height:0.42in;color:var(--accent);flex:0 0 auto;}
+  .front .ch{font-size:20pt;font-weight:700;line-height:1;}
+  .front .place{font-size:8pt;color:var(--soft);margin-top:1pt;}
+  .front .rule{height:1px;background:var(--line);margin:0.1in 0;}
+  .front .cs{font-size:11pt;}
+  .front .cs b{color:var(--accent);letter-spacing:.03em;}
+  .front .nm{font-size:10.5pt;margin-top:2pt;}
+  .front .nm span{font-weight:700;}
+
+  /* Back */
+  .back{display:flex;flex-direction:column;justify-content:space-between;}
+  .back .btitle{font-size:7pt;letter-spacing:.12em;text-transform:uppercase;color:var(--soft);margin-bottom:2pt;}
+  .brow{display:flex;gap:0.1in;align-items:flex-start;padding:1.5pt 0;}
+  .brow svg{width:0.2in;height:0.2in;color:var(--accent);flex:0 0 auto;margin-top:1pt;}
+  .brow .txt{font-size:8.2pt;line-height:1.28;}
+  .brow .lbl{font-weight:700;color:var(--accent);}
+  .brow .say{}
+  .blank{border-bottom:1px solid var(--soft);padding:0 0.3em;font-style:italic;}
+  .accent{color:var(--accent);font-weight:700;}
+
+  .stamp{font-size:.75rem;color:var(--soft);text-align:center;margin-top:16px;}
+
+  @media print{
+    @page{margin:12mm;}
+    html,body{background:#fff;}
+    body{padding:0;}
+    .setup,.cutnote{display:none;}
+    .wrap{max-width:100%;}
+    .cards{gap:0.25in;}
+    .bcard{page-break-inside:avoid;}
+    .stamp{margin-top:0.2in;}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+
+    <section class="setup" aria-label="Set up this card">
+      <h2>Set up this card</h2>
+      <p>Type your details below. Both cards fill in by themselves. Then print and cut them out.</p>
+      <div class="field"><label for="in-callsign">Your call sign</label><input id="in-callsign" type="text" placeholder="Type your call sign" autocomplete="off"></div>
+      <div class="field"><label for="in-channel">Channel number</label><input id="in-channel" type="text" placeholder="A number from 1 to 22" autocomplete="off"></div>
+      <div class="field"><label for="in-place">Neighborhood name</label><input id="in-place" type="text" placeholder="Type the neighborhood name" autocomplete="off"></div>
+      <div class="field"><label for="in-name">Radio user's name</label><input id="in-name" type="text" placeholder="Type the name" autocomplete="off"></div>
+    </section>
+
+    <p class="cutnote">Print, then cut along the dashed lines. Front card and back card.</p>
+
+    <div class="cards">
+
+      <!-- FRONT -->
+      <div class="bcard front">
+        <div class="kicker">My radio card</div>
+        <div class="hero">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="6" y="8" width="12" height="13" rx="2.2"></rect>
+            <line x1="9.5" y1="8" x2="9.5" y2="3.5"></line><circle cx="9.5" cy="3" r="0.9"></circle>
+            <rect x="8.5" y="10.5" width="7" height="3.4" rx="0.8"></rect>
+            <line x1="9.5" y1="17" x2="9.5" y2="17.01"></line><line x1="12" y1="17" x2="12" y2="17.01"></line><line x1="14.5" y1="17" x2="14.5" y2="17.01"></line>
+          </svg>
+          <div>
+            <div class="ch">Channel <span class="v-channel">__</span></div>
+            <div class="place"><span class="v-place">(neighborhood)</span> neighborhood</div>
+          </div>
+        </div>
+        <div class="rule"></div>
+        <div class="cs">Call sign: <b class="v-callsign">(call sign)</b></div>
+        <div class="nm">Name: <span class="v-name">(name)</span></div>
+      </div>
+
+      <!-- BACK -->
+      <div class="bcard back">
+        <div class="btitle">What to say</div>
+
+        <div class="brow">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 6 h16 a1.8 1.8 0 0 1 1.8 1.8 v7 a1.8 1.8 0 0 1 -1.8 1.8 H11 l-4 3 v-3 H4 a1.8 1.8 0 0 1 -1.8 -1.8 V7.8 A1.8 1.8 0 0 1 4 6 z"></path>
+          </svg>
+          <div class="txt"><span class="lbl">Call:</span> “This is <span class="v-callsign">(call sign)</span>. <span class="v-name">(name)</span> calling <span class="blank">name</span>.”</div>
+        </div>
+
+        <div class="brow">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="8.2"></circle><line x1="12" y1="12" x2="12" y2="6.8"></line><line x1="12" y1="12" x2="15.4" y2="13.2"></line>
+          </svg>
+          <div class="txt"><span class="lbl">Every 15 min:</span> say “<span class="accent v-callsign">(call sign)</span>” again.</div>
+        </div>
+
+        <div class="brow">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M6.5 10.5 a5.5 5.5 0 1 1 8.6 4.6 c-1.3 0.9 -1.9 1.6 -2.1 2.9 a2.2 2.2 0 0 1 -4.2 -0.5"></path><path d="M9.7 10.2 a2.4 2.4 0 0 1 4.2 1.9"></path>
+          </svg>
+          <div class="txt"><span class="lbl">Listen:</span> “This is <span class="v-callsign">(call sign)</span>. <span class="v-name">(name)</span>, and I’ll be on the side.”</div>
+        </div>
+
+        <div class="brow">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="8.2"></circle><path d="M8.3 12.4 l2.6 2.6 l4.8 -5.4"></path>
+          </svg>
+          <div class="txt"><span class="lbl">Done:</span> “This is <span class="v-callsign">(call sign)</span>. <span class="v-name">(name)</span>, and I’ll be clear.”</div>
+        </div>
+      </div>
+
+    </div>
+
+    <p class="stamp">Accessibility: WCAG&nbsp;2.2 Level&nbsp;AA. Compliant as of 2026-06-09.</p>
+  </div>
+
+<script>
+  var fields = {
+    callsign: {sel:'#in-callsign', ph:'(call sign)'},
+    channel:  {sel:'#in-channel',  ph:'__'},
+    place:    {sel:'#in-place',    ph:'(neighborhood)'},
+    name:     {sel:'#in-name',     ph:'(name)'}
+  };
+  Object.keys(fields).forEach(function(key){
+    var cfg = fields[key];
+    var input = document.querySelector(cfg.sel);
+    var targets = document.querySelectorAll('.v-' + key);
+    function update(){
+      var val = input.value.trim();
+      for (var i = 0; i < targets.length; i++){ targets[i].textContent = val || cfg.ph; }
+    }
+    input.addEventListener('input', update);
+    update();
+  });
+</script>
+
+
+</body></html>

@@ -58,7 +58,7 @@
     @media (max-width: 640px) {
       #navbar { padding: 0 16px !important; }
       .nav-text-links { display: none !important; }
-      .nav-mobile-btn { display: block !important; }
+      .nav-mobile-btn { display: flex !important; }
 
       .sec-pad { padding: 52px 20px !important; }
 
@@ -103,6 +103,7 @@
       </a>
       <!-- Desktop nav links -->
       <div class="nav-text-links" style="display:flex;gap:24px;align-items:center;">
+        <a href="#templates" style="color:#94a3b8;font-size:14px;text-decoration:none;font-weight:500;">Templates</a>
         <a href="#features" style="color:#94a3b8;font-size:14px;text-decoration:none;font-weight:500;">Features</a>
         <a href="#install" style="color:#94a3b8;font-size:14px;text-decoration:none;font-weight:500;">Install</a>
         <a href="https://github.com/Xpiatio/Radio-TTY/blob/master/USER_MANUAL.md" target="_blank" rel="noopener"
@@ -112,8 +113,9 @@
            aria-label="View Radio-TTY on GitHub (opens in new tab)"
            style="background:#1d4ed8;color:#fff;font-size:13px;font-weight:600;padding:7px 16px;border-radius:20px;text-decoration:none;">GitHub →</a>
       </div>
-      <!-- Mobile: GitHub button only -->
-      <div class="nav-mobile-btn" style="display:none;">
+      <!-- Mobile: Templates link + GitHub button -->
+      <div class="nav-mobile-btn" style="display:none;gap:10px;align-items:center;">
+        <a href="#templates" style="color:#94a3b8;font-size:14px;text-decoration:none;font-weight:500;">Templates</a>
         <a href="https://github.com/Xpiatio/Radio-TTY" target="_blank" rel="noopener"
            aria-label="View Radio-TTY on GitHub (opens in new tab)"
            style="background:#1d4ed8;color:#fff;font-size:13px;font-weight:600;padding:7px 14px;border-radius:20px;text-decoration:none;">GitHub →</a>
@@ -239,6 +241,71 @@
         </article>
 
       </div>
+    </div>
+  </section>
+
+  <!-- ── PRINTABLE TEMPLATES ── -->
+  <section id="templates" class="sec-pad" aria-labelledby="templates-heading"
+           style="background:#f8fafc;padding:72px 32px;">
+    <div style="max-width:1100px;margin:0 auto;">
+      <div style="text-align:center;margin-bottom:48px;">
+        <h2 id="templates-heading" class="sec-h2"
+            style="font-size:30px;font-weight:800;color:#0f172a;margin:0 0 10px;">Free printable reference cards</h2>
+        <p style="color:#64748b;font-size:16px;max-width:520px;margin:0 auto;line-height:1.6;">Type your callsign and channel once — the card fills in live. Print it and you're ready to go. No account needed.</p>
+      </div>
+
+      <ul class="feature-grid" aria-label="Printable templates"
+          style="display:grid;grid-template-columns:repeat(4,1fr);gap:18px;list-style:none;padding:0;margin:0;">
+
+        <li>
+          <a href="gmrs-home-post-template-family.html" target="_blank" rel="noopener"
+             class="feature-card"
+             aria-label="GMRS Station Reference template — opens in new tab"
+             style="display:flex;flex-direction:column;height:100%;padding:22px 18px;border:1px solid #e2e8f0;border-radius:14px;background:#fff;text-decoration:none;color:inherit;">
+            <div aria-hidden="true" style="font-size:30px;margin-bottom:12px;">📋</div>
+            <h3 style="font-weight:700;color:#0f172a;font-size:14px;margin:0 0 7px;">Station Reference</h3>
+            <p style="color:#64748b;font-size:13px;margin:0 0 14px;line-height:1.5;flex:1;">Key channels, calling phrases, and the 15-min ID reminder — all in one reference card for your home station.</p>
+            <span style="display:inline-block;background:#dbeafe;color:#1d4ed8;font-size:11px;font-weight:600;padding:3px 10px;border-radius:8px;align-self:flex-start;">For adults &middot; Fill &amp; print</span>
+          </a>
+        </li>
+
+        <li>
+          <a href="gmrs-radio-card-template-kid.html" target="_blank" rel="noopener"
+             class="feature-card"
+             aria-label="My Radio Card template — opens in new tab"
+             style="display:flex;flex-direction:column;height:100%;padding:22px 18px;border:1px solid #e2e8f0;border-radius:14px;background:#fff;text-decoration:none;color:inherit;">
+            <div aria-hidden="true" style="font-size:30px;margin-bottom:12px;">🧒</div>
+            <h3 style="font-weight:700;color:#0f172a;font-size:14px;margin:0 0 7px;">My Radio Card</h3>
+            <p style="color:#64748b;font-size:13px;margin:0 0 14px;line-height:1.5;flex:1;">Five numbered steps — turn the channel, call, identify, listen, sign off. A card kids can follow on their own.</p>
+            <span style="display:inline-block;background:#dcfce7;color:#166534;font-size:11px;font-weight:600;padding:3px 10px;border-radius:8px;align-self:flex-start;">For kids &middot; Fill &amp; print</span>
+          </a>
+        </li>
+
+        <li>
+          <a href="gmrs-radio-social-story-kid.html" target="_blank" rel="noopener"
+             class="feature-card"
+             aria-label="My Radio Story template — opens in new tab"
+             style="display:flex;flex-direction:column;height:100%;padding:22px 18px;border:1px solid #e2e8f0;border-radius:14px;background:#fff;text-decoration:none;color:inherit;">
+            <div aria-hidden="true" style="font-size:30px;margin-bottom:12px;">📖</div>
+            <h3 style="font-weight:700;color:#0f172a;font-size:14px;margin:0 0 7px;">My Radio Story</h3>
+            <p style="color:#64748b;font-size:13px;margin:0 0 14px;line-height:1.5;flex:1;">A 12-page illustrated social story — how to turn on the radio, what the sounds mean, when to talk and listen.</p>
+            <span style="display:inline-block;background:#fef9c3;color:#854d0e;font-size:11px;font-weight:600;padding:3px 10px;border-radius:8px;align-self:flex-start;">For kids &middot; Social story</span>
+          </a>
+        </li>
+
+        <li>
+          <a href="My-Radio-Business-Card.html" target="_blank" rel="noopener"
+             class="feature-card"
+             aria-label="My Radio Business Card template — opens in new tab"
+             style="display:flex;flex-direction:column;height:100%;padding:22px 18px;border:1px solid #e2e8f0;border-radius:14px;background:#fff;text-decoration:none;color:inherit;">
+            <div aria-hidden="true" style="font-size:30px;margin-bottom:12px;">🪪</div>
+            <h3 style="font-weight:700;color:#0f172a;font-size:14px;margin:0 0 7px;">Radio Business Card</h3>
+            <p style="color:#64748b;font-size:13px;margin:0 0 14px;line-height:1.5;flex:1;">Wallet-sized front-and-back card. Channel and callsign on the front; what to say on the back. Print and cut.</p>
+            <span style="display:inline-block;background:#f3e8ff;color:#7e22ce;font-size:11px;font-weight:600;padding:3px 10px;border-radius:8px;align-self:flex-start;">All ages &middot; Wallet card</span>
+          </a>
+        </li>
+
+      </ul>
     </div>
   </section>
 
