@@ -59,6 +59,10 @@ export interface StatusMsg {
   rx_mode?: string;
   vad_threshold?: number;
   whisper_model?: string;
+  whisper_model_final?: string;
+  squelch_adaptive?: boolean;
+  stt_debug_capture?: boolean;
+  tx_conditioning?: boolean;
   ptt_mode?: string;
   ptt_serial_port?: string;
   ptt_serial_line?: string;

@@ -11,17 +11,20 @@
 #   6. Downloads the 8 default Piper TTS voices
 #
 # Usage:
-#   bash setup.sh                   # Whisper small.en + all voices (recommended)
-#   bash setup.sh --model base.en   # smaller/faster Whisper (~145 MB)
-#   bash setup.sh --model medium.en # higher-accuracy Whisper (~1.5 GB)
-#   bash setup.sh --voice-only      # re-run voices only (skip Whisper)
-#   bash setup.sh --skip-voices     # Whisper only (skip voices)
+#   bash setup.sh                          # Whisper small.en + all voices (recommended)
+#   bash setup.sh --model base.en          # smaller/faster Whisper (~145 MB)
+#   bash setup.sh --model medium.en        # higher-accuracy Whisper (~1.5 GB)
+#   bash setup.sh --final-model distil-large-v3   # also stage the two-tier
+#                                          # final-pass model (set whisper_model_final to match)
+#   bash setup.sh --voice-only             # re-run voices only (skip Whisper)
+#   bash setup.sh --skip-voices            # Whisper only (skip voices)
 
 set -euo pipefail
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
 
 WHISPER_MODEL="small.en"
+FINAL_MODEL=""
 VOICE_ONLY=false
 SKIP_VOICES=false
 
@@ -30,24 +33,36 @@ while [[ $# -gt 0 ]]; do
     --model)
       [[ $# -lt 2 ]] && { echo "Error: --model requires a value." >&2; exit 1; }
       WHISPER_MODEL="$2"; shift 2 ;;
+    --final-model)
+      [[ $# -lt 2 ]] && { echo "Error: --final-model requires a value." >&2; exit 1; }
+      FINAL_MODEL="$2"; shift 2 ;;
     --voice-only)  VOICE_ONLY=true;  shift ;;
     --skip-voices) SKIP_VOICES=true; shift ;;
-    -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     *) echo "Unknown argument: $1  (try --help)" >&2; exit 1 ;;
   esac
 done
 
-case "$WHISPER_MODEL" in
-  tiny.en)   REPO_ID="Systran/faster-whisper-tiny.en";   MODEL_SIZE="~75 MB"  ;;
-  base.en)   REPO_ID="Systran/faster-whisper-base.en";   MODEL_SIZE="~145 MB" ;;
-  small.en)  REPO_ID="Systran/faster-whisper-small.en";  MODEL_SIZE="~464 MB" ;;
-  medium.en) REPO_ID="Systran/faster-whisper-medium.en"; MODEL_SIZE="~1.5 GB" ;;
-  large-v3)  REPO_ID="Systran/faster-whisper-large-v3";  MODEL_SIZE="~3 GB"   ;;
-  *)
-    echo "Error: unknown model '$WHISPER_MODEL'." >&2
-    echo "Valid choices: tiny.en  base.en  small.en  medium.en  large-v3" >&2
-    exit 1 ;;
-esac
+# Map a model name → "<repo_id>|<approx size>", or exit with an error.
+repo_for_model() {
+  case "$1" in
+    tiny.en)          echo "Systran/faster-whisper-tiny.en|~75 MB"  ;;
+    base.en)          echo "Systran/faster-whisper-base.en|~145 MB" ;;
+    small.en)         echo "Systran/faster-whisper-small.en|~464 MB" ;;
+    medium.en)        echo "Systran/faster-whisper-medium.en|~1.5 GB" ;;
+    large-v3)         echo "Systran/faster-whisper-large-v3|~3 GB"   ;;
+    distil-large-v3)  echo "Systran/faster-distil-whisper-large-v3|~1.5 GB" ;;
+    *)
+      echo "Error: unknown model '$1'." >&2
+      echo "Valid choices: tiny.en  base.en  small.en  medium.en  large-v3  distil-large-v3" >&2
+      exit 1 ;;
+  esac
+}
+
+_spec="$(repo_for_model "$WHISPER_MODEL")"
+REPO_ID="${_spec%%|*}"
+MODEL_SIZE="${_spec##*|}"
+[[ -n "$FINAL_MODEL" ]] && repo_for_model "$FINAL_MODEL" > /dev/null  # validate early
 
 HF_BASE="https://huggingface.co/rhasspy/piper-voices/resolve/main"
 
@@ -139,25 +154,41 @@ fi
 
 # ── 4. Whisper STT model ──────────────────────────────────────────────────────
 
-if ! $VOICE_ONLY; then
-  echo ""
-  TARGET="Models/STT/${WHISPER_MODEL}"
-  if [[ -d "$TARGET" ]] && [[ -n "$(ls -A "$TARGET" 2>/dev/null)" ]]; then
-    echo "==> Whisper ${WHISPER_MODEL}: already present, skipping."
-  else
-    echo "==> Downloading Whisper ${WHISPER_MODEL} (${MODEL_SIZE}) — this may take a while..."
-    mkdir -p "$TARGET"
-    docker run --rm \
-      -v "$(pwd)/Models:/models" \
-      python:3.13-slim \
-      bash -c "pip install -q --root-user-action=ignore huggingface_hub && python3 -c \"
+# Download one Whisper model into Models/STT/<name> (idempotent).
+fetch_whisper_model() {
+  local model="$1"
+  local spec repo size target
+  spec="$(repo_for_model "$model")"
+  repo="${spec%%|*}"
+  size="${spec##*|}"
+  target="Models/STT/${model}"
+  if [[ -d "$target" ]] && [[ -n "$(ls -A "$target" 2>/dev/null)" ]]; then
+    echo "==> Whisper ${model}: already present, skipping."
+    return 0
+  fi
+  echo "==> Downloading Whisper ${model} (${size}) — this may take a while..."
+  mkdir -p "$target"
+  docker run --rm \
+    -v "$(pwd)/Models:/models" \
+    python:3.13-slim \
+    bash -c "pip install -q --root-user-action=ignore huggingface_hub && python3 -c \"
 import os
 from huggingface_hub import snapshot_download
-os.makedirs('/models/STT/${WHISPER_MODEL}', exist_ok=True)
-snapshot_download('${REPO_ID}', local_dir='/models/STT/${WHISPER_MODEL}')
-print('  Whisper ${WHISPER_MODEL} download complete.')
+os.makedirs('/models/STT/${model}', exist_ok=True)
+snapshot_download('${repo}', local_dir='/models/STT/${model}')
+print('  Whisper ${model} download complete.')
 \""
-    echo "  Saved to ${TARGET}/"
+  echo "  Saved to ${target}/"
+}
+
+if ! $VOICE_ONLY; then
+  echo ""
+  fetch_whisper_model "$WHISPER_MODEL"
+  if [[ -n "$FINAL_MODEL" ]]; then
+    echo ""
+    echo "==> Two-tier final-pass model:"
+    fetch_whisper_model "$FINAL_MODEL"
+    echo "  Set whisper_model_final=\"${FINAL_MODEL}\" in data/config.json to enable it."
   fi
 fi
 

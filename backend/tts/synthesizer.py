@@ -37,10 +37,16 @@ class TTSSynthesizer:
         out_queue: asyncio.Queue,
         compute_backend: "ComputeBackend | None" = None,
         output_device=None,
+        tx_conditioning: bool = False,
     ):
         self.out_queue = out_queue
         self.compute_backend = compute_backend
         self.output_device = output_device if output_device not in (None, -1) else None
+        # Band-limit/compress/normalize synthesized speech for the radio's
+        # mic input. Only the PTT path honors this — browser read-aloud goes
+        # to real speakers where conditioning would just degrade the audio.
+        # Mutable at runtime (server toggles it without a restart).
+        self.tx_conditioning = bool(tx_conditioning)
 
     # ------------------------------------------------------------------
     # Public async interface
@@ -60,7 +66,8 @@ class TTSSynthesizer:
         Returns (None, sample_rate) if synthesis produces no audio.
         """
         return await asyncio.to_thread(
-            self._synthesize_blocking, voice, text, lead_in_seconds, tail_seconds, length_scale
+            self._synthesize_blocking, voice, text, lead_in_seconds, tail_seconds, length_scale,
+            condition=False,
         )
 
     async def synthesize(self, voice, text: str, ptt: "PTT", length_scale: float = 1.0) -> None:
@@ -81,7 +88,8 @@ class TTSSynthesizer:
         tail_seconds = ptt.tail_seconds
         try:
             audio, sample_rate = await asyncio.to_thread(
-                self._synthesize_blocking, voice, text, lead_in_seconds, tail_seconds, length_scale
+                self._synthesize_blocking, voice, text, lead_in_seconds, tail_seconds, length_scale,
+                condition=self.tx_conditioning,
             )
         except Exception as e:
             await self.out_queue.put({"event": "error", "detail": str(e)})
@@ -111,6 +119,7 @@ class TTSSynthesizer:
         lead_in_seconds: float,
         tail_seconds: float,
         length_scale: float,
+        condition: bool = False,
     ) -> tuple[np.ndarray | None, int]:
         """Run Piper synthesis and build the padded PCM buffer.
 
@@ -132,17 +141,20 @@ class TTSSynthesizer:
         if not chunks:
             return None, sample_rate
 
+        speech = np.concatenate(chunks) if len(chunks) > 1 else chunks[0]
+        if condition:
+            # Conditioned before splicing so the lead/tail regions stay
+            # exact zeros (the radio sees clean silence around the keying).
+            from backend.audio.tx_conditioning import condition_tx_audio
+            speech = condition_tx_audio(speech, sample_rate)
+
         lead_samples = int(lead_in_seconds * sample_rate)
         tail_samples = int(tail_seconds * sample_rate)
-        total = lead_samples + sum(len(c) for c in chunks) + tail_samples
+        total = lead_samples + len(speech) + tail_samples
         # np.zeros so lead and tail regions are already silence; no
         # extra concatenations needed to splice them in.
         audio = np.zeros(total, dtype=np.int16)
-        pos = lead_samples
-        for c in chunks:
-            n = len(c)
-            audio[pos:pos + n] = c
-            pos += n
+        audio[lead_samples:lead_samples + len(speech)] = speech
 
         return audio, sample_rate
 

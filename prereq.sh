@@ -9,20 +9,26 @@
 #   bash prereq.sh                   # full setup: Whisper small.en + all voices
 #   bash prereq.sh --model base.en   # use a smaller/faster Whisper model
 #   bash prereq.sh --model medium.en # use a higher-accuracy Whisper model
+#   bash prereq.sh --final-model distil-large-v3  # also stage the two-tier
+#                                    # final-pass model (set whisper_model_final to match)
 #   bash prereq.sh --voice-only      # add/update voices only (skip Whisper)
 
 set -euo pipefail
 
 VOICE_ONLY=false
 WHISPER_MODEL="small.en"
+FINAL_MODEL=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --model)
       [[ $# -lt 2 ]] && { echo "Error: --model requires a value." >&2; exit 1; }
       WHISPER_MODEL="$2"; shift 2 ;;
+    --final-model)
+      [[ $# -lt 2 ]] && { echo "Error: --final-model requires a value." >&2; exit 1; }
+      FINAL_MODEL="$2"; shift 2 ;;
     --voice-only) VOICE_ONLY=true; shift ;;
-    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
     *) echo "Unknown argument: $1  (try --help)" >&2; exit 1 ;;
   esac
 done
@@ -49,14 +55,24 @@ VOICES=(
 
 # ── 0. Validate model choice ─────────────────────────────────────────────────
 
-WHISPER_REPOS=(tiny.en base.en small.en medium.en large-v3)
-VALID=false
-for m in "${WHISPER_REPOS[@]}"; do [[ "$m" == "$WHISPER_MODEL" ]] && VALID=true; done
-if ! $VALID; then
-  echo "Error: unknown model '$WHISPER_MODEL'." >&2
-  echo "Valid choices: ${WHISPER_REPOS[*]}" >&2
-  exit 1
-fi
+# Map a model name → HuggingFace repo id, or exit with an error.
+repo_for_model() {
+  case "$1" in
+    tiny.en)          echo "Systran/faster-whisper-tiny.en"   ;;
+    base.en)          echo "Systran/faster-whisper-base.en"   ;;
+    small.en)         echo "Systran/faster-whisper-small.en"  ;;
+    medium.en)        echo "Systran/faster-whisper-medium.en" ;;
+    large-v3)         echo "Systran/faster-whisper-large-v3"  ;;
+    distil-large-v3)  echo "Systran/faster-distil-whisper-large-v3" ;;
+    *)
+      echo "Error: unknown model '$1'." >&2
+      echo "Valid choices: tiny.en base.en small.en medium.en large-v3 distil-large-v3" >&2
+      exit 1 ;;
+  esac
+}
+
+repo_for_model "$WHISPER_MODEL" > /dev/null            # validate primary
+[[ -n "$FINAL_MODEL" ]] && repo_for_model "$FINAL_MODEL" > /dev/null  # validate final
 
 # ── 1. Check prerequisites ────────────────────────────────────────────────────
 
@@ -86,26 +102,18 @@ done
 
 # ── 3. Whisper STT model ──────────────────────────────────────────────────────
 
-if ! $VOICE_ONLY; then
-  # Map model name → HuggingFace repo
-  case "$WHISPER_MODEL" in
-    tiny.en)   REPO_ID="Systran/faster-whisper-tiny.en"   ;;
-    base.en)   REPO_ID="Systran/faster-whisper-base.en"   ;;
-    small.en)  REPO_ID="Systran/faster-whisper-small.en"  ;;
-    medium.en) REPO_ID="Systran/faster-whisper-medium.en" ;;
-    large-v3)  REPO_ID="Systran/faster-whisper-large-v3"  ;;
-  esac
-
+# Download one Whisper model into the models volume (idempotent).
+fetch_whisper_model() {
+  local model="$1"
+  local repo
+  repo="$(repo_for_model "$model")"
   echo ""
-  echo "==> Whisper STT model (${WHISPER_MODEL})..."
-  echo "  Pulling backend image..."
-  docker pull "$BACKEND_IMAGE" --quiet
-
+  echo "==> Whisper STT model (${model})..."
   docker run --rm --user root \
     --entrypoint python3 \
     -v "${MODELS_VOL}:/app/backend/Models" \
-    -e "WHISPER_MODEL=${WHISPER_MODEL}" \
-    -e "REPO_ID=${REPO_ID}" \
+    -e "WHISPER_MODEL=${model}" \
+    -e "REPO_ID=${repo}" \
     "$BACKEND_IMAGE" \
     -c "
 import os, sys
@@ -124,6 +132,19 @@ print(f'  Downloading {repo} from HuggingFace...')
 snapshot_download(repo, local_dir=target)
 print(f'  Whisper {model} download complete.')
 "
+}
+
+if ! $VOICE_ONLY; then
+  echo ""
+  echo "  Pulling backend image..."
+  docker pull "$BACKEND_IMAGE" --quiet
+  fetch_whisper_model "$WHISPER_MODEL"
+  if [[ -n "$FINAL_MODEL" ]]; then
+    echo ""
+    echo "==> Two-tier final-pass model:"
+    fetch_whisper_model "$FINAL_MODEL"
+    echo "  Set whisper_model_final=\"${FINAL_MODEL}\" in the data volume's config.json to enable it."
+  fi
 fi
 
 # ── 4. Piper TTS voices ───────────────────────────────────────────────────────
@@ -159,6 +180,7 @@ echo ""
 echo "Done. Volumes ready:"
 if ! $VOICE_ONLY; then
   echo "  ${MODELS_VOL}  Whisper ${WHISPER_MODEL} STT model"
+  [[ -n "$FINAL_MODEL" ]] && echo "  ${MODELS_VOL}  Whisper ${FINAL_MODEL} final-pass model (two-tier)"
 fi
 VOICE_NAMES=""
 for entry in "${VOICES[@]}"; do VOICE_NAMES+=" ${entry%%|*}"; done

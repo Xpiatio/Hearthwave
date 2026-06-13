@@ -17,13 +17,16 @@ class WhisperTranscriber:
         self.initial_prompt = self._build_prompt(saved_phrases)
 
     @classmethod
-    def load(cls, model_path, saved_phrases=()):
+    def load(cls, model_path, saved_phrases=(), *, cpu_threads=None):
         from faster_whisper import WhisperModel
 
         # Leave at least one core free for the asyncio event loop.
         # faster-whisper's default cpu_threads=0 means "use all cores",
         # which saturates the CPU during inference and starves the event loop.
-        cpu_threads = max(1, (os.cpu_count() or 2) - 1)
+        # Callers may pass a smaller count (the background final-pass model
+        # runs with fewer threads so it never crowds out the fast path).
+        if cpu_threads is None:
+            cpu_threads = max(1, (os.cpu_count() or 2) - 1)
         return cls(
             WhisperModel(
                 model_path,

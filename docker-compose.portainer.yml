@@ -14,7 +14,14 @@
 #    -------------------- | -----------------------------------------------
 #    radio-tty-data       | Config, contacts, users, tokens, journals (auto-created on first run)
 #    radio-tty-voices     | Piper ONNX voice files (*.onnx + *.onnx.json)
-#    radio-tty-models     | faster-whisper model dir
+#    radio-tty-models     | faster-whisper model dir(s) — streaming + optional final-pass
+#
+#    TWO-TIER (higher RX accuracy): stage a second, larger model for the
+#    full-utterance final pass alongside the streaming model:
+#       bash prereq.sh --final-model distil-large-v3
+#    then set whisper_model_final in the Server Config panel (or config.json).
+#    It lazy-loads on the first finalized utterance and adds ~1.5 GB RAM only
+#    while active — keep that in mind for any backend memory limit you set.
 #
 # 2. Set PULSE_UID to your host user's UID (run 'id -u' on the host to check).
 #    The default below is 1000. In Portainer: Stack → Environment variables → add PULSE_UID.

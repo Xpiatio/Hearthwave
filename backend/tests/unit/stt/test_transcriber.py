@@ -75,3 +75,23 @@ class TestUpdatePrompt:
         t.update_prompt(["first"])
         t.update_prompt(["second"])
         assert t.initial_prompt == "GMRS radio. Phrases: second."
+
+
+# ---------------------------------------------------------------------------
+# load() cpu_threads plumbing (faster_whisper is stubbed by conftest)
+# ---------------------------------------------------------------------------
+
+class TestLoadCpuThreads:
+    def _last_call_kwargs(self):
+        import faster_whisper
+        return faster_whisper.WhisperModel.call_args.kwargs
+
+    def test_default_leaves_one_core_free(self):
+        import os
+        WhisperTranscriber.load("/tmp/model")
+        expected = max(1, (os.cpu_count() or 2) - 1)
+        assert self._last_call_kwargs()["cpu_threads"] == expected
+
+    def test_explicit_cpu_threads_forwarded(self):
+        WhisperTranscriber.load("/tmp/model", cpu_threads=2)
+        assert self._last_call_kwargs()["cpu_threads"] == 2

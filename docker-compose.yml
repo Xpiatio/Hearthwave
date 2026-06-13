@@ -8,6 +8,12 @@ services:
     volumes:
       - ./data:/data
       - ./Voices:/app/Voices:ro
+      # All Whisper models live here, including the optional two-tier
+      # final-pass model. Stage both in one run:
+      #   bash setup.sh --final-model distil-large-v3
+      # then set whisper_model_final in data/config.json (or via the Server
+      # Config panel). The final model lazy-loads on first finalized utterance
+      # and adds ~1.5 GB RAM only while active.
       - ./Models:/app/backend/Models:ro
       # setup.sh writes PULSE_UID to .env — run it once before docker compose up
       - /run/user/${PULSE_UID:-1000}/pulse:/run/pulse:ro

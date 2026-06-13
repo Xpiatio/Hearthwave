@@ -40,9 +40,22 @@ const WHISPER_MODELS = [
   { value: 'large-v3',  label: 'large-v3 — slowest, most accurate' },
 ];
 
+// Final-pass model re-transcribes the whole utterance once it ends, replacing
+// the stitched-together streaming partials. "" disables the second pass.
+const FINAL_WHISPER_MODELS = [
+  { value: '',                label: 'Off — single-pass (streaming only)' },
+  { value: 'medium.en',       label: 'medium.en' },
+  { value: 'large-v3',        label: 'large-v3' },
+  { value: 'distil-large-v3', label: 'distil-large-v3 — recommended' },
+];
+
 export interface ServerConfig {
   vadThreshold: number;
   whisperModel: string;
+  whisperModelFinal: string;
+  squelchAdaptive: boolean;
+  sttDebugCapture: boolean;
+  txConditioning: boolean;
   pttMode: string;
   pttSerialPort: string;
   pttSerialLine: string;
@@ -51,25 +64,35 @@ export interface ServerConfig {
   savedPhrases: string[];
 }
 
+export interface ServerConfigSaveValues {
+  vad_threshold: number;
+  whisper_model: string;
+  whisper_model_final: string;
+  squelch_adaptive: boolean;
+  stt_debug_capture: boolean;
+  tx_conditioning: boolean;
+  ptt_mode: string;
+  ptt_serial_port: string;
+  ptt_serial_line: string;
+  monitor_passthrough: boolean;
+  attendance_enabled: boolean;
+  saved_phrases: string[];
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
   config: ServerConfig;
-  onSave: (values: {
-    vad_threshold: number;
-    whisper_model: string;
-    ptt_mode: string;
-    ptt_serial_port: string;
-    ptt_serial_line: string;
-    monitor_passthrough: boolean;
-    attendance_enabled: boolean;
-    saved_phrases: string[];
-  }) => void;
+  onSave: (values: ServerConfigSaveValues) => void;
 }
 
 export function ServerConfigPanel({ open, onClose, config, onSave }: Props) {
   const [vadThreshold, setVadThreshold] = useState(0.5);
   const [whisperModel, setWhisperModel] = useState('small.en');
+  const [whisperModelFinal, setWhisperModelFinal] = useState('');
+  const [squelchAdaptive, setSquelchAdaptive] = useState(false);
+  const [sttDebugCapture, setSttDebugCapture] = useState(false);
+  const [txConditioning, setTxConditioning] = useState(false);
   const [pttMode, setPttMode] = useState('manual');
   const [pttSerialPort, setPttSerialPort] = useState('');
   const [pttSerialLine, setPttSerialLine] = useState('RTS');
@@ -84,6 +107,10 @@ export function ServerConfigPanel({ open, onClose, config, onSave }: Props) {
     if (!open) return;
     setVadThreshold(config.vadThreshold);
     setWhisperModel(config.whisperModel);
+    setWhisperModelFinal(config.whisperModelFinal);
+    setSquelchAdaptive(config.squelchAdaptive);
+    setSttDebugCapture(config.sttDebugCapture);
+    setTxConditioning(config.txConditioning);
     setPttMode(config.pttMode);
     setPttSerialPort(config.pttSerialPort);
     setPttSerialLine(config.pttSerialLine);
@@ -109,6 +136,10 @@ export function ServerConfigPanel({ open, onClose, config, onSave }: Props) {
     onSave({
       vad_threshold: vadThreshold,
       whisper_model: whisperModel,
+      whisper_model_final: whisperModelFinal,
+      squelch_adaptive: squelchAdaptive,
+      stt_debug_capture: sttDebugCapture,
+      tx_conditioning: txConditioning,
       ptt_mode: pttMode,
       ptt_serial_port: pttSerialPort.trim(),
       ptt_serial_line: pttSerialLine,
@@ -144,6 +175,27 @@ export function ServerConfigPanel({ open, onClose, config, onSave }: Props) {
             </Select>
           </FormControl>
 
+          <FormControl size="small" fullWidth>
+            <InputLabel id="whisper-model-final-label">Final-pass Model</InputLabel>
+            <Select
+              labelId="whisper-model-final-label"
+              label="Final-pass Model"
+              value={whisperModelFinal}
+              displayEmpty
+              onChange={(e) => setWhisperModelFinal(e.target.value)}
+            >
+              {FINAL_WHISPER_MODELS.map((m) => (
+                <MenuItem key={m.value || 'off'} value={m.value}>{m.label}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Typography variant="caption" sx={{ color: 'text.secondary', mt: -1.5 }}>
+            Re-transcribes each finished transmission with a larger model for higher
+            accuracy, replacing the live partials. The model must be staged first
+            (e.g. <code>setup.sh --final-model distil-large-v3</code>) and adds ~1.5&nbsp;GB
+            RAM while active.
+          </Typography>
+
           <Box>
             <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
               VAD Sensitivity — {vadThreshold.toFixed(2)}
@@ -163,6 +215,51 @@ export function ServerConfigPanel({ open, onClose, config, onSave }: Props) {
               Higher = less sensitive (fewer false triggers). Lower = more sensitive (catches faint speech).
             </Typography>
           </Box>
+
+          <FormControlLabel
+            control={
+              <Switch
+                checked={squelchAdaptive}
+                onChange={(e) => setSquelchAdaptive(e.target.checked)}
+                size="small"
+              />
+            }
+            label="Adaptive squelch"
+          />
+          <Typography variant="caption" sx={{ color: 'text.secondary', mt: -1.5 }}>
+            Track the channel noise floor and open at 3× it, so weak carriers pre-trigger
+            capture instead of clipping the first word.
+          </Typography>
+
+          <FormControlLabel
+            control={
+              <Switch
+                checked={txConditioning}
+                onChange={(e) => setTxConditioning(e.target.checked)}
+                size="small"
+              />
+            }
+            label="TX conditioning"
+          />
+          <Typography variant="caption" sx={{ color: 'text.secondary', mt: -1.5 }}>
+            Band-limit, compress, and level synthesized speech before it drives the radio
+            mic — clearer over narrowband FM. Browser read-aloud is unaffected.
+          </Typography>
+
+          <FormControlLabel
+            control={
+              <Switch
+                checked={sttDebugCapture}
+                onChange={(e) => setSttDebugCapture(e.target.checked)}
+                size="small"
+              />
+            }
+            label="STT debug capture"
+          />
+          <Typography variant="caption" sx={{ color: 'text.secondary', mt: -1.5 }}>
+            Save raw / segmented / processed audio plus transcripts per utterance for
+            offline word-error-rate evaluation. For tuning only — leave off normally.
+          </Typography>
 
           <Box>
             <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>

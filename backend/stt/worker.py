@@ -34,9 +34,10 @@ import numpy as np
 _log = logging.getLogger(__name__)
 
 from backend.audio.capture import open_input_source
-from backend.audio.dsp import bandpass, denoise, dynamic_agc, lowpass, make_bandpass_sos, make_lowpass_sos
+from backend.audio.dsp import lowpass, make_bandpass_sos, make_lowpass_sos
 from backend.audio.squelch import SquelchDetector
 from backend.audio.vad import load_vad_model, make_vad_iterator
+from backend.stt.preprocess import preprocess_segment
 from backend.stt.segmenter import SpeechSegmenter
 from backend.stt.transcriber import WhisperTranscriber
 
@@ -52,6 +53,9 @@ class ModelCache:
     whisper: object
     vad_model: object
     model_name: str
+    # Second-pass model that re-transcribes full utterances on finalization.
+    whisper_final: object = None
+    final_model_name: str = ""
 
 
 class STTWorker:
@@ -102,6 +106,14 @@ class STTWorker:
         system_monitor_sink: str = "",
         rx_mode: str = "voice",
         saved_phrases: "list[str] | tuple" = (),
+        debug_capture: bool = False,
+        debug_dir: str = "",
+        squelch_open_threshold: "float | None" = None,
+        squelch_adaptive: bool = False,
+        pre_roll_s: "float | None" = None,
+        min_speech_s: "float | None" = None,
+        whisper_model_final: str = "",
+        final_max_s: float = 60.0,
         # Optional event callbacks — all called from the worker thread;
         # implementations must be thread-safe (e.g. loop.call_soon_threadsafe).
         on_audio_level: "Callable[[int], None] | None" = None,
@@ -118,6 +130,39 @@ class STTWorker:
         self.vad_threshold = float(vad_threshold)
         self.rx_mode = rx_mode
         self.saved_phrases: list[str] = list(saved_phrases)
+        self.debug_capture = bool(debug_capture)
+        self.debug_dir = debug_dir or ""
+        self._debug_recorder = None
+        self.squelch_open_threshold = (
+            float(squelch_open_threshold)
+            if squelch_open_threshold is not None
+            else self.SQUELCH_OPEN_THRESHOLD
+        )
+        self.squelch_adaptive = bool(squelch_adaptive)
+        # Pre-roll seeds the utterance with context preceding VAD onset; the
+        # squelch buffer cap must stay >= it or the seed silently shrinks.
+        self.pre_buffer_chunks = (
+            max(1, int(float(pre_roll_s) * self.SAMPLE_RATE / self.CHUNK_SAMPLES))
+            if pre_roll_s is not None
+            else self.PRE_BUFFER_CHUNKS
+        )
+        self.pre_buffer_chunks = min(self.pre_buffer_chunks, self.SQUELCH_BUFFER_MAX_CHUNKS)
+        self.min_speech_duration_s = (
+            float(min_speech_s) if min_speech_s is not None else self.MIN_SPEECH_DURATION_S
+        )
+        # Two-tier transcription: when a final model is configured, every
+        # finalized utterance is re-transcribed whole on a low-priority
+        # thread and broadcast as a replacing final.
+        self.whisper_model_final = (whisper_model_final or "").strip()
+        self.whisper_model_final_path = (
+            str(self._MODELS_DIR / self.whisper_model_final) if self.whisper_model_final else ""
+        )
+        self.final_max_s = float(final_max_s)
+        self._final_q: "queue.Queue | None" = (
+            queue.Queue(maxsize=8) if self.whisper_model_final else None
+        )
+        # uid → accumulated segment audio; None marks "too long, pass abandoned"
+        self._pending_final: dict = {}
         self._model_cache: ModelCache | None = model_cache
 
         self._on_audio_level = on_audio_level
@@ -195,8 +240,16 @@ class STTWorker:
     # Private helpers — emit helpers bridge thread → asyncio queue/callbacks
     # ------------------------------------------------------------------
 
-    def _emit_result(self, utterance_id: int, text: str, partial: bool, source: str = "voice") -> None:
-        """Push a transcription result onto the asyncio queue from the worker thread."""
+    def _emit_result(
+        self, utterance_id: int, text: str, partial: bool,
+        source: str = "voice", replace: bool = False,
+    ) -> None:
+        """Push a transcription result onto the asyncio queue from the worker thread.
+
+        ``replace=True`` marks a full-utterance re-transcription: the server
+        publishes it INSTEAD of the accumulated partial texts. Backend-internal;
+        never forwarded to WebSocket clients.
+        """
         if self._loop is None:
             return
         self._loop.call_soon_threadsafe(
@@ -206,6 +259,7 @@ class STTWorker:
                 "text": text,
                 "partial": partial,
                 "source": source,
+                "replace": replace,
             },
         )
 
@@ -324,23 +378,51 @@ class STTWorker:
         )
         transcribe_thread.start()
 
+        final_thread = None
+        if self._final_q is not None:
+            final_thread = threading.Thread(
+                target=self._final_pass_loop,
+                args=(self._final_q, bandpass_sos),
+                daemon=True,
+            )
+            final_thread.start()
+
         self._emit_status("Listening...")
         squelch = SquelchDetector(
-            open_threshold=self.SQUELCH_OPEN_THRESHOLD,
+            open_threshold=self.squelch_open_threshold,
             open_hold_chunks=self.SQUELCH_OPEN_HOLD_CHUNKS,
             close_hold_chunks=self.SQUELCH_CLOSE_HOLD_CHUNKS,
+            adaptive=self.squelch_adaptive,
         )
         segmenter = SpeechSegmenter(
             vad_iter, squelch,
             sample_rate=self.SAMPLE_RATE,
             rolling_target_chunks=int(self.ROLLING_SEGMENT_S * self.SAMPLE_RATE / self.CHUNK_SAMPLES),
             cut_window_chunks=int(self.CUT_WINDOW_S * self.SAMPLE_RATE / self.CHUNK_SAMPLES),
-            pre_buffer_chunks=self.PRE_BUFFER_CHUNKS,
+            pre_buffer_chunks=self.pre_buffer_chunks,
             squelch_buffer_max_chunks=self.SQUELCH_BUFFER_MAX_CHUNKS,
-            min_speech_duration_s=self.MIN_SPEECH_DURATION_S,
+            min_speech_duration_s=self.min_speech_duration_s,
             silence_reset_chunks=int(self.SILENCE_RESET_S * self.SAMPLE_RATE / self.CHUNK_SAMPLES),
         )
         was_paused = False
+
+        if self.debug_capture and self.debug_dir:
+            try:
+                from backend.stt.debug_capture import UtteranceDebugRecorder
+                self._debug_recorder = UtteranceDebugRecorder(
+                    self.debug_dir,
+                    sample_rate=self.SAMPLE_RATE,
+                    pre_roll_chunks=self.pre_buffer_chunks,
+                    meta={
+                        "whisper_model": self.whisper_model_name,
+                        "vad_threshold": self.vad_threshold,
+                        "squelch_open_threshold": self.squelch_open_threshold,
+                    },
+                )
+            except Exception as e:
+                _log.warning("Debug capture disabled (init failed): %s", e)
+                self._debug_recorder = None
+        recorder = self._debug_recorder
 
         try:
             while not self._stop_event.is_set():
@@ -380,11 +462,17 @@ class STTWorker:
                     self._emit_status("Listening...")
                     was_paused = False
 
+                if recorder is not None:
+                    recorder.feed_raw(np.asarray(chunk, dtype=np.float32))
                 segments, events = segmenter.feed(chunk_for_vad, peak)
                 for event in events:
                     self._apply_squelch_event(event)
                     self._emit_capture_event(event)
+                    if recorder is not None:
+                        recorder.on_capture_event(event)
                 for uid, audio, is_final in segments:
+                    if recorder is not None:
+                        recorder.on_segment(uid, audio, is_final)
                     transcribe_queue.put((uid, audio, is_final))
         finally:
             try:
@@ -393,6 +481,16 @@ class STTWorker:
                 pass
             transcribe_queue.put(None)
             transcribe_thread.join(timeout=15)
+            if final_thread is not None:
+                # Sentinel after the transcription thread has drained so any
+                # finals it enqueued are processed first. The bounded queue
+                # could be full if the final model is far behind — don't hang
+                # shutdown on it.
+                try:
+                    self._final_q.put(None, timeout=5)
+                except queue.Full:
+                    pass
+                final_thread.join(timeout=30)
             self._emit_status("Stopped listening")
 
     def _run_cw(self) -> None:
@@ -418,9 +516,10 @@ class STTWorker:
 
         decoder = CWDecoder()
         squelch = SquelchDetector(
-            open_threshold=self.SQUELCH_OPEN_THRESHOLD,
+            open_threshold=self.squelch_open_threshold,
             open_hold_chunks=self.SQUELCH_OPEN_HOLD_CHUNKS,
             close_hold_chunks=self.SQUELCH_CLOSE_HOLD_CHUNKS,
+            adaptive=self.squelch_adaptive,
         )
         # Chunks of audio accumulated during the current transmission
         buffer: list[np.ndarray] = []
@@ -498,17 +597,150 @@ class STTWorker:
         a None sentinel signals shutdown. Single-threaded by design so
         partials emit in capture order.
         """
+        final_enabled = self._final_q is not None
         while True:
             job = transcribe_queue.get()
             if job is None:
                 break
             uid, audio, is_final = job
+            recorder = self._debug_recorder
             try:
-                filtered = bandpass(audio, bandpass_sos)
-                denoised = denoise(filtered, self.SAMPLE_RATE, prop_decrease=0.7)
-                agc_audio = dynamic_agc(denoised, self.SAMPLE_RATE)
-                text = transcriber.transcribe(agc_audio)
-                if text:
+                if final_enabled:
+                    self._accumulate_for_final(uid, audio)
+                processed = preprocess_segment(audio, self.SAMPLE_RATE, bandpass_sos)
+                if recorder is not None:
+                    recorder.on_processed(uid, processed)
+                text = transcriber.transcribe(processed)
+                if text and recorder is not None:
+                    recorder.on_transcript(uid, text, partial=not is_final)
+                if final_enabled and is_final:
+                    full = self._take_final_audio(uid)
+                    if full is not None:
+                        # Demote the fast-path tail to a partial; the final
+                        # pass replaces the whole utterance shortly.
+                        if text:
+                            self._emit_result(uid, text, True)
+                        self._enqueue_final(uid, full)
+                    else:
+                        # Too long for the final pass — flush as a plain
+                        # final (empty text still releases the partials).
+                        self._emit_result(uid, text or "", False)
+                elif text:
                     self._emit_result(uid, text, not is_final)
             except Exception as e:
                 self._emit_error(f"Transcription error: {e}")
+            finally:
+                if recorder is not None and is_final:
+                    recorder.finalize(uid)
+
+    # ------------------------------------------------------------------
+    # Two-tier final pass — full-utterance re-transcription
+    # ------------------------------------------------------------------
+
+    def _accumulate_for_final(self, uid, audio) -> None:
+        """Collect raw segment audio per utterance for the final pass.
+        Past the final_max_s cap the pass is abandoned (marked None) so the
+        partial texts — which cover the whole utterance — are kept instead of
+        being replaced by a truncated re-transcription."""
+        entry = self._pending_final.get(uid, [])
+        if entry is None:
+            return
+        cap = int(self.final_max_s * self.SAMPLE_RATE)
+        if sum(c.size for c in entry) + audio.size > cap:
+            self._pending_final[uid] = None
+            return
+        entry.append(audio)
+        self._pending_final[uid] = entry
+
+    def _take_final_audio(self, uid):
+        """Pop the accumulated utterance audio, or None if abandoned/missing."""
+        entry = self._pending_final.pop(uid, None)
+        if not entry:
+            return None
+        return np.concatenate(entry)
+
+    def _enqueue_final(self, uid, audio) -> None:
+        """Queue a final-pass job; under backlog, drop the oldest job and
+        flush its partials with an empty plain final so nothing is lost."""
+        try:
+            self._final_q.put_nowait((uid, audio))
+            return
+        except queue.Full:
+            pass
+        try:
+            old_uid, _ = self._final_q.get_nowait()
+            self._emit_result(old_uid, "", False)
+        except queue.Empty:
+            pass
+        try:
+            self._final_q.put_nowait((uid, audio))
+        except queue.Full:
+            self._emit_result(uid, "", False)
+
+    def _load_final_transcriber(self):
+        """Lazy-load the final-pass model (cached across Listen toggles).
+        Returns None on failure — the caller falls back to plain finals."""
+        cache = self._model_cache
+        if (
+            cache is not None
+            and cache.whisper_final is not None
+            and cache.final_model_name == self.whisper_model_final
+        ):
+            cache.whisper_final.update_prompt(self.saved_phrases)
+            return cache.whisper_final
+        if not os.path.isdir(self.whisper_model_final_path):
+            self._emit_error(
+                f"Final-pass Whisper model not found at '{self.whisper_model_final_path}'. "
+                f"Run 'python bootstrap_models.py --model {self.whisper_model_final}' on an "
+                f"internet-connected machine, then copy Models/ here. "
+                f"Falling back to single-pass transcription."
+            )
+            return None
+        try:
+            self._emit_status(f"Loading final-pass model {self.whisper_model_final}...")
+            # Half the cores so the fast path always has headroom.
+            cores = os.cpu_count() or 2
+            transcriber = WhisperTranscriber.load(
+                self.whisper_model_final_path,
+                saved_phrases=self.saved_phrases,
+                cpu_threads=max(1, cores // 2),
+            )
+            if cache is not None:
+                cache.whisper_final = transcriber
+                cache.final_model_name = self.whisper_model_final
+            return transcriber
+        except Exception as e:
+            self._emit_error(f"Failed to load final-pass model: {e}")
+            return None
+
+    def _final_pass_loop(self, final_q: queue.Queue, bandpass_sos) -> None:
+        """Re-transcribe whole utterances with the larger model and emit
+        replacing finals. Runs at reduced scheduler priority; every job ends
+        in exactly one final emission (replace, or empty fallback) so the
+        server's per-utterance partial accumulator always drains."""
+        try:
+            os.setpriority(os.PRIO_PROCESS, threading.get_native_id(), 10)
+        except Exception:
+            pass
+        transcriber = None
+        load_failed = False
+        while True:
+            job = final_q.get()
+            if job is None:
+                break
+            uid, audio = job
+            if transcriber is None and not load_failed:
+                transcriber = self._load_final_transcriber()
+                load_failed = transcriber is None
+            text = None
+            if transcriber is not None:
+                try:
+                    processed = preprocess_segment(audio, self.SAMPLE_RATE, bandpass_sos)
+                    text = transcriber.transcribe(processed)
+                except Exception as e:
+                    self._emit_error(f"Final-pass transcription error: {e}")
+                    text = None
+            if text:
+                self._emit_result(uid, text, False, replace=True)
+            else:
+                self._emit_result(uid, "", False)

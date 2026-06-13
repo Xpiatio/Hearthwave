@@ -169,6 +169,11 @@ _tts_event_queue: asyncio.Queue = asyncio.Queue()
 # Background tasks — kept alive so they are not GC'd mid-run
 _background_tasks: set[asyncio.Task] = set()
 
+# Whisper variants the config UI may select; must match bootstrap_models.py.
+VALID_WHISPER_MODELS = {
+    "tiny.en", "base.en", "small.en", "medium.en", "large-v3", "distil-large-v3",
+}
+
 # Signal-quality state — written by STT worker callbacks (GIL-safe int/bool assignments)
 _audio_level: int = 0
 _radio_error: bool = False
@@ -339,6 +344,36 @@ def _audio_chunk_fanout(chunk) -> None:
     plugin_registry.dispatch_audio_rx_chunk(chunk)
 
 
+def _make_stt_worker() -> STTWorker:
+    """Build an STTWorker from the current _config and module callbacks.
+
+    Single construction point so config plumbing only has to change here.
+    Callers that change audio settings must write them into _config first.
+    """
+    return STTWorker(
+        out_queue=_stt_out_queue,
+        input_device=_config.input_device if _config.input_device not in (-1, None) else None,
+        whisper_model=_config.whisper_model,
+        vad_threshold=_config.vad_threshold,
+        system_monitor_sink=_config.system_monitor_sink,
+        rx_mode=_config.rx_mode,
+        saved_phrases=_config.saved_phrases,
+        debug_capture=_config.stt_debug_capture,
+        debug_dir=_config.stt_debug_dir,
+        squelch_open_threshold=_config.squelch_open_threshold,
+        squelch_adaptive=_config.squelch_adaptive,
+        pre_roll_s=_config.stt_pre_roll_s,
+        min_speech_s=_config.stt_min_speech_s,
+        whisper_model_final=_config.whisper_model_final,
+        final_max_s=_config.stt_final_max_s,
+        on_audio_level=_on_stt_audio_level,
+        on_audio_chunk=_audio_chunk_fanout,
+        on_capture_event=_on_stt_capture_event,
+        on_status=_on_stt_status,
+        on_error=_on_stt_error,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Attendance helpers
 # ---------------------------------------------------------------------------
@@ -410,6 +445,17 @@ async def _synthesize_rx_audio(text: str) -> None:
             await _manager.send_to(ws, msg)
 
 
+def _resolve_final_text(prior: str, chunk_text: str, replace: bool) -> str:
+    """Final transcript for an utterance. A replacing final (second-pass
+    full-utterance re-transcription) supersedes the accumulated partials;
+    a plain final covers only the tail audio after the last partial cut, so
+    the partial text is prepended. An empty replace falls back to the
+    partials — a failed final pass must never erase the transcript."""
+    if replace and chunk_text:
+        return chunk_text
+    return (prior + " " + chunk_text).strip() if prior else chunk_text
+
+
 async def _rx_pump() -> None:
     """Drain the STT output queue and broadcast rx_message frames."""
     global _vad_active
@@ -430,10 +476,8 @@ async def _rx_pump() -> None:
                 raw_text = (prior + " " + chunk_text).strip() if prior else chunk_text
                 _utterance_partial_texts[utterance_id] = raw_text
             else:
-                # Final covers only the tail audio after the last partial cut.
-                # Prepend accumulated partial text so the full utterance is preserved.
                 prior = _utterance_partial_texts.pop(utterance_id, "")
-                raw_text = (prior + " " + chunk_text).strip() if prior else chunk_text
+                raw_text = _resolve_final_text(prior, chunk_text, result.get("replace", False))
 
             filtered_text = mask_profanity(raw_text)
 
@@ -917,6 +961,10 @@ def _build_status() -> dict:
         "rx_mode": (_config.rx_mode if _config else "voice"),
         "vad_threshold": float(_config.vad_threshold) if _config else 0.5,
         "whisper_model": (_config.whisper_model if _config else "small.en"),
+        "whisper_model_final": (_config.whisper_model_final if _config else ""),
+        "squelch_adaptive": bool(_config.squelch_adaptive) if _config else False,
+        "stt_debug_capture": bool(_config.stt_debug_capture) if _config else False,
+        "tx_conditioning": bool(_config.tx_conditioning) if _config else False,
         "ptt_mode": (_config.ptt_mode if _config else "manual"),
         "ptt_serial_port": (_config.ptt_serial_port if _config else ""),
         "ptt_serial_line": (_config.ptt_serial_line if _config else "RTS"),
@@ -1122,20 +1170,7 @@ async def _lifespan(app: FastAPI):
         squelch_fn=lambda: not _channel_clear,
     )
 
-    _stt_worker = STTWorker(
-        out_queue=_stt_out_queue,
-        input_device=_config.input_device if _config.input_device != -1 else None,
-        whisper_model=_config.whisper_model,
-        vad_threshold=_config.vad_threshold,
-        system_monitor_sink=_config.system_monitor_sink,
-        rx_mode=_config.rx_mode,
-        saved_phrases=_config.saved_phrases,
-        on_audio_level=_on_stt_audio_level,
-        on_audio_chunk=_audio_chunk_fanout,
-        on_capture_event=_on_stt_capture_event,
-        on_status=_on_stt_status,
-        on_error=_on_stt_error,
-    )
+    _stt_worker = _make_stt_worker()
     _stt_worker.start()
 
     # Register plugins — must happen after _tx_queue and _config are initialised.
@@ -1155,6 +1190,7 @@ async def _lifespan(app: FastAPI):
         out_queue=_tts_event_queue,
         compute_backend=compute,
         output_device=_config.output_device if _config.output_device != -1 else None,
+        tx_conditioning=_config.tx_conditioning,
     )
 
     _background_tasks = {
@@ -1261,20 +1297,7 @@ async def _ws_handle_set_admin_config(ws: WebSocket, data: dict, state: "Connect
     if rx_mode_changed and _stt_worker is not None and _stt_listening:
         _stt_worker.stop()
         await _stt_worker.join()
-        _stt_worker = STTWorker(
-            out_queue=_stt_out_queue,
-            input_device=_config.input_device if _config.input_device != -1 else None,
-            whisper_model=_config.whisper_model,
-            vad_threshold=_config.vad_threshold,
-            system_monitor_sink=_config.system_monitor_sink,
-            rx_mode=_config.rx_mode,
-            saved_phrases=_config.saved_phrases,
-            on_audio_level=_on_stt_audio_level,
-            on_audio_chunk=_audio_chunk_fanout,
-            on_capture_event=_on_stt_capture_event,
-            on_status=_on_stt_status,
-            on_error=_on_stt_error,
-        )
+        _stt_worker = _make_stt_worker()
         _stt_worker.start()
 
 
@@ -1298,9 +1321,33 @@ async def _ws_handle_set_server_config(ws: WebSocket, data: dict, state: "Connec
 
     if "whisper_model" in data:
         model = str(data["whisper_model"]).strip()
-        valid = {"tiny.en", "base.en", "small.en", "medium.en", "large-v3"}
-        if model in valid and model != _config.whisper_model:
+        if model in VALID_WHISPER_MODELS and model != _config.whisper_model:
             _config["whisper_model"] = model
+            stt_restart_needed = True
+
+    if "whisper_model_final" in data:
+        model = str(data["whisper_model_final"]).strip()
+        # Empty string disables the second pass.
+        if (model == "" or model in VALID_WHISPER_MODELS) and model != _config.whisper_model_final:
+            _config["whisper_model_final"] = model
+            stt_restart_needed = True
+
+    if "tx_conditioning" in data:
+        enabled = bool(data["tx_conditioning"])
+        _config["tx_conditioning"] = enabled
+        if _synthesizer is not None:
+            _synthesizer.tx_conditioning = enabled
+
+    if "stt_debug_capture" in data:
+        enabled = bool(data["stt_debug_capture"])
+        if enabled != _config.stt_debug_capture:
+            _config["stt_debug_capture"] = enabled
+            stt_restart_needed = True
+
+    if "squelch_adaptive" in data:
+        adaptive = bool(data["squelch_adaptive"])
+        if adaptive != _config.squelch_adaptive:
+            _config["squelch_adaptive"] = adaptive
             stt_restart_needed = True
 
     if "ptt_mode" in data:
@@ -1340,20 +1387,7 @@ async def _ws_handle_set_server_config(ws: WebSocket, data: dict, state: "Connec
     if stt_restart_needed and _stt_worker is not None and _stt_listening:
         _stt_worker.stop()
         await _stt_worker.join()
-        _stt_worker = STTWorker(
-            out_queue=_stt_out_queue,
-            input_device=_config.input_device if _config.input_device != -1 else None,
-            whisper_model=_config.whisper_model,
-            vad_threshold=_config.vad_threshold,
-            system_monitor_sink=_config.system_monitor_sink,
-            rx_mode=_config.rx_mode,
-            saved_phrases=_config.saved_phrases,
-            on_audio_level=_on_stt_audio_level,
-            on_audio_chunk=_audio_chunk_fanout,
-            on_capture_event=_on_stt_capture_event,
-            on_status=_on_stt_status,
-            on_error=_on_stt_error,
-        )
+        _stt_worker = _make_stt_worker()
         _stt_worker.start()
 
 
@@ -1843,20 +1877,7 @@ async def websocket_endpoint(
                 if _stt_worker is not None:
                     _stt_worker.stop()
                     await _stt_worker.join()
-                _stt_worker = STTWorker(
-                    out_queue=_stt_out_queue,
-                    input_device=new_device if new_device not in (-1, None) else None,
-                    whisper_model=_config.whisper_model,
-                    vad_threshold=_config.vad_threshold,
-                    system_monitor_sink=new_sink,
-                    rx_mode=_config.rx_mode,
-                    saved_phrases=_config.saved_phrases,
-                    on_audio_level=_on_stt_audio_level,
-                    on_audio_chunk=_audio_chunk_fanout,
-                    on_capture_event=_on_stt_capture_event,
-                    on_status=_on_stt_status,
-                    on_error=_on_stt_error,
-                )
+                _stt_worker = _make_stt_worker()
                 _stt_worker.start()
                 await _manager.broadcast(_build_status())
 

@@ -10,6 +10,10 @@ Usage:
     python bootstrap_models.py                       # default: small.en
     python bootstrap_models.py --model base.en       # smaller, faster
     python bootstrap_models.py --model medium.en     # higher accuracy
+
+    # Two-tier RX pipeline — stage the streaming model and the final-pass
+    # model in one run (set whisper_model + whisper_model_final to match):
+    python bootstrap_models.py --model small.en distil-large-v3
 """
 import argparse
 import os
@@ -21,6 +25,9 @@ WHISPER_REPOS = {
     "small.en":  "Systran/faster-whisper-small.en",
     "medium.en": "Systran/faster-whisper-medium.en",
     "large-v3":  "Systran/faster-whisper-large-v3",
+    # Distilled large: ~large-v2 accuracy at a fraction of the compute —
+    # the recommended whisper_model_final for the two-pass RX pipeline.
+    "distil-large-v3": "Systran/faster-distil-whisper-large-v3",
 }
 
 
@@ -31,9 +38,13 @@ def main():
     )
     parser.add_argument(
         "--model",
-        default="small.en",
+        default=["small.en"],
+        nargs="+",
         choices=sorted(WHISPER_REPOS),
-        help="faster-whisper variant to fetch (default: small.en).",
+        metavar="MODEL",
+        help="faster-whisper variant(s) to fetch (default: small.en). Pass "
+             "more than one to stage the two-tier pipeline's streaming and "
+             "final-pass models together.",
     )
     args = parser.parse_args()
 
@@ -47,12 +58,15 @@ def main():
         )
         return 1
 
-    target = os.path.join("Models", "STT", args.model)
-    os.makedirs(target, exist_ok=True)
-    repo_id = WHISPER_REPOS[args.model]
-    print(f"Whisper: downloading {repo_id} -> {target}")
-    snapshot_download(repo_id=repo_id, local_dir=target)
-    print(f"Whisper: done. Loaded at runtime from {target}/")
+    # Preserve order but drop duplicates (e.g. --model small.en small.en).
+    models = list(dict.fromkeys(args.model))
+    for model in models:
+        target = os.path.join("Models", "STT", model)
+        os.makedirs(target, exist_ok=True)
+        repo_id = WHISPER_REPOS[model]
+        print(f"Whisper: downloading {repo_id} -> {target}")
+        snapshot_download(repo_id=repo_id, local_dir=target)
+        print(f"Whisper: done. Loaded at runtime from {target}/")
     return 0
 
 

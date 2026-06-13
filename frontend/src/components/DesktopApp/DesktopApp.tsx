@@ -21,7 +21,7 @@ import { PendingStationsBar } from '../PendingStationsBar/PendingStationsBar';
 import { ConfigPanel } from '../ConfigPanel/ConfigPanel';
 import { AdminPanel } from '../AdminPanel/AdminPanel';
 import { ServerConfigPanel } from '../ServerConfigPanel/ServerConfigPanel';
-import type { ServerConfig } from '../ServerConfigPanel/ServerConfigPanel';
+import type { ServerConfig, ServerConfigSaveValues } from '../ServerConfigPanel/ServerConfigPanel';
 import { UsersPanel } from '../UsersPanel/UsersPanel';
 import type {
   StatusMsg,
@@ -121,16 +121,7 @@ export interface DesktopAppProps {
     ncs_zone: string;
     rx_mode: string;
   }) => void;
-  onServerConfigSave: (values: {
-    vad_threshold: number;
-    whisper_model: string;
-    ptt_mode: string;
-    ptt_serial_port: string;
-    ptt_serial_line: string;
-    monitor_passthrough: boolean;
-    attendance_enabled: boolean;
-    saved_phrases: string[];
-  }) => void;
+  onServerConfigSave: (values: ServerConfigSaveValues) => void;
   onPreviewVoice: (voiceId: string) => void;
   onSaveTtsPrefs: (prefs: { voice: string; length_scale: number }) => void;
 

@@ -3,14 +3,23 @@
 # Creates a Python venv at .venv/, installs all deps, and validates the setup.
 #
 # Usage:
-#   bash install.sh            # full install
-#   bash install.sh --no-models  # skip model download (copy Models/ manually)
+#   bash install.sh                            # full install
+#   bash install.sh --no-models                # skip model download (copy Models/ manually)
+#   bash install.sh --final-model distil-large-v3   # also stage the two-tier
+#                                              # final-pass model (set whisper_model_final to match)
 
 set -euo pipefail
 
 MODELS=true
-for arg in "$@"; do
-  [[ "$arg" == "--no-models" ]] && MODELS=false
+FINAL_MODEL=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --no-models) MODELS=false; shift ;;
+    --final-model)
+      [[ $# -lt 2 ]] && { echo "Error: --final-model requires a value." >&2; exit 1; }
+      FINAL_MODEL="$2"; shift 2 ;;
+    *) echo "Unknown argument: $1" >&2; exit 1 ;;
+  esac
 done
 
 # ── 1. System packages ───────────────────────────────────────────────────────
@@ -67,8 +76,14 @@ pip install -r backend/requirements.txt
 # ── 5. Models ────────────────────────────────────────────────────────────────
 
 if $MODELS; then
-    echo "==> Downloading Whisper STT model (small.en, ~464 MB)..."
-    python bootstrap_models.py --model small.en
+    if [[ -n "$FINAL_MODEL" ]]; then
+        echo "==> Downloading Whisper STT models (small.en + ${FINAL_MODEL})..."
+        python bootstrap_models.py --model small.en "$FINAL_MODEL"
+        echo "    Set whisper_model_final=\"${FINAL_MODEL}\" in data/config.json to enable two-tier."
+    else
+        echo "==> Downloading Whisper STT model (small.en, ~464 MB)..."
+        python bootstrap_models.py --model small.en
+    fi
 
     echo "==> Downloading Piper TTS voices..."
     mkdir -p Voices

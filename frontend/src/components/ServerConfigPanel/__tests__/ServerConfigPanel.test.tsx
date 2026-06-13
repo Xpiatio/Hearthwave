@@ -16,11 +16,16 @@ function makeConfig(overrides: Partial<ServerConfig> = {}): ServerConfig {
   return {
     vadThreshold: 0.5,
     whisperModel: 'small.en',
+    whisperModelFinal: '',
+    squelchAdaptive: false,
+    sttDebugCapture: false,
+    txConditioning: false,
     pttMode: 'manual',
     pttSerialPort: '',
     pttSerialLine: 'RTS',
     monitorPassthrough: false,
     attendanceEnabled: false,
+    savedPhrases: [],
     ...overrides,
   }
 }
@@ -190,6 +195,10 @@ describe('ServerConfigPanel', () => {
     expect(props.onSave).toHaveBeenCalledWith({
       vad_threshold: 0.3,
       whisper_model: 'base.en',
+      whisper_model_final: '',
+      squelch_adaptive: false,
+      stt_debug_capture: false,
+      tx_conditioning: false,
       ptt_mode: 'manual',
       ptt_serial_port: '', // trimmed
       ptt_serial_line: 'RTS',
@@ -297,5 +306,86 @@ describe('ServerConfigPanel', () => {
 
     // Config value (true) should be reflected
     expect(screen.getByLabelText(/monitor passthrough/i)).toBeChecked()
+  })
+
+  // -------------------------------------------------------------------------
+  // Two-tier final-pass model
+  // -------------------------------------------------------------------------
+
+  it('renders the final-pass model select', () => {
+    render(<ServerConfigPanel {...makeDefaultProps()} />)
+    expect(screen.getByLabelText(/final-pass model/i)).toBeInTheDocument()
+  })
+
+  it('defaults the final-pass model to Off when empty', () => {
+    render(<ServerConfigPanel {...makeDefaultProps({ whisperModelFinal: '' })} />)
+    // The combobox display shows the "Off" label for the empty value.
+    expect(screen.getByRole('combobox', { name: /final-pass model/i })).toHaveTextContent(/off/i)
+  })
+
+  it('passes the selected final-pass model to onSave', async () => {
+    const user = userEvent.setup()
+    const props = makeDefaultProps({ whisperModelFinal: '' })
+    render(<ServerConfigPanel {...props} />)
+
+    await user.click(screen.getByLabelText(/final-pass model/i))
+    const listbox = await screen.findByRole('listbox')
+    await user.click(within(listbox).getByText(/distil-large-v3/i))
+
+    await user.click(screen.getByRole('button', { name: /save/i }))
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ whisper_model_final: 'distil-large-v3' })
+    )
+  })
+
+  // -------------------------------------------------------------------------
+  // New STT/TX toggles
+  // -------------------------------------------------------------------------
+
+  it('toggles adaptive squelch and passes it to onSave', async () => {
+    const user = userEvent.setup()
+    const props = makeDefaultProps({ squelchAdaptive: false })
+    render(<ServerConfigPanel {...props} />)
+
+    await user.click(screen.getByLabelText(/adaptive squelch/i))
+    await user.click(screen.getByRole('button', { name: /save/i }))
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ squelch_adaptive: true })
+    )
+  })
+
+  it('toggles TX conditioning and passes it to onSave', async () => {
+    const user = userEvent.setup()
+    const props = makeDefaultProps({ txConditioning: false })
+    render(<ServerConfigPanel {...props} />)
+
+    await user.click(screen.getByLabelText(/tx conditioning/i))
+    await user.click(screen.getByRole('button', { name: /save/i }))
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ tx_conditioning: true })
+    )
+  })
+
+  it('toggles debug capture and passes it to onSave', async () => {
+    const user = userEvent.setup()
+    const props = makeDefaultProps({ sttDebugCapture: false })
+    render(<ServerConfigPanel {...props} />)
+
+    await user.click(screen.getByLabelText(/debug capture/i))
+    await user.click(screen.getByRole('button', { name: /save/i }))
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ stt_debug_capture: true })
+    )
+  })
+
+  it('reflects config values for the new toggles', () => {
+    render(
+      <ServerConfigPanel
+        {...makeDefaultProps({ squelchAdaptive: true, txConditioning: true, sttDebugCapture: true })}
+      />
+    )
+    expect(screen.getByLabelText(/adaptive squelch/i)).toBeChecked()
+    expect(screen.getByLabelText(/tx conditioning/i)).toBeChecked()
+    expect(screen.getByLabelText(/debug capture/i)).toBeChecked()
   })
 })

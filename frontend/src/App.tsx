@@ -25,7 +25,7 @@ import type {
 } from './types/ws';
 import type { ChatEntry } from './components/ChatDisplay/ChatDisplay';
 import type { SpectrogramHandle } from './components/Spectrogram/Spectrogram';
-import type { ServerConfig } from './components/ServerConfigPanel/ServerConfigPanel';
+import type { ServerConfig, ServerConfigSaveValues } from './components/ServerConfigPanel/ServerConfigPanel';
 import { LoginScreen } from './components/LoginScreen/LoginScreen';
 import { SetupScreen } from './components/SetupScreen/SetupScreen';
 import { DesktopApp } from './components/DesktopApp/DesktopApp';
@@ -103,6 +103,10 @@ export default function App() {
   const [serverConfig, setServerConfig] = useState<ServerConfig>({
     vadThreshold: 0.5,
     whisperModel: 'small.en',
+    whisperModelFinal: '',
+    squelchAdaptive: false,
+    sttDebugCapture: false,
+    txConditioning: false,
     pttMode: 'manual',
     pttSerialPort: '',
     pttSerialLine: 'RTS',
@@ -325,6 +329,10 @@ export default function App() {
         setServerConfig((prev) => ({
           vadThreshold: msg.vad_threshold ?? prev.vadThreshold,
           whisperModel: msg.whisper_model ?? prev.whisperModel,
+          whisperModelFinal: msg.whisper_model_final ?? prev.whisperModelFinal,
+          squelchAdaptive: msg.squelch_adaptive ?? prev.squelchAdaptive,
+          sttDebugCapture: msg.stt_debug_capture ?? prev.sttDebugCapture,
+          txConditioning: msg.tx_conditioning ?? prev.txConditioning,
           pttMode: msg.ptt_mode ?? prev.pttMode,
           pttSerialPort: msg.ptt_serial_port ?? prev.pttSerialPort,
           pttSerialLine: msg.ptt_serial_line ?? prev.pttSerialLine,
@@ -695,16 +703,7 @@ export default function App() {
     send({ type: 'set_admin_config', ...values });
   }
 
-  function handleServerConfigSave(values: {
-    vad_threshold: number;
-    whisper_model: string;
-    ptt_mode: string;
-    ptt_serial_port: string;
-    ptt_serial_line: string;
-    monitor_passthrough: boolean;
-    attendance_enabled: boolean;
-    saved_phrases: string[];
-  }) {
+  function handleServerConfigSave(values: ServerConfigSaveValues) {
     send({ type: 'set_server_config', ...values });
   }
 

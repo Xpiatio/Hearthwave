@@ -70,6 +70,40 @@ class ServerConfig(dict):
         return float(self.get("vad_threshold", 0.5))
 
     @property
+    def whisper_model_final(self) -> str:
+        """Second-pass model that re-transcribes the full utterance on
+        finalization. Empty string disables the second pass."""
+        return self.get("whisper_model_final", "")
+
+    @property
+    def stt_final_max_s(self) -> float:
+        return float(self.get("stt_final_max_s", 60.0))
+
+    @property
+    def squelch_open_threshold(self) -> float:
+        return float(self.get("squelch_open_threshold", 0.05))
+
+    @property
+    def squelch_adaptive(self) -> bool:
+        return bool(self.get("squelch_adaptive", False))
+
+    @property
+    def stt_pre_roll_s(self) -> float:
+        return float(self.get("stt_pre_roll_s", 1.0))
+
+    @property
+    def stt_min_speech_s(self) -> float:
+        return float(self.get("stt_min_speech_s", 0.4))
+
+    @property
+    def stt_debug_capture(self) -> bool:
+        return bool(self.get("stt_debug_capture", False))
+
+    @property
+    def stt_debug_dir(self) -> str:
+        return self.get("stt_debug_dir", "/data/debug/stt")
+
+    @property
     def system_monitor_sink(self) -> str:
         return (self.get("system_monitor_sink") or "").strip()
 
@@ -82,6 +116,12 @@ class ServerConfig(dict):
     @property
     def tts_length_scale(self) -> float:
         return float(self.get("tts_length_scale", 1.0))
+
+    @property
+    def tx_conditioning(self) -> bool:
+        """Band-limit, compress, and level-normalize synthesized speech before
+        it drives the radio's mic input."""
+        return bool(self.get("tx_conditioning", False))
 
     @property
     def voices_dir(self) -> Path:

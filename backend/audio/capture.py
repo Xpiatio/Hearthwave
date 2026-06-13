@@ -8,8 +8,23 @@ import time
 from typing import Protocol, runtime_checkable
 
 import numpy as np
-import sounddevice as sd
 from scipy.signal import resample_poly
+
+
+class _LazySounddevice:
+    """Defer the sounddevice import until an audio device is actually used.
+
+    PortAudio is a runtime-only dependency: the parec path and offline tools
+    (backend.tools.eval_stt) never touch it, and importing it at module load
+    breaks environments without libportaudio.
+    """
+
+    def __getattr__(self, name):
+        import sounddevice
+        return getattr(sounddevice, name)
+
+
+sd = _LazySounddevice()
 
 
 @runtime_checkable
