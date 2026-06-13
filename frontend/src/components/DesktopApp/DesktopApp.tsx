@@ -31,6 +31,7 @@ import type {
   FccLookupResultMsg,
   InputDeviceOption,
   MonitorSinkOption,
+  OutputDeviceOption,
   UserProfile,
   VoiceOption,
   WsMessage,
@@ -95,12 +96,15 @@ export interface DesktopAppProps {
   systemMonitorSink: string;
   inputDevices: InputDeviceOption[];
   monitorSinks: MonitorSinkOption[];
+  outputDevice: number;
+  outputDevices: OutputDeviceOption[];
   spectroColormap: 'viridis' | 'grayscale';
   spectroFreqRange: 'voice' | 'full';
   spectroTimeWindowS: number;
   onToggleProfanity: () => void;
   onToggleFuzzy: () => void;
   onInputDeviceChange: (device: string | number, sink: string) => void;
+  onOutputDeviceChange: (device: number) => void;
   onSpectroColormapChange: (cm: 'viridis' | 'grayscale') => void;
   onSpectroFreqRangeChange: (range: 'voice' | 'full') => void;
   onSpectroTimeWindowChange: (s: number) => void;
@@ -239,12 +243,15 @@ export function DesktopApp({
   systemMonitorSink,
   inputDevices,
   monitorSinks,
+  outputDevice,
+  outputDevices,
   spectroColormap,
   spectroFreqRange,
   spectroTimeWindowS,
   onToggleProfanity,
   onToggleFuzzy,
   onInputDeviceChange,
+  onOutputDeviceChange,
   onSpectroColormapChange,
   onSpectroFreqRangeChange,
   onSpectroTimeWindowChange,
@@ -389,12 +396,15 @@ export function DesktopApp({
                     systemMonitorSink={systemMonitorSink}
                     inputDevices={inputDevices}
                     monitorSinks={monitorSinks}
+                    outputDevice={outputDevice}
+                    outputDevices={outputDevices}
                     spectroColormap={spectroColormap}
                     spectroFreqRange={spectroFreqRange}
                     spectroTimeWindowS={spectroTimeWindowS}
                     onToggleProfanity={onToggleProfanity}
                     onToggleFuzzy={onToggleFuzzy}
                     onInputDeviceChange={onInputDeviceChange}
+                    onOutputDeviceChange={onOutputDeviceChange}
                     onSpectroColormapChange={onSpectroColormapChange}
                     onSpectroFreqRangeChange={onSpectroFreqRangeChange}
                     onSpectroTimeWindowChange={onSpectroTimeWindowChange}
