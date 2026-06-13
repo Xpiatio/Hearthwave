@@ -33,7 +33,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-BACKEND_IMAGE="ghcr.io/xpiatio/radio-tty-backend:v2.2.0"
+BACKEND_IMAGE="ghcr.io/xpiatio/radio-tty-backend:v2.5.0"
 VOICES_VOL="radio-tty-voices"
 MODELS_VOL="radio-tty-models"
 DATA_VOL="radio-tty-data"

@@ -1,6 +1,6 @@
 # Radio-TTY User Manual
 
-> **Version:** v2.4.1
+> **Version:** v2.5.0
 
 This manual covers day-to-day operation of Radio-TTY as a GMRS family hub or neighborhood watch base station — a shared radio operating station where every household member or watch volunteer connects from their own device. For installation and server setup, see [README.md](README.md).
 
@@ -695,14 +695,33 @@ The **Server Config** panel provides technical server-side settings, separate fr
 | Setting | Description |
 |---------|-------------|
 | VAD threshold | Sensitivity of voice activity detection. Lower = more sensitive; higher = requires stronger signal. Changing this restarts the STT worker. |
-| Whisper model | Which Whisper model the server uses for transcription. Changing this restarts the STT worker. |
+| Whisper model | Which Whisper model the server uses for live (streaming) transcription. Changing this restarts the STT worker. |
+| Final-pass model | Optional larger model that re-transcribes each completed transmission in full once the other station unkeys, replacing the live partial text with a more accurate final. Choose **Off** for single-pass, or a larger model such as `distil-large-v3` (recommended). The model must be staged first (see below) and adds ~1.5 GB RAM only while active. Changing this restarts the STT worker. |
+| Adaptive squelch | Tracks the channel noise floor and opens at 3× it, so weak carriers pre-trigger audio capture instead of clipping the first word. Leave off on consistently strong signals; enable on noisy or distant channels. Restarts the STT worker. |
+| TX conditioning | Band-limits, compresses, and levels synthesized speech before it drives the radio's microphone input — clearer over narrowband FM. Browser read-aloud is unaffected. Takes effect immediately. |
+| STT debug capture | Saves raw / segmented / processed audio plus transcripts for each utterance, for offline word-error-rate evaluation. For tuning only — leave off in normal operation. Restarts the STT worker. |
 | Saved Phrases | A list of phrases Whisper is pre-loaded with as vocabulary hints to improve recognition accuracy. Common radio phrases ("break break", "QSL", "copy that") are included by default. Add any group-specific phrases — net names, operator handles, local shorthand — to help Whisper recognise them consistently. Changes take effect immediately without an STT restart. |
 | PTT mode | How PTT is keyed: `manual`, `serial`, or `vox` (voice-operated transmit — keys automatically based on audio level). |
 | PTT port / line | Serial port and control line used when PTT mode is `serial`. |
 | Monitor passthrough | When enabled, audio captured from the radio input is simultaneously played back through the output device. Useful when the radio is not directly audible at the operator position. Does not require a server restart. |
 | Attendance tracking | Enable or disable automatic callsign recording in the Stations panel. When disabled, the panel still exists but callsigns are not recorded automatically. |
 
-> Changes to VAD threshold or Whisper model trigger a live STT worker restart and will briefly interrupt transcription. Saved Phrases changes take effect immediately.
+> Changes to VAD threshold, Whisper model, Final-pass model, Adaptive squelch, or STT debug capture trigger a live STT worker restart and will briefly interrupt transcription. TX conditioning and Saved Phrases changes take effect immediately.
+
+### Staging the final-pass model
+
+The final-pass model is not bundled — download it once on an internet-connected machine, then it loads automatically on the first finished transmission:
+
+```bash
+# Docker (host volumes):
+bash setup.sh --final-model distil-large-v3
+# Portainer (named volumes):
+bash prereq.sh --final-model distil-large-v3
+# Native install:
+python bootstrap_models.py --model small.en distil-large-v3
+```
+
+Then set **Final-pass model** to `distil-large-v3` in this panel (or `whisper_model_final` in `config.json`). On a CPU-only host a long transmission may take roughly its own duration to produce the improved final; live partials are unaffected.
 
 ---
 
