@@ -101,7 +101,6 @@ export default function App() {
   const [showContacts, setShowContacts] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
-  const [showServerConfig, setShowServerConfig] = useState(false);
   const [serverConfig, setServerConfig] = useState<ServerConfig>({
     vadThreshold: 0.5,
     whisperModel: 'small.en',
@@ -899,7 +898,6 @@ export default function App() {
   }
   function handleToggleConfig() { setShowConfig((v) => !v); }
   function handleToggleAdmin() { setShowAdmin((v) => !v); }
-  function handleToggleServerConfig() { setShowServerConfig((v) => !v); }
   function handleToggleNcs() {
     const next = !showNcs;
     setShowNcs(next);
@@ -1014,10 +1012,8 @@ export default function App() {
     serverConfig,
     showConfig,
     showAdmin,
-    showServerConfig,
     onToggleConfig: handleToggleConfig,
     onToggleAdmin: handleToggleAdmin,
-    onToggleServerConfig: handleToggleServerConfig,
     onAdminSave: handleAdminSave,
     onServerConfigSave: handleServerConfigSave,
     showContacts,

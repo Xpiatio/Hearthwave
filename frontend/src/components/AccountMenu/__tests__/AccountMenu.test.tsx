@@ -55,8 +55,6 @@ function makeProps(overrides: Partial<Parameters<typeof AccountMenu>[0]> = {}) {
     onToggleConfig: vi.fn(),
     showAdmin: false,
     onToggleAdmin: vi.fn(),
-    showServerConfig: false,
-    onToggleServerConfig: vi.fn(),
     ...overrides,
   }
 }
@@ -112,27 +110,19 @@ describe('AccountMenu', () => {
       })
     })
 
-    it('shows Admin menu item for admin users', async () => {
+    it('shows Admin Settings menu item for admin users', async () => {
       render(<AccountMenu {...makeProps({ profile: { ...mockProfile, is_admin: true } })} />)
       fireEvent.click(screen.getByRole('button', { name: /account menu/i }))
       await waitFor(() => {
-        expect(screen.getByText('Admin')).toBeInTheDocument()
+        expect(screen.getByText('Admin Settings')).toBeInTheDocument()
       })
     })
 
-    it('hides Admin menu item for non-admin users', async () => {
+    it('hides Admin Settings menu item for non-admin users', async () => {
       render(<AccountMenu {...makeProps({ profile: { ...mockProfile, is_admin: false } })} />)
       fireEvent.click(screen.getByRole('button', { name: /account menu/i }))
       await waitFor(() => {
-        expect(screen.queryByText('Admin')).not.toBeInTheDocument()
-      })
-    })
-
-    it('shows Server Config for admin users', async () => {
-      render(<AccountMenu {...makeProps({ profile: { ...mockProfile, is_admin: true } })} />)
-      fireEvent.click(screen.getByRole('button', { name: /account menu/i }))
-      await waitFor(() => {
-        expect(screen.getByText('Server Config')).toBeInTheDocument()
+        expect(screen.queryByText('Admin Settings')).not.toBeInTheDocument()
       })
     })
   })
@@ -156,22 +146,13 @@ describe('AccountMenu', () => {
       expect(onToggleConfig).toHaveBeenCalledTimes(1)
     })
 
-    it('calls onToggleAdmin when Admin clicked', async () => {
+    it('calls onToggleAdmin when Admin Settings clicked', async () => {
       const onToggleAdmin = vi.fn()
       render(<AccountMenu {...makeProps({ onToggleAdmin, profile: { ...mockProfile, is_admin: true } })} />)
       fireEvent.click(screen.getByRole('button', { name: /account menu/i }))
-      await waitFor(() => screen.getByText('Admin'))
-      fireEvent.click(screen.getByText('Admin'))
+      await waitFor(() => screen.getByText('Admin Settings'))
+      fireEvent.click(screen.getByText('Admin Settings'))
       expect(onToggleAdmin).toHaveBeenCalledTimes(1)
-    })
-
-    it('calls onToggleServerConfig when Server Config clicked', async () => {
-      const onToggleServerConfig = vi.fn()
-      render(<AccountMenu {...makeProps({ onToggleServerConfig, profile: { ...mockProfile, is_admin: true } })} />)
-      fireEvent.click(screen.getByRole('button', { name: /account menu/i }))
-      await waitFor(() => screen.getByText('Server Config'))
-      fireEvent.click(screen.getByText('Server Config'))
-      expect(onToggleServerConfig).toHaveBeenCalledTimes(1)
     })
   })
 

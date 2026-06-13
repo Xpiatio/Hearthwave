@@ -84,9 +84,12 @@ interface Props {
   onClose: () => void;
   config: ServerConfig;
   onSave: (values: ServerConfigSaveValues) => void;
+  /** When true, render just the form body (no Dialog chrome) for embedding in
+   *  a tabbed SettingsDialog. The Save button is kept; Cancel/title are not. */
+  embedded?: boolean;
 }
 
-export function ServerConfigPanel({ open, onClose, config, onSave }: Props) {
+export function ServerConfigPanel({ open, onClose, config, onSave, embedded = false }: Props) {
   const [vadThreshold, setVadThreshold] = useState(0.5);
   const [whisperModel, setWhisperModel] = useState('small.en');
   const [whisperModelFinal, setWhisperModelFinal] = useState('');
@@ -150,12 +153,8 @@ export function ServerConfigPanel({ open, onClose, config, onSave }: Props) {
     onClose();
   }
 
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ fontWeight: 700 }}>Server Config</DialogTitle>
-
-      <DialogContent dividers>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+  const content = (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
 
           <Typography variant="overline" sx={{ color: 'text.secondary', lineHeight: 1 }}>
             Audio / STT
@@ -401,11 +400,30 @@ export function ServerConfigPanel({ open, onClose, config, onSave }: Props) {
           </Typography>
 
         </Box>
-      </DialogContent>
+  );
 
+  const saveButton = (
+    <Button onClick={handleSave} variant="contained">Save</Button>
+  );
+
+  if (embedded) {
+    return (
+      <Box sx={{ pt: 1 }}>
+        {content}
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
+          {saveButton}
+        </Box>
+      </Box>
+    );
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ fontWeight: 700 }}>Server Config</DialogTitle>
+      <DialogContent dividers>{content}</DialogContent>
       <DialogActions sx={{ px: 3, py: 2 }}>
         <Button onClick={onClose} variant="outlined">Cancel</Button>
-        <Button onClick={handleSave} variant="contained">Save</Button>
+        {saveButton}
       </DialogActions>
     </Dialog>
   );

@@ -19,8 +19,7 @@ import { QuickMessages } from '../QuickMessages/QuickMessages';
 import { ContactsDialog } from '../ContactsDialog/ContactsDialog';
 import { PendingStationsBar } from '../PendingStationsBar/PendingStationsBar';
 import { ConfigPanel } from '../ConfigPanel/ConfigPanel';
-import { AdminPanel } from '../AdminPanel/AdminPanel';
-import { ServerConfigPanel } from '../ServerConfigPanel/ServerConfigPanel';
+import { SettingsDialog } from '../SettingsDialog/SettingsDialog';
 import type { ServerConfig, ServerConfigSaveValues } from '../ServerConfigPanel/ServerConfigPanel';
 import { UsersPanel } from '../UsersPanel/UsersPanel';
 import type {
@@ -162,7 +161,6 @@ export interface DesktopAppProps {
   showContacts: boolean;
   showConfig: boolean;
   showAdmin: boolean;
-  showServerConfig: boolean;
   showNcs: boolean;
   panelOrder: string[];
   onToggleAttendance: () => void;
@@ -170,7 +168,6 @@ export interface DesktopAppProps {
   onToggleContacts: () => void;
   onToggleConfig: () => void;
   onToggleAdmin: () => void;
-  onToggleServerConfig: () => void;
   onToggleNcs: () => void;
   onPanelDragEnd: (event: DragEndEvent) => void;
   onPanelMove: (fromIndex: number, toIndex: number) => void;
@@ -287,7 +284,6 @@ export function DesktopApp({
   showContacts,
   showConfig,
   showAdmin,
-  showServerConfig,
   showNcs,
   panelOrder,
   onToggleAttendance,
@@ -295,7 +291,6 @@ export function DesktopApp({
   onToggleContacts,
   onToggleConfig,
   onToggleAdmin,
-  onToggleServerConfig,
   onToggleNcs,
   onPanelDragEnd,
   onPanelMove,
@@ -351,8 +346,6 @@ export function DesktopApp({
         onToggleConfig={onToggleConfig}
         showAdmin={showAdmin}
         onToggleAdmin={onToggleAdmin}
-        showServerConfig={showServerConfig}
-        onToggleServerConfig={onToggleServerConfig}
         showNcs={showNcs}
         onToggleNcs={onToggleNcs}
         showWaterfall={showWaterfall}
@@ -533,16 +526,17 @@ export function DesktopApp({
         onVerifyAllDismiss={onVerifyAllDismiss}
       />
 
-      <AdminPanel
+      <SettingsDialog
         open={showAdmin}
         onClose={onToggleAdmin}
-        config={adminConfig}
+        adminConfig={adminConfig}
         voices={voices}
         voicePreviewBusy={voicePreviewBusy}
-        onSave={onAdminSave}
+        onAdminSave={onAdminSave}
         onPreviewVoice={onPreviewVoice}
-      >
-        {profile.is_admin && (
+        serverConfig={serverConfig}
+        onServerConfigSave={onServerConfigSave}
+        usersPanel={profile.is_admin && (
           <UsersPanel
             profiles={profiles}
             currentUserId={profile.id}
@@ -551,13 +545,6 @@ export function DesktopApp({
             onResetLockout={(userId) => send({ type: 'reset_lockout', user_id: userId })}
           />
         )}
-      </AdminPanel>
-
-      <ServerConfigPanel
-        open={showServerConfig}
-        onClose={onToggleServerConfig}
-        config={serverConfig}
-        onSave={onServerConfigSave}
       />
 
       <Snackbar
