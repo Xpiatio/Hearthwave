@@ -9,6 +9,7 @@ import type {
   WsMessage,
   StatusMsg,
   TxMessagePayload,
+  ChatMessagePayload,
   Contact,
   AttendanceStation,
   JournalEntry,
@@ -397,6 +398,19 @@ export default function App() {
         break;
       }
 
+      case 'chat_echo':
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: nextId(),
+            timestamp: formatTime(msg.ts),
+            kind: 'chat',
+            sender: msg.display_name || msg.operator || msg.callsign,
+            text: msg.text,
+          },
+        ]);
+        break;
+
       case 'system_msg':
         setMessages((prev) => [
           ...prev,
@@ -587,8 +601,21 @@ export default function App() {
       callsign: effectiveCallsign,
       target_call: targetCall,
       target_name: targetName,
+      // Transmit in this operator's profile voice/speed (the [tx] [name]
+      // convention); the backend resolves it by display name.
+      voice_as: profile.display_name,
     };
     send(payload);
+  }
+
+  function handleChat(text: string) {
+    if (!profile) return;
+    send({
+      type: 'chat_message',
+      text,
+      operator: profile.operator_name,
+      callsign: effectiveCallsign,
+    } satisfies ChatMessagePayload);
   }
 
   function handleVoicePttStart() {
@@ -958,6 +985,7 @@ export default function App() {
     onDismissJournalResult: handleDismissJournalResult,
     listenOnly,
     onSend: handleSend,
+    onChat: handleChat,
     onStandaloneId: handleStandaloneId,
     onVoicePttStart: handleVoicePttStart,
     onVoicePttChunk: handleVoicePttChunk,

@@ -124,6 +124,18 @@ describe('ChatDisplay — message kinds', () => {
     expect(screen.getByLabelText('System message')).toHaveTextContent('[SYS]')
   })
 
+  it('renders [CHAT] label for chat messages (not transmitted)', () => {
+    render(
+      <ChatDisplay
+        entries={[makeEntry({ kind: 'chat', sender: 'Alice', text: 'meet at noon' })]}
+        contacts={NO_CONTACTS}
+        showCallsignChips={false}
+      />
+    )
+    expect(screen.getByLabelText('Chat message (not transmitted)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Chat message (not transmitted)')).toHaveTextContent('[CHAT]')
+  })
+
   it('renders timestamp for each entry', () => {
     render(
       <ChatDisplay

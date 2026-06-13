@@ -21,11 +21,12 @@ interface Props {
   transmitting: boolean;
   contacts: Contact[];
   onSend: (text: string, targetCall: string, targetName: string) => void;
+  onChat?: (text: string) => void;
   onStandaloneId?: () => void;
 }
 
 export const MessageInput = forwardRef<MessageInputHandle, Props>(
-  ({ transmitting, contacts, onSend, onStandaloneId }, ref) => {
+  ({ transmitting, contacts, onSend, onChat, onStandaloneId }, ref) => {
     const [draft, setDraft] = useState('');
     const [targetKey, setTargetKey] = useState('');
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -53,6 +54,14 @@ export const MessageInput = forwardRef<MessageInputHandle, Props>(
       );
       setDraft('');
       setTargetKey('');
+      textareaRef.current?.focus();
+    }
+
+    function handleChat() {
+      const text = draft.trim();
+      if (!text || transmitting || !onChat) return;
+      onChat(text);
+      setDraft('');
       textareaRef.current?.focus();
     }
 
@@ -128,6 +137,18 @@ export const MessageInput = forwardRef<MessageInputHandle, Props>(
           >
             PRESS TO SEND MESSAGE
           </Button>
+          {onChat && (
+            <Button
+              variant="outlined"
+              size="large"
+              onClick={handleChat}
+              disabled={transmitting || !draft.trim()}
+              aria-label="Send chat message without transmitting over radio"
+              sx={{ whiteSpace: 'nowrap' }}
+            >
+              CHAT
+            </Button>
+          )}
           {onStandaloneId && (
             <Button
               variant="outlined"

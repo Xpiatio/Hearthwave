@@ -5,9 +5,11 @@ from backend.text.locations import expand_trailing_state
 ID_INTERVAL_SECONDS = 15 * 60  # FCC Part 95: identify at least every 15 minutes when in use.
 
 
-def format_tail_id(my_call: str) -> str:
-    """Return the short tail-ID string appended to every untargeted GMRS transmission."""
-    return f"{my_call}."
+def format_tail_id(my_call: str, my_name: str = "") -> str:
+    """Return the short tail-ID appended to every untargeted GMRS transmission:
+    the call sign, followed by the operator's name when one is set."""
+    name = (my_name or "").strip()
+    return f"{my_call} {name}." if name else f"{my_call}."
 
 
 def format_outgoing_message(
@@ -45,7 +47,7 @@ def format_outgoing_message(
             spoken_text = f"{my_call} {my_name} calling {target_label}."
         return spoken_text, now
 
-    tail = format_tail_id(my_call)
+    tail = format_tail_id(my_call, my_name)
     spoken_text = f"{text}. {tail}" if text else tail
     return spoken_text, now
 

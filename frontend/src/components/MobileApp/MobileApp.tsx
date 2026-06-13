@@ -79,6 +79,7 @@ export interface MobileAppProps {
   // TX / PTT
   listenOnly: boolean;
   onSend: (text: string, targetCall: string, targetName: string) => void;
+  onChat: (text: string) => void;
   onStandaloneId: () => void;
   onVoicePttStart: () => void;
   onVoicePttChunk: (b64: string) => void;
@@ -184,6 +185,7 @@ export function MobileApp({
   onDismissJournalResult,
   listenOnly,
   onSend,
+  onChat,
   onStandaloneId,
   onVoicePttStart,
   onVoicePttChunk,
@@ -307,6 +309,7 @@ export function MobileApp({
               transmitting={transmitting}
               contacts={contacts}
               onSend={onSend}
+              onChat={onChat}
               onStandaloneId={onStandaloneId}
             />
           )}

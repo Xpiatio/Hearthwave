@@ -95,6 +95,7 @@ import datetime
 import logging
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
@@ -669,8 +670,17 @@ async def _tx_pump() -> None:
                 text = spell_digits_in_callsigns(text)
                 chat_text = raw_text
 
-            # Discard transmission if the channel is already occupied.
-            if not is_preview and _stt_worker is not None and _stt_worker.channel_busy.is_set():
+            # Discard transmission if the channel is already occupied — but an
+            # operator-initiated transmit (Transmit button / "THIS IS") overrides
+            # the squelch, like the voice-test path: the operator decides when to
+            # key.  Automatic transmits (auto station-ID) still wait for a clear
+            # channel to avoid talking over a received signal.
+            if (
+                not is_preview
+                and not payload.get("_operator_initiated")
+                and _stt_worker is not None
+                and _stt_worker.channel_busy.is_set()
+            ):
                 _log.warning("TX discarded: channel busy (squelch open)")
                 continue
 
@@ -884,6 +894,24 @@ async def _handle_voice_tx(payload: dict) -> None:
             _stt_worker.resume()
 
 
+def _resolve_tx_voice(display_name: str) -> tuple[str | None, float | None]:
+    """Map a display name to that user's (tts_voice, tts_length_scale).
+
+    Used when a client transmits on behalf of a named operator (the `voice_as`
+    field).  Returns (None, None) when the name is unknown or the user has not
+    overridden the station defaults — tts_voice="" / tts_length_scale=0 are the
+    DEFAULT_PREFS "inherit station default" sentinels — so the caller's
+    `or _config.voice` / `or _config.tts_length_scale` fallbacks apply.
+    """
+    if _users_store is None:
+        return None, None
+    profile = _users_store.get_by_display_name(display_name)
+    if not profile:
+        return None, None
+    prefs = profile.get("prefs") or {}
+    return (prefs.get("tts_voice") or None, prefs.get("tts_length_scale") or None)
+
+
 def _play_voice_blocking(audio: "np.ndarray", sample_rate: int, output_device) -> None:
     """Play int16 PCM audio through the configured output device, blocking until done.
     Resamples if the device's native rate differs from the input rate."""
@@ -902,6 +930,12 @@ def _play_voice_blocking(audio: "np.ndarray", sample_rate: int, output_device) -
         resampled = resample_poly(audio.astype(np.float32), native_sr // gcd, sample_rate // gcd)
         audio     = np.clip(resampled, -32768, 32767).astype(np.int16)
 
+    dur = len(audio) / native_sr if native_sr else 0.0
+    _log.info(
+        "TX audio → output device %s: %.2fs @ %dHz (%d samples)",
+        output_device if output_device is not None else "default",
+        dur, native_sr, len(audio),
+    )
     sd.play(audio, samplerate=native_sr, device=output_device)
     sd.wait()
 
@@ -936,7 +970,6 @@ def _list_voices() -> list[dict]:
     """Return all .onnx voice files in the configured voices directory."""
     if _config is None:
         return []
-    from pathlib import Path as _Path
     try:
         return [
             {"id": str(p), "name": p.stem, "label": _voice_label(p.stem)}
@@ -1028,7 +1061,7 @@ async def _id_rule_pump() -> None:
             now = datetime.datetime.now(datetime.timezone.utc)
             elapsed = (now - _last_id_time).total_seconds() if _last_id_time else float("inf")
             if elapsed > ID_INTERVAL_SECONDS:
-                tail = format_tail_id(_config.callsign)
+                tail = format_tail_id(_config.callsign, _config.name)
                 spoken = spell_digits_in_callsigns(f"This is {tail}")
                 _last_id_time = now
                 _has_transmitted = False
@@ -1097,6 +1130,22 @@ async def _lifespan(app: FastAPI):
     global _pending_stations, _auto_add_tasks, _event_loop, _audit_log
 
     # --- startup -----------------------------------------------------------
+    # Surface the app's own INFO logs (TX playback, station ID, monitor state,
+    # "server ready"). uvicorn configures only its own loggers, not the root —
+    # so backend.* records otherwise hit Python's lastResort handler, which
+    # emits at WARNING. Attach an INFO handler so operational info (including
+    # TX-audio confirmation) is visible. Honour LOG_LEVEL if the operator sets it.
+    _backend_logger = logging.getLogger("backend")
+    _backend_logger.setLevel(
+        getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO)
+    )
+    if not _backend_logger.handlers:
+        _h = logging.StreamHandler()
+        _h.setFormatter(logging.Formatter("%(levelname)s:     %(name)s — %(message)s"))
+        _backend_logger.addHandler(_h)
+        # Keep propagate=True so pytest's caplog (a root handler) still captures
+        # backend.* records. The handler above is what makes INFO visible in
+        # production; the root logger has no handler, so there's no double-emit.
     _event_loop = asyncio.get_running_loop()
     _config = ServerConfig.load()
     _log.info("Config loaded: callsign=%s, port=%d", _config.callsign, _config.port)
@@ -1539,18 +1588,57 @@ async def websocket_endpoint(
                 _tx_sender_display = (
                     (_users_store.get_public_one(state.user_id) or {}).get("display_name") or ""
                 ) if _users_store else ""
+                # `voice_as` lets a client transmit on behalf of a named
+                # operator (the [tx] [name] chat convention): voice the message
+                # in that user's profile voice/speed.  Absent → voice as the
+                # sending connection's own profile (legacy behavior).
+                voice_as = (data.get("voice_as") or "").strip()
+                if voice_as:
+                    tx_voice, tx_scale = _resolve_tx_voice(voice_as)
+                    tx_display = voice_as
+                else:
+                    tx_voice = state.prefs.get("tts_voice") or None
+                    tx_scale = state.prefs.get("tts_length_scale") or None
+                    tx_display = _tx_sender_display
                 tx_payload = await plugin_registry.dispatch_tx_pre_queue({
                     **data,
                     "_filter_profanity": state.prefs.get("filter_profanity", True),
-                    "_voice_name": state.prefs.get("tts_voice") or None,
-                    "_length_scale": state.prefs.get("tts_length_scale") or None,
-                    "_display_name": _tx_sender_display,
+                    "_voice_name": tx_voice,
+                    "_length_scale": tx_scale,
+                    "_display_name": tx_display,
                     "_user_id": state.user_id,
+                    # Operator pressed Transmit — overrides the channel-busy squelch.
+                    "_operator_initiated": True,
                 })
                 if tx_payload is None:
                     continue  # TX blocked by a plugin
                 await _tx_queue.put(tx_payload)
                 await _manager.broadcast({"type": "tx_status", "status": "transmitting"})
+
+            elif msg_type == "chat_message":
+                # Chat-only: shared to all operators in the log but never keyed
+                # over the radio (no synthesis, no PTT, no STT pause).  Only
+                # [tx]-prefixed lines (sent as tx_message) reach the air.
+                text = (data.get("text") or "").strip()
+                if not text:
+                    continue
+                # Listen-only is fully silent — no chat either.
+                if await _check_listen_only(ws, state):
+                    continue
+                sender_display = (
+                    (_users_store.get_public_one(state.user_id) or {}).get("display_name") or ""
+                ) if _users_store else ""
+                await _manager.broadcast_rx(
+                    {
+                        "type": "chat_echo",
+                        "ts": utc_now_iso(),
+                        "display_name": sender_display,
+                        "operator": data.get("operator") or "",
+                        "callsign": data.get("callsign") or "",
+                    },
+                    text,
+                    mask_profanity(text),
+                )
 
             elif msg_type == "add_contact":
                 if _contacts_store is None:
@@ -1732,6 +1820,7 @@ async def websocket_endpoint(
                 await _manager.broadcast({"type": "tx_status", "status": "transmitting"})
                 await _tx_queue.put({
                     "_standalone_id": True,
+                    "_operator_initiated": True,
                     "_filter_profanity": state.prefs.get("filter_profanity", True),
                     "operator": (data.get("operator") or "").strip(),
                     "callsign": (data.get("callsign") or "").strip(),

@@ -276,6 +276,52 @@ describe('MessageInput', () => {
     })
   })
 
+  describe('chat (no transmit) button', () => {
+    it('renders a chat button when onChat is provided', () => {
+      render(<MessageInput transmitting={false} contacts={[]} onSend={vi.fn()} onChat={vi.fn()} />)
+      expect(screen.getByRole('button', { name: /chat/i })).toBeInTheDocument()
+    })
+
+    it('does not render a chat button when onChat is absent', () => {
+      render(<MessageInput transmitting={false} contacts={[]} onSend={vi.fn()} />)
+      expect(screen.queryByRole('button', { name: /chat/i })).not.toBeInTheDocument()
+    })
+
+    it('calls onChat (not onSend) with trimmed text when chat is clicked', () => {
+      const onChat = vi.fn()
+      const onSend = vi.fn()
+      render(<MessageInput transmitting={false} contacts={[]} onSend={onSend} onChat={onChat} />)
+      fireEvent.change(screen.getByRole('textbox', { name: /message text/i }), {
+        target: { value: '  meet at noon  ' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: /chat/i }))
+      expect(onChat).toHaveBeenCalledWith('meet at noon')
+      expect(onSend).not.toHaveBeenCalled()
+    })
+
+    it('calls onSend (not onChat) when the transmit button is clicked', () => {
+      const onChat = vi.fn()
+      const onSend = vi.fn()
+      render(<MessageInput transmitting={false} contacts={[]} onSend={onSend} onChat={onChat} />)
+      fireEvent.change(screen.getByRole('textbox', { name: /message text/i }), {
+        target: { value: 'hello' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: /press to send message/i }))
+      expect(onSend).toHaveBeenCalled()
+      expect(onChat).not.toHaveBeenCalled()
+    })
+
+    it('disables the chat button when transmitting', () => {
+      render(<MessageInput transmitting={true} contacts={[]} onSend={vi.fn()} onChat={vi.fn()} />)
+      expect(screen.getByRole('button', { name: /chat/i })).toBeDisabled()
+    })
+
+    it('disables the chat button when the draft is empty', () => {
+      render(<MessageInput transmitting={false} contacts={[]} onSend={vi.fn()} onChat={vi.fn()} />)
+      expect(screen.getByRole('button', { name: /chat/i })).toBeDisabled()
+    })
+  })
+
   describe('accessibility', () => {
     it('has no violations with contacts list', async () => {
       const { container } = render(

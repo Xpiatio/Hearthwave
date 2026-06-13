@@ -93,6 +93,17 @@ export interface TxEchoMsg {
   target_name: string;
 }
 
+// Chat-only line — shared to all operators' logs but never keyed over the
+// radio. Per-recipient profanity-filtered server-side (like rx transcriptions).
+export interface ChatEchoMsg {
+  type: 'chat_echo';
+  ts: string;
+  display_name: string;
+  operator: string;
+  callsign: string;
+  text: string;
+}
+
 export interface SystemMsgMsg {
   type: 'system_msg';
   text: string;
@@ -357,6 +368,7 @@ export type WsMessage =
   | ContactsMsg
   | TxStatusMsg
   | TxEchoMsg
+  | ChatEchoMsg
   | SystemMsgMsg
   | SessionAttendanceMsg
   | JournalsMsg
@@ -400,6 +412,18 @@ export interface TxMessagePayload {
   callsign: string;
   target_call?: string;
   target_name?: string;
+  // Voice/speed the backend should transmit in: the named operator's profile
+  // (the [tx] [name] convention). Resolved server-side via get_by_display_name;
+  // falls back to the station default when unknown.
+  voice_as?: string;
+}
+
+// Chat-only line — Client → Server (sent via send(), NOT part of WsMessage union).
+export interface ChatMessagePayload {
+  type: 'chat_message';
+  text: string;
+  operator: string;
+  callsign: string;
 }
 
 // Voice PTT — Client → Server payloads (sent via send(), NOT part of WsMessage union)
