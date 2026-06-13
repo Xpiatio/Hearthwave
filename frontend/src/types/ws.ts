@@ -46,6 +46,7 @@ export interface StatusMsg {
   spectro_freq_range?: 'voice' | 'full';
   spectro_time_window_s?: number;
   input_device?: string | number;
+  output_device?: number;
   system_monitor_sink?: string;
   // Admin-editable identity fields
   station_callsign?: string;
@@ -229,6 +230,17 @@ export interface InputDevicesMsg {
   current_monitor_sink: string;
 }
 
+export interface OutputDeviceOption {
+  label: string;
+  id: number;
+}
+
+export interface OutputDevicesMsg {
+  type: 'output_devices';
+  devices: OutputDeviceOption[];
+  current_output_device: number;
+}
+
 export interface VoiceOption {
   id: string;
   name: string;
@@ -278,12 +290,6 @@ export interface ProfilesMsg {
 
 export interface VoicePreviewAudioMsg {
   type: 'voice_preview_audio';
-  data: string; // base64-encoded int16 PCM
-  sample_rate: number;
-}
-
-export interface TxAudioMsg {
-  type: 'tx_audio';
   data: string; // base64-encoded int16 PCM
   sample_rate: number;
 }
@@ -366,13 +372,13 @@ export type WsMessage =
   | OnlineStatusMsg
   | SpectrogramRowMsg
   | InputDevicesMsg
+  | OutputDevicesMsg
   | UserProfileMsg
   | ProfilesMsg
   | JournalPublishedMsg
   | JournalUnpublishedMsg
   | VoicesListMsg
   | VoicePreviewAudioMsg
-  | TxAudioMsg
   | RxAudioMsg
   | NCSStateMsg
   | NCSRosterUpdateMsg

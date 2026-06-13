@@ -4,7 +4,7 @@ import { ThemeProvider } from '@mui/material/styles'
 import { makeTheme } from '../../../theme'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ConfigPanel } from '../ConfigPanel'
-import type { InputDeviceOption, MonitorSinkOption } from '../../../types/ws'
+import type { InputDeviceOption, MonitorSinkOption, OutputDeviceOption } from '../../../types/ws'
 
 function render(ui: React.ReactElement) {
   return rtlRender(
@@ -23,6 +23,11 @@ const SINK_OPTIONS: MonitorSinkOption[] = [
   { label: 'HDMI Audio', sink_id: 'sink2' },
 ]
 
+const OUTPUT_DEVICE_OPTIONS: OutputDeviceOption[] = [
+  { label: 'System Default (speaker)', id: -1 },
+  { label: 'USB Audio CODEC', id: 3 },
+]
+
 function makeDefaultProps() {
   return {
     filterProfanity: false,
@@ -31,12 +36,15 @@ function makeDefaultProps() {
     systemMonitorSink: '',
     inputDevices: DEVICE_OPTIONS,
     monitorSinks: SINK_OPTIONS,
+    outputDevice: -1,
+    outputDevices: OUTPUT_DEVICE_OPTIONS,
     spectroColormap: 'viridis' as const,
     spectroFreqRange: 'voice' as const,
     spectroTimeWindowS: 30,
     onToggleProfanity: vi.fn(),
     onToggleFuzzy: vi.fn(),
     onInputDeviceChange: vi.fn(),
+    onOutputDeviceChange: vi.fn(),
     onSpectroColormapChange: vi.fn(),
     onSpectroFreqRangeChange: vi.fn(),
     onSpectroTimeWindowChange: vi.fn(),
@@ -263,6 +271,37 @@ describe('ConfigPanel', () => {
     await user.click(within(listbox).getByText('HDMI Audio'))
 
     expect(props.onInputDeviceChange).toHaveBeenCalledWith('system_monitor', 'sink2')
+  })
+
+  // -------------------------------------------------------------------------
+  // Audio output device selector (drives the radio)
+  // -------------------------------------------------------------------------
+
+  it('renders the Audio Output select', () => {
+    render(<ConfigPanel {...makeDefaultProps()} />)
+    expect(screen.getByLabelText(/audio output \(to radio\)/i)).toBeInTheDocument()
+  })
+
+  it('calls onOutputDeviceChange with numeric id when an output device is selected', async () => {
+    const user = userEvent.setup()
+    const props = makeDefaultProps()
+    render(<ConfigPanel {...props} />)
+
+    await user.click(screen.getByLabelText(/audio output \(to radio\)/i))
+    const listbox = await screen.findByRole('listbox')
+    await user.click(within(listbox).getByText('USB Audio CODEC'))
+
+    expect(props.onOutputDeviceChange).toHaveBeenCalledWith(3)
+  })
+
+  it('shows fallback output option when outputDevices prop is empty', async () => {
+    const user = userEvent.setup()
+    const props = { ...makeDefaultProps(), outputDevices: [] }
+    render(<ConfigPanel {...props} />)
+
+    await user.click(screen.getByLabelText(/audio output \(to radio\)/i))
+    const listbox = await screen.findByRole('listbox')
+    expect(within(listbox).getByText('System Default (speaker)')).toBeInTheDocument()
   })
 
   // -------------------------------------------------------------------------

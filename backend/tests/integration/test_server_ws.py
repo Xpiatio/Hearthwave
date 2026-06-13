@@ -48,13 +48,13 @@ def _make_mocks():
     return mock_stt, mock_tts
 
 
-def _make_auth_mocks(*, listen_only: bool = False):
+def _make_auth_mocks(*, listen_only: bool = False, is_admin: bool = True):
     mock_users = MagicMock()
     mock_users.is_empty.return_value = False
     mock_users.get.return_value = {
         "id": "test-user",
         "display_name": "Test Operator",
-        "is_admin": True,
+        "is_admin": is_admin,
         "prefs": {"listen_only": listen_only} if listen_only else {},
     }
     mock_users.get_public_one.return_value = {"display_name": "Test Operator"}
@@ -66,6 +66,62 @@ def _make_auth_mocks(*, listen_only: bool = False):
 
 
 WS_URL = "/ws?token=test"
+
+
+@contextmanager
+def _ws_server(tmp_path, *, is_admin: bool = True):
+    """Spin up the app with mocked deps and yield (TestClient, cfg).
+
+    cfg.save is stubbed so handlers that persist config don't touch the real
+    config file, and sd.query_devices is stubbed so device enumeration is
+    deterministic without audio hardware.
+    """
+    cfg = _minimal_cfg(tmp_path)
+    cfg.save = MagicMock()
+    mock_stt, mock_tts = _make_mocks()
+    mock_users, mock_tokens = _make_auth_mocks(is_admin=is_admin)
+    fake_devices = [
+        {"name": "Built-in Output", "max_input_channels": 0, "max_output_channels": 2},
+        {"name": "USB CODEC", "max_input_channels": 1, "max_output_channels": 2},
+    ]
+    with (
+        patch("backend.server.ServerConfig.load", return_value=cfg),
+        patch("backend.server.STTWorker", return_value=mock_stt),
+        patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+        patch("backend.server.UsersStore", return_value=mock_users),
+        patch("backend.server.TokenStore", return_value=mock_tokens),
+        patch("backend.auth_routes.init"),
+        patch("backend.server.sd.query_devices", return_value=fake_devices),
+    ):
+        with TestClient(app) as tc:
+            yield tc, cfg
+
+
+def _next_of_type(ws, msg_type: str, limit: int = 15) -> dict | None:
+    """Receive frames until one matching msg_type arrives; return it (or None)."""
+    for _ in range(limit):
+        msg = ws.receive_json()
+        if msg.get("type") == msg_type:
+            return msg
+    return None
+
+
+@pytest.fixture
+def non_admin_client(tmp_path):
+    cfg = _minimal_cfg(tmp_path)
+    cfg.save = MagicMock()
+    mock_stt, mock_tts = _make_mocks()
+    mock_users, mock_tokens = _make_auth_mocks(is_admin=False)
+    with (
+        patch("backend.server.ServerConfig.load", return_value=cfg),
+        patch("backend.server.STTWorker", return_value=mock_stt),
+        patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+        patch("backend.server.UsersStore", return_value=mock_users),
+        patch("backend.server.TokenStore", return_value=mock_tokens),
+        patch("backend.auth_routes.init"),
+    ):
+        with TestClient(app) as tc:
+            yield tc, cfg
 
 
 @pytest.fixture
@@ -416,3 +472,51 @@ class TestSetServerConfigSavedPhrases:
             long_phrase = "x" * 200
             msg = self._send_and_get_status(ws, [long_phrase])
             assert msg["saved_phrases"] == ["x" * 120]
+
+
+# ---------------------------------------------------------------------------
+# Audio output device (drives the radio) — listing, setting, admin gating
+# ---------------------------------------------------------------------------
+
+class TestOutputDevice:
+    def test_list_output_devices_returns_output_capable_devices(self, tmp_path):
+        with _ws_server(tmp_path) as (tc, _cfg):
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                ws.send_json({"type": "list_output_devices"})
+                msg = _next_of_type(ws, "output_devices")
+        assert msg is not None, "no output_devices reply received"
+        labels = [d["label"] for d in msg["devices"]]
+        # System Default plus the two output-capable devices from the stub.
+        assert labels == ["System Default (speaker)", "Built-in Output", "USB CODEC"]
+        assert msg["current_output_device"] == -1
+
+    def test_set_output_device_updates_config_and_status(self, tmp_path):
+        with _ws_server(tmp_path) as (tc, cfg):
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                ws.send_json({"type": "set_output_device", "output_device": 1})
+                status = _next_of_type(ws, "status")
+        assert cfg["output_device"] == 1
+        assert cfg.save.called
+        assert status is not None and status["output_device"] == 1
+
+    def test_set_output_device_rejected_for_non_admin(self, non_admin_client):
+        tc, cfg = non_admin_client
+        with tc.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "set_output_device", "output_device": 1})
+            err = _next_of_type(ws, "error")
+        assert err is not None and "admin" in err["detail"].lower()
+        assert "output_device" not in cfg
+        assert not cfg.save.called
+
+    def test_set_input_device_rejected_for_non_admin(self, non_admin_client):
+        tc, cfg = non_admin_client
+        with tc.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "set_input_device", "input_device": 2})
+            err = _next_of_type(ws, "error")
+        assert err is not None and "admin" in err["detail"].lower()
+        assert cfg.get("input_device", -1) == -1
+        assert not cfg.save.called

@@ -15,6 +15,7 @@ import type {
   FccLookupResultMsg,
   InputDeviceOption,
   MonitorSinkOption,
+  OutputDeviceOption,
   UserProfile,
   VoiceOption,
   VoiceTxStartPayload,
@@ -183,6 +184,8 @@ export default function App() {
   const [systemMonitorSink, setSystemMonitorSink] = useState('');
   const [inputDevices, setInputDevices] = useState<InputDeviceOption[]>([]);
   const [monitorSinks, setMonitorSinks] = useState<MonitorSinkOption[]>([]);
+  const [outputDevice, setOutputDevice] = useState<number>(-1);
+  const [outputDevices, setOutputDevices] = useState<OutputDeviceOption[]>([]);
   const [spectroFreqRange, setSpectroFreqRange] = useState<'voice' | 'full'>('full');
 
   // Admin config (synced from server status message)
@@ -312,6 +315,7 @@ export default function App() {
         if (msg.service_mode !== undefined) setServiceMode(msg.service_mode);
         if (msg.fuzzy_callsign !== undefined) setFuzzyCallsign(msg.fuzzy_callsign);
         if (msg.input_device !== undefined) setInputDevice(msg.input_device);
+        if (msg.output_device !== undefined) setOutputDevice(msg.output_device);
         if (msg.system_monitor_sink !== undefined) setSystemMonitorSink(msg.system_monitor_sink);
         if (msg.spectro_freq_range === 'voice' || msg.spectro_freq_range === 'full')
           setSpectroFreqRange(msg.spectro_freq_range);
@@ -482,18 +486,22 @@ export default function App() {
         setSystemMonitorSink(msg.current_monitor_sink);
         break;
 
+      case 'output_devices':
+        setOutputDevices(msg.devices);
+        setOutputDevice(msg.current_output_device);
+        break;
+
       case 'voices_list':
         setVoices(msg.voices);
         break;
 
       case 'voice_preview_audio':
-      case 'tx_audio':
       case 'rx_audio': {
         // Decode base64 int16 PCM and play in the browser via Web Audio API.
-        // tx_audio routes transmitted speech through the local audio output
-        // (e.g. 3.5mm jack to radio); voice_preview_audio does the same for previews.
+        // voice_preview_audio lets a user audition their own TTS voice;
         // rx_audio plays incoming RX transcripts aloud (read_aloud pref).
-        const isTxAudio = msg.type === 'tx_audio';
+        // Transmitted TX audio is NOT played in the browser — the server plays
+        // it out the radio's sound device directly.
         try {
           const binary = atob(msg.data);
           const bytes = new Uint8Array(binary.length);
@@ -507,14 +515,10 @@ export default function App() {
           const src = ctx.createBufferSource();
           src.buffer = buf;
           src.connect(ctx.destination);
-          src.onended = () => {
-            ctx.close();
-            if (isTxAudio) sendRef.current({ type: 'tx_audio_complete' });
-          };
+          src.onended = () => { ctx.close(); };
           src.start();
         } catch (e) {
           console.error('audio playback error', e);
-          if (isTxAudio) sendRef.current({ type: 'tx_audio_complete' });
         }
         break;
       }
@@ -560,8 +564,9 @@ export default function App() {
   }, [setProfile]);
 
   const handleWsOpen = useCallback(() => {
-    // Request input device list whenever the socket connects or reconnects.
+    // Request input/output device lists whenever the socket connects or reconnects.
     sendRef.current({ type: 'list_input_devices' });
+    sendRef.current({ type: 'list_output_devices' });
     sendRef.current({ type: 'list_profiles' });
   }, []);
 
@@ -663,6 +668,11 @@ export default function App() {
     setInputDevice(device);
     setSystemMonitorSink(sink);
     send({ type: 'set_input_device', input_device: device, system_monitor_sink: sink });
+  }
+
+  function handleOutputDeviceChange(device: number) {
+    setOutputDevice(device);
+    send({ type: 'set_output_device', output_device: device });
   }
 
   function handlePreviewVoice(voiceId: string) {
@@ -1028,12 +1038,15 @@ export default function App() {
           systemMonitorSink={systemMonitorSink}
           inputDevices={inputDevices}
           monitorSinks={monitorSinks}
+          outputDevice={outputDevice}
+          outputDevices={outputDevices}
           spectroColormap={spectroColormap}
           spectroFreqRange={spectroFreqRange}
           spectroTimeWindowS={spectroTimeWindowS}
           onToggleProfanity={handleToggleProfanity}
           onToggleFuzzy={handleToggleFuzzy}
           onInputDeviceChange={handleInputDeviceChange}
+          onOutputDeviceChange={handleOutputDeviceChange}
           onSpectroColormapChange={handleSpectroColormapChange}
           onSpectroFreqRangeChange={handleSpectroFreqRangeChange}
           onSpectroTimeWindowChange={handleSpectroTimeWindowChange}
