@@ -105,6 +105,10 @@ class STTWorker:
         saved_phrases: "list[str] | tuple" = (),
         debug_capture: bool = False,
         debug_dir: str = "",
+        squelch_open_threshold: "float | None" = None,
+        squelch_adaptive: bool = False,
+        pre_roll_s: "float | None" = None,
+        min_speech_s: "float | None" = None,
         # Optional event callbacks — all called from the worker thread;
         # implementations must be thread-safe (e.g. loop.call_soon_threadsafe).
         on_audio_level: "Callable[[int], None] | None" = None,
@@ -124,6 +128,23 @@ class STTWorker:
         self.debug_capture = bool(debug_capture)
         self.debug_dir = debug_dir or ""
         self._debug_recorder = None
+        self.squelch_open_threshold = (
+            float(squelch_open_threshold)
+            if squelch_open_threshold is not None
+            else self.SQUELCH_OPEN_THRESHOLD
+        )
+        self.squelch_adaptive = bool(squelch_adaptive)
+        # Pre-roll seeds the utterance with context preceding VAD onset; the
+        # squelch buffer cap must stay >= it or the seed silently shrinks.
+        self.pre_buffer_chunks = (
+            max(1, int(float(pre_roll_s) * self.SAMPLE_RATE / self.CHUNK_SAMPLES))
+            if pre_roll_s is not None
+            else self.PRE_BUFFER_CHUNKS
+        )
+        self.pre_buffer_chunks = min(self.pre_buffer_chunks, self.SQUELCH_BUFFER_MAX_CHUNKS)
+        self.min_speech_duration_s = (
+            float(min_speech_s) if min_speech_s is not None else self.MIN_SPEECH_DURATION_S
+        )
         self._model_cache: ModelCache | None = model_cache
 
         self._on_audio_level = on_audio_level
@@ -332,18 +353,19 @@ class STTWorker:
 
         self._emit_status("Listening...")
         squelch = SquelchDetector(
-            open_threshold=self.SQUELCH_OPEN_THRESHOLD,
+            open_threshold=self.squelch_open_threshold,
             open_hold_chunks=self.SQUELCH_OPEN_HOLD_CHUNKS,
             close_hold_chunks=self.SQUELCH_CLOSE_HOLD_CHUNKS,
+            adaptive=self.squelch_adaptive,
         )
         segmenter = SpeechSegmenter(
             vad_iter, squelch,
             sample_rate=self.SAMPLE_RATE,
             rolling_target_chunks=int(self.ROLLING_SEGMENT_S * self.SAMPLE_RATE / self.CHUNK_SAMPLES),
             cut_window_chunks=int(self.CUT_WINDOW_S * self.SAMPLE_RATE / self.CHUNK_SAMPLES),
-            pre_buffer_chunks=self.PRE_BUFFER_CHUNKS,
+            pre_buffer_chunks=self.pre_buffer_chunks,
             squelch_buffer_max_chunks=self.SQUELCH_BUFFER_MAX_CHUNKS,
-            min_speech_duration_s=self.MIN_SPEECH_DURATION_S,
+            min_speech_duration_s=self.min_speech_duration_s,
             silence_reset_chunks=int(self.SILENCE_RESET_S * self.SAMPLE_RATE / self.CHUNK_SAMPLES),
         )
         was_paused = False
@@ -354,7 +376,7 @@ class STTWorker:
                 self._debug_recorder = UtteranceDebugRecorder(
                     self.debug_dir,
                     sample_rate=self.SAMPLE_RATE,
-                    pre_roll_chunks=self.PRE_BUFFER_CHUNKS,
+                    pre_roll_chunks=self.pre_buffer_chunks,
                     meta={
                         "whisper_model": self.whisper_model_name,
                         "vad_threshold": self.vad_threshold,
@@ -448,9 +470,10 @@ class STTWorker:
 
         decoder = CWDecoder()
         squelch = SquelchDetector(
-            open_threshold=self.SQUELCH_OPEN_THRESHOLD,
+            open_threshold=self.squelch_open_threshold,
             open_hold_chunks=self.SQUELCH_OPEN_HOLD_CHUNKS,
             close_hold_chunks=self.SQUELCH_CLOSE_HOLD_CHUNKS,
+            adaptive=self.squelch_adaptive,
         )
         # Chunks of audio accumulated during the current transmission
         buffer: list[np.ndarray] = []

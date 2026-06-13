@@ -67,6 +67,7 @@ def run_pipeline(audio: np.ndarray, cfg: EvalPipelineConfig, transcriber, vad_it
         open_threshold=cfg.squelch_open_threshold,
         open_hold_chunks=STTWorker.SQUELCH_OPEN_HOLD_CHUNKS,
         close_hold_chunks=STTWorker.SQUELCH_CLOSE_HOLD_CHUNKS,
+        adaptive=cfg.squelch_adaptive,
     )
     segmenter = SpeechSegmenter(
         vad_iter,

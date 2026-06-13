@@ -126,6 +126,100 @@ class TestVadOnsetAndOffset:
 
 
 # ---------------------------------------------------------------------------
+# Force-finalize on squelch close (carrier drop ends the utterance)
+# ---------------------------------------------------------------------------
+
+class TestSquelchCloseFinalize:
+    """When the remote operator unkeys, the carrier drop is the end of the
+    transmission — don't wait for VAD to decide, and trim the static crash."""
+
+    def _seg(self, vad_events, *, close_hold=2, min_speech_s=0.0, **kw):
+        squelch = SquelchDetector(
+            open_threshold=0.1, open_hold_chunks=1, close_hold_chunks=close_hold,
+        )
+        return make_seg(vad_events, squelch=squelch, min_speech_s=min_speech_s, **kw)
+
+    def _run_keyed_transmission(self, seg, n_speech_chunks=6, close_hold=2):
+        """Carrier up, VAD start, speech, carrier drop. Returns the feed
+        results from the chunk where squelch closes."""
+        seg_out, ev_out = [], []
+        seg_, _ = (seg, None) if not isinstance(seg, tuple) else (None, None)
+        # feed 1: carrier opens (no VAD yet)
+        seg.feed(chunk(0.5), 0.5)
+        # vad start + speech chunks, carrier still up
+        for _ in range(1 + n_speech_chunks):
+            seg.feed(chunk(0.5), 0.5)
+        # carrier drops: close_hold quiet chunks; squelch closes on the last
+        for i in range(close_hold):
+            seg_out, ev_out = seg.feed(chunk(0.0), 0.0)
+        return seg_out, ev_out
+
+    def test_squelch_close_mid_speech_emits_final(self):
+        vad_events = [None, "start"] + [None] * 20  # VAD never ends on its own
+        seg, _ = self._seg(vad_events)
+        segs, events = self._run_keyed_transmission(seg)
+        assert "squelch_closed" in events
+        assert "vad_end" in events
+        assert len(segs) == 1
+        assert segs[0][2] is True
+
+    def test_trailing_tail_and_crash_are_trimmed(self):
+        # close_hold=2, crash trim=2 → 4 chunks trimmed off the right (and the
+        # closing chunk itself is never appended).
+        vad_events = [None, "start"] + [None] * 20
+        seg, _ = self._seg(vad_events)
+        segs, _ = self._run_keyed_transmission(seg, n_speech_chunks=6, close_hold=2)
+        # collected at close: seed(1 squelch-buffer chunk) + start + 6 speech
+        # + 1 quiet = 9 chunks; trim min(9-1, 2+2)=4 → 5 chunks remain
+        assert segs[0][1].size == 5 * 512
+
+    def test_trim_never_empties_the_buffer(self):
+        # Very short keyed burst: trim is capped at len-1 so at least one
+        # chunk of audio survives.
+        vad_events = [None, "start", None, None]
+        seg, _ = self._seg(vad_events)
+        seg.feed(chunk(0.5), 0.5)        # carrier opens
+        seg.feed(chunk(0.5), 0.5)        # vad start
+        seg.feed(chunk(0.0), 0.0)        # quiet 1
+        segs, events = seg.feed(chunk(0.0), 0.0)  # quiet 2 → squelch closes
+        assert "squelch_closed" in events
+        assert len(segs) == 1
+        assert segs[0][1].size >= 512
+
+    def test_stale_vad_end_after_force_finalize_is_ignored(self):
+        vad_events = [None, "start"] + [None] * 8 + ["end"]
+        seg, _ = self._seg(vad_events)
+        self._run_keyed_transmission(seg, n_speech_chunks=6)
+        # VAD's own (now stale) end arrives afterwards → nothing emitted
+        segs, events = seg.feed(chunk(0.0), 0.0)
+        assert segs == []
+        assert "vad_end" not in events
+
+    def test_vad_state_reset_on_force_finalize(self):
+        vad_events = [None, "start"] + [None] * 20
+        seg, vad = self._seg(vad_events)
+        before = vad.reset_count
+        self._run_keyed_transmission(seg)
+        assert vad.reset_count == before + 1
+
+    def test_next_utterance_gets_fresh_uid(self):
+        vad_events = [None, "start"] + [None] * 9 + [None, "start"] + [None] * 20
+        seg, _ = self._seg(vad_events)
+        segs1, _ = self._run_keyed_transmission(seg, n_speech_chunks=6)
+        segs2, _ = self._run_keyed_transmission(seg, n_speech_chunks=6)
+        assert len(segs1) == 1 and len(segs2) == 1
+        assert segs2[0][0] > segs1[0][0]
+
+    def test_min_speech_gate_applies_to_force_finalize(self):
+        vad_events = [None, "start"] + [None] * 20
+        seg, _ = self._seg(vad_events, min_speech_s=0.4)
+        # only 2 speech chunks (0.064 s) before carrier drop → dropped
+        segs, events = self._run_keyed_transmission(seg, n_speech_chunks=2)
+        assert "squelch_closed" in events
+        assert segs == []
+
+
+# ---------------------------------------------------------------------------
 # Minimum speech duration gate
 # ---------------------------------------------------------------------------
 
@@ -149,6 +243,43 @@ class TestMinSpeechDuration:
         seg, _ = make_seg(events, min_speech_s=0.4)
         last_segs = []
         for _ in events:
+            last_segs, _ = seg.feed(chunk(), 0.0)
+        assert len(last_segs) == 1
+        assert last_segs[0][2] is True
+
+    def test_pre_roll_seed_does_not_count_toward_min_speech(self):
+        # A large pre-roll seed must not let a kerchunk through the gate:
+        # 20 seeded chunks (0.64 s) + 5 speech chunks (0.16 s) is over 0.4 s
+        # of *audio* but under 0.4 s of *speech*.
+        seg, _ = make_seg(
+            [None] * 20 + ["start", None, None, None, "end"],
+            pre_buffer=20, min_speech_s=0.4,
+        )
+        last_segs = []
+        for _ in range(25):
+            last_segs, _ = seg.feed(chunk(), 0.0)
+        assert last_segs == []
+
+    def test_squelch_buffer_seed_does_not_count_toward_min_speech(self):
+        # Same as above but seeded from the squelch pre-trigger buffer.
+        squelch = SquelchDetector(open_threshold=0.1, open_hold_chunks=1, close_hold_chunks=50)
+        seg, _ = make_seg(
+            [None] * 20 + ["start", None, None, None, "end"],
+            squelch=squelch, squelch_buf_max=30, min_speech_s=0.4,
+        )
+        last_segs = []
+        for _ in range(25):
+            last_segs, _ = seg.feed(chunk(0.5), 0.5)  # squelch open throughout
+        assert last_segs == []
+
+    def test_speech_longer_than_min_with_seed_is_emitted(self):
+        # 14 speech chunks (0.448 s) pass the gate regardless of seed size.
+        seg, _ = make_seg(
+            [None] * 20 + ["start"] + [None] * 12 + ["end"],
+            pre_buffer=20, min_speech_s=0.4,
+        )
+        last_segs = []
+        for _ in range(34):
             last_segs, _ = seg.feed(chunk(), 0.0)
         assert len(last_segs) == 1
         assert last_segs[0][2] is True
@@ -204,19 +335,23 @@ class TestPreBuffer:
     def test_squelch_buffer_replaces_pre_roll_on_vad_start(self):
         # Squelch opens, 2 above-threshold chunks accumulate in squelch_buf,
         # then VAD fires while squelch is still open → squelch_buf prepended
-        # instead of the 3 pre-roll chunks.
+        # instead of the 3 pre-roll chunks. close_hold is large so the
+        # carrier-drop force-finalize (separate behavior) doesn't race the
+        # VAD end here.
+        squelch = SquelchDetector(open_threshold=0.1, open_hold_chunks=1, close_hold_chunks=50)
         seg, _ = make_seg(
             [None, None, None, None, None, "start", "end"],
             pre_buffer=3,
             squelch_buf_max=8,
+            squelch=squelch,
         )
         seg.feed(chunk(0.0), 0.0)   # pre-roll 1
         seg.feed(chunk(0.0), 0.0)   # pre-roll 2
         seg.feed(chunk(0.0), 0.0)   # pre-roll 3
         seg.feed(chunk(0.5), 0.5)   # squelch opens → squelch_buf grows
         seg.feed(chunk(0.5), 0.5)   # above threshold → squelch stays open; squelch_buf grows
-        # squelch_buf now has 2 chunks; squelch still open (close_hold=2, below count=0)
-        segs_start, _ = seg.feed(chunk(0.0), 0.0)   # VAD=start; below=1 < close_hold=2
+        # squelch_buf now has 2 chunks; squelch still open
+        segs_start, _ = seg.feed(chunk(0.0), 0.0)   # VAD=start
         # squelch still open when VAD fires → squelch_buf prepended
         segs_end, _ = seg.feed(chunk(0.0), 0.0)     # VAD=end
         assert len(segs_end) == 1

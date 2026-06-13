@@ -84,6 +84,87 @@ class TestReset:
         assert event == "opened"
 
 
+class TestAdaptiveThreshold:
+    def test_non_adaptive_effective_threshold_is_fixed(self):
+        sq = SquelchDetector(open_threshold=0.05)
+        for _ in range(50):
+            sq.update(0.001)
+        assert sq.effective_open_threshold == 0.05
+
+    def test_effective_threshold_starts_at_configured_threshold(self):
+        sq = SquelchDetector(open_threshold=0.05, adaptive=True)
+        assert sq.effective_open_threshold == 0.05
+
+    def test_quiet_floor_lowers_threshold_so_weak_carrier_opens(self):
+        sq = SquelchDetector(
+            open_threshold=0.05, open_hold_chunks=2,
+            adaptive=True, floor_alpha=0.5, open_factor=3.0,
+            min_open_threshold=0.01,
+        )
+        for _ in range(20):
+            sq.update(0.001)  # very quiet channel
+        assert sq.effective_open_threshold < 0.05
+        # A 0.03-peak carrier is below the fixed 0.05 default but must now open
+        sq.update(0.03)
+        assert sq.update(0.03) == "opened"
+
+    def test_floor_does_not_learn_while_open(self):
+        sq = SquelchDetector(
+            open_threshold=0.05, open_hold_chunks=1, close_hold_chunks=100,
+            adaptive=True, floor_alpha=0.5,
+        )
+        sq.update(0.8)  # opens
+        assert sq.is_open
+        before = sq.effective_open_threshold
+        for _ in range(50):
+            sq.update(0.8)
+        assert sq.effective_open_threshold == before
+
+    def test_floor_does_not_learn_from_above_threshold_chunks(self):
+        # Carrier-rise chunks while still closed must not drag the floor up.
+        sq = SquelchDetector(
+            open_threshold=0.05, open_hold_chunks=10,
+            adaptive=True, floor_alpha=0.5,
+        )
+        before = sq.effective_open_threshold
+        for _ in range(5):
+            sq.update(0.9)  # above effective threshold, but not open yet
+        assert sq.effective_open_threshold == before
+
+    def test_threshold_clipped_to_max(self):
+        sq = SquelchDetector(
+            open_threshold=0.05, adaptive=True, floor_alpha=1.0,
+            open_factor=3.0, max_open_threshold=0.25,
+        )
+        # noisy-but-closed channel just below effective threshold each time
+        for _ in range(100):
+            sq.update(sq.effective_open_threshold * 0.99)
+        assert sq.effective_open_threshold <= 0.25
+
+    def test_threshold_clipped_to_min(self):
+        sq = SquelchDetector(
+            open_threshold=0.05, adaptive=True, floor_alpha=1.0,
+            min_open_threshold=0.01,
+        )
+        for _ in range(20):
+            sq.update(0.0)
+        assert sq.effective_open_threshold >= 0.01
+
+    def test_reset_restores_initial_floor(self):
+        sq = SquelchDetector(open_threshold=0.05, adaptive=True, floor_alpha=0.5)
+        for _ in range(20):
+            sq.update(0.001)
+        assert sq.effective_open_threshold != 0.05
+        sq.reset()
+        assert sq.effective_open_threshold == 0.05
+
+    def test_weak_carrier_below_fixed_threshold_never_opens_non_adaptive(self):
+        sq = SquelchDetector(open_threshold=0.05, open_hold_chunks=1)
+        for _ in range(100):
+            sq.update(0.03)
+        assert not sq.is_open
+
+
 class TestReturnValues:
     def test_returns_none_while_stable_open(self):
         sq = SquelchDetector(open_hold_chunks=1, close_hold_chunks=5)
