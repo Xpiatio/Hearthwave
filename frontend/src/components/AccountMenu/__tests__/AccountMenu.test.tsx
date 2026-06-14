@@ -2,7 +2,7 @@ import { render as rtlRender, screen, fireEvent, waitFor } from '@testing-librar
 import userEvent from '@testing-library/user-event'
 import { ThemeProvider } from '@mui/material/styles'
 import { makeTheme } from '../../../theme'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { AccountMenu } from '../AccountMenu'
 import type { UserProfile, VoiceOption } from '../../../types/ws'
 
@@ -316,6 +316,24 @@ describe('AccountMenu', () => {
       await waitFor(() => screen.getByRole('dialog'))
       // Fields should still show original values
       expect(screen.getByDisplayValue('Alice Smith')).toBeInTheDocument()
+    })
+  })
+
+  describe('About dialog', () => {
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    it('opens the About dialog from the menu', async () => {
+      vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({ ok: true, version: '2.5.2' }),
+      } as Response)
+
+      render(<AccountMenu {...makeProps()} />)
+      await userEvent.click(screen.getByRole('button', { name: /account menu/i }))
+      await userEvent.click(screen.getByRole('menuitem', { name: /about hearthwave/i }))
+      expect(screen.getByText(/self-hosted gmrs hub for your household/i)).toBeInTheDocument()
     })
   })
 })

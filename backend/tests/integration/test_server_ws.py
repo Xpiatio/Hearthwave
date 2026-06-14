@@ -197,7 +197,20 @@ class TestHealth:
     def test_returns_ok(self, client):
         resp = client.get("/health")
         assert resp.status_code == 200
-        assert resp.json() == {"ok": True}
+        body = resp.json()
+        assert body["ok"] is True
+        assert "version" in body
+
+    def test_health_reports_version(self, client):
+        """/health returns ok plus the backend package version."""
+        import backend
+
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["ok"] is True
+        assert body["version"] == backend.__version__
+        assert isinstance(backend.__version__, str) and body["version"]
 
 
 # ---------------------------------------------------------------------------

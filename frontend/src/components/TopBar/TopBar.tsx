@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   AppBar,
   Toolbar,
@@ -13,6 +14,8 @@ import Brightness7Icon from '@mui/icons-material/Brightness7';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import { AccountMenu } from '../AccountMenu/AccountMenu';
 import { VoicePTT } from '../VoicePTT/VoicePTT';
+import { Logo } from '../Logo/Logo';
+import { AboutDialog } from '../AboutDialog/AboutDialog';
 import type { UserProfile, VoiceOption } from '../../types/ws';
 
 interface Props {
@@ -115,10 +118,25 @@ export function TopBar({
   onVoicePttCancel,
   onTxAbort,
 }: Props) {
+  const [aboutOpen, setAboutOpen] = useState(false);
   return (
     <AppBar position="static" color="default" elevation={0}
       sx={{ borderBottom: 1, borderColor: 'divider' }}>
       <Toolbar sx={{ gap: 1, flexWrap: 'wrap', py: 0.5 }}>
+
+        {/* Brand — click to open About */}
+        <Tooltip title="About Hearthwave">
+          <IconButton
+            onClick={() => setAboutOpen(true)}
+            aria-label="About Hearthwave"
+            size="small"
+            sx={{ p: 0.5 }}
+          >
+            <Logo size={28} />
+          </IconButton>
+        </Tooltip>
+
+        <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
 
         {/* Group 1 — Identity */}
         <AccountMenu
@@ -345,6 +363,7 @@ export function TopBar({
           </IconButton>
         </Tooltip>
       </Toolbar>
+      <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </AppBar>
   );
 }
