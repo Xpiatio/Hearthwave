@@ -398,6 +398,8 @@ Open your personal settings panel by clicking your **account chip** in the top b
 | Input device | Which microphone/audio interface the server listens on |
 | System audio loopback | Capture from a PulseAudio sink (for radios on virtual cable) |
 
+> **Connecting the radio:** Hearthwave connects to the radio's **combo (speaker/mic) jack** — typically a Kenwood-style **K1** cable — either through the computer's built-in 3.5 mm jack or a USB sound card. A USB connection *to the radio itself* is not required. For a VOX-keyed radio, enable the **VOX primer tone** (see [Admin Settings](#21-admin-settings-dialog-admin)) so the radio opens before speech begins. Full wiring options are in the [README](README.md#connecting-the-radio).
+
 ### Radio & content (per-user)
 | Setting | Description |
 |---------|-------------|
