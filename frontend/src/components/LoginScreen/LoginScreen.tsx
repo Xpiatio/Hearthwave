@@ -69,7 +69,7 @@ export function LoginScreen({ onLogin }: Props) {
       <Card sx={{ width: '100%', maxWidth: 420 }} elevation={4}>
         <CardContent sx={{ p: 4 }}>
           <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5, textAlign: 'center' }}>
-            Radio-TTY
+            Hearthwave
           </Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', mb: 3 }}>
             Sign in to continue

@@ -68,7 +68,7 @@ export function SetupScreen({ onSetup }: Props) {
       <Card sx={{ width: '100%', maxWidth: 460 }} elevation={4}>
         <CardContent sx={{ p: 4 }}>
           <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5, textAlign: 'center' }}>
-            Radio-TTY
+            Hearthwave
           </Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', mb: 3 }}>
             Create your admin account to get started

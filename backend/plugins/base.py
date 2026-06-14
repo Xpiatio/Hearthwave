@@ -1,4 +1,4 @@
-"""Base class for Radio-TTY plugins.
+"""Base class for Hearthwave plugins.
 
 Subclass BasePlugin and register an instance with plugin_registry to hook into
 the core message and audio pipeline. All hook methods are no-ops by default —
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 
 class BasePlugin:
-    """Lifecycle hooks for Radio-TTY plugins (ADR 0003).
+    """Lifecycle hooks for Hearthwave plugins (ADR 0003).
 
     Hook summary:
       on_client_message_received  — every inbound WS client message (async)

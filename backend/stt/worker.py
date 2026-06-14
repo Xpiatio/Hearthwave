@@ -340,7 +340,7 @@ class STTWorker:
                 f"Whisper model not found at '{self.whisper_model_path}'. "
                 f"Run 'python bootstrap_models.py --model {self.whisper_model_name}' on an "
                 f"internet-connected machine, then copy Models/ here. "
-                f"Radio-TTY does not download models at runtime."
+                f"Hearthwave does not download models at runtime."
             )
             return
 

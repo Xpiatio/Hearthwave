@@ -1,4 +1,4 @@
-"""Server configuration for Radio-TTY.
+"""Server configuration for Hearthwave.
 
 ServerConfig is a dict subclass (same pattern as GMRS-TTY's AppConfig) so it
 can be passed as a plain dict anywhere and still offer typed property access

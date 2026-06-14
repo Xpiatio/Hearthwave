@@ -20,7 +20,7 @@ def normalize_service(value):
     return SERVICE_GMRS
 
 
-VOICE_TEST_TEXT = "Radio-TTY voice test. Radio check, one two three."
+VOICE_TEST_TEXT = "Hearthwave voice test. Radio check, one two three."
 
 DEFAULT_OPERATOR_NAME = "Default User"
 UNSET_FIELD = "N/A"
