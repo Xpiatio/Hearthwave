@@ -25,6 +25,9 @@ frontend/dist/
 # Claude Code local settings (project settings.json is tracked)
 .claude/settings.local.json
 
+# Superpowers brainstorming / scratch working dir
+.superpowers/
+
 # Misc
 .DS_Store
 *.swp

@@ -3,7 +3,7 @@ import { render as rtlRender, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ThemeProvider } from '@mui/material/styles'
 import { makeTheme } from '../../../theme'
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { axe } from 'jest-axe'
 import { LoginScreen } from '../LoginScreen'
 
@@ -199,6 +199,31 @@ describe('LoginScreen', () => {
     it('has no violations in idle state', async () => {
       const { container } = render(<LoginScreen onLogin={vi.fn()} />)
       expect(await axe(container)).toHaveNoViolations()
+    })
+  })
+
+  describe('logo lockup and About footer', () => {
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    it('shows the logo lockup', () => {
+      vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({ ok: true, version: '2.5.2' }),
+      } as Response)
+      render(<LoginScreen onLogin={vi.fn().mockResolvedValue(undefined)} />)
+      expect(screen.getByRole('img', { name: /hearthwave logo/i })).toBeInTheDocument()
+    })
+
+    it('opens the About dialog from the footer link', async () => {
+      vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({ ok: true, version: '2.5.2' }),
+      } as Response)
+      render(<LoginScreen onLogin={vi.fn().mockResolvedValue(undefined)} />)
+      await userEvent.click(screen.getByRole('button', { name: /about/i }))
+      expect(screen.getByText(/self-hosted gmrs hub for your household/i)).toBeInTheDocument()
     })
   })
 })
