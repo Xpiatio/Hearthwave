@@ -10,6 +10,9 @@ import {
   CircularProgress,
 } from '@mui/material';
 import type { AuthError } from '../../hooks/useAuth';
+import { Logo } from '../Logo/Logo';
+import { AboutDialog } from '../AboutDialog/AboutDialog';
+import { useVersion } from '../../hooks/useVersion';
 
 interface Props {
   onLogin: (displayName: string, password: string) => Promise<unknown>;
@@ -21,6 +24,8 @@ export function LoginScreen({ onLogin }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [lockedUntil, setLockedUntil] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const version = useVersion();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -68,9 +73,9 @@ export function LoginScreen({ onLogin }: Props) {
     >
       <Card sx={{ width: '100%', maxWidth: 420 }} elevation={4}>
         <CardContent sx={{ p: 4 }}>
-          <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5, textAlign: 'center' }}>
-            Hearthwave
-          </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1 }}>
+            <Logo size={56} withWordmark />
+          </Box>
           <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', mb: 3 }}>
             Sign in to continue
           </Typography>
@@ -113,8 +118,20 @@ export function LoginScreen({ onLogin }: Props) {
               {loading ? 'Signing in…' : 'Sign In'}
             </Button>
           </Box>
+
+          <Box sx={{ mt: 2, textAlign: 'center' }}>
+            <Button
+              size="small"
+              onClick={() => setAboutOpen(true)}
+              sx={{ textTransform: 'none', color: 'text.secondary' }}
+            >
+              About{version ? ` · v${version}` : ''}
+            </Button>
+          </Box>
         </CardContent>
       </Card>
+
+      <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </Box>
   );
 }
