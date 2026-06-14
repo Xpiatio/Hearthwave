@@ -118,6 +118,7 @@ from backend.fcc.id_rule import (
 from backend.hw_detect import detect as detect_compute
 from backend.net.online import invalidate as _invalidate_online
 from backend.net.online import is_online, is_online_cached
+from backend import __version__
 from backend import auth_routes
 from backend.auth_routes import router as _auth_router
 from backend.plugins import plugin_registry
@@ -1353,7 +1354,6 @@ app.include_router(_auth_router, prefix="/auth")
 
 @app.get("/health")
 async def health() -> dict:
-    from backend import __version__
     return {"ok": True, "version": __version__}
 
 
