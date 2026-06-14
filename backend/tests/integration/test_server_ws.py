@@ -770,3 +770,15 @@ class TestTxMessageVoiceAs:
         mock_users.get_by_display_name.return_value = None
         loaded = self._run(cfg, mock_users, "Ghost")
         assert "fake_voice" in loaded
+
+
+def test_health_reports_version(client):
+    """/health returns ok plus the backend package version."""
+    import backend
+
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["version"] == backend.__version__
+    assert isinstance(backend.__version__, str) and body["version"]
