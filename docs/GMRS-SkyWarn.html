@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Family SKYWARN Radio Script</title>
+  <style>
+    @page {
+        size: letter portrait;
+        margin: 0.5in;
+        background-color: #ffffff;
+    }
+    * { 
+        box-sizing: border-box; 
+    }
+    body {
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        line-height: 1.25;
+        color: #000000;
+        margin: 0;
+        padding: 0;
+        font-size: 10pt;
+        background-color: #ffffff;
+    }
+    .header-container {
+        text-align: center;
+        border-bottom: 3px solid #002244;
+        padding-bottom: 6px;
+        margin-bottom: 12px;
+    }
+    h1 {
+        color: #002244;
+        font-size: 18pt;
+        margin: 0 0 4px 0;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .subtitle {
+        font-size: 10pt;
+        font-weight: bold;
+        color: #222222;
+    }
+    h2 {
+        color: #002244;
+        font-size: 12pt;
+        margin: 12px 0 6px 0;
+        text-transform: uppercase;
+        border-left: 4px solid #002244;
+        padding-left: 8px;
+    }
+    p {
+        margin: 0 0 6px 0;
+        font-size: 10pt;
+        color: #111111;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 10px;
+        page-break-inside: avoid;
+    }
+    th, td {
+        border: 1px solid #444444;
+        padding: 8px;
+        text-align: left;
+        vertical-align: top;
+    }
+    th {
+        background-color: #002244;
+        color: #ffffff;
+        font-weight: bold;
+        font-size: 10pt;
+    }
+    .config-table th {
+        background-color: #e6e6e6;
+        color: #000000;
+        font-size: 10pt;
+    }
+    .config-table td {
+        padding: 12px 8px;
+        color: #333333;
+        font-style: italic;
+    }
+    .formula-box {
+        background-color: #f4f4f4;
+        border: 1px solid #999999;
+        border-left: 5px solid #002244;
+        padding: 10px;
+        font-weight: bold;
+        font-size: 12pt;
+        text-align: center;
+        font-family: 'Courier New', Courier, monospace;
+        margin-bottom: 12px;
+        color: #000000;
+    }
+    .bold-lead {
+        font-weight: bold;
+        display: block;
+        margin-bottom: 3px;
+        font-size: 10.5pt;
+    }
+    .desc-text {
+        color: #222222;
+        font-size: 9pt;
+        display: block;
+    }
+    .pro-word {
+        font-weight: bold;
+        font-size: 11pt;
+    }
+    .emergency { color: #b30000; }
+    .standard { color: #002244; }
+    .silence { color: #444444; }
+    
+    .silence-row {
+        background-color: #f0f0f0;
+    }
+
+    /* ---- Setup panel (screen only) ---- */
+    .setup {
+        background-color: #f4f4f4;
+        border: 1px solid #999999;
+        border-left: 5px solid #002244;
+        padding: 12px 16px;
+        margin-bottom: 16px;
+    }
+    .setup h2 {
+        margin: 0 0 4px 0;
+        border: none;
+        padding: 0;
+    }
+    .setup p {
+        margin: 0 0 12px 0;
+        color: #333333;
+    }
+    .setup-fields {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+    .field {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 220px;
+    }
+    .field label {
+        font-weight: bold;
+        font-size: 9.5pt;
+        margin-bottom: 4px;
+        color: #002244;
+    }
+    .field input {
+        font-family: inherit;
+        font-size: 11pt;
+        color: #000000;
+        padding: 8px 10px;
+        border: 1px solid #999999;
+        background-color: #ffffff;
+    }
+    .field input:focus {
+        outline: 3px solid #002244;
+        outline-offset: 1px;
+    }
+
+    @media print {
+        .setup { display: none; }
+        * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header-container">
+    <h1>Family SKYWARN Radio Script</h1>
+    <div class="subtitle">FACTS ONLY. Report only what you see or measure. No guessing.</div>
+  </div>
+
+  <section class="setup" aria-label="Set up this script">
+    <h2>Set up this script</h2>
+    <p>Type your details below. They fill in throughout the script. Then print and post it.</p>
+    <div class="setup-fields">
+      <div class="field">
+        <label for="in-channel">My Local Repeater / Channel</label>
+        <input id="in-channel" type="text" placeholder="Enter channel / repeater name" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="in-callsign">My FCC GMRS Callsign</label>
+        <input id="in-callsign" type="text" placeholder="Enter callsign" autocomplete="off">
+      </div>
+    </div>
+  </section>
+
+  <h2>1. Station Configuration</h2>
+  <table class="config-table">
+    <thead>
+      <tr>
+        <th scope="col" style="width: 50%;">My Local Repeater / Channel</th>
+        <th scope="col" style="width: 50%;">My FCC GMRS Callsign</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="v-channel">[ Enter Channel / Repeater Name ]</span></td>
+        <td><span class="v-callsign">[ Enter Callsign ]</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>2. The Universal Formula</h2>
+  <p>To catch Net Control's attention cleanly, key up the microphone and transmit only your identity and pro word:</p>
+  <div class="formula-box">
+    "<span class="v-callsign">[My Callsign]</span> + [Statement Pro Word]"
+  </div>
+
+  <h2>3. Factual Logic Tree (Streamlined)</h2>
+  <p>Match your live observation directly to the correct word. If Net Control clears you to proceed, deliver your facts in strict sequence: Who, What, When, Where.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th scope="col" style="width: 42%;">IF YOU OBSERVE...</th>
+        <th scope="col" style="width: 20%;">PRO WORD</th>
+        <th scope="col" style="width: 38%;">EXACT INITIAL HAIL</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>
+          <span class="bold-lead">Tornado, Wall Cloud, or Destructive Winds</span>
+          <span class="desc-text">Active tornado, rotating funnel/wall cloud, or destructive wind events measured or estimated at 80mph or higher.</span>
+        </td>
+        <td><span class="pro-word emergency">EMERGENCY</span></td>
+        <td><strong>"<span class="v-callsign">[Callsign]</span>, EMERGENCY."</strong></td>
+      </tr>
+      <tr>
+        <td>
+          <span class="bold-lead">Storm Damage</span>
+          <span class="desc-text">Downed power lines, structural damage to buildings, or large tree structural limbs blocking roadways.</span>
+        </td>
+        <td><span class="pro-word standard">DAMAGE</span></td>
+        <td><strong>"<span class="v-callsign">[Callsign]</span>, DAMAGE."</strong></td>
+      </tr>
+      <tr>
+        <td>
+          <span class="bold-lead">Severe Weather Metrics</span>
+          <span class="desc-text">Severe verified hail (Quarter size / 1-inch or larger) or measured severe wind gusts matching regional criteria.</span>
+        </td>
+        <td><span class="pro-word standard">WEATHER</span></td>
+        <td><strong>"<span class="v-callsign">[Callsign]</span>, WEATHER."</strong></td>
+      </tr>
+      <tr class="silence-row">
+        <td>
+          <span class="bold-lead" style="color: #444444;">Cool Lightning, Dark Clouds, Standard Rain</span>
+          <span class="desc-text" style="color: #444444;">Heavy rainfall, thunder, generic wind gusts, dark clouds, or small pea-sized hail.</span>
+        </td>
+        <td><span class="pro-word silence">SILENCE</span></td>
+        <td style="font-style: italic; color: #444444;">
+          <strong>Keep it to yourself.</strong> Do not touch the microphone button. Keep the frequency clear.
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <script>
+    var fields = {
+      channel:  {sel:'#in-channel',  ph:'[ Enter Channel / Repeater Name ]'},
+      callsign: {sel:'#in-callsign', ph:'[Callsign]'}
+    };
+    Object.keys(fields).forEach(function(key){
+      var cfg = fields[key];
+      var input = document.querySelector(cfg.sel);
+      var targets = document.querySelectorAll('.v-' + key);
+      function update(){
+        var val = input.value.trim();
+        for (var i = 0; i < targets.length; i++){ targets[i].textContent = val || cfg.ph; }
+      }
+      input.addEventListener('input', update);
+      update();
+    });
+  </script>
+</body>
+</html>
