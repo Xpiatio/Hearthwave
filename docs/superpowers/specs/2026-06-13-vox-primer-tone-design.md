@@ -68,8 +68,8 @@ Defaults keep the feature **off**; when off, behaviour is unchanged.
 - `backend/tts/synthesizer.py`
   - New pure helper `make_vox_primer(sample_rate, ms)` → `np.ndarray` (int16):
     `ms` of 1000 Hz sine at ~0.3 FS followed by ~80 ms of silence (gap).
-  - `synthesize_to_buffer` / `_synthesize_blocking` gain a `vox_primer_seconds`
-    (and the helper's fixed params) argument, default `0.0` / disabled. When >0,
+  - `synthesize_to_buffer` / `_synthesize_blocking` gain a `vox_primer_ms`
+    argument, default `0.0` / disabled. When >0,
     the primer block is spliced between the lead-in silence and the speech.
     Default-off path produces a buffer identical to today.
 - `backend/server.py`
