@@ -388,4 +388,20 @@ describe('ServerConfigPanel', () => {
     expect(screen.getByLabelText(/tx conditioning/i)).toBeChecked()
     expect(screen.getByLabelText(/debug capture/i)).toBeChecked()
   })
+
+  // -------------------------------------------------------------------------
+  // VOX primer
+  // -------------------------------------------------------------------------
+
+  it('saves vox_primer_enabled when toggled on', async () => {
+    const user = userEvent.setup()
+    const props = makeDefaultProps({ voxPrimerEnabled: false, voxPrimerMs: 300 })
+    render(<ServerConfigPanel {...props} embedded open onClose={() => {}} />)
+
+    await user.click(screen.getByLabelText(/vox primer tone/i))
+    await user.click(screen.getByRole('button', { name: /save/i }))
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ vox_primer_enabled: true, vox_primer_ms: 300 })
+    )
+  })
 })

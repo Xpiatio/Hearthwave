@@ -64,6 +64,8 @@ export interface StatusMsg {
   squelch_adaptive?: boolean;
   stt_debug_capture?: boolean;
   tx_conditioning?: boolean;
+  vox_primer_enabled?: boolean;
+  vox_primer_ms?: number;
   ptt_mode?: string;
   ptt_serial_port?: string;
   ptt_serial_line?: string;

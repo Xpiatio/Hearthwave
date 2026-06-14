@@ -56,6 +56,8 @@ export interface ServerConfig {
   squelchAdaptive: boolean;
   sttDebugCapture: boolean;
   txConditioning: boolean;
+  voxPrimerEnabled: boolean;
+  voxPrimerMs: number;
   pttMode: string;
   pttSerialPort: string;
   pttSerialLine: string;
@@ -71,6 +73,8 @@ export interface ServerConfigSaveValues {
   squelch_adaptive: boolean;
   stt_debug_capture: boolean;
   tx_conditioning: boolean;
+  vox_primer_enabled: boolean;
+  vox_primer_ms: number;
   ptt_mode: string;
   ptt_serial_port: string;
   ptt_serial_line: string;
@@ -96,6 +100,8 @@ export function ServerConfigPanel({ open, onClose, config, onSave, embedded = fa
   const [squelchAdaptive, setSquelchAdaptive] = useState(false);
   const [sttDebugCapture, setSttDebugCapture] = useState(false);
   const [txConditioning, setTxConditioning] = useState(false);
+  const [voxPrimerEnabled, setVoxPrimerEnabled] = useState(false);
+  const [voxPrimerMs, setVoxPrimerMs] = useState(300);
   const [pttMode, setPttMode] = useState('manual');
   const [pttSerialPort, setPttSerialPort] = useState('');
   const [pttSerialLine, setPttSerialLine] = useState('RTS');
@@ -114,6 +120,8 @@ export function ServerConfigPanel({ open, onClose, config, onSave, embedded = fa
     setSquelchAdaptive(config.squelchAdaptive);
     setSttDebugCapture(config.sttDebugCapture);
     setTxConditioning(config.txConditioning);
+    setVoxPrimerEnabled(config.voxPrimerEnabled);
+    setVoxPrimerMs(config.voxPrimerMs);
     setPttMode(config.pttMode);
     setPttSerialPort(config.pttSerialPort);
     setPttSerialLine(config.pttSerialLine);
@@ -143,6 +151,8 @@ export function ServerConfigPanel({ open, onClose, config, onSave, embedded = fa
       squelch_adaptive: squelchAdaptive,
       stt_debug_capture: sttDebugCapture,
       tx_conditioning: txConditioning,
+      vox_primer_enabled: voxPrimerEnabled,
+      vox_primer_ms: voxPrimerMs,
       ptt_mode: pttMode,
       ptt_serial_port: pttSerialPort.trim(),
       ptt_serial_line: pttSerialLine,
@@ -244,6 +254,31 @@ export function ServerConfigPanel({ open, onClose, config, onSave, embedded = fa
             Band-limit, compress, and level synthesized speech before it drives the radio
             mic — clearer over narrowband FM. Browser read-aloud is unaffected.
           </Typography>
+
+          <FormControlLabel
+            control={
+              <Switch
+                checked={voxPrimerEnabled}
+                onChange={(e) => setVoxPrimerEnabled(e.target.checked)}
+                size="small"
+              />
+            }
+            label="VOX primer tone"
+          />
+          <Typography variant="caption" sx={{ color: 'text.secondary', mt: -1.5 }}>
+            Prepend a short tone to each transmission so a VOX-keyed radio is fully
+            keyed before the message starts (silence won't trip VOX).
+          </Typography>
+          <TextField
+            label="Primer duration (ms)"
+            type="number"
+            size="small"
+            value={voxPrimerMs}
+            disabled={!voxPrimerEnabled}
+            onChange={(e) => setVoxPrimerMs(Math.max(0, Math.min(2000, Number(e.target.value) || 0)))}
+            slotProps={{ htmlInput: { min: 0, max: 2000, step: 50 } }}
+            sx={{ maxWidth: 200 }}
+          />
 
           <FormControlLabel
             control={
