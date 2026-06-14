@@ -733,6 +733,7 @@ async def _tx_pump() -> None:
                             voice, text, length_scale=length_scale,
                             lead_in_seconds=ptt.lead_in_seconds,
                             tail_seconds=ptt.tail_seconds,
+                            vox_primer_ms=(_config.vox_primer_ms if _config.vox_primer_enabled else 0),
                         ),
                         timeout=synth_timeout,
                     )
@@ -1021,6 +1022,8 @@ def _build_status() -> dict:
         "squelch_adaptive": bool(_config.squelch_adaptive) if _config else False,
         "stt_debug_capture": bool(_config.stt_debug_capture) if _config else False,
         "tx_conditioning": bool(_config.tx_conditioning) if _config else False,
+        "vox_primer_enabled": bool(_config.vox_primer_enabled) if _config else False,
+        "vox_primer_ms": int(_config.vox_primer_ms) if _config else 300,
         "ptt_mode": (_config.ptt_mode if _config else "manual"),
         "ptt_serial_port": (_config.ptt_serial_port if _config else ""),
         "ptt_serial_line": (_config.ptt_serial_line if _config else "RTS"),
@@ -1409,6 +1412,16 @@ async def _ws_handle_set_server_config(ws: WebSocket, data: dict, state: "Connec
         _config["tx_conditioning"] = enabled
         if _synthesizer is not None:
             _synthesizer.tx_conditioning = enabled
+
+    if "vox_primer_enabled" in data:
+        _config["vox_primer_enabled"] = bool(data["vox_primer_enabled"])
+
+    if "vox_primer_ms" in data:
+        try:
+            ms = int(data["vox_primer_ms"])
+            _config["vox_primer_ms"] = max(0, min(2000, ms))
+        except (TypeError, ValueError):
+            pass
 
     if "stt_debug_capture" in data:
         enabled = bool(data["stt_debug_capture"])
