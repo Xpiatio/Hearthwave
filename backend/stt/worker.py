@@ -93,6 +93,12 @@ class STTWorker:
     # CUT_WINDOW_S so cuts land in a natural pause between words.
     ROLLING_SEGMENT_S = 2.0
     CUT_WINDOW_S = 0.3
+    # After STT resumes following a transmit, the capture device still carries
+    # the tail of our own TTS (it echoes back through the same sound card /
+    # acoustically). Discard captured chunks until the channel goes quiet so we
+    # never transcribe our own outgoing audio. The cap guarantees release so a
+    # steady above-threshold noise floor can't starve RX forever (~1.5s).
+    TX_TAIL_GUARD_MAX_CHUNKS = int(1.5 * SAMPLE_RATE / CHUNK_SAMPLES)
 
     _MODELS_DIR = Path(__file__).resolve().parent.parent / "Models" / "STT"
 
@@ -301,6 +307,21 @@ class STTWorker:
         elif sq_event == "closed":
             self._apply_squelch_event("squelch_closed")
 
+    def _tx_tail_guard_release(self, peak: float, count: int) -> bool:
+        """Decide whether the post-resume TX-tail guard may release.
+
+        The bleed of our own TTS tail is sub-squelch (measured ~0.02 peak,
+        below the 0.05 carrier threshold) yet VAD transcribes it, and it
+        arrives after a brief quiet gap — so we hold (discard) ALL sub-squelch
+        audio for a bounded window rather than releasing on the first quiet
+        chunk. Release early only when a genuine carrier opens squelch (a real
+        station replying, so RX isn't clipped), or when the window cap is hit.
+        While this returns False the caller discards the chunk.
+        """
+        if peak >= self.squelch_open_threshold:
+            return True
+        return count >= self.TX_TAIL_GUARD_MAX_CHUNKS
+
     # ------------------------------------------------------------------
     # Worker body — runs in a thread-pool thread
     # ------------------------------------------------------------------
@@ -405,6 +426,7 @@ class STTWorker:
             silence_reset_chunks=int(self.SILENCE_RESET_S * self.SAMPLE_RATE / self.CHUNK_SAMPLES),
         )
         was_paused = False
+        tail_guard_count = -1  # >=0 while discarding our own TTS tail after TX
 
         if self.debug_capture and self.debug_dir:
             try:
@@ -458,9 +480,29 @@ class STTWorker:
                     continue
 
                 if was_paused:
+                    # Don't resume transcription on a blind timer — our own TTS
+                    # tail is still bleeding back through the capture device
+                    # (same sound card / acoustic coupling). Arm the tail guard
+                    # so the chunks below get discarded until the channel is
+                    # quiet, instead of transcribing our outgoing audio.
                     segmenter.reset()
-                    self._emit_status("Listening...")
                     was_paused = False
+                    tail_guard_count = 0
+
+                if tail_guard_count >= 0:
+                    if self._tx_tail_guard_release(peak, tail_guard_count):
+                        if tail_guard_count:
+                            _log.info(
+                                "TX-tail guard discarded %d chunk(s) (~%dms) before resuming RX",
+                                tail_guard_count,
+                                int(tail_guard_count * self.CHUNK_SAMPLES / self.SAMPLE_RATE * 1000),
+                            )
+                        tail_guard_count = -1
+                        segmenter.reset()
+                        self._emit_status("Listening...")
+                    else:
+                        tail_guard_count += 1
+                        continue
 
                 if recorder is not None:
                     recorder.feed_raw(np.asarray(chunk, dtype=np.float32))
