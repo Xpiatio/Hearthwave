@@ -25,6 +25,8 @@ import LockIcon from '@mui/icons-material/Lock';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SettingsIcon from '@mui/icons-material/Settings';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import { AboutDialog } from '../AboutDialog/AboutDialog';
 import type { UserProfile, VoiceOption } from '../../types/ws';
 
 const SPEED_MARKS = [
@@ -61,6 +63,7 @@ export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogo
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   const [operatorName, setOperatorName] = useState(profile.operator_name);
   const [callsign, setCallsign] = useState(profile.callsign);
@@ -178,6 +181,10 @@ export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogo
           </MenuItem>
         )}
         <Divider />
+        <MenuItem onClick={() => { setAboutOpen(true); handleClose(); }}>
+          <ListItemIcon><InfoOutlinedIcon fontSize="small" /></ListItemIcon>
+          About Hearthwave
+        </MenuItem>
         <MenuItem onClick={() => { handleClose(); onLogout(); }}>
           <ListItemIcon><LogoutIcon fontSize="small" /></ListItemIcon>
           Sign Out
@@ -328,6 +335,8 @@ export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogo
           </Button>
         </DialogActions>
       </Dialog>
+
+      <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </>
   );
 }
