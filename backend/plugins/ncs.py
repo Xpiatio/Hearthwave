@@ -1,4 +1,4 @@
-"""NCS (Net Control Station) / SKYWARN plugin for Radio-TTY.
+"""NCS (Net Control Station) / SKYWARN plugin for Hearthwave.
 
 Implements ADR 0003: interactive roster, BREAK BREAK emergency interrupter,
 15-second rolling audio replay buffer, and NWS CAP alert feed with
@@ -42,7 +42,7 @@ def _fetch_nws_alerts_sync(zone: str) -> list:
         url,
         headers={
             "Accept": "application/geo+json",
-            "User-Agent": "Radio-TTY NCS/1.0 (github.com/Xpiatio/Radio-TTY)",
+            "User-Agent": "Hearthwave NCS/1.0 (github.com/Xpiatio/Hearthwave)",
         },
     )
     try:

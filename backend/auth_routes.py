@@ -1,4 +1,4 @@
-"""Auth HTTP endpoints for Radio-TTY.
+"""Auth HTTP endpoints for Hearthwave.
 
 GET  /auth/setup-status            — returns whether first-run setup is needed
 POST /auth/setup                   — create the initial admin account (first-run only)

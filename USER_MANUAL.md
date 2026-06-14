@@ -1,8 +1,8 @@
-# Radio-TTY User Manual
+# Hearthwave User Manual
 
 > **Version:** v2.5.2
 
-This manual covers day-to-day operation of Radio-TTY as a GMRS family hub or neighborhood watch base station — a shared radio operating station where every household member or watch volunteer connects from their own device. For installation and server setup, see [README.md](README.md).
+This manual covers day-to-day operation of Hearthwave as a GMRS family hub or neighborhood watch base station — a shared radio operating station where every household member or watch volunteer connects from their own device. For installation and server setup, see [README.md](README.md).
 
 ---
 
@@ -42,7 +42,7 @@ This manual covers day-to-day operation of Radio-TTY as a GMRS family hub or nei
 > default. Toggle between dark and light mode from Settings (hamburger menu on
 > mobile, or the account menu on desktop).
 
-New to Radio-TTY? Here is what happens in your first five minutes.
+New to Hearthwave? Here is what happens in your first five minutes.
 
 1. **Open the app** — navigate to `http://<server-ip>` in any browser on your home network. Your administrator gives you this address.
 2. **Create your account** — on first launch the Setup screen appears. Enter your name and a password; optionally add your operator name, callsign, and location. Click **Create Account**.
@@ -57,11 +57,11 @@ That's it. The rest of this manual covers each feature in detail when you're rea
 
 ## 1. Signing in
 
-Open your browser and navigate to the Radio-TTY host address — typically `http://192.168.x.x` or a hostname your administrator provides.
+Open your browser and navigate to the Hearthwave host address — typically `http://192.168.x.x` or a hostname your administrator provides.
 
 ### First launch — Setup screen
 
-If no accounts exist yet, the **Setup** screen appears instead of the login screen. This happens once, the very first time Radio-TTY is used.
+If no accounts exist yet, the **Setup** screen appears instead of the login screen. This happens once, the very first time Hearthwave is used.
 
 1. Enter your **display name** and choose a **password** (minimum 8 characters, confirmed).
 2. Optionally fill in **operator name**, **call sign**, and **location** — these can be changed later.
@@ -86,7 +86,7 @@ If the server is unreachable, the status bar shows **OFFLINE** in amber. Refresh
 
 ## 2. The interface
 
-The Radio-TTY interface adapts to your screen size — desktop and mobile use
+The Hearthwave interface adapts to your screen size — desktop and mobile use
 different layouts but share the same feature set.
 
 ### Desktop layout
@@ -132,7 +132,7 @@ The desktop shows all panels simultaneously:
 
 ## 2a. Mobile interface
 
-On phones and narrow tablets Radio-TTY shows a single-column view:
+On phones and narrow tablets Hearthwave shows a single-column view:
 
 ```
 ┌────────────────── TopBar (sticky) ──────────────────┐
@@ -180,7 +180,7 @@ Each received entry is labelled **[RX]** in the chat (in green). Outgoing entrie
 
 ## 4. Sending a message (TX)
 
-Radio-TTY has two distinct send actions — **CHAT** and **TRANSMIT**. Use the correct one for what you want to do.
+Hearthwave has two distinct send actions — **CHAT** and **TRANSMIT**. Use the correct one for what you want to do.
 
 ### CHAT — operators only, no radio
 
@@ -244,7 +244,7 @@ Quick messages are stored in your browser's local storage — they are per-brows
 
 ## 6. Station identification (FCC ID)
 
-GMRS regulations require your station to identify with the callsign at least every 15 minutes. Radio-TTY handles this automatically — every outgoing message is wrapped with the station callsign and the timer resets.
+GMRS regulations require your station to identify with the callsign at least every 15 minutes. Hearthwave handles this automatically — every outgoing message is wrapped with the station callsign and the timer resets.
 
 **Manual "THIS IS" ID:** Tap the **THIS IS** button to send a standalone identification in NATO phonetics (e.g., *"This is Whiskey Quebec Zulu X-Ray 9 9 9"*). Use this at the start of a session or when required by net control. A `[TX] Station ID` entry appears in chat for all connected users.
 
@@ -265,7 +265,7 @@ The **Contacts** panel shows the shared station contact list. All users on all d
 
 ### GMRS family callsigns
 
-A GMRS licence covers an entire household, so multiple people share the same callsign. Radio-TTY supports this by allowing **multiple contact records with the same callsign**, each identified by a unique name.
+A GMRS licence covers an entire household, so multiple people share the same callsign. Hearthwave supports this by allowing **multiple contact records with the same callsign**, each identified by a unique name.
 
 **Example:** John Smith / WQZE123 and Jane Smith / WQZE123 are stored as two separate rows. Each can be edited, deleted, or verified independently. When a callsign chip appears in chat, hovering shows all family members registered to that callsign.
 
@@ -587,7 +587,7 @@ When you deactivate NCS mode, a session journal is automatically saved with the 
 
 ## 17. Browser notifications
 
-Radio-TTY can fire browser (OS-level) notifications when the tab is in the background — useful when the station is monitoring in another window or on a separate screen.
+Hearthwave can fire browser (OS-level) notifications when the tab is in the background — useful when the station is monitoring in another window or on a separate screen.
 
 **Enabling notifications:**
 1. Click the **NOTIFY** button in the top bar. It turns blue when active.
@@ -598,7 +598,7 @@ Radio-TTY can fire browser (OS-level) notifications when the tab is in the backg
 - A final RX transcript arrives (shows callsign + first 120 characters of the text)
 - A SKYWARN alert fires from the NCS plugin (shows event name)
 
-Notifications only appear when the Radio-TTY tab is **not** in focus. If you are actively looking at the tab, no notification is shown.
+Notifications only appear when the Hearthwave tab is **not** in focus. If you are actively looking at the tab, no notification is shown.
 
 **Disabling notifications:** Click **NOTIFY** again. The button returns to the unselected state and notifications stop.
 
@@ -608,7 +608,7 @@ This preference is saved to your account and restored across sessions and device
 
 ## 18. Text shortcuts reference
 
-Radio-TTY automatically expands common TTY, Q-signal, and CW abbreviations before transmitting.
+Hearthwave automatically expands common TTY, Q-signal, and CW abbreviations before transmitting.
 
 ### Common TTY/TDD abbreviations
 
@@ -760,7 +760,7 @@ Then set **Final-pass model** to `distil-large-v3` in this panel (or `whisper_mo
 
 ## 22. Plugin system
 
-Radio-TTY is built around a plugin architecture. New capabilities attach to the radio pipeline at defined hook points without requiring changes to the core server. The **NCS / SKYWARN** feature described in [section 16](#16-ncs--net-control-station-mode) is itself a plugin — it demonstrates what the system can do and serves as the template for future extensions.
+Hearthwave is built around a plugin architecture. New capabilities attach to the radio pipeline at defined hook points without requiring changes to the core server. The **NCS / SKYWARN** feature described in [section 16](#16-ncs--net-control-station-mode) is itself a plugin — it demonstrates what the system can do and serves as the template for future extensions.
 
 ### How plugins work
 
@@ -797,19 +797,19 @@ If you are a developer and want to build a plugin, see `backend/plugins/base.py`
 
 ## 23. FCC compliance and remote access
 
-Radio-TTY allows family members to send text-to-speech messages to the base station over the internet. This section explains how that is designed to comply with FCC Part 95 GMRS regulations and what it means for your licence.
+Hearthwave allows family members to send text-to-speech messages to the base station over the internet. This section explains how that is designed to comply with FCC Part 95 GMRS regulations and what it means for your licence.
 
 ### What it is: remote control, not an internet gateway
 
 An internet repeater gateway (sometimes called RoIP or a VoIP bridge) takes audio received from a radio in one location, streams it across the public internet, and retransmits it from a different radio elsewhere. The FCC prohibits this type of internet interconnection on GMRS under Part 95.1749 — GMRS is licensed as a localized family and community service, not a globally-linked network.
 
-Radio-TTY does not do this. When a family member sends a message from a phone or browser over the internet, that message travels to your local base station server and is spoken by the TTS engine through the local radio. Nothing received from the air is forwarded across the internet to another transmitter. The base station is the end destination, not a bridge.
+Hearthwave does not do this. When a family member sends a message from a phone or browser over the internet, that message travels to your local base station server and is spoken by the TTS engine through the local radio. Nothing received from the air is forwarded across the internet to another transmitter. The base station is the end destination, not a bridge.
 
 This is equivalent to a licensed operator sitting at the base station microphone — except the "microphone" is a text input accessed remotely. The FCC calls this a **remote control point** (§ 95.1745), which is permitted provided the station is protected against unauthorized transmissions.
 
 ### Access controls
 
-Because family members can trigger transmissions from outside the home, Radio-TTY requires authentication for every connection:
+Because family members can trigger transmissions from outside the home, Hearthwave requires authentication for every connection:
 
 - Each family member has their own password-protected account
 - Session tokens are validated before any radio access is granted
@@ -821,7 +821,7 @@ Do not share your password or admin credentials with anyone outside your license
 
 ### What administrators should verify
 
-If you expose Radio-TTY to the public internet (outside your home network):
+If you expose Hearthwave to the public internet (outside your home network):
 
 1. **Use TLS** — run a reverse proxy (nginx, Caddy) with a valid HTTPS certificate in front of the app; without it, session tokens travel in plaintext
 2. **Restrict accounts to your licensed family unit** — do not create TX-capable accounts for unlicensed individuals
