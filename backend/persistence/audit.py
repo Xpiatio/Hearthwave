@@ -1,4 +1,4 @@
-"""Append-only JSONL audit log for Radio-TTY.
+"""Append-only JSONL audit log for Hearthwave.
 
 Entries are written to /data/audit.log (or RADIO_TTY_AUDIT_LOG).
 Each line is a JSON object: {"ts", "event", "user_id", "ip", "detail"}.

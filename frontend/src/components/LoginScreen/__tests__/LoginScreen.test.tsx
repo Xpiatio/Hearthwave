@@ -17,7 +17,7 @@ describe('LoginScreen', () => {
   describe('general rendering', () => {
     it('renders title and subtitle', () => {
       render(<LoginScreen onLogin={vi.fn()} />)
-      expect(screen.getByText('Radio-TTY')).toBeInTheDocument()
+      expect(screen.getByText('Hearthwave')).toBeInTheDocument()
       expect(screen.getByText(/sign in to continue/i)).toBeInTheDocument()
     })
 

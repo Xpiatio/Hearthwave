@@ -1,4 +1,4 @@
-"""Integration tests for the Radio-TTY WebSocket server.
+"""Integration tests for the Hearthwave WebSocket server.
 
 Uses Starlette's in-process TestClient — no audio hardware or real ML models
 required.  STTWorker and TTSSynthesizer are mocked so the suite covers the

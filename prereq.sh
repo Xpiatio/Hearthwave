@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Radio-TTY prerequisite setup — run once on the Docker host BEFORE deploying
+# Hearthwave prerequisite setup — run once on the Docker host BEFORE deploying
 # the Portainer stack.
 #
 # Populates the three named volumes the stack expects with models and voices.
@@ -33,7 +33,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-BACKEND_IMAGE="ghcr.io/xpiatio/radio-tty-backend:v2.5.2"
+BACKEND_IMAGE="ghcr.io/xpiatio/hearthwave-backend:v2.5.2"
 VOICES_VOL="radio-tty-voices"
 MODELS_VOL="radio-tty-models"
 DATA_VOL="radio-tty-data"

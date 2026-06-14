@@ -46,7 +46,7 @@ describe('SetupScreen', () => {
   describe('rendering', () => {
     it('renders title and subtitle', () => {
       render(<SetupScreen onSetup={vi.fn()} />)
-      expect(screen.getByText('Radio-TTY')).toBeInTheDocument()
+      expect(screen.getByText('Hearthwave')).toBeInTheDocument()
       expect(screen.getByText(/create your admin account/i)).toBeInTheDocument()
     })
 

@@ -62,7 +62,7 @@ If README does not yet have a version callout at the top, add one below the firs
 
 ## Step 5 — Update USER_MANUAL.md
 
-1. If the manual does not have a version line at the very top (after the `# Radio-TTY User Manual` heading), add:
+1. If the manual does not have a version line at the very top (after the `# Hearthwave User Manual` heading), add:
 
 ```markdown
 > **Version:** vNEW_VERSION

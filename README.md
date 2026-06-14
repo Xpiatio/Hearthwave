@@ -1,4 +1,4 @@
-# Radio-TTY
+# Hearthwave
 
 A GMRS hub that turns a home server or x86 mini PC into a shared radio
 operating station for every member of your household or neighborhood watch group.
@@ -14,7 +14,7 @@ National Weather Service, and an instant audio replay buffer. The plugin
 architecture is open — additional capabilities wire into the radio pipeline
 without touching core server logic.
 
-Radio-TTY is a fork of GMRS-TTY that replaces the desktop PySide6 UI with a
+Hearthwave is a fork of GMRS-TTY that replaces the desktop PySide6 UI with a
 browser-based React frontend communicating over WebSocket.
 
 > **Latest release:** v2.5.2
@@ -24,7 +24,7 @@ browser-based React frontend communicating over WebSocket.
 - **Families** — one GMRS license covers the whole household. Each person gets
   their own account with their own voice and preferences. Kids on tablets, parents
   on laptops, grandparents with large-touch mode — everyone on the same channel.
-- **Neighborhood watch groups** — deploy Radio-TTY as the watch's base station.
+- **Neighborhood watch groups** — deploy Hearthwave as the watch's base station.
   Assign listen-only accounts to patrol volunteers and TX-capable accounts to
   designated net control operators. The NCS roster tracks who is active on each
   patrol; SKYWARN alerts auto-announce over the air when severe weather approaches.
@@ -72,7 +72,7 @@ browser-based React frontend communicating over WebSocket.
 ## UI Overview
 
 The interface uses a navy/blue design language that matches the
-[Radio-TTY website](https://xpiatio.github.io/Radio-TTY/):
+[Hearthwave website](https://xpiatio.github.io/Hearthwave/):
 
 - **Dark mode** — deep navy backgrounds (`#0F2540` page, `#1A3A5C` panels) with
   blue primary actions (`#60A5FA`) and white text
@@ -131,12 +131,12 @@ FastAPI Backend  ──►  PulseAudio / sounddevice
 
 ## FCC compliance
 
-Radio-TTY is designed as a **remote control point** for a single local station,
+Hearthwave is designed as a **remote control point** for a single local station,
 not an internet repeater gateway or RoIP bridge. All transmissions originate
 from the licensed station's transceiver under direct operator control. The system
 automatically prepends and appends the station callsign per §95.1751.
 
-Remote access over the internet is the operator's responsibility. Radio-TTY
+Remote access over the internet is the operator's responsibility. Hearthwave
 provides no port-forwarding, relay, or TURN/STUN infrastructure — use a VPN or
 private tunnel.
 
@@ -155,8 +155,8 @@ private tunnel.
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/Xpiatio/Radio-TTY
-cd Radio-TTY
+git clone https://github.com/Xpiatio/Hearthwave
+cd Hearthwave
 
 # 2. Run setup (creates .env and configures audio)
 ./setup.sh

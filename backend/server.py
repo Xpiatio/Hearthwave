@@ -1,4 +1,4 @@
-"""Radio-TTY WebSocket server.
+"""Hearthwave WebSocket server.
 
 Wires together: STTWorker, TTSSynthesizer, ContactsStore, ConnectionManager.
 All clients receive broadcasts; TX messages are queued to the audio pipeline.
@@ -1316,12 +1316,12 @@ async def _lifespan(app: FastAPI):
         asyncio.create_task(_online_status_pump(), name="online-status-pump"),
         asyncio.create_task(_voices_watcher_pump(), name="voices-watcher"),
     }
-    _log.info("Radio-TTY server ready.")
+    _log.info("Hearthwave server ready.")
 
     yield
 
     # --- shutdown ----------------------------------------------------------
-    _log.info("Shutting down Radio-TTY server...")
+    _log.info("Shutting down Hearthwave server...")
     for task in _background_tasks:
         task.cancel()
     await asyncio.gather(*_background_tasks, return_exceptions=True)
@@ -1336,14 +1336,14 @@ async def _lifespan(app: FastAPI):
         _monitor = None
 
     _level_window.clear()
-    _log.info("Radio-TTY server stopped.")
+    _log.info("Hearthwave server stopped.")
 
 
 # ---------------------------------------------------------------------------
 # FastAPI app
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Radio-TTY", lifespan=_lifespan)
+app = FastAPI(title="Hearthwave", lifespan=_lifespan)
 app.include_router(_auth_router, prefix="/auth")
 
 
@@ -1885,7 +1885,7 @@ async def websocket_endpoint(
                 # Synthesize a test phrase locally (no PTT keying) so the
                 # operator can audition the current voice and speech rate.
                 preview_text = (
-                    data.get("text") or "Radio-TTY voice test. How does this sound?"
+                    data.get("text") or "Hearthwave voice test. How does this sound?"
                 ).strip()
                 preview_voice = (
                     data.get("voice")

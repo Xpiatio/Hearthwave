@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Pre-stage the offline Whisper model Radio-TTY needs.
+"""Pre-stage the offline Whisper model Hearthwave needs.
 
-Radio-TTY is designed for fully offline operation — the server never attempts
+Hearthwave is designed for fully offline operation — the server never attempts
 to fetch a model at runtime. Run this script once on a machine with internet
 access; the resulting Models/ directory is portable and can be copied to
 air-gapped target machines alongside the source tree.

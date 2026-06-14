@@ -1,4 +1,4 @@
-# Radio-TTY — Claude Instructions
+# Hearthwave — Claude Instructions
 
 ## Releases
 
