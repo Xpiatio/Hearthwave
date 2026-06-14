@@ -24,6 +24,24 @@ if TYPE_CHECKING:
     from backend.ptt.base import PTT
 
 
+def make_vox_primer(
+    sample_rate: int,
+    ms: float,
+    freq: int = 1000,
+    level: float = 0.3,
+    gap_ms: float = 80.0,
+) -> "np.ndarray":
+    """Build a VOX-priming burst: ``ms`` of a ``freq`` Hz sine at ``level`` of
+    full scale, followed by ``gap_ms`` of silence. The tone keys a VOX radio;
+    the gap lets it settle before speech so the first word isn't clipped.
+    Returns int16 PCM at ``sample_rate``."""
+    tone_n = int(ms / 1000.0 * sample_rate)
+    gap_n = int(gap_ms / 1000.0 * sample_rate)
+    t = np.arange(tone_n) / sample_rate
+    tone = (level * np.sin(2 * np.pi * freq * t) * 32767).astype(np.int16)
+    return np.concatenate([tone, np.zeros(gap_n, dtype=np.int16)])
+
+
 class TTSSynthesizer:
     """Renders Piper TTS and plays it with PTT keying.
 
