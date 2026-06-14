@@ -44,3 +44,44 @@ class TestMakeVoxPrimer:
         peak = np.max(np.abs(primer))
         assert peak <= 32767
         assert peak >= int(0.25 * 32767)  # ~level, allowing for sine peak/rounding
+
+
+class TestPrimerSplicing:
+    def test_primer_prepended_before_speech(self):
+        voice, pcm = _fake_voice()
+        synth = TTSSynthesizer(out_queue=asyncio.Queue())
+        audio, sr = synth._synthesize_blocking(
+            voice, "hi", 0.1, 0.05, 1.0, condition=False, vox_primer_ms=300,
+        )
+        lead_n = int(0.1 * SR)
+        tail_n = int(0.05 * SR)
+        primer_n = len(make_vox_primer(SR, ms=300))
+        assert audio.size == lead_n + primer_n + pcm.size + tail_n
+        assert np.all(audio[:lead_n] == 0)
+        assert np.max(np.abs(audio[lead_n:lead_n + primer_n])) > 0
+        speech_start = lead_n + primer_n
+        assert np.array_equal(audio[speech_start:speech_start + pcm.size], pcm)
+
+    def test_disabled_is_unchanged(self):
+        voice, pcm = _fake_voice()
+        synth = TTSSynthesizer(out_queue=asyncio.Queue())
+        audio, sr = synth._synthesize_blocking(
+            voice, "hi", 0.1, 0.05, 1.0, condition=False, vox_primer_ms=0,
+        )
+        lead_n, tail_n = int(0.1 * SR), int(0.05 * SR)
+        assert audio.size == lead_n + pcm.size + tail_n
+
+    def test_buffer_path_defaults_to_no_primer(self):
+        voice, pcm = _fake_voice()
+        synth = TTSSynthesizer(out_queue=asyncio.Queue())
+        audio, sr = asyncio.run(synth.synthesize_to_buffer(voice, "hi"))
+        assert np.array_equal(audio, pcm)
+
+    def test_buffer_path_forwards_primer(self):
+        voice, pcm = _fake_voice()
+        synth = TTSSynthesizer(out_queue=asyncio.Queue())
+        audio, sr = asyncio.run(
+            synth.synthesize_to_buffer(voice, "hi", vox_primer_ms=300)
+        )
+        primer_n = len(make_vox_primer(SR, ms=300))
+        assert audio.size == primer_n + pcm.size

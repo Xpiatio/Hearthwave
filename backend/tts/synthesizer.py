@@ -77,6 +77,7 @@ class TTSSynthesizer:
         length_scale: float = 1.0,
         lead_in_seconds: float = 0.0,
         tail_seconds: float = 0.0,
+        vox_primer_ms: float = 0.0,
     ) -> tuple["np.ndarray | None", int]:
         """Synthesize ``text`` and return (audio_int16, sample_rate) without playing.
 
@@ -86,6 +87,7 @@ class TTSSynthesizer:
         return await asyncio.to_thread(
             self._synthesize_blocking, voice, text, lead_in_seconds, tail_seconds, length_scale,
             condition=False,
+            vox_primer_ms=vox_primer_ms,
         )
 
     async def synthesize(self, voice, text: str, ptt: "PTT", length_scale: float = 1.0) -> None:
@@ -138,6 +140,7 @@ class TTSSynthesizer:
         tail_seconds: float,
         length_scale: float,
         condition: bool = False,
+        vox_primer_ms: float = 0.0,
     ) -> tuple[np.ndarray | None, int]:
         """Run Piper synthesis and build the padded PCM buffer.
 
@@ -168,11 +171,16 @@ class TTSSynthesizer:
 
         lead_samples = int(lead_in_seconds * sample_rate)
         tail_samples = int(tail_seconds * sample_rate)
-        total = lead_samples + len(speech) + tail_samples
+        primer = make_vox_primer(sample_rate, vox_primer_ms) if vox_primer_ms > 0 else None
+        primer_samples = len(primer) if primer is not None else 0
+        total = lead_samples + primer_samples + len(speech) + tail_samples
         # np.zeros so lead and tail regions are already silence; no
         # extra concatenations needed to splice them in.
         audio = np.zeros(total, dtype=np.int16)
-        audio[lead_samples:lead_samples + len(speech)] = speech
+        if primer is not None:
+            audio[lead_samples:lead_samples + primer_samples] = primer
+        speech_start = lead_samples + primer_samples
+        audio[speech_start:speech_start + len(speech)] = speech
 
         return audio, sample_rate
 
