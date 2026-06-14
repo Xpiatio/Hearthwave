@@ -17,7 +17,7 @@ without touching core server logic.
 Hearthwave is a fork of GMRS-TTY that replaces the desktop PySide6 UI with a
 browser-based React frontend communicating over WebSocket.
 
-> **Latest release:** v2.5.2
+> **Latest release:** v2.6.0
 
 ## Who uses it
 
@@ -67,6 +67,7 @@ browser-based React frontend communicating over WebSocket.
 - **Chat vs Transmit split** — a CHAT action broadcasts a message to all operators' displays without keying the radio; TRANSMIT is the over-the-air action; chat lines are marked `[CHAT]` and are profanity-filtered per recipient
 - **Unified Admin Settings** — the Admin panel and Server Config are merged into a single tabbed "Admin Settings" dialog (Station and System tabs, each with its own Save button)
 - **VOX primer tone** — an optional short tone prepended to each transmission so a VOX-keyed radio is fully keyed before the message starts; configurable on/off and tone duration in milliseconds (System tab, off by default)
+- **Logo, About & version** — a Hearthwave logo on the login screen and in the top bar, plus an About dialog (opened from the account menu, the login-screen footer, or the top-bar logo) showing the running version, project links, and FCC information. The version is sourced from the backend `/health` endpoint
 - **Docker install** — single `docker compose up -d` gets you running
 
 ## UI Overview
