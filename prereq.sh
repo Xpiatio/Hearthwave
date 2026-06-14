@@ -33,10 +33,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-BACKEND_IMAGE="ghcr.io/xpiatio/hearthwave-backend:v2.5.2"
-VOICES_VOL="radio-tty-voices"
-MODELS_VOL="radio-tty-models"
-DATA_VOL="radio-tty-data"
+BACKEND_IMAGE="ghcr.io/xpiatio/hearthwave-backend:v2.6.0"
+VOICES_VOL="hearthwave-voices"
+MODELS_VOL="hearthwave-models"
+DATA_VOL="hearthwave-data"
 
 HF_BASE="https://huggingface.co/rhasspy/piper-voices/resolve/main"
 
