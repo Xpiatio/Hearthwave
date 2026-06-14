@@ -10,10 +10,10 @@
 services:
   backend:
     build: !reset null
-    image: ghcr.io/xpiatio/radio-tty-backend:v2.5.1
+    image: ghcr.io/xpiatio/radio-tty-backend:v2.5.2
     pull_policy: always
 
   frontend:
     build: !reset null
-    image: ghcr.io/xpiatio/radio-tty-frontend:v2.5.1
+    image: ghcr.io/xpiatio/radio-tty-frontend:v2.5.2
     pull_policy: always
