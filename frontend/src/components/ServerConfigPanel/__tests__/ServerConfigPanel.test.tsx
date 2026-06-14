@@ -26,6 +26,8 @@ function makeConfig(overrides: Partial<ServerConfig> = {}): ServerConfig {
     monitorPassthrough: false,
     attendanceEnabled: false,
     savedPhrases: [],
+    voxPrimerEnabled: false,
+    voxPrimerMs: 300,
     ...overrides,
   }
 }
@@ -205,6 +207,8 @@ describe('ServerConfigPanel', () => {
       monitor_passthrough: true,
       attendance_enabled: true,
       saved_phrases: [],
+      vox_primer_enabled: false,
+      vox_primer_ms: 300,
     })
     expect(props.onClose).toHaveBeenCalledTimes(1)
   })
@@ -392,6 +396,15 @@ describe('ServerConfigPanel', () => {
   // -------------------------------------------------------------------------
   // VOX primer
   // -------------------------------------------------------------------------
+
+  it('disables the primer duration field until the toggle is on', () => {
+    render(<ServerConfigPanel open onClose={() => {}} config={makeConfig()} onSave={vi.fn()} embedded />)
+    // The TextField type="number" renders as a spinbutton; fall back if getByLabelText doesn't resolve
+    const duration = screen.getByLabelText('Primer duration (ms)')
+    expect(duration).toBeDisabled()
+    fireEvent.click(screen.getByLabelText('VOX primer tone'))
+    expect(duration).not.toBeDisabled()
+  })
 
   it('saves vox_primer_enabled when toggled on', async () => {
     const user = userEvent.setup()
