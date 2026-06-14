@@ -481,3 +481,17 @@ class TestPttLeadInMs:
         cfg = ServerConfig({"ptt_lead_in_ms": "500"})
         assert isinstance(cfg.ptt_lead_in_ms, int)
         assert cfg.ptt_lead_in_ms == 500
+
+
+class TestVoxPrimer:
+    def test_enabled_default_false(self):
+        assert ServerConfig().vox_primer_enabled is False
+
+    def test_enabled_override(self):
+        assert make_config(vox_primer_enabled=True).vox_primer_enabled is True
+
+    def test_ms_default_300(self):
+        assert ServerConfig().vox_primer_ms == 300
+
+    def test_ms_override(self):
+        assert make_config(vox_primer_ms=500).vox_primer_ms == 500
