@@ -17,7 +17,7 @@ without touching core server logic.
 Radio-TTY is a fork of GMRS-TTY that replaces the desktop PySide6 UI with a
 browser-based React frontend communicating over WebSocket.
 
-> **Latest release:** v2.5.1
+> **Latest release:** v2.5.2
 
 ## Who uses it
 
@@ -33,7 +33,8 @@ browser-based React frontend communicating over WebSocket.
 
 - **Two-tier transcription** — a fast model streams live partials while an
   optional larger model (e.g. `distil-large-v3`) re-transcribes each completed
-  transmission in full, replacing the live text with a higher-accuracy final
+  transmission in full, replacing the live text with a higher-accuracy final —
+  without truncating long overs or dropping a callsign the live pass already heard
 - **Cuts through static** — adaptive squelch tracks the channel noise floor so
   weak carriers pre-trigger capture, a 1-second pre-roll plus carrier-drop
   finalize stops the first and last words from being clipped
