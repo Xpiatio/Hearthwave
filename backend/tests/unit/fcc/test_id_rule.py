@@ -27,6 +27,13 @@ class TestFormatTailId:
     def test_blank_call_returns_period_only(self):
         assert format_tail_id("") == "."
 
+    def test_appends_name_after_call(self):
+        assert format_tail_id("WQXX123", "Bob") == "WQXX123 Bob."
+
+    def test_blank_name_omits_name(self):
+        assert format_tail_id("WQXX123", "") == "WQXX123."
+        assert format_tail_id("WQXX123", "  ") == "WQXX123."
+
 
 class TestUntargetedAlwaysAppendsTail:
     def test_appends_tail_to_non_empty_text(self, now, me):
@@ -38,7 +45,7 @@ class TestUntargetedAlwaysAppendsTail:
             my_name=me["name"],
             now=now,
         )
-        assert text == "Hello channel. WSLZ233."
+        assert text == "Hello channel. WSLZ233 Bob."
         assert new_last == now
 
     def test_target_empty_string_treated_as_untargeted(self, now, me):
@@ -50,7 +57,7 @@ class TestUntargetedAlwaysAppendsTail:
             my_name=me["name"],
             now=now,
         )
-        assert text == "Open call. WSLZ233."
+        assert text == "Open call. WSLZ233 Bob."
         assert new_last == now
 
     def test_all_lowercase_still_treated_as_untargeted(self, now, me):
@@ -62,7 +69,7 @@ class TestUntargetedAlwaysAppendsTail:
             my_name=me["name"],
             now=now,
         )
-        assert text == "msg. WSLZ233."
+        assert text == "msg. WSLZ233 Bob."
         assert new_last == now
 
     def test_empty_body_returns_tail_only(self, now, me):
@@ -74,7 +81,7 @@ class TestUntargetedAlwaysAppendsTail:
             my_name=me["name"],
             now=now,
         )
-        assert text == "WSLZ233."
+        assert text == "WSLZ233 Bob."
         assert new_last == now
 
     def test_always_resets_timer(self, now, me):
@@ -201,7 +208,7 @@ class TestFrsModeSkipsCallsignFraming:
             my_name=me["name"],
             now=now,
         )
-        assert text == "Hello channel. WSLZ233."
+        assert text == "Hello channel. WSLZ233 Bob."
 
 
 class TestFrsCallerContract:

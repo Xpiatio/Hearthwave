@@ -3,7 +3,7 @@ import {
   ToggleButtonGroup, ToggleButton, FormControl, InputLabel, Select, MenuItem, Typography,
 } from '@mui/material';
 import { PanelHeader } from '../PanelHeader/PanelHeader';
-import type { InputDeviceOption, MonitorSinkOption } from '../../types/ws';
+import type { InputDeviceOption, MonitorSinkOption, OutputDeviceOption } from '../../types/ws';
 
 interface Props {
   filterProfanity: boolean;
@@ -12,12 +12,15 @@ interface Props {
   systemMonitorSink: string;
   inputDevices: InputDeviceOption[];
   monitorSinks: MonitorSinkOption[];
+  outputDevice: number;
+  outputDevices: OutputDeviceOption[];
   spectroColormap: 'viridis' | 'grayscale';
   spectroFreqRange: 'voice' | 'full';
   spectroTimeWindowS: number;
   onToggleProfanity: () => void;
   onToggleFuzzy: () => void;
   onInputDeviceChange: (device: string | number, sink: string) => void;
+  onOutputDeviceChange: (device: number) => void;
   onSpectroColormapChange: (cm: 'viridis' | 'grayscale') => void;
   onSpectroFreqRangeChange: (range: 'voice' | 'full') => void;
   onSpectroTimeWindowChange: (s: number) => void;
@@ -30,12 +33,15 @@ export function ConfigPanel({
   systemMonitorSink,
   inputDevices,
   monitorSinks,
+  outputDevice,
+  outputDevices,
   spectroColormap,
   spectroFreqRange,
   spectroTimeWindowS,
   onToggleProfanity,
   onToggleFuzzy,
   onInputDeviceChange,
+  onOutputDeviceChange,
   onSpectroColormapChange,
   onSpectroFreqRangeChange,
   onSpectroTimeWindowChange,
@@ -49,6 +55,11 @@ export function ConfigPanel({
         { label: 'System Default (microphone)', id: -1 },
         { label: 'System Audio Output (loopback)', id: 'system_monitor' },
       ];
+
+  // Output device drives the radio (TTS is played server-side out this device).
+  const outputDeviceOptions: OutputDeviceOption[] = outputDevices.length > 0
+    ? outputDevices
+    : [{ label: 'System Default (speaker)', id: -1 }];
 
   return (
     <Paper
@@ -117,6 +128,23 @@ export function ConfigPanel({
             </Select>
           </FormControl>
         )}
+
+        {/* Audio output to the radio — transmitted TTS plays out this device */}
+        <FormControl size="small" sx={{ minWidth: 240 }}>
+          <InputLabel id="output-device-label">Audio Output (to radio)</InputLabel>
+          <Select
+            labelId="output-device-label"
+            label="Audio Output (to radio)"
+            value={String(outputDevice)}
+            onChange={(e) => onOutputDeviceChange(Number(e.target.value))}
+          >
+            {outputDeviceOptions.map((dev) => (
+              <MenuItem key={String(dev.id)} value={String(dev.id)}>
+                {dev.label}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
 
         <Divider orientation="vertical" flexItem />
 

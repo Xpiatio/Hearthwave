@@ -46,6 +46,7 @@ export interface StatusMsg {
   spectro_freq_range?: 'voice' | 'full';
   spectro_time_window_s?: number;
   input_device?: string | number;
+  output_device?: number;
   system_monitor_sink?: string;
   // Admin-editable identity fields
   station_callsign?: string;
@@ -63,6 +64,8 @@ export interface StatusMsg {
   squelch_adaptive?: boolean;
   stt_debug_capture?: boolean;
   tx_conditioning?: boolean;
+  vox_primer_enabled?: boolean;
+  vox_primer_ms?: number;
   ptt_mode?: string;
   ptt_serial_port?: string;
   ptt_serial_line?: string;
@@ -90,6 +93,17 @@ export interface TxEchoMsg {
   text: string;
   target_call: string;
   target_name: string;
+}
+
+// Chat-only line — shared to all operators' logs but never keyed over the
+// radio. Per-recipient profanity-filtered server-side (like rx transcriptions).
+export interface ChatEchoMsg {
+  type: 'chat_echo';
+  ts: string;
+  display_name: string;
+  operator: string;
+  callsign: string;
+  text: string;
 }
 
 export interface SystemMsgMsg {
@@ -229,6 +243,17 @@ export interface InputDevicesMsg {
   current_monitor_sink: string;
 }
 
+export interface OutputDeviceOption {
+  label: string;
+  id: number;
+}
+
+export interface OutputDevicesMsg {
+  type: 'output_devices';
+  devices: OutputDeviceOption[];
+  current_output_device: number;
+}
+
 export interface VoiceOption {
   id: string;
   name: string;
@@ -278,12 +303,6 @@ export interface ProfilesMsg {
 
 export interface VoicePreviewAudioMsg {
   type: 'voice_preview_audio';
-  data: string; // base64-encoded int16 PCM
-  sample_rate: number;
-}
-
-export interface TxAudioMsg {
-  type: 'tx_audio';
   data: string; // base64-encoded int16 PCM
   sample_rate: number;
 }
@@ -351,6 +370,7 @@ export type WsMessage =
   | ContactsMsg
   | TxStatusMsg
   | TxEchoMsg
+  | ChatEchoMsg
   | SystemMsgMsg
   | SessionAttendanceMsg
   | JournalsMsg
@@ -366,13 +386,13 @@ export type WsMessage =
   | OnlineStatusMsg
   | SpectrogramRowMsg
   | InputDevicesMsg
+  | OutputDevicesMsg
   | UserProfileMsg
   | ProfilesMsg
   | JournalPublishedMsg
   | JournalUnpublishedMsg
   | VoicesListMsg
   | VoicePreviewAudioMsg
-  | TxAudioMsg
   | RxAudioMsg
   | NCSStateMsg
   | NCSRosterUpdateMsg
@@ -394,6 +414,18 @@ export interface TxMessagePayload {
   callsign: string;
   target_call?: string;
   target_name?: string;
+  // Voice/speed the backend should transmit in: the named operator's profile
+  // (the [tx] [name] convention). Resolved server-side via get_by_display_name;
+  // falls back to the station default when unknown.
+  voice_as?: string;
+}
+
+// Chat-only line — Client → Server (sent via send(), NOT part of WsMessage union).
+export interface ChatMessagePayload {
+  type: 'chat_message';
+  text: string;
+  operator: string;
+  callsign: string;
 }
 
 // Voice PTT — Client → Server payloads (sent via send(), NOT part of WsMessage union)

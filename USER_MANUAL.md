@@ -1,6 +1,6 @@
 # Radio-TTY User Manual
 
-> **Version:** v2.5.0
+> **Version:** v2.5.1
 
 This manual covers day-to-day operation of Radio-TTY as a GMRS family hub or neighborhood watch base station — a shared radio operating station where every household member or watch volunteer connects from their own device. For installation and server setup, see [README.md](README.md).
 
@@ -30,7 +30,7 @@ This manual covers day-to-day operation of Radio-TTY as a GMRS family hub or nei
 18. [Text shortcuts reference](#18-text-shortcuts-reference)
 19. [Voice PTT (browser microphone)](#19-voice-ptt-browser-microphone)
 20. [CW (Morse code) receive mode](#20-cw-morse-code-receive-mode)
-21. [Server Config panel (admin)](#21-server-config-panel-admin)
+21. [Admin Settings dialog (admin)](#21-admin-settings-dialog-admin)
 22. [Plugin system](#22-plugin-system)
 23. [FCC compliance and remote access](#23-fcc-compliance-and-remote-access)
 
@@ -180,17 +180,31 @@ Each received entry is labelled **[RX]** in the chat (in green). Outgoing entrie
 
 ## 4. Sending a message (TX)
 
+Radio-TTY has two distinct send actions — **CHAT** and **TRANSMIT**. Use the correct one for what you want to do.
+
+### CHAT — operators only, no radio
+
+Pressing **CHAT** (or **Shift+Enter**) broadcasts your message to the shared log for all connected operators but does **not** key the radio. The message appears in the chat area marked `[CHAT]` and is visible to everyone currently signed in. It is profanity-filtered per recipient according to each user's individual filter setting. Chat messages are blocked when your account is in listen-only mode.
+
+Use CHAT for coordination notes that do not need to go over the air — confirming a plan before transmitting, alerting other operators to channel activity, or passing administrative notes.
+
+### TRANSMIT — sends over the air
+
 1. Type your message in the message box at the bottom of the screen.
-2. Press **Enter** or tap **SEND**.
+2. Press **Enter** or tap **TRANSMIT**.
 
 The system will:
 - Expand TTY abbreviations and Q-signals (see [Text shortcuts reference](#18-text-shortcuts-reference))
 - Apply your profanity filter if enabled
 - Wrap the message with the station callsign per FCC rules
-- Synthesize speech using the configured Piper voice
+- Synthesize speech server-side using the configured Piper voice and play it out the configured output device to the radio
 - Key the radio via PTT and transmit
 
 The status bar shows **Transmitting** while the radio is keyed and returns to **Idle** when done.
+
+> **Server-side audio:** TTS playback for transmitted messages is handled entirely by the server through the configured output device. Your browser does not play back the audio, which prevents double-keying the base station if multiple operators are connected.
+
+**Per-operator voice:** If the transmitting operator has a personal TTS voice configured in their profile (`voice_as`), that voice is used for the transmission. If no personal voice is set, the station default voice is used.
 
 **Chat echo:** Every outgoing transmission appears in the chat area as a `[TX]` entry (shown in blue). All connected users see the same entry in real time. When a message is directed to a specific station, the recipient is shown between the sender and the message text:
 
@@ -409,7 +423,7 @@ Your personal TTS voice and speech speed are chosen in **Account → Edit Profil
 The **Config**, **Stations**, and **Journal** panels on the left side of the screen can be reordered by dragging. Grab the drag handle on a panel header and move it up or down. The order is saved to your account and restored across devices.
 
 ### Station identity (admin only)
-The **callsign**, **name**, **location**, **default TTS voice**, **Gemini API key**, and **journals directory** are set in the **Admin** panel. These are shared by all users. Changes are persisted to `config.json`.
+The **callsign**, **name**, **location**, **default TTS voice**, **Gemini API key**, and **journals directory** are set on the **Station tab** of the **Admin Settings** dialog. These are shared by all users. Changes are persisted to `config.json`.
 
 The **Default TTS Voice** dropdown sets which Piper voice the station uses when a user has not chosen a personal voice. Click the **mic icon** next to the dropdown to preview the selected voice without keying the radio.
 
@@ -450,7 +464,7 @@ Ends your session on this device. Your preferences are saved and will be restore
 
 ## 15. Admin — managing users
 
-Admin accounts have access to the **Admin** item in the account menu (click your name chip → **Admin**), or via the **NCS MODE** button which opens the NCS panel alongside the Admin panel. The Admin panel has three sections: station settings, user accounts, and NCS / SKYWARN.
+Admin accounts have access to the **Admin Settings** dialog via the account chip menu or the **ADMIN** button in the top bar. The dialog has two tabs: **Station** (station identity, user accounts, NCS / SKYWARN) and **System** (audio, STT, PTT, and advanced server settings — see [section 21](#21-admin-settings-dialog-admin)). The **NCS MODE** button in the top bar opens the NCS panel alongside the main interface without entering the settings dialog.
 
 ### User accounts
 
@@ -686,11 +700,14 @@ Decoded morse appears in chat as **[RX]** entries, identical in appearance to vo
 
 ---
 
-## 21. Server Config panel (admin)
+## 21. Admin Settings dialog (admin)
 
-The **Server Config** panel provides technical server-side settings, separate from the Admin Settings / Station Identity panel. It is accessible to admin accounts only via a button in the top bar.
+The **Admin Settings** dialog is accessible to admin accounts only. Open it from the account chip menu or via the **ADMIN** button in the top bar. It combines the former Admin panel and Server Config panel into a single tabbed dialog with two tabs:
 
-### Available settings
+- **Station tab** — station identity (callsign, name, location, default TTS voice, Gemini API key, journals directory), user accounts, and NCS / SKYWARN zone. Each section has its own **Save** button.
+- **System tab** — technical server-side settings (audio devices, STT, PTT, VOX, and advanced options). Each section has its own **Save** button.
+
+### System tab settings
 
 | Setting | Description |
 |---------|-------------|
@@ -703,6 +720,7 @@ The **Server Config** panel provides technical server-side settings, separate fr
 | Saved Phrases | A list of phrases Whisper is pre-loaded with as vocabulary hints to improve recognition accuracy. Common radio phrases ("break break", "QSL", "copy that") are included by default. Add any group-specific phrases — net names, operator handles, local shorthand — to help Whisper recognise them consistently. Changes take effect immediately without an STT restart. |
 | PTT mode | How PTT is keyed: `manual`, `serial`, or `vox` (voice-operated transmit — keys automatically based on audio level). |
 | PTT port / line | Serial port and control line used when PTT mode is `serial`. |
+| VOX primer tone | When enabled, a short tone is prepended to each transmission so a VOX-keyed radio is fully keyed before the message starts. Silence alone does not reliably trip many VOX radios; the tone guarantees the radio is open when the speech begins. Off by default. Also configurable: tone duration in milliseconds. Enable this only if your radio uses VOX keying. |
 | Monitor passthrough | When enabled, audio captured from the radio input is simultaneously played back through the output device. Useful when the radio is not directly audible at the operator position. Does not require a server restart. |
 | Attendance tracking | Enable or disable automatic callsign recording in the Stations panel. When disabled, the panel still exists but callsigns are not recorded automatically. |
 

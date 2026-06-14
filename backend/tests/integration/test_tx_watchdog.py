@@ -2,12 +2,17 @@
 
 Covers:
 - Synthesis timeout: TTS hangs → PTT never keyed, error broadcast, idle returned
-- PTT max-duration watchdog: audio sleep exceeds cap → PTT force-released
-- Operator abort (tx_abort message): interrupts active PTT sleep
+- PTT max-duration watchdog: playback exceeds cap → PTT force-released
+- Operator abort (tx_abort message): interrupts active playback
 - Abort while idle: subsequent tx_message is NOT silently discarded
 
-All tests use short timeout values (≤ 200 ms) so the suite runs in under 3 s.
+All tests use short timeout values (≤ 200 ms) so the suite runs quickly.
 No real audio hardware or ML models are required; all I/O paths are mocked.
+
+TX audio is played server-side (sd.play + sd.wait, run in an executor thread).
+Tests patch backend.server._play_voice_blocking with a fake that blocks for the
+audio's natural duration but returns early when sd.stop() is called — mirroring
+how sd.stop() unblocks sd.wait() on abort/watchdog.
 
 NOTE: test_server_ws.py fixtures do not include auth mocks and are currently
 broken since the auth feature was added.  This file uses _auth_patches() to
@@ -16,6 +21,7 @@ bypass token/user validation for every test.
 from __future__ import annotations
 
 import asyncio
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -144,6 +150,26 @@ def _mock_ptt():
     return ptt
 
 
+def _make_play_mocks():
+    """Return (fake_play, stop_event, calls) emulating sd.play + sd.wait + sd.stop().
+
+    fake_play blocks for the audio's natural duration but returns early when
+    stop_event is set, mirroring sd.stop() interrupting sd.wait().  Patch
+    backend.server.sd.stop with side_effect=stop_event.set so the server's
+    abort/watchdog path unblocks the (threaded) playback.  Each call is recorded
+    in `calls` as (sample_rate, output_device) for assertions.
+    """
+    stop_event = threading.Event()
+    calls: list[tuple] = []
+
+    def fake_play(audio, sample_rate, output_device):
+        calls.append((sample_rate, output_device))
+        if stop_event.wait(timeout=len(audio) / sample_rate):
+            stop_event.clear()
+
+    return fake_play, stop_event, calls
+
+
 # ---------------------------------------------------------------------------
 # Synthesis timeout — PTT must never be keyed when TTS hangs
 # ---------------------------------------------------------------------------
@@ -210,7 +236,7 @@ class TestSynthesisTimeout:
 
 
 # ---------------------------------------------------------------------------
-# PTT max-duration watchdog — PTT released when audio sleep exceeds cap
+# PTT max-duration watchdog — PTT released when playback exceeds cap
 # ---------------------------------------------------------------------------
 
 class TestPttMaxDurationWatchdog:
@@ -218,6 +244,7 @@ class TestPttMaxDurationWatchdog:
         cfg = _cfg(tmp_path, tx_max_duration_seconds=0.15)
         mock_stt, mock_tts = _make_base_mocks()
         mock_ptt = _mock_ptt()
+        fake_play, stop_event, _ = _make_play_mocks()
 
         # 5 s of audio; PTT cap is 150 ms so the watchdog fires first.
         long_audio = np.zeros(80000, dtype=np.int16)
@@ -234,6 +261,8 @@ class TestPttMaxDurationWatchdog:
                 patch("backend.server.TTSSynthesizer", return_value=mock_tts),
                 patch("backend.server.make_ptt", return_value=mock_ptt),
                 patch("backend.server._load_voice", return_value=MagicMock()),
+                patch("backend.server._play_voice_blocking", fake_play),
+                patch("backend.server.sd.stop", side_effect=stop_event.set),
             ):
                 with TestClient(app) as tc:
                     with tc.websocket_connect(WS_URL) as ws:
@@ -249,10 +278,12 @@ class TestPttMaxDurationWatchdog:
         mock_ptt.unkey.assert_called_once()
 
     def test_normal_short_tx_completes_without_error(self, tmp_path):
-        """Watchdog must not fire for audio shorter than the cap."""
-        cfg = _cfg(tmp_path, tx_max_duration_seconds=5)
+        """Watchdog must not fire for audio shorter than the cap; audio is played
+        server-side out the configured output device."""
+        cfg = _cfg(tmp_path, tx_max_duration_seconds=5, output_device=7)
         mock_stt, mock_tts = _make_base_mocks()
         mock_ptt = _mock_ptt()
+        fake_play, stop_event, play_calls = _make_play_mocks()
 
         short_audio = np.zeros(160, dtype=np.int16)  # 10 ms
 
@@ -268,6 +299,8 @@ class TestPttMaxDurationWatchdog:
                 patch("backend.server.TTSSynthesizer", return_value=mock_tts),
                 patch("backend.server.make_ptt", return_value=mock_ptt),
                 patch("backend.server._load_voice", return_value=MagicMock()),
+                patch("backend.server._play_voice_blocking", fake_play),
+                patch("backend.server.sd.stop", side_effect=stop_event.set),
             ):
                 with TestClient(app) as tc:
                     with tc.websocket_connect(WS_URL) as ws:
@@ -280,19 +313,23 @@ class TestPttMaxDurationWatchdog:
         assert frames[-1] == {"type": "tx_status", "status": "idle"}
         mock_ptt.key.assert_called_once()
         mock_ptt.unkey.assert_called_once()
+        # Audio was played server-side out the configured output device (7), not
+        # broadcast to browsers.
+        assert play_calls == [(16000, 7)], f"Expected one play to device 7; got {play_calls}"
 
 
 # ---------------------------------------------------------------------------
-# Operator abort — tx_abort interrupts active PTT sleep
+# Operator abort — tx_abort interrupts active playback
 # ---------------------------------------------------------------------------
 
 class TestOperatorAbort:
-    def test_tx_abort_interrupts_ptt_sleep(self, tmp_path):
+    def test_tx_abort_interrupts_playback(self, tmp_path):
         cfg = _cfg(tmp_path, tx_max_duration_seconds=30)
         mock_stt, mock_tts = _make_base_mocks()
         mock_ptt = _mock_ptt()
+        fake_play, stop_event, _ = _make_play_mocks()
 
-        # 10 s audio; without abort the PTT sleep would last 10 s.
+        # 10 s audio; without abort the playback would last 10 s.
         long_audio = np.zeros(160000, dtype=np.int16)
 
         async def _synth(*_args, **_kwargs):
@@ -307,15 +344,18 @@ class TestOperatorAbort:
                 patch("backend.server.TTSSynthesizer", return_value=mock_tts),
                 patch("backend.server.make_ptt", return_value=mock_ptt),
                 patch("backend.server._load_voice", return_value=MagicMock()),
+                patch("backend.server._play_voice_blocking", fake_play),
+                patch("backend.server.sd.stop", side_effect=stop_event.set),
             ):
                 with TestClient(app) as tc:
                     with tc.websocket_connect(WS_URL) as ws:
                         _drain_initial(ws)
                         ws.send_json({"type": "tx_message", "callsign": "W5TST", "text": "long"})
 
-                        # Drain up to and including tx_audio; PTT is now keyed and
-                        # sleeping for 10 s.  Send abort to interrupt it.
-                        _drain_until(ws, "tx_audio", limit=10)
+                        # tx_echo is broadcast from inside _tx_pump after dequeue and
+                        # before keying, so once we see it the abort can't be dropped
+                        # by the top-of-loop guard.  PTT is now keyed and playing.
+                        _drain_until(ws, "tx_echo", limit=10)
                         ws.send_json({"type": "tx_abort"})
 
                         # Should receive abort-related messages promptly (not 10 s later).
@@ -330,6 +370,7 @@ class TestOperatorAbort:
         cfg = _cfg(tmp_path, tx_max_duration_seconds=30)
         mock_stt, mock_tts = _make_base_mocks()
         mock_ptt = _mock_ptt()
+        fake_play, stop_event, _ = _make_play_mocks()
 
         long_audio = np.zeros(160000, dtype=np.int16)
         synth_calls: list[int] = []
@@ -347,12 +388,14 @@ class TestOperatorAbort:
                 patch("backend.server.TTSSynthesizer", return_value=mock_tts),
                 patch("backend.server.make_ptt", return_value=mock_ptt),
                 patch("backend.server._load_voice", return_value=MagicMock()),
+                patch("backend.server._play_voice_blocking", fake_play),
+                patch("backend.server.sd.stop", side_effect=stop_event.set),
             ):
                 with TestClient(app) as tc:
                     with tc.websocket_connect(WS_URL) as ws:
                         _drain_initial(ws)
                         ws.send_json({"type": "tx_message", "callsign": "W5TST", "text": "msg 1"})
-                        _drain_until(ws, "tx_audio", limit=10)
+                        _drain_until(ws, "tx_echo", limit=10)
                         # Queue a second message while first is transmitting, then abort.
                         ws.send_json({"type": "tx_message", "callsign": "W5TST", "text": "msg 2"})
                         ws.send_json({"type": "tx_abort"})
@@ -372,6 +415,7 @@ class TestAbortWhileIdle:
         cfg = _cfg(tmp_path)
         mock_stt, mock_tts = _make_base_mocks()
         mock_ptt = _mock_ptt()
+        fake_play, stop_event, _ = _make_play_mocks()
 
         short_audio = np.zeros(160, dtype=np.int16)  # 10 ms
 
@@ -387,6 +431,8 @@ class TestAbortWhileIdle:
                 patch("backend.server.TTSSynthesizer", return_value=mock_tts),
                 patch("backend.server.make_ptt", return_value=mock_ptt),
                 patch("backend.server._load_voice", return_value=MagicMock()),
+                patch("backend.server._play_voice_blocking", fake_play),
+                patch("backend.server.sd.stop", side_effect=stop_event.set),
             ):
                 with TestClient(app) as tc:
                     with tc.websocket_connect(WS_URL) as ws:

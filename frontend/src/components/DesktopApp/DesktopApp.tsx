@@ -19,8 +19,7 @@ import { QuickMessages } from '../QuickMessages/QuickMessages';
 import { ContactsDialog } from '../ContactsDialog/ContactsDialog';
 import { PendingStationsBar } from '../PendingStationsBar/PendingStationsBar';
 import { ConfigPanel } from '../ConfigPanel/ConfigPanel';
-import { AdminPanel } from '../AdminPanel/AdminPanel';
-import { ServerConfigPanel } from '../ServerConfigPanel/ServerConfigPanel';
+import { SettingsDialog } from '../SettingsDialog/SettingsDialog';
 import type { ServerConfig, ServerConfigSaveValues } from '../ServerConfigPanel/ServerConfigPanel';
 import { UsersPanel } from '../UsersPanel/UsersPanel';
 import type {
@@ -31,6 +30,7 @@ import type {
   FccLookupResultMsg,
   InputDeviceOption,
   MonitorSinkOption,
+  OutputDeviceOption,
   UserProfile,
   VoiceOption,
   WsMessage,
@@ -81,6 +81,7 @@ export interface DesktopAppProps {
   // TX / PTT
   listenOnly: boolean;
   onSend: (text: string, targetCall: string, targetName: string) => void;
+  onChat: (text: string) => void;
   onStandaloneId: () => void;
   onVoicePttStart: () => void;
   onVoicePttChunk: (b64: string) => void;
@@ -95,12 +96,15 @@ export interface DesktopAppProps {
   systemMonitorSink: string;
   inputDevices: InputDeviceOption[];
   monitorSinks: MonitorSinkOption[];
+  outputDevice: number;
+  outputDevices: OutputDeviceOption[];
   spectroColormap: 'viridis' | 'grayscale';
   spectroFreqRange: 'voice' | 'full';
   spectroTimeWindowS: number;
   onToggleProfanity: () => void;
   onToggleFuzzy: () => void;
   onInputDeviceChange: (device: string | number, sink: string) => void;
+  onOutputDeviceChange: (device: number) => void;
   onSpectroColormapChange: (cm: 'viridis' | 'grayscale') => void;
   onSpectroFreqRangeChange: (range: 'voice' | 'full') => void;
   onSpectroTimeWindowChange: (s: number) => void;
@@ -157,7 +161,6 @@ export interface DesktopAppProps {
   showContacts: boolean;
   showConfig: boolean;
   showAdmin: boolean;
-  showServerConfig: boolean;
   showNcs: boolean;
   panelOrder: string[];
   onToggleAttendance: () => void;
@@ -165,7 +168,6 @@ export interface DesktopAppProps {
   onToggleContacts: () => void;
   onToggleConfig: () => void;
   onToggleAdmin: () => void;
-  onToggleServerConfig: () => void;
   onToggleNcs: () => void;
   onPanelDragEnd: (event: DragEndEvent) => void;
   onPanelMove: (fromIndex: number, toIndex: number) => void;
@@ -227,6 +229,7 @@ export function DesktopApp({
   onDismissJournalResult,
   listenOnly,
   onSend,
+  onChat,
   onStandaloneId,
   onVoicePttStart,
   onVoicePttChunk,
@@ -239,12 +242,15 @@ export function DesktopApp({
   systemMonitorSink,
   inputDevices,
   monitorSinks,
+  outputDevice,
+  outputDevices,
   spectroColormap,
   spectroFreqRange,
   spectroTimeWindowS,
   onToggleProfanity,
   onToggleFuzzy,
   onInputDeviceChange,
+  onOutputDeviceChange,
   onSpectroColormapChange,
   onSpectroFreqRangeChange,
   onSpectroTimeWindowChange,
@@ -278,7 +284,6 @@ export function DesktopApp({
   showContacts,
   showConfig,
   showAdmin,
-  showServerConfig,
   showNcs,
   panelOrder,
   onToggleAttendance,
@@ -286,7 +291,6 @@ export function DesktopApp({
   onToggleContacts,
   onToggleConfig,
   onToggleAdmin,
-  onToggleServerConfig,
   onToggleNcs,
   onPanelDragEnd,
   onPanelMove,
@@ -342,8 +346,6 @@ export function DesktopApp({
         onToggleConfig={onToggleConfig}
         showAdmin={showAdmin}
         onToggleAdmin={onToggleAdmin}
-        showServerConfig={showServerConfig}
-        onToggleServerConfig={onToggleServerConfig}
         showNcs={showNcs}
         onToggleNcs={onToggleNcs}
         showWaterfall={showWaterfall}
@@ -389,12 +391,15 @@ export function DesktopApp({
                     systemMonitorSink={systemMonitorSink}
                     inputDevices={inputDevices}
                     monitorSinks={monitorSinks}
+                    outputDevice={outputDevice}
+                    outputDevices={outputDevices}
                     spectroColormap={spectroColormap}
                     spectroFreqRange={spectroFreqRange}
                     spectroTimeWindowS={spectroTimeWindowS}
                     onToggleProfanity={onToggleProfanity}
                     onToggleFuzzy={onToggleFuzzy}
                     onInputDeviceChange={onInputDeviceChange}
+                    onOutputDeviceChange={onOutputDeviceChange}
                     onSpectroColormapChange={onSpectroColormapChange}
                     onSpectroFreqRangeChange={onSpectroFreqRangeChange}
                     onSpectroTimeWindowChange={onSpectroTimeWindowChange}
@@ -503,6 +508,7 @@ export function DesktopApp({
           transmitting={transmitting}
           contacts={contacts}
           onSend={onSend}
+          onChat={onChat}
           onStandaloneId={onStandaloneId}
         />
       )}
@@ -520,16 +526,17 @@ export function DesktopApp({
         onVerifyAllDismiss={onVerifyAllDismiss}
       />
 
-      <AdminPanel
+      <SettingsDialog
         open={showAdmin}
         onClose={onToggleAdmin}
-        config={adminConfig}
+        adminConfig={adminConfig}
         voices={voices}
         voicePreviewBusy={voicePreviewBusy}
-        onSave={onAdminSave}
+        onAdminSave={onAdminSave}
         onPreviewVoice={onPreviewVoice}
-      >
-        {profile.is_admin && (
+        serverConfig={serverConfig}
+        onServerConfigSave={onServerConfigSave}
+        usersPanel={profile.is_admin && (
           <UsersPanel
             profiles={profiles}
             currentUserId={profile.id}
@@ -538,13 +545,6 @@ export function DesktopApp({
             onResetLockout={(userId) => send({ type: 'reset_lockout', user_id: userId })}
           />
         )}
-      </AdminPanel>
-
-      <ServerConfigPanel
-        open={showServerConfig}
-        onClose={onToggleServerConfig}
-        config={serverConfig}
-        onSave={onServerConfigSave}
       />
 
       <Snackbar

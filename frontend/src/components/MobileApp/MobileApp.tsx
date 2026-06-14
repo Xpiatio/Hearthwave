@@ -19,8 +19,7 @@ import { AttendancePanel } from '../AttendancePanel/AttendancePanel';
 import { JournalPanel } from '../JournalPanel/JournalPanel';
 import { PendingStationsBar } from '../PendingStationsBar/PendingStationsBar';
 import { ContactsDialog } from '../ContactsDialog/ContactsDialog';
-import { AdminPanel } from '../AdminPanel/AdminPanel';
-import { ServerConfigPanel } from '../ServerConfigPanel/ServerConfigPanel';
+import { SettingsDialog } from '../SettingsDialog/SettingsDialog';
 import type { ServerConfig, ServerConfigSaveValues } from '../ServerConfigPanel/ServerConfigPanel';
 import { UsersPanel } from '../UsersPanel/UsersPanel';
 import type {
@@ -79,6 +78,7 @@ export interface MobileAppProps {
   // TX / PTT
   listenOnly: boolean;
   onSend: (text: string, targetCall: string, targetName: string) => void;
+  onChat: (text: string) => void;
   onStandaloneId: () => void;
   onVoicePttStart: () => void;
   onVoicePttChunk: (b64: string) => void;
@@ -116,10 +116,8 @@ export interface MobileAppProps {
   serverConfig: ServerConfig;
   showConfig: boolean;
   showAdmin: boolean;
-  showServerConfig: boolean;
   onToggleConfig: () => void;
   onToggleAdmin: () => void;
-  onToggleServerConfig: () => void;
   onAdminSave: (values: {
     callsign: string;
     name: string;
@@ -184,6 +182,7 @@ export function MobileApp({
   onDismissJournalResult,
   listenOnly,
   onSend,
+  onChat,
   onStandaloneId,
   onVoicePttStart,
   onVoicePttChunk,
@@ -210,10 +209,8 @@ export function MobileApp({
   serverConfig,
   showConfig,
   showAdmin,
-  showServerConfig,
   onToggleConfig,
   onToggleAdmin,
-  onToggleServerConfig,
   onAdminSave,
   onServerConfigSave,
   showContacts,
@@ -259,7 +256,6 @@ export function MobileApp({
         stationLengthScale={adminConfig.stationLengthScale}
         showConfig={showConfig}
         showAdmin={showAdmin}
-        showServerConfig={showServerConfig}
         onToggleSttListening={onToggleSttListening}
         onToggleReadAloud={onToggleReadAloud}
         onToggleNotifications={onToggleNotifications}
@@ -277,7 +273,6 @@ export function MobileApp({
         onSaveTtsPrefs={onSaveTtsPrefs}
         onToggleConfig={onToggleConfig}
         onToggleAdmin={onToggleAdmin}
-        onToggleServerConfig={onToggleServerConfig}
       />
 
       <PendingStationsBar
@@ -307,6 +302,7 @@ export function MobileApp({
               transmitting={transmitting}
               contacts={contacts}
               onSend={onSend}
+              onChat={onChat}
               onStandaloneId={onStandaloneId}
             />
           )}
@@ -369,16 +365,17 @@ export function MobileApp({
         onVerifyAllDismiss={onVerifyAllDismiss}
       />
 
-      <AdminPanel
+      <SettingsDialog
         open={showAdmin}
         onClose={onToggleAdmin}
-        config={adminConfig}
+        adminConfig={adminConfig}
         voices={voices}
         voicePreviewBusy={voicePreviewBusy}
-        onSave={onAdminSave}
+        onAdminSave={onAdminSave}
         onPreviewVoice={onPreviewVoice}
-      >
-        {profile.is_admin && (
+        serverConfig={serverConfig}
+        onServerConfigSave={onServerConfigSave}
+        usersPanel={profile.is_admin && (
           <UsersPanel
             profiles={profiles}
             currentUserId={profile.id}
@@ -387,13 +384,6 @@ export function MobileApp({
             onResetLockout={(userId) => send({ type: 'reset_lockout', user_id: userId })}
           />
         )}
-      </AdminPanel>
-
-      <ServerConfigPanel
-        open={showServerConfig}
-        onClose={onToggleServerConfig}
-        config={serverConfig}
-        onSave={onServerConfigSave}
       />
 
       <Snackbar

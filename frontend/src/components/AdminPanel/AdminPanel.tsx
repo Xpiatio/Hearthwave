@@ -62,9 +62,12 @@ interface Props {
   }) => void;
   onPreviewVoice: (voiceId: string) => void;
   children?: React.ReactNode;
+  /** When true, render just the form body (no Dialog chrome) for embedding in
+   *  a tabbed SettingsDialog. The Save button is kept; Cancel/title are not. */
+  embedded?: boolean;
 }
 
-export function AdminPanel({ open, onClose, config, voices, voicePreviewBusy, onSave, onPreviewVoice, children }: Props) {
+export function AdminPanel({ open, onClose, config, voices, voicePreviewBusy, onSave, onPreviewVoice, children, embedded = false }: Props) {
   const [callsign, setCallsign] = useState('');
   const [name, setName] = useState('');
   const [location, setLocation] = useState('');
@@ -108,12 +111,8 @@ export function AdminPanel({ open, onClose, config, voices, voicePreviewBusy, on
     onClose();
   }
 
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ fontWeight: 700 }}>Admin Settings</DialogTitle>
-
-      <DialogContent dividers>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+  const content = (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
 
           <Typography variant="overline" sx={{ color: 'text.secondary', lineHeight: 1 }}>
             Station Identity
@@ -283,11 +282,30 @@ export function AdminPanel({ open, onClose, config, voices, voicePreviewBusy, on
           )}
 
         </Box>
-      </DialogContent>
+  );
 
+  const saveButton = (
+    <Button onClick={handleSave} variant="contained">Save</Button>
+  );
+
+  if (embedded) {
+    return (
+      <Box sx={{ pt: 1 }}>
+        {content}
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
+          {saveButton}
+        </Box>
+      </Box>
+    );
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ fontWeight: 700 }}>Admin Settings</DialogTitle>
+      <DialogContent dividers>{content}</DialogContent>
       <DialogActions sx={{ px: 3, py: 2 }}>
         <Button onClick={onClose} variant="outlined">Cancel</Button>
-        <Button onClick={handleSave} variant="contained">Save</Button>
+        {saveButton}
       </DialogActions>
     </Dialog>
   );

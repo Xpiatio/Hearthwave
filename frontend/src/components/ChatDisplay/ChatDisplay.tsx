@@ -6,7 +6,7 @@ import type { Contact } from '../../types/ws';
 export interface ChatEntry {
   id: string;
   timestamp: string;
-  kind: 'rx' | 'tx' | 'system';
+  kind: 'rx' | 'tx' | 'system' | 'chat';
   sender?: string;
   recipient?: string;   // e.g. "WSLZ233 — Dave"; absent when broadcast to ALL
   text: string;
@@ -33,6 +33,7 @@ const KIND_COLOR: Record<string, string> = {
   rx: 'success.main',
   tx: 'info.main',
   system: 'warning.main',
+  chat: 'text.secondary',
 };
 
 const SCROLL_THRESHOLD = 80;
@@ -289,6 +290,15 @@ export function ChatDisplay({ entries, contacts, showCallsignChips }: Props) {
                 aria-label="System message"
               >
                 [SYS]
+              </Typography>
+            )}
+            {entry.kind === 'chat' && (
+              <Typography
+                component="span"
+                sx={{ fontWeight: 700, fontSize: '1.0625rem', color: KIND_COLOR.chat, flexShrink: 0 }}
+                aria-label="Chat message (not transmitted)"
+              >
+                [CHAT]
               </Typography>
             )}
 

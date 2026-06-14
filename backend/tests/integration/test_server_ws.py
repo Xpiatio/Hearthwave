@@ -48,13 +48,13 @@ def _make_mocks():
     return mock_stt, mock_tts
 
 
-def _make_auth_mocks(*, listen_only: bool = False):
+def _make_auth_mocks(*, listen_only: bool = False, is_admin: bool = True):
     mock_users = MagicMock()
     mock_users.is_empty.return_value = False
     mock_users.get.return_value = {
         "id": "test-user",
         "display_name": "Test Operator",
-        "is_admin": True,
+        "is_admin": is_admin,
         "prefs": {"listen_only": listen_only} if listen_only else {},
     }
     mock_users.get_public_one.return_value = {"display_name": "Test Operator"}
@@ -66,6 +66,62 @@ def _make_auth_mocks(*, listen_only: bool = False):
 
 
 WS_URL = "/ws?token=test"
+
+
+@contextmanager
+def _ws_server(tmp_path, *, is_admin: bool = True):
+    """Spin up the app with mocked deps and yield (TestClient, cfg).
+
+    cfg.save is stubbed so handlers that persist config don't touch the real
+    config file, and sd.query_devices is stubbed so device enumeration is
+    deterministic without audio hardware.
+    """
+    cfg = _minimal_cfg(tmp_path)
+    cfg.save = MagicMock()
+    mock_stt, mock_tts = _make_mocks()
+    mock_users, mock_tokens = _make_auth_mocks(is_admin=is_admin)
+    fake_devices = [
+        {"name": "Built-in Output", "max_input_channels": 0, "max_output_channels": 2},
+        {"name": "USB CODEC", "max_input_channels": 1, "max_output_channels": 2},
+    ]
+    with (
+        patch("backend.server.ServerConfig.load", return_value=cfg),
+        patch("backend.server.STTWorker", return_value=mock_stt),
+        patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+        patch("backend.server.UsersStore", return_value=mock_users),
+        patch("backend.server.TokenStore", return_value=mock_tokens),
+        patch("backend.auth_routes.init"),
+        patch("backend.server.sd.query_devices", return_value=fake_devices),
+    ):
+        with TestClient(app) as tc:
+            yield tc, cfg
+
+
+def _next_of_type(ws, msg_type: str, limit: int = 15) -> dict | None:
+    """Receive frames until one matching msg_type arrives; return it (or None)."""
+    for _ in range(limit):
+        msg = ws.receive_json()
+        if msg.get("type") == msg_type:
+            return msg
+    return None
+
+
+@pytest.fixture
+def non_admin_client(tmp_path):
+    cfg = _minimal_cfg(tmp_path)
+    cfg.save = MagicMock()
+    mock_stt, mock_tts = _make_mocks()
+    mock_users, mock_tokens = _make_auth_mocks(is_admin=False)
+    with (
+        patch("backend.server.ServerConfig.load", return_value=cfg),
+        patch("backend.server.STTWorker", return_value=mock_stt),
+        patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+        patch("backend.server.UsersStore", return_value=mock_users),
+        patch("backend.server.TokenStore", return_value=mock_tokens),
+        patch("backend.auth_routes.init"),
+    ):
+        with TestClient(app) as tc:
+            yield tc, cfg
 
 
 @pytest.fixture
@@ -279,6 +335,40 @@ class TestTxMessageFlow:
         assert pause_order.index("pause") < pause_order.index("synth")
         assert pause_order.index("synth") < pause_order.index("resume")
 
+    def test_operator_tx_transmits_even_when_channel_busy(self, tmp_path):
+        """An operator-initiated tx_message overrides the channel-busy squelch
+        guard (consistent with the voice-test path): the operator decides when
+        to key. Auto station-ID still respects a busy channel — covered
+        separately."""
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_stt.channel_busy = MagicMock(is_set=MagicMock(return_value=True))
+        synth_called = threading.Event()
+
+        async def _synth(*_args, **_kwargs):
+            synth_called.set()
+            return None, None
+
+        mock_tts.synthesize_to_buffer = _synth
+        mock_users, mock_tokens = _make_auth_mocks()
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch("backend.server.make_ptt", return_value=MagicMock()),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "tx_message", "callsign": "W5TST", "text": "hello"})
+                    frames = _drain_until_idle(ws)
+        types = [f["type"] for f in frames]
+        assert "tx_echo" in types, "operator TX was discarded despite channel-busy override"
+        assert synth_called.is_set(), "synthesis never ran — TX was discarded"
+
     def test_tx_broadcast_reaches_second_client(self, client):
         with (
             client.websocket_connect(WS_URL) as ws1,
@@ -416,3 +506,267 @@ class TestSetServerConfigSavedPhrases:
             long_phrase = "x" * 200
             msg = self._send_and_get_status(ws, [long_phrase])
             assert msg["saved_phrases"] == ["x" * 120]
+
+
+# ---------------------------------------------------------------------------
+# Audio output device (drives the radio) — listing, setting, admin gating
+# ---------------------------------------------------------------------------
+
+class TestOutputDevice:
+    def test_list_output_devices_returns_output_capable_devices(self, tmp_path):
+        with _ws_server(tmp_path) as (tc, _cfg):
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                ws.send_json({"type": "list_output_devices"})
+                msg = _next_of_type(ws, "output_devices")
+        assert msg is not None, "no output_devices reply received"
+        labels = [d["label"] for d in msg["devices"]]
+        # System Default plus the two output-capable devices from the stub.
+        assert labels == ["System Default (speaker)", "Built-in Output", "USB CODEC"]
+        assert msg["current_output_device"] == -1
+
+    def test_set_output_device_updates_config_and_status(self, tmp_path):
+        with _ws_server(tmp_path) as (tc, cfg):
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                ws.send_json({"type": "set_output_device", "output_device": 1})
+                status = _next_of_type(ws, "status")
+        assert cfg["output_device"] == 1
+        assert cfg.save.called
+        assert status is not None and status["output_device"] == 1
+
+    def test_set_output_device_rejected_for_non_admin(self, non_admin_client):
+        tc, cfg = non_admin_client
+        with tc.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "set_output_device", "output_device": 1})
+            err = _next_of_type(ws, "error")
+        assert err is not None and "admin" in err["detail"].lower()
+        assert "output_device" not in cfg
+        assert not cfg.save.called
+
+    def test_set_input_device_rejected_for_non_admin(self, non_admin_client):
+        tc, cfg = non_admin_client
+        with tc.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "set_input_device", "input_device": 2})
+            err = _next_of_type(ws, "error")
+        assert err is not None and "admin" in err["detail"].lower()
+        assert cfg.get("input_device", -1) == -1
+        assert not cfg.save.called
+
+
+class TestListJournals:
+    """Regression coverage for the journals handler.
+
+    `Path` was referenced in the list_journals handler but never imported at
+    module scope (only locally, under the alias `_Path`, in a different
+    function).  With >=1 journal present the handler raised
+    NameError('Path'), which propagated out of the WS receive loop and closed
+    the connection — and the frontend sends list_journals on connect, so the
+    socket died in a reconnect loop and never processed tx_message (TTS).
+    """
+
+    def test_list_journals_with_entry_does_not_crash_connection(self, tmp_path):
+        from backend.persistence.journal import save_journal
+        from starlette.websockets import WebSocketDisconnect
+
+        msg = None
+        with _ws_server(tmp_path) as (tc, cfg):
+            cfg["journals_dir"] = str(tmp_path / "journals")
+            save_journal("Net Title", "summary", [], "transcript", cfg.journals_dir)
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                ws.send_json({"type": "list_journals"})
+                try:
+                    msg = _next_of_type(ws, "journals")
+                except WebSocketDisconnect:
+                    pytest.fail(
+                        "WS connection crashed handling list_journals "
+                        "(NameError: name 'Path' is not defined?)"
+                    )
+        assert msg is not None, "connection died before sending journals (NameError?)"
+        assert len(msg["journals"]) == 1
+        assert msg["journals"][0]["published"] is False
+
+
+# ---------------------------------------------------------------------------
+# _resolve_tx_voice — map a display name to that user's (voice, length_scale)
+# ---------------------------------------------------------------------------
+
+class TestResolveTxVoice:
+    @staticmethod
+    def _store(profile):
+        store = MagicMock()
+        store.get_by_display_name.return_value = profile
+        return store
+
+    def test_resolves_named_user_prefs(self):
+        import backend.server as srv
+        store = self._store({"prefs": {"tts_voice": "alice.onnx", "tts_length_scale": 1.3}})
+        with patch.object(srv, "_users_store", store):
+            assert srv._resolve_tx_voice("Alice") == ("alice.onnx", 1.3)
+        store.get_by_display_name.assert_called_once_with("Alice")
+
+    def test_unknown_name_returns_none(self):
+        import backend.server as srv
+        with patch.object(srv, "_users_store", self._store(None)):
+            assert srv._resolve_tx_voice("Nobody") == (None, None)
+
+    def test_sentinel_prefs_fall_through_to_none(self):
+        # tts_voice="" and tts_length_scale=0 are the DEFAULT_PREFS "inherit
+        # station default" sentinels — they must resolve to (None, None).
+        import backend.server as srv
+        store = self._store({"prefs": {"tts_voice": "", "tts_length_scale": 0}})
+        with patch.object(srv, "_users_store", store):
+            assert srv._resolve_tx_voice("Alice") == (None, None)
+
+    def test_no_store_returns_none(self):
+        import backend.server as srv
+        with patch.object(srv, "_users_store", None):
+            assert srv._resolve_tx_voice("Alice") == (None, None)
+
+
+# ---------------------------------------------------------------------------
+# chat_message — chat-only path (broadcast to log, never keyed over the radio)
+# ---------------------------------------------------------------------------
+
+class TestChatMessage:
+    def test_chat_message_broadcasts_chat_echo_to_all(self, client):
+        with (
+            client.websocket_connect(WS_URL) as ws1,
+            client.websocket_connect(WS_URL) as ws2,
+        ):
+            _drain_initial(ws1)
+            _drain_initial(ws2)
+            ws1.send_json({"type": "chat_message", "text": "meet at noon",
+                           "callsign": "W5TST", "operator": "Op"})
+            m1 = _next_of_type(ws1, "chat_echo")
+            m2 = _next_of_type(ws2, "chat_echo")
+        assert m1 is not None and m1["text"] == "meet at noon"
+        assert m2 is not None and m2["text"] == "meet at noon"
+
+    def test_empty_chat_message_ignored(self, client):
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "chat_message", "text": "   ",
+                          "callsign": "W5TST", "operator": "Op"})
+            ws.send_json({"type": "chat_message", "text": "real",
+                          "callsign": "W5TST", "operator": "Op"})
+            msg = _next_of_type(ws, "chat_echo")
+        # The whitespace-only message must produce no chat_echo, so the first
+        # echo we see is the second ("real") message.
+        assert msg is not None and msg["text"] == "real"
+
+    def test_chat_message_does_not_synthesize_or_key_ptt(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()
+        mock_ptt = MagicMock()
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch("backend.server.make_ptt", return_value=mock_ptt),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "chat_message", "text": "hello",
+                                  "callsign": "W5TST", "operator": "Op"})
+                    msg = _next_of_type(ws, "chat_echo")
+        assert msg is not None
+        mock_tts.synthesize_to_buffer.assert_not_called()
+        mock_ptt.key.assert_not_called()
+
+    def test_chat_profanity_masked_for_filtering_recipient(self, client):
+        # Default profile prefs -> filter_profanity True.
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "chat_message", "text": "oh shit",
+                          "callsign": "W5TST", "operator": "Op"})
+            msg = _next_of_type(ws, "chat_echo")
+        assert msg is not None and msg["text"] == "oh s***"
+
+    def test_chat_raw_when_filter_disabled(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()
+        mock_users.get.return_value = {
+            "id": "test-user", "display_name": "Test Operator",
+            "is_admin": True, "prefs": {"filter_profanity": False},
+        }
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "chat_message", "text": "oh shit",
+                                  "callsign": "W5TST", "operator": "Op"})
+                    msg = _next_of_type(ws, "chat_echo")
+        assert msg is not None and msg["text"] == "oh shit"
+
+    def test_listen_only_rejects_chat(self, listen_only_client):
+        with listen_only_client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "chat_message", "text": "hello",
+                          "callsign": "W5TST", "operator": "Op"})
+            msg = ws.receive_json()
+        assert msg["type"] == "error"
+        assert "listen" in msg["detail"].lower()
+
+
+# ---------------------------------------------------------------------------
+# tx_message + voice_as — voice as the *named* user, not the sender
+# ---------------------------------------------------------------------------
+
+class TestTxMessageVoiceAs:
+    @staticmethod
+    def _run(cfg, mock_users, voice_as):
+        mock_stt, mock_tts = _make_mocks()
+        _, mock_tokens = _make_auth_mocks()
+        loaded: list[str] = []
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch("backend.server.make_ptt", return_value=MagicMock()),
+            patch("backend.server._load_voice",
+                  side_effect=lambda v: loaded.append(v) or MagicMock()),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "tx_message", "callsign": "W5TST",
+                                  "text": "hello", "voice_as": voice_as})
+                    _drain_until_idle(ws)
+        return loaded
+
+    def test_voice_as_uses_named_user_voice(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_users, _ = _make_auth_mocks()
+        mock_users.get_by_display_name.return_value = {
+            "display_name": "Alice",
+            "prefs": {"tts_voice": "alice.onnx", "tts_length_scale": 1.5},
+        }
+        loaded = self._run(cfg, mock_users, "Alice")
+        assert "alice.onnx" in loaded
+
+    def test_voice_as_unknown_falls_back_to_station_voice(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)  # cfg.voice == "fake_voice"
+        mock_users, _ = _make_auth_mocks()
+        mock_users.get_by_display_name.return_value = None
+        loaded = self._run(cfg, mock_users, "Ghost")
+        assert "fake_voice" in loaded

@@ -20,6 +20,8 @@ WebSocket message types (client → server):
     list_input_devices — {"type": "list_input_devices"}
     set_input_device  — {"type": "set_input_device", "input_device": "system_monitor"|int|-1,
                           "system_monitor_sink"?: str}
+    list_output_devices — {"type": "list_output_devices"}
+    set_output_device — {"type": "set_output_device", "output_device": int|-1}
     set_config        — {"type": "set_config", "filter_profanity"?: bool,
                           "fuzzy_callsign"?: bool}
     set_spectro_config — {"type": "set_spectro_config", "colormap"?: str,
@@ -74,10 +76,14 @@ WebSocket message types (server → client):
     spectrogram_row   — {"type": "spectrogram_row", "row": [int, ...],
                           "vad": bool, "squelch": bool}
     voice_preview_audio — {"type": "voice_preview_audio", "data": str (base64 int16 PCM),
-                          "sample_rate": int}
-    tx_audio          — {"type": "tx_audio", "data": str (base64 int16 PCM),
-                          "sample_rate": int}
+                          "sample_rate": int}  (sent only to the requesting user)
+    output_devices    — {"type": "output_devices",
+                          "devices": [{"label": str, "id": int},...],
+                          "current_output_device": int}
     error             — {"type": "error", "detail": str}
+
+Transmitted TTS audio is played server-side out the configured output device
+(wired to the radio); it is NOT streamed to browsers.
 """
 from __future__ import annotations
 
@@ -89,6 +95,7 @@ import datetime
 import logging
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
@@ -150,7 +157,6 @@ _token_store: TokenStore | None = None
 _audit_log: AuditLog | None = None
 _stt_worker: STTWorker | None = None
 _synthesizer: TTSSynthesizer | None = None
-_tx_audio_complete_event: asyncio.Event | None = None
 _tx_abort_event: asyncio.Event = asyncio.Event()
 _monitor: "Any | None" = None  # AudioMonitor, lazy-imported
 _spectro: SpectroTask | None = None
@@ -590,7 +596,7 @@ async def _rx_pump() -> None:
 
 async def _tx_pump() -> None:
     """Drain tx_queue; apply text pipeline, FCC formatting, synthesize, play."""
-    global _last_id_time, _has_transmitted, _tx_audio_complete_event
+    global _last_id_time, _has_transmitted
 
     while True:
         try:
@@ -664,8 +670,17 @@ async def _tx_pump() -> None:
                 text = spell_digits_in_callsigns(text)
                 chat_text = raw_text
 
-            # Discard transmission if the channel is already occupied.
-            if not is_preview and _stt_worker is not None and _stt_worker.channel_busy.is_set():
+            # Discard transmission if the channel is already occupied — but an
+            # operator-initiated transmit (Transmit button / "THIS IS") overrides
+            # the squelch, like the voice-test path: the operator decides when to
+            # key.  Automatic transmits (auto station-ID) still wait for a clear
+            # channel to avoid talking over a received signal.
+            if (
+                not is_preview
+                and not payload.get("_operator_initiated")
+                and _stt_worker is not None
+                and _stt_worker.channel_busy.is_set()
+            ):
                 _log.warning("TX discarded: channel busy (squelch open)")
                 continue
 
@@ -692,22 +707,24 @@ async def _tx_pump() -> None:
             length_scale = payload.get("_length_scale") or _config.tts_length_scale
 
             if is_preview:
-                # Synthesize without PTT keying, then stream PCM to the browser
-                # so remote users hear the preview in their own speaker.
+                # Synthesize without PTT keying, then stream PCM only to the
+                # requesting user's connections so they audition it locally.
                 audio, sample_rate = await _synthesizer.synthesize_to_buffer(
                     voice, text, length_scale=length_scale
                 )
                 if audio is not None:
                     audio_b64 = base64.b64encode(audio.tobytes()).decode("ascii")
-                    await _manager.broadcast({
+                    await _manager.broadcast_to_user(payload.get("_user_id", ""), {
                         "type": "voice_preview_audio",
                         "data": audio_b64,
                         "sample_rate": sample_rate,
                     })
             else:
                 # Synthesize to buffer (including PTT lead/tail silence), key PTT
-                # server-side, then stream PCM to the browser so it plays through
-                # the local audio device connected to the radio.
+                # server-side, then play the audio out the local sound device wired
+                # to the radio.  Browsers are text-only for TX; nothing is streamed
+                # to clients (that would double-key audio on the base station, which
+                # runs a browser AND the radio).
                 ptt = make_ptt(_config)
                 synth_timeout = _config.tx_synthesis_timeout_seconds
                 try:
@@ -716,6 +733,7 @@ async def _tx_pump() -> None:
                             voice, text, length_scale=length_scale,
                             lead_in_seconds=ptt.lead_in_seconds,
                             tail_seconds=ptt.tail_seconds,
+                            vox_primer_ms=(_config.vox_primer_ms if _config.vox_primer_enabled else 0),
                         ),
                         timeout=synth_timeout,
                     )
@@ -724,8 +742,7 @@ async def _tx_pump() -> None:
                     await _manager.broadcast({"type": "error", "detail": f"TX aborted: TTS synthesis exceeded {synth_timeout}s."})
                     audio = None
                 if audio is not None:
-                    audio_b64 = base64.b64encode(audio.tobytes()).decode("ascii")
-                    _tx_audio_complete_event = asyncio.Event()
+                    out_dev = _config.output_device if _config.output_device != -1 else None
                     max_tx = _config.tx_max_duration_seconds
                     try:
                         ptt.key()
@@ -738,30 +755,37 @@ async def _tx_pump() -> None:
                                     f"text={payload.get('text', '')!r}"
                                 ),
                             )
-                        await _manager.broadcast({
-                            "type": "tx_audio",
-                            "data": audio_b64,
-                            "sample_rate": sample_rate,
-                        })
-                        # Race the audio-duration sleep against the operator abort
-                        # event and the hard PTT cap.  Whichever fires first wins;
-                        # PTT is always released in the finally block below.
-                        sleep_task = asyncio.create_task(asyncio.sleep(len(audio) / sample_rate))
-                        abort_task = asyncio.create_task(_tx_abort_event.wait())
+                        # Play server-side, blocking until the device finishes.
+                        # Race the playback against the operator abort event and the
+                        # hard PTT cap.  sd.stop() unblocks sd.wait() in the worker
+                        # thread; we never cancel play_task (cancelling a to_thread
+                        # future doesn't kill the underlying thread) — instead we stop
+                        # the device and await the task so the thread drains.  PTT is
+                        # always released in the finally block below.
+                        play_task  = asyncio.ensure_future(
+                            asyncio.to_thread(_play_voice_blocking, audio, sample_rate, out_dev)
+                        )
+                        abort_task = asyncio.ensure_future(_tx_abort_event.wait())
                         done, pending = await asyncio.wait(
-                            {sleep_task, abort_task},
+                            {play_task, abort_task},
                             timeout=max_tx,
                             return_when=asyncio.FIRST_COMPLETED,
                         )
-                        # Capture outcome BEFORE cancellation: after gather() the
-                        # tasks are marked done (CancelledError), so post-gather
-                        # checks would always find sleep_task.done() == True.
+                        # Capture outcome BEFORE stopping/draining.
                         operator_aborted = abort_task in done
-                        watchdog_fired = not operator_aborted and sleep_task not in done
-                        for t in pending:
-                            t.cancel()
-                        if pending:
-                            await asyncio.gather(*pending, return_exceptions=True)
+                        watchdog_fired = not operator_aborted and play_task not in done
+                        if operator_aborted or watchdog_fired:
+                            # sd.stop() is process-global; safe — TX is serialized
+                            # through the single _tx_queue consumer.
+                            sd.stop()
+                        if abort_task in pending:
+                            abort_task.cancel()
+                        # Always await playback so the executor thread is fully drained.
+                        try:
+                            await play_task
+                        except Exception as exc:
+                            _log.warning("TX playback error: %s", exc)
+                        await asyncio.gather(abort_task, return_exceptions=True)
                         if operator_aborted:
                             _tx_abort_event.clear()
                             _log.warning("TX aborted by operator kill switch")
@@ -785,26 +809,17 @@ async def _tx_pump() -> None:
             await _manager.broadcast({"type": "error", "detail": f"TX error: {exc}"})
         finally:
             if is_preview:
-                await _manager.broadcast({"type": "voice_preview_done"})
+                await _manager.broadcast_to_user(
+                    payload.get("_user_id", ""), {"type": "voice_preview_done"}
+                )
             else:
                 await _manager.broadcast({"type": "tx_status", "status": "idle"})
                 if _stt_worker is not None and _stt_listening:
-                    # Wait for the browser to confirm audio playback has ended
-                    # before resuming STT.  The duration-based sleep above only
-                    # covers synthesis length; browser Web Audio API buffering +
-                    # PulseAudio loopback latency means audio is still playing
-                    # when that sleep expires.  We fall back to a 2 s timeout
-                    # in case the browser never sends the signal (tab hidden,
-                    # WS drop, etc.), then add a short tail for loopback drain.
-                    evt = _tx_audio_complete_event
-                    if evt is not None:
-                        try:
-                            await asyncio.wait_for(evt.wait(), timeout=2.0)
-                        except asyncio.TimeoutError:
-                            pass
-                    await asyncio.sleep(0.2)
+                    # Playback above blocked until the device finished (sd.wait),
+                    # so just add a short tail for the PulseAudio loopback to drain
+                    # before resuming STT.
+                    await asyncio.sleep(0.3)
                     _stt_worker.resume()
-            _tx_audio_complete_event = None
 
 
 # ---------------------------------------------------------------------------
@@ -880,6 +895,24 @@ async def _handle_voice_tx(payload: dict) -> None:
             _stt_worker.resume()
 
 
+def _resolve_tx_voice(display_name: str) -> tuple[str | None, float | None]:
+    """Map a display name to that user's (tts_voice, tts_length_scale).
+
+    Used when a client transmits on behalf of a named operator (the `voice_as`
+    field).  Returns (None, None) when the name is unknown or the user has not
+    overridden the station defaults — tts_voice="" / tts_length_scale=0 are the
+    DEFAULT_PREFS "inherit station default" sentinels — so the caller's
+    `or _config.voice` / `or _config.tts_length_scale` fallbacks apply.
+    """
+    if _users_store is None:
+        return None, None
+    profile = _users_store.get_by_display_name(display_name)
+    if not profile:
+        return None, None
+    prefs = profile.get("prefs") or {}
+    return (prefs.get("tts_voice") or None, prefs.get("tts_length_scale") or None)
+
+
 def _play_voice_blocking(audio: "np.ndarray", sample_rate: int, output_device) -> None:
     """Play int16 PCM audio through the configured output device, blocking until done.
     Resamples if the device's native rate differs from the input rate."""
@@ -898,8 +931,32 @@ def _play_voice_blocking(audio: "np.ndarray", sample_rate: int, output_device) -
         resampled = resample_poly(audio.astype(np.float32), native_sr // gcd, sample_rate // gcd)
         audio     = np.clip(resampled, -32768, 32767).astype(np.int16)
 
+    dur = len(audio) / native_sr if native_sr else 0.0
+    _log.info(
+        "TX audio → output device %s: %.2fs @ %dHz (%d samples)",
+        output_device if output_device is not None else "default",
+        dur, native_sr, len(audio),
+    )
     sd.play(audio, samplerate=native_sr, device=output_device)
     sd.wait()
+
+
+async def _enumerate_devices(kind: str) -> list[dict]:
+    """Enumerate sound devices of the given kind ('input' or 'output') as a list
+    of {"label", "id"}.  The blocking PortAudio query runs off the event loop."""
+    channel_key = "max_input_channels" if kind == "input" else "max_output_channels"
+
+    def _query() -> list[dict]:
+        out: list[dict] = []
+        try:
+            for i, dev in enumerate(sd.query_devices()):
+                if dev.get(channel_key, 0) > 0:
+                    out.append({"label": dev["name"], "id": i})
+        except Exception:
+            pass
+        return out
+
+    return await asyncio.to_thread(_query)
 
 
 def _voice_label(stem: str) -> str:
@@ -914,7 +971,6 @@ def _list_voices() -> list[dict]:
     """Return all .onnx voice files in the configured voices directory."""
     if _config is None:
         return []
-    from pathlib import Path as _Path
     try:
         return [
             {"id": str(p), "name": p.stem, "label": _voice_label(p.stem)}
@@ -957,6 +1013,7 @@ def _build_status() -> dict:
         "journals_dir": str(_config.journals_dir) if _config else "/data/journals",
         "ncs_zone": (_config.ncs_zone if _config else ""),
         "input_device": (_config.input_device if _config else -1),
+        "output_device": (_config.output_device if _config else -1),
         "system_monitor_sink": (_config.system_monitor_sink if _config else ""),
         "rx_mode": (_config.rx_mode if _config else "voice"),
         "vad_threshold": float(_config.vad_threshold) if _config else 0.5,
@@ -965,6 +1022,8 @@ def _build_status() -> dict:
         "squelch_adaptive": bool(_config.squelch_adaptive) if _config else False,
         "stt_debug_capture": bool(_config.stt_debug_capture) if _config else False,
         "tx_conditioning": bool(_config.tx_conditioning) if _config else False,
+        "vox_primer_enabled": bool(_config.vox_primer_enabled) if _config else False,
+        "vox_primer_ms": int(_config.vox_primer_ms) if _config else 300,
         "ptt_mode": (_config.ptt_mode if _config else "manual"),
         "ptt_serial_port": (_config.ptt_serial_port if _config else ""),
         "ptt_serial_line": (_config.ptt_serial_line if _config else "RTS"),
@@ -1005,7 +1064,7 @@ async def _id_rule_pump() -> None:
             now = datetime.datetime.now(datetime.timezone.utc)
             elapsed = (now - _last_id_time).total_seconds() if _last_id_time else float("inf")
             if elapsed > ID_INTERVAL_SECONDS:
-                tail = format_tail_id(_config.callsign)
+                tail = format_tail_id(_config.callsign, _config.name)
                 spoken = spell_digits_in_callsigns(f"This is {tail}")
                 _last_id_time = now
                 _has_transmitted = False
@@ -1074,6 +1133,22 @@ async def _lifespan(app: FastAPI):
     global _pending_stations, _auto_add_tasks, _event_loop, _audit_log
 
     # --- startup -----------------------------------------------------------
+    # Surface the app's own INFO logs (TX playback, station ID, monitor state,
+    # "server ready"). uvicorn configures only its own loggers, not the root —
+    # so backend.* records otherwise hit Python's lastResort handler, which
+    # emits at WARNING. Attach an INFO handler so operational info (including
+    # TX-audio confirmation) is visible. Honour LOG_LEVEL if the operator sets it.
+    _backend_logger = logging.getLogger("backend")
+    _backend_logger.setLevel(
+        getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO)
+    )
+    if not _backend_logger.handlers:
+        _h = logging.StreamHandler()
+        _h.setFormatter(logging.Formatter("%(levelname)s:     %(name)s — %(message)s"))
+        _backend_logger.addHandler(_h)
+        # Keep propagate=True so pytest's caplog (a root handler) still captures
+        # backend.* records. The handler above is what makes INFO visible in
+        # production; the root logger has no handler, so there's no double-emit.
     _event_loop = asyncio.get_running_loop()
     _config = ServerConfig.load()
     _log.info("Config loaded: callsign=%s, port=%d", _config.callsign, _config.port)
@@ -1338,6 +1413,16 @@ async def _ws_handle_set_server_config(ws: WebSocket, data: dict, state: "Connec
         if _synthesizer is not None:
             _synthesizer.tx_conditioning = enabled
 
+    if "vox_primer_enabled" in data:
+        _config["vox_primer_enabled"] = bool(data["vox_primer_enabled"])
+
+    if "vox_primer_ms" in data:
+        try:
+            ms = int(data["vox_primer_ms"])
+            _config["vox_primer_ms"] = max(0, min(2000, ms))
+        except (TypeError, ValueError):
+            pass
+
     if "stt_debug_capture" in data:
         enabled = bool(data["stt_debug_capture"])
         if enabled != _config.stt_debug_capture:
@@ -1485,11 +1570,6 @@ async def websocket_endpoint(
                 name="plugin-client-msg",
             )
 
-            if msg_type == "tx_audio_complete":
-                if _tx_audio_complete_event is not None:
-                    _tx_audio_complete_event.set()
-                continue
-
             if msg_type == "tx_message":
                 callsign = (data.get("callsign") or "").strip()
                 if not callsign:
@@ -1521,18 +1601,57 @@ async def websocket_endpoint(
                 _tx_sender_display = (
                     (_users_store.get_public_one(state.user_id) or {}).get("display_name") or ""
                 ) if _users_store else ""
+                # `voice_as` lets a client transmit on behalf of a named
+                # operator (the [tx] [name] chat convention): voice the message
+                # in that user's profile voice/speed.  Absent → voice as the
+                # sending connection's own profile (legacy behavior).
+                voice_as = (data.get("voice_as") or "").strip()
+                if voice_as:
+                    tx_voice, tx_scale = _resolve_tx_voice(voice_as)
+                    tx_display = voice_as
+                else:
+                    tx_voice = state.prefs.get("tts_voice") or None
+                    tx_scale = state.prefs.get("tts_length_scale") or None
+                    tx_display = _tx_sender_display
                 tx_payload = await plugin_registry.dispatch_tx_pre_queue({
                     **data,
                     "_filter_profanity": state.prefs.get("filter_profanity", True),
-                    "_voice_name": state.prefs.get("tts_voice") or None,
-                    "_length_scale": state.prefs.get("tts_length_scale") or None,
-                    "_display_name": _tx_sender_display,
+                    "_voice_name": tx_voice,
+                    "_length_scale": tx_scale,
+                    "_display_name": tx_display,
                     "_user_id": state.user_id,
+                    # Operator pressed Transmit — overrides the channel-busy squelch.
+                    "_operator_initiated": True,
                 })
                 if tx_payload is None:
                     continue  # TX blocked by a plugin
                 await _tx_queue.put(tx_payload)
                 await _manager.broadcast({"type": "tx_status", "status": "transmitting"})
+
+            elif msg_type == "chat_message":
+                # Chat-only: shared to all operators in the log but never keyed
+                # over the radio (no synthesis, no PTT, no STT pause).  Only
+                # [tx]-prefixed lines (sent as tx_message) reach the air.
+                text = (data.get("text") or "").strip()
+                if not text:
+                    continue
+                # Listen-only is fully silent — no chat either.
+                if await _check_listen_only(ws, state):
+                    continue
+                sender_display = (
+                    (_users_store.get_public_one(state.user_id) or {}).get("display_name") or ""
+                ) if _users_store else ""
+                await _manager.broadcast_rx(
+                    {
+                        "type": "chat_echo",
+                        "ts": utc_now_iso(),
+                        "display_name": sender_display,
+                        "operator": data.get("operator") or "",
+                        "callsign": data.get("callsign") or "",
+                    },
+                    text,
+                    mask_profanity(text),
+                )
 
             elif msg_type == "add_contact":
                 if _contacts_store is None:
@@ -1714,6 +1833,7 @@ async def websocket_endpoint(
                 await _manager.broadcast({"type": "tx_status", "status": "transmitting"})
                 await _tx_queue.put({
                     "_standalone_id": True,
+                    "_operator_initiated": True,
                     "_filter_profanity": state.prefs.get("filter_profanity", True),
                     "operator": (data.get("operator") or "").strip(),
                     "callsign": (data.get("callsign") or "").strip(),
@@ -1738,6 +1858,7 @@ async def websocket_endpoint(
                     "_voice_preview": True,
                     "_voice_name": preview_voice,
                     "_length_scale": state.prefs.get("tts_length_scale") or None,
+                    "_user_id": state.user_id,
                 })
 
             elif msg_type == "fcc_lookup":
@@ -1845,12 +1966,7 @@ async def websocket_endpoint(
 
             elif msg_type == "list_input_devices":
                 devices = [{"label": "System Default (microphone)", "id": -1}]
-                try:
-                    for i, dev in enumerate(sd.query_devices()):
-                        if dev.get("max_input_channels", 0) > 0:
-                            devices.append({"label": dev["name"], "id": i})
-                except Exception:
-                    pass
+                devices += await _enumerate_devices("input")
                 devices.append({"label": "System Audio Output (loopback)", "id": "system_monitor"})
                 monitor_sinks = [
                     {"label": label, "sink_id": sink_id}
@@ -1865,6 +1981,9 @@ async def websocket_endpoint(
                 })
 
             elif msg_type == "set_input_device":
+                if not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin only."})
+                    continue
                 if _config is None:
                     await _manager.send_to(ws, {"type": "error", "detail": "Config not loaded."})
                     continue
@@ -1879,6 +1998,31 @@ async def websocket_endpoint(
                     await _stt_worker.join()
                 _stt_worker = _make_stt_worker()
                 _stt_worker.start()
+                await _manager.broadcast(_build_status())
+
+            elif msg_type == "list_output_devices":
+                devices = [{"label": "System Default (speaker)", "id": -1}]
+                devices += await _enumerate_devices("output")
+                await _manager.send_to(ws, {
+                    "type": "output_devices",
+                    "devices": devices,
+                    "current_output_device": _config.output_device if _config else -1,
+                })
+
+            elif msg_type == "set_output_device":
+                if not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin only."})
+                    continue
+                if _config is None:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Config not loaded."})
+                    continue
+                new_device = data.get("output_device", -1)
+                _config["output_device"] = new_device
+                _config.save()
+                # Keep the synthesizer's cached device in sync (used by its own
+                # internal playback path).  TX playback reads _config at send time.
+                if _synthesizer is not None:
+                    _synthesizer.output_device = new_device if new_device != -1 else None
                 await _manager.broadcast(_build_status())
 
             elif msg_type == "set_config":

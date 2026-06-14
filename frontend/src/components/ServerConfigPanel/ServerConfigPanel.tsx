@@ -56,6 +56,8 @@ export interface ServerConfig {
   squelchAdaptive: boolean;
   sttDebugCapture: boolean;
   txConditioning: boolean;
+  voxPrimerEnabled: boolean;
+  voxPrimerMs: number;
   pttMode: string;
   pttSerialPort: string;
   pttSerialLine: string;
@@ -71,6 +73,8 @@ export interface ServerConfigSaveValues {
   squelch_adaptive: boolean;
   stt_debug_capture: boolean;
   tx_conditioning: boolean;
+  vox_primer_enabled: boolean;
+  vox_primer_ms: number;
   ptt_mode: string;
   ptt_serial_port: string;
   ptt_serial_line: string;
@@ -84,15 +88,20 @@ interface Props {
   onClose: () => void;
   config: ServerConfig;
   onSave: (values: ServerConfigSaveValues) => void;
+  /** When true, render just the form body (no Dialog chrome) for embedding in
+   *  a tabbed SettingsDialog. The Save button is kept; Cancel/title are not. */
+  embedded?: boolean;
 }
 
-export function ServerConfigPanel({ open, onClose, config, onSave }: Props) {
+export function ServerConfigPanel({ open, onClose, config, onSave, embedded = false }: Props) {
   const [vadThreshold, setVadThreshold] = useState(0.5);
   const [whisperModel, setWhisperModel] = useState('small.en');
   const [whisperModelFinal, setWhisperModelFinal] = useState('');
   const [squelchAdaptive, setSquelchAdaptive] = useState(false);
   const [sttDebugCapture, setSttDebugCapture] = useState(false);
   const [txConditioning, setTxConditioning] = useState(false);
+  const [voxPrimerEnabled, setVoxPrimerEnabled] = useState(false);
+  const [voxPrimerMs, setVoxPrimerMs] = useState(300);
   const [pttMode, setPttMode] = useState('manual');
   const [pttSerialPort, setPttSerialPort] = useState('');
   const [pttSerialLine, setPttSerialLine] = useState('RTS');
@@ -111,6 +120,8 @@ export function ServerConfigPanel({ open, onClose, config, onSave }: Props) {
     setSquelchAdaptive(config.squelchAdaptive);
     setSttDebugCapture(config.sttDebugCapture);
     setTxConditioning(config.txConditioning);
+    setVoxPrimerEnabled(config.voxPrimerEnabled);
+    setVoxPrimerMs(config.voxPrimerMs);
     setPttMode(config.pttMode);
     setPttSerialPort(config.pttSerialPort);
     setPttSerialLine(config.pttSerialLine);
@@ -140,6 +151,8 @@ export function ServerConfigPanel({ open, onClose, config, onSave }: Props) {
       squelch_adaptive: squelchAdaptive,
       stt_debug_capture: sttDebugCapture,
       tx_conditioning: txConditioning,
+      vox_primer_enabled: voxPrimerEnabled,
+      vox_primer_ms: voxPrimerMs,
       ptt_mode: pttMode,
       ptt_serial_port: pttSerialPort.trim(),
       ptt_serial_line: pttSerialLine,
@@ -150,12 +163,8 @@ export function ServerConfigPanel({ open, onClose, config, onSave }: Props) {
     onClose();
   }
 
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ fontWeight: 700 }}>Server Config</DialogTitle>
-
-      <DialogContent dividers>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+  const content = (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
 
           <Typography variant="overline" sx={{ color: 'text.secondary', lineHeight: 1 }}>
             Audio / STT
@@ -245,6 +254,31 @@ export function ServerConfigPanel({ open, onClose, config, onSave }: Props) {
             Band-limit, compress, and level synthesized speech before it drives the radio
             mic — clearer over narrowband FM. Browser read-aloud is unaffected.
           </Typography>
+
+          <FormControlLabel
+            control={
+              <Switch
+                checked={voxPrimerEnabled}
+                onChange={(e) => setVoxPrimerEnabled(e.target.checked)}
+                size="small"
+              />
+            }
+            label="VOX primer tone"
+          />
+          <Typography variant="caption" sx={{ color: 'text.secondary', mt: -1.5 }}>
+            Prepend a short tone to each transmission so a VOX-keyed radio is fully
+            keyed before the message starts (silence won't trip VOX).
+          </Typography>
+          <TextField
+            label="Primer duration (ms)"
+            type="number"
+            size="small"
+            value={voxPrimerMs}
+            disabled={!voxPrimerEnabled}
+            onChange={(e) => setVoxPrimerMs(Math.max(0, Math.min(2000, Number(e.target.value) || 0)))}
+            slotProps={{ htmlInput: { min: 0, max: 2000, step: 50 } }}
+            sx={{ maxWidth: 200 }}
+          />
 
           <FormControlLabel
             control={
@@ -401,11 +435,30 @@ export function ServerConfigPanel({ open, onClose, config, onSave }: Props) {
           </Typography>
 
         </Box>
-      </DialogContent>
+  );
 
+  const saveButton = (
+    <Button onClick={handleSave} variant="contained">Save</Button>
+  );
+
+  if (embedded) {
+    return (
+      <Box sx={{ pt: 1 }}>
+        {content}
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
+          {saveButton}
+        </Box>
+      </Box>
+    );
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ fontWeight: 700 }}>Server Config</DialogTitle>
+      <DialogContent dividers>{content}</DialogContent>
       <DialogActions sx={{ px: 3, py: 2 }}>
         <Button onClick={onClose} variant="outlined">Cancel</Button>
-        <Button onClick={handleSave} variant="contained">Save</Button>
+        {saveButton}
       </DialogActions>
     </Dialog>
   );

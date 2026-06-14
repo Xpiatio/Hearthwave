@@ -1,0 +1,19 @@
+# Run the local stack from the PUBLISHED ghcr images instead of building from
+# source. Keeps every bind mount / device / PulseAudio setting from
+# docker-compose.yml — only swaps `build:` for the registry `image:`.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.images.yml pull
+#   docker compose -f docker-compose.yml -f docker-compose.images.yml up -d
+#
+# Not auto-loaded (it is not named docker-compose.override.yml), so a plain
+# `docker compose up` still builds from source as before.
+services:
+  backend:
+    build: !reset null
+    image: ghcr.io/xpiatio/radio-tty-backend:v2.5.1
+    pull_policy: always
+
+  frontend:
+    build: !reset null
+    image: ghcr.io/xpiatio/radio-tty-frontend:v2.5.1
+    pull_policy: always
