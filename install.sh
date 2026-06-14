@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Radio-TTY native install — run once on a fresh Debian/Ubuntu machine.
+# Hearthwave native install — run once on a fresh Debian/Ubuntu machine.
 # Creates a Python venv at .venv/, installs all deps, and validates the setup.
 #
 # Usage:

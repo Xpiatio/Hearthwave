@@ -1,4 +1,4 @@
-"""User profiles and authentication for Radio-TTY.
+"""User profiles and authentication for Hearthwave.
 
 Stores named user profiles in /data/users.json. Each profile has a password
 (PBKDF2-SHA256 with per-user salt) and per-user preferences that override the

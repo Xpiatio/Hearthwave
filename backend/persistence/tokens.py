@@ -1,4 +1,4 @@
-"""Session token store for Radio-TTY.
+"""Session token store for Hearthwave.
 
 Tokens are opaque URL-safe strings (32 bytes). They are stored in /data/tokens.json
 and survive server restarts. Expiry is checked on validation; expired tokens are
