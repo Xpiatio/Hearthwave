@@ -134,7 +134,12 @@ from backend.persistence.tokens import TokenStore
 from backend.persistence.users import DEFAULT_PREFS, SENSITIVE_PROFILE_FIELDS, UsersStore
 from backend.ptt.factory import make_ptt
 from backend.stt.worker import STTWorker
-from backend.text.callsigns import find_callsign_spans, fuzzy_match_callsign, spell_digits_in_callsigns
+from backend.text.callsigns import (
+    detect_callsigns,
+    find_callsign_spans,
+    fuzzy_match_callsign,
+    spell_digits_in_callsigns,
+)
 from backend.text.metadata import extract_name_location
 from backend.text.shorthand import expand_tty_abbreviations
 from backend.text.profanity import mask_profanity
@@ -451,15 +456,46 @@ async def _synthesize_rx_audio(text: str) -> None:
             await _manager.send_to(ws, msg)
 
 
+# A replacing second pass must retain at least this fraction of the
+# first-pass text. The whole-utterance final pass occasionally truncates long
+# messages to the first bit (or drops them entirely); when its result is this
+# much shorter than the partials it already produced, treat it as truncated
+# and keep the complete first-pass transcript instead of overwriting it.
+_FINAL_REPLACE_MIN_RATIO = 0.5
+
+
 def _resolve_final_text(prior: str, chunk_text: str, replace: bool) -> str:
     """Final transcript for an utterance. A replacing final (second-pass
     full-utterance re-transcription) supersedes the accumulated partials;
     a plain final covers only the tail audio after the last partial cut, so
     the partial text is prepended. An empty replace falls back to the
-    partials — a failed final pass must never erase the transcript."""
+    partials — a failed final pass must never erase the transcript. A
+    replacing final that is drastically shorter than the partials is treated
+    as a truncated second pass and discarded in favor of the first-pass text."""
     if replace and chunk_text:
+        prior_len = len(prior.strip())
+        if prior_len and len(chunk_text.strip()) < _FINAL_REPLACE_MIN_RATIO * prior_len:
+            return prior
         return chunk_text
     return (prior + " " + chunk_text).strip() if prior else chunk_text
+
+
+def _detected_callsigns(callsign_spans, prior_text: str, known, *, fuzzy: bool) -> set:
+    """Callsigns to drive attendance + pending pills for a finalized utterance.
+
+    Unions the callsigns highlighted in the displayed (final) text with any
+    found in the first-pass (prior) text. A replacing second pass sometimes
+    drops or truncates a callsign the first pass heard cleanly; detecting on
+    both passes means a callsign caught by either survives."""
+    detected = {span[2] for span in callsign_spans}
+    for cs in detect_callsigns(prior_text):
+        effective = cs
+        if fuzzy:
+            matched = fuzzy_match_callsign(cs, known)
+            if matched:
+                effective = matched
+        detected.add(effective)
+    return detected
 
 
 async def _rx_pump() -> None:
@@ -561,8 +597,11 @@ async def _rx_pump() -> None:
             if not partial:
                 _recent_finals.append((utterance_id, raw_text))
 
-                # Extract all detected callsigns (regular + any cross-boundary additions).
-                detected = list({span[2] for span in callsign_spans})
+                # All detected callsigns: spans (regular + cross-boundary) unioned
+                # with the first-pass text, so a callsign the replacing second
+                # pass dropped or truncated still drives attendance + pending.
+                fuzzy = _config is not None and _config.fuzzy_callsign
+                detected = list(_detected_callsigns(callsign_spans, prior, known, fuzzy=fuzzy))
                 changed = any(_attendance.record(cs) for cs in detected)
                 if changed:
                     await _manager.broadcast(_build_attendance_payload())

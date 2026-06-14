@@ -778,7 +778,11 @@ class STTWorker:
             if transcriber is not None:
                 try:
                     processed = preprocess_segment(audio, self.SAMPLE_RATE, bandpass_sos)
-                    text = transcriber.transcribe(processed)
+                    # Whole utterance, already squelch-bounded: don't let VAD
+                    # re-gating or a low-confidence drop truncate long messages.
+                    text = transcriber.transcribe(
+                        processed, vad_filter=False, drop_low_confidence=False
+                    )
                 except Exception as e:
                     self._emit_error(f"Final-pass transcription error: {e}")
                     text = None

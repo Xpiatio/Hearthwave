@@ -58,14 +58,22 @@ class WhisperTranscriber:
         """Rebuild the initial_prompt from a new phrase list (thread-safe via GIL)."""
         self.initial_prompt = self._build_prompt(saved_phrases)
 
-    def transcribe(self, audio):
+    def transcribe(self, audio, *, vad_filter=True, drop_low_confidence=True):
         """Return transcribed text, or None when the output is empty or
-        matches a known Whisper-on-silence hallucination."""
+        matches a known Whisper-on-silence hallucination.
+
+        The fast streaming path keeps the defaults: VAD re-gating plus a
+        low-confidence segment drop weed out hallucinations on short slices.
+        The whole-utterance final pass passes ``vad_filter=False,
+        drop_low_confidence=False`` — its audio is already a squelch-bounded
+        utterance, so re-gating it with VAD or dropping quieter tail segments
+        only truncates long messages.
+        """
         segments, _ = self.model.transcribe(
             audio,
             language="en",
             beam_size=5,
-            vad_filter=True,
+            vad_filter=vad_filter,
             # Don't let a hallucination in one segment condition the next.
             condition_on_previous_text=False,
             initial_prompt=self.initial_prompt,
@@ -74,7 +82,7 @@ class WhisperTranscriber:
         for seg in segments:
             if seg.no_speech_prob > self._NO_SPEECH_THRESHOLD:
                 continue
-            if seg.avg_logprob < self._AVG_LOGPROB_THRESHOLD:
+            if drop_low_confidence and seg.avg_logprob < self._AVG_LOGPROB_THRESHOLD:
                 continue
             kept.append(seg.text.strip())
         text = " ".join(kept).strip()
