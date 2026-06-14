@@ -124,6 +124,17 @@ class ServerConfig(dict):
         return bool(self.get("tx_conditioning", False))
 
     @property
+    def vox_primer_enabled(self) -> bool:
+        """Prepend a short tone to server-synthesized TX audio so a VOX-keyed
+        radio is fully keyed before the message starts."""
+        return bool(self.get("vox_primer_enabled", False))
+
+    @property
+    def vox_primer_ms(self) -> int:
+        """Duration of the VOX primer tone in milliseconds."""
+        return int(self.get("vox_primer_ms", 300))
+
+    @property
     def voices_dir(self) -> Path:
         raw = self.get("voices_dir")
         if raw:
