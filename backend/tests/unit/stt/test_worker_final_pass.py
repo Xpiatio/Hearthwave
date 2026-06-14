@@ -20,9 +20,11 @@ class StubTranscriber:
     def __init__(self, texts=("hello",)):
         self.texts = list(texts)
         self.calls = []
+        self.call_kwargs = []
 
-    def transcribe(self, audio):
+    def transcribe(self, audio, **kwargs):
         self.calls.append(audio)
+        self.call_kwargs.append(kwargs)
         return self.texts[(len(self.calls) - 1) % len(self.texts)]
 
     def update_prompt(self, phrases=()):
@@ -145,6 +147,14 @@ class TestFinalPassLoop:
         assert results == [
             {"uid": 1, "text": "the better transcript", "partial": False, "replace": True}
         ]
+
+    def test_final_pass_uses_robust_long_audio_flags(self):
+        # The whole-utterance pass disables VAD re-gating and low-confidence
+        # segment dropping so long messages aren't truncated.
+        w, _ = make_worker()
+        stub = StubTranscriber(["full transcript"])
+        run_final_loop(w, [(1, _audio())], stub)
+        assert stub.call_kwargs[0] == {"vad_filter": False, "drop_low_confidence": False}
 
     def test_empty_text_falls_back_to_plain_final(self):
         w, results = make_worker()
