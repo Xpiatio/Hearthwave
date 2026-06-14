@@ -1353,7 +1353,8 @@ app.include_router(_auth_router, prefix="/auth")
 
 @app.get("/health")
 async def health() -> dict:
-    return {"ok": True}
+    from backend import __version__
+    return {"ok": True, "version": __version__}
 
 
 @app.get("/journal")
