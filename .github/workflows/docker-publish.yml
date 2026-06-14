@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Image tag to publish (e.g. v2.5.2)'
+        required: true
+        type: string
 
 env:
   REGISTRY: ghcr.io
@@ -46,7 +52,7 @@ jobs:
           push: true
           build-args: COMPUTE_BACKEND=${{ matrix.compute.backend }}
           tags: |
-            ${{ env.BACKEND_IMAGE }}:${{ github.ref_name }}${{ matrix.compute.suffix }}
+            ${{ env.BACKEND_IMAGE }}:${{ inputs.version || github.ref_name }}${{ matrix.compute.suffix }}
             ${{ env.BACKEND_IMAGE }}:latest${{ matrix.compute.suffix }}
           cache-from: type=gha,scope=backend-${{ matrix.compute.backend }}
           cache-to: type=gha,mode=max,scope=backend-${{ matrix.compute.backend }}
@@ -78,7 +84,7 @@ jobs:
           file: frontend/Dockerfile
           push: true
           tags: |
-            ${{ env.FRONTEND_IMAGE }}:${{ github.ref_name }}
+            ${{ env.FRONTEND_IMAGE }}:${{ inputs.version || github.ref_name }}
             ${{ env.FRONTEND_IMAGE }}:latest
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
