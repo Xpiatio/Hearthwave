@@ -17,7 +17,7 @@ without touching core server logic.
 Hearthwave is a fork of GMRS-TTY that replaces the desktop PySide6 UI with a
 browser-based React frontend communicating over WebSocket.
 
-> **Latest release:** v2.6.0
+> **Latest release:** v2.6.1
 
 ## Who uses it
 
