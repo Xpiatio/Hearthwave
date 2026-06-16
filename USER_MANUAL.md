@@ -110,9 +110,11 @@ The desktop shows all panels simultaneously:
 - **TopBar** — navy gradient bar. Shows your callsign, a green dot when
   connected, the PTT button, the ABORT TX button, the spectrogram toggle, and
   your account chip.
-- **Chat Display** — scrollable log of all RX (received) and TX (sent)
-  messages. Received messages appear with a green `[RX]` label; sent messages
-  with a blue `[TX]` label.
+- **Chat Display** — scrollable log of all RX (received), TX (sent), and CHAT
+  messages, shared server-side across every signed-in device. Received messages
+  appear with a green `[RX]` label; sent messages with a blue `[TX]` label;
+  operator chat with a `[CHAT]` label. See
+  [Shared, persisted message log](#shared-persisted-message-log).
 - **Draggable panels** — NCS, Journals, Attendance, and any installed plugins.
   Drag the panel handle to reorder. Each panel has a coloured gradient header:
   NCS and Admin use a blue gradient; Config, Journals, and Attendance use a
@@ -189,6 +191,14 @@ Hearthwave has two distinct send actions — **CHAT** and **TRANSMIT**. Use the 
 Pressing **CHAT** (or **Shift+Enter**) broadcasts your message to the shared log for all connected operators but does **not** key the radio. The message appears in the chat area marked `[CHAT]` and is visible to everyone currently signed in. It is profanity-filtered per recipient according to each user's individual filter setting. Chat messages are blocked when your account is in listen-only mode.
 
 Use CHAT for coordination notes that do not need to go over the air — confirming a plan before transmitting, alerting other operators to channel activity, or passing administrative notes.
+
+### Shared, persisted message log
+
+The message log — received transcriptions (`[RX]`), your transmissions (`[TX]`), and chat lines (`[CHAT]`) — is shared by the server across the base station and every web and mobile login. When you sign in, or simply refresh the page, you see the history that has accumulated since the log was last cleared, not a blank screen. The stream is profanity-filtered to match *your* personal filter setting, regardless of who sent each line.
+
+The log is held in the server's memory. It is **not** written to disk, so restarting the backend starts the log fresh, and only the most recent messages are kept (older entries roll off automatically on a very long session).
+
+**Clearing the log is admin-only and clears it for everyone.** Only an administrator sees the **Clear chat log** button (the sweep icon in the top bar). Using it asks for confirmation, then wipes the shared log for every connected operator — base station, web, and mobile — at the same time. There is no per-user "clear my view only"; this keeps everyone looking at the same stream. Clearing cannot be undone.
 
 ### TRANSMIT — sends over the air
 

@@ -308,15 +308,23 @@ describe('TopBar', () => {
   })
 
   describe('utility controls', () => {
-    it('renders clear chat button', () => {
-      render(<TopBar {...makeProps()} />)
+    it('renders clear chat button for admins', () => {
+      render(<TopBar {...makeProps({ profile: { ...mockProfile, is_admin: true } })} />)
       expect(screen.getByRole('button', { name: /clear chat log/i })).toBeInTheDocument()
     })
 
-    it('calls onClearChat when clear button clicked', () => {
+    it('hides clear chat button for non-admins', () => {
+      render(<TopBar {...makeProps({ profile: { ...mockProfile, is_admin: false } })} />)
+      expect(screen.queryByRole('button', { name: /clear chat log/i })).not.toBeInTheDocument()
+    })
+
+    it('calls onClearChat only after confirming', () => {
       const onClearChat = vi.fn()
-      render(<TopBar {...makeProps({ onClearChat })} />)
+      render(<TopBar {...makeProps({ onClearChat, profile: { ...mockProfile, is_admin: true } })} />)
       fireEvent.click(screen.getByRole('button', { name: /clear chat log/i }))
+      // Opens a confirmation dialog — no clear yet.
+      expect(onClearChat).not.toHaveBeenCalled()
+      fireEvent.click(screen.getByRole('button', { name: /clear for everyone/i }))
       expect(onClearChat).toHaveBeenCalledTimes(1)
     })
 

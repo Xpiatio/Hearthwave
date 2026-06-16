@@ -8,6 +8,11 @@ import {
   Divider,
   IconButton,
   Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
 } from '@mui/material';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
@@ -119,6 +124,7 @@ export function TopBar({
   onTxAbort,
 }: Props) {
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
   return (
     <AppBar position="static" color="default" elevation={0}
       sx={{ borderBottom: 1, borderColor: 'divider' }}>
@@ -346,12 +352,18 @@ export function TopBar({
 
         <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
 
-        {/* Group 4 — UI utilities */}
-        <Tooltip title="Clear chat log">
-          <IconButton onClick={onClearChat} aria-label="Clear chat log" size="small">
-            <DeleteSweepIcon />
-          </IconButton>
-        </Tooltip>
+        {/* Group 4 — UI utilities. Clearing the chat is admin-only and global. */}
+        {profile.is_admin && (
+          <Tooltip title="Clear chat log for everyone">
+            <IconButton
+              onClick={() => setConfirmClearOpen(true)}
+              aria-label="Clear chat log"
+              size="small"
+            >
+              <DeleteSweepIcon />
+            </IconButton>
+          </Tooltip>
+        )}
 
         <Tooltip title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}>
           <IconButton
@@ -364,6 +376,27 @@ export function TopBar({
         </Tooltip>
       </Toolbar>
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
+      <Dialog open={confirmClearOpen} onClose={() => setConfirmClearOpen(false)}>
+        <DialogTitle>Clear chat for everyone?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This wipes the shared chat log for all connected operators — base
+            station, web, and mobile. This cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmClearOpen(false)}>Cancel</Button>
+          <Button
+            color="error"
+            onClick={() => {
+              setConfirmClearOpen(false);
+              onClearChat();
+            }}
+          >
+            Clear for everyone
+          </Button>
+        </DialogActions>
+      </Dialog>
     </AppBar>
   );
 }
