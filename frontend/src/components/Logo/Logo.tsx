@@ -1,5 +1,5 @@
+import { useId } from 'react';
 import { Box } from '@mui/material';
-import { useTheme } from '@mui/material/styles';
 
 interface LogoProps {
   /** Pixel size of the square mark. Default 32. */
@@ -9,14 +9,15 @@ interface LogoProps {
 }
 
 /**
- * Hearthwave logo — a radio wave cresting into a rooftop over a glowing
- * hearth doorway. Wave/roof strokes follow the active theme; the doorway
- * glow is a fixed warm amber so the "hearth" reads in both color modes.
+ * Hearthwave logo — a home sheltering a radio set, with signal waves
+ * cresting off the roof. The house and radio strokes are a fixed cyan and
+ * the waves sweep cyan → violet → magenta, matching the brand mark in both
+ * light and dark themes.
  */
 export function Logo({ size = 32, withWordmark = false }: LogoProps) {
-  const theme = useTheme();
-  const wave = theme.palette.primary.main;
-  const roof = theme.palette.mode === 'dark' ? '#93C5FD' : theme.palette.info.main;
+  // Unique gradient id so multiple Logo instances don't collide.
+  const gradId = useId();
+  const cyan = '#20C5CE';
 
   const mark = (
     <svg
@@ -25,11 +26,28 @@ export function Logo({ size = 32, withWordmark = false }: LogoProps) {
       viewBox="0 0 100 100"
       role="img"
       aria-label="Hearthwave logo"
+      fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
-      <path d="M12 50 Q31 24 50 37 Q69 50 88 30" fill="none" stroke={wave} strokeWidth={5.5} strokeLinecap="round" />
-      <path d="M22 54 L22 82 L78 82 L78 44" fill="none" stroke={roof} strokeWidth={4.5} strokeLinejoin="round" />
-      <path d="M44 82 L44 64 Q44 57 51 57 L57 57 Q64 57 64 64 L64 82 Z" fill="#FBBF24" />
+      <defs>
+        <linearGradient id={gradId} x1="55" y1="20" x2="95" y2="50" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#36DDE4" />
+          <stop offset="0.5" stopColor="#8B5CF6" />
+          <stop offset="1" stopColor="#EA53C6" />
+        </linearGradient>
+      </defs>
+      {/* house */}
+      <path d="M16 54 L50 26 L84 54 V86 H16 Z" stroke={cyan} strokeWidth={5} strokeLinejoin="round" />
+      {/* radio set inside */}
+      <rect x="38" y="58" width="24" height="20" rx="3" stroke={cyan} strokeWidth={3.5} />
+      <line x1="43" y1="64" x2="57" y2="64" stroke={cyan} strokeWidth={2.6} strokeLinecap="round" />
+      <line x1="43" y1="70" x2="53" y2="70" stroke={cyan} strokeWidth={2.6} strokeLinecap="round" />
+      {/* signal waves cresting off the roof */}
+      <g stroke={`url(#${gradId})`} strokeWidth={5} strokeLinecap="round">
+        <path d="M58 30 A14 14 0 0 1 72 44" />
+        <path d="M62 22 A24 24 0 0 1 86 46" />
+        <path d="M66 14 A34 34 0 0 1 100 48" />
+      </g>
     </svg>
   );
 
