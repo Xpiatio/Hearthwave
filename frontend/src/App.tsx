@@ -24,6 +24,7 @@ import type {
   VoiceTxEndPayload,
   VoiceTxCancelPayload,
   TxAbortPayload,
+  StoredStreamMsg,
 } from './types/ws';
 import type { ChatEntry } from './components/ChatDisplay/ChatDisplay';
 import type { SpectrogramHandle } from './components/Spectrogram/Spectrogram';
@@ -74,6 +75,47 @@ function pruneMap<K, V>(map: Map<K, V>, maxSize: number): void {
   while (map.size > maxSize) {
     map.delete(map.keys().next().value as K);
   }
+}
+
+// Map one backfilled stream message (chat_history) to a ChatEntry. Mirrors the
+// live tx_echo / chat_echo / rx_message-final handlers, minus their live side
+// effects (notifications, partial bookkeeping) — history holds finals only.
+export function streamMsgToEntry(msg: StoredStreamMsg): ChatEntry {
+  if (msg.type === 'tx_echo') {
+    const recipient =
+      msg.target_call && msg.target_call !== 'ALL'
+        ? msg.target_name
+          ? `${msg.target_call} — ${msg.target_name}`
+          : msg.target_call
+        : undefined;
+    return {
+      id: nextId(),
+      timestamp: formatTime(msg.ts),
+      kind: 'tx',
+      sender: msg.display_name || msg.operator || msg.callsign,
+      recipient,
+      text: msg.text,
+    };
+  }
+  if (msg.type === 'chat_echo') {
+    return {
+      id: nextId(),
+      timestamp: formatTime(msg.ts),
+      kind: 'chat',
+      sender: msg.display_name || msg.operator || msg.callsign,
+      text: msg.text,
+    };
+  }
+  // rx_message
+  return {
+    id: nextId(),
+    timestamp: formatTime(msg.ts),
+    kind: 'rx',
+    sender: msg.from || msg.callsign || undefined,
+    text: msg.text,
+    callsign_spans: msg.callsign_spans,
+    source: msg.source,
+  };
 }
 
 import type { JournalResultDraft, PendingStation, PromptState } from './types/appTypes';
@@ -412,6 +454,17 @@ export default function App() {
             text: msg.text,
           },
         ]);
+        break;
+
+      case 'chat_history':
+        // Backfill of the shared stream since the last clear. Replaces the
+        // local log (sent once on connect, before any live messages).
+        setMessages(msg.messages.map(streamMsgToEntry));
+        break;
+
+      case 'chat_cleared':
+        // An admin cleared the chat for everyone.
+        setMessages([]);
         break;
 
       case 'system_msg':
@@ -761,7 +814,9 @@ export default function App() {
   }
 
   function handleClearChat() {
-    setMessages([]);
+    // Admin-only and global: the server wipes the shared stream and broadcasts
+    // `chat_cleared`, which clears every client's log (including ours).
+    send({ type: 'clear_chat' });
   }
 
   function handleTokenSubmit(resolvedText: string) {
