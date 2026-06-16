@@ -19,7 +19,7 @@ import pytest
 from starlette.testclient import TestClient
 
 from backend.config import ServerConfig
-from backend.server import app
+from backend.server import app, StreamHistory
 
 
 # ---------------------------------------------------------------------------
@@ -166,14 +166,14 @@ def _drain_initial(ws, limit: int = 10) -> list[dict]:
     """Drain the burst of initial frames every new connection receives.
 
     The server sends: status, user_profile, contacts, session_attendance,
-    pending_stations, voices_list (and optionally online_status).  Stop when
-    voices_list is seen so tests start from a clean slate.
+    pending_stations, voices_list, chat_history (and optionally online_status).
+    Stop when chat_history is seen so tests start from a clean slate.
     """
     frames = []
     for _ in range(limit):
         msg = ws.receive_json()
         frames.append(msg)
-        if msg.get("type") == "voices_list":
+        if msg.get("type") == "chat_history":
             break
     return frames
 
@@ -736,6 +736,157 @@ class TestChatMessage:
             msg = ws.receive_json()
         assert msg["type"] == "error"
         assert "listen" in msg["detail"].lower()
+
+
+class TestChatHistory:
+    def test_history_empty_on_first_connect(self, client):
+        with client.websocket_connect(WS_URL) as ws:
+            frames = _drain_initial(ws)
+        hist = next(f for f in frames if f["type"] == "chat_history")
+        assert hist["messages"] == []
+
+    def test_later_client_receives_prior_chat(self, client):
+        with client.websocket_connect(WS_URL) as ws1:
+            _drain_initial(ws1)
+            ws1.send_json({"type": "chat_message", "text": "meet at noon",
+                           "callsign": "W5TST", "operator": "Op"})
+            assert _next_of_type(ws1, "chat_echo") is not None
+            # A client connecting afterwards gets the message in its backfill.
+            with client.websocket_connect(WS_URL) as ws2:
+                frames = _drain_initial(ws2)
+        hist = next(f for f in frames if f["type"] == "chat_history")
+        chat = [m for m in hist["messages"] if m["type"] == "chat_echo"]
+        assert any(m["text"] == "meet at noon" for m in chat)
+
+    def test_history_masks_profanity_for_filtering_client(self, client):
+        # Default prefs -> filter_profanity True, so the backfill is masked too.
+        with client.websocket_connect(WS_URL) as ws1:
+            _drain_initial(ws1)
+            ws1.send_json({"type": "chat_message", "text": "oh shit",
+                           "callsign": "W5TST", "operator": "Op"})
+            assert _next_of_type(ws1, "chat_echo") is not None
+            with client.websocket_connect(WS_URL) as ws2:
+                frames = _drain_initial(ws2)
+        hist = next(f for f in frames if f["type"] == "chat_history")
+        chat = [m for m in hist["messages"] if m["type"] == "chat_echo"]
+        assert chat and chat[-1]["text"] == "oh s***"
+
+    def test_admin_clear_broadcasts_and_empties_history(self, client):
+        with (
+            client.websocket_connect(WS_URL) as ws1,
+            client.websocket_connect(WS_URL) as ws2,
+        ):
+            _drain_initial(ws1)
+            _drain_initial(ws2)
+            ws1.send_json({"type": "chat_message", "text": "hello there",
+                           "callsign": "W5TST", "operator": "Op"})
+            assert _next_of_type(ws1, "chat_echo") is not None
+            assert _next_of_type(ws2, "chat_echo") is not None
+            # Admin clears: both clients get chat_cleared.
+            ws1.send_json({"type": "clear_chat"})
+            assert _next_of_type(ws1, "chat_cleared") is not None
+            assert _next_of_type(ws2, "chat_cleared") is not None
+            # A new client now gets an empty backfill.
+            with client.websocket_connect(WS_URL) as ws3:
+                frames = _drain_initial(ws3)
+        hist = next(f for f in frames if f["type"] == "chat_history")
+        assert hist["messages"] == []
+
+    def test_non_admin_clear_rejected_and_history_kept(self, non_admin_client):
+        tc, _cfg = non_admin_client
+        with tc.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "chat_message", "text": "keep me",
+                          "callsign": "W5TST", "operator": "Op"})
+            assert _next_of_type(ws, "chat_echo") is not None
+            ws.send_json({"type": "clear_chat"})
+            err = _next_of_type(ws, "error")
+            assert err is not None and "admin" in err["detail"].lower()
+            # History survived: a fresh connection still sees the message.
+            with tc.websocket_connect(WS_URL) as ws2:
+                frames = _drain_initial(ws2)
+        hist = next(f for f in frames if f["type"] == "chat_history")
+        assert any(m.get("text") == "keep me" for m in hist["messages"])
+
+    def test_history_raw_for_non_filtering_client(self, tmp_path):
+        # A client with filter_profanity disabled gets unmasked backfill text.
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()
+        mock_users.get.return_value = {
+            "id": "test-user", "display_name": "Test Operator",
+            "is_admin": True, "prefs": {"filter_profanity": False},
+        }
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws1:
+                    _drain_initial(ws1)
+                    ws1.send_json({"type": "chat_message", "text": "oh shit",
+                                   "callsign": "W5TST", "operator": "Op"})
+                    assert _next_of_type(ws1, "chat_echo") is not None
+                    with tc.websocket_connect(WS_URL) as ws2:
+                        frames = _drain_initial(ws2)
+        hist = next(f for f in frames if f["type"] == "chat_history")
+        chat = [m for m in hist["messages"] if m["type"] == "chat_echo"]
+        assert chat and chat[-1]["text"] == "oh shit"
+
+
+class TestStreamHistoryUnit:
+    """Unit tests for the StreamHistory buffer (no server/WS involved)."""
+
+    def test_render_resolves_text_per_filter_pref(self):
+        h = StreamHistory()
+        h.record_rx({"type": "chat_echo", "ts": "t"}, "oh shit", "oh s***")
+        assert h.render_for(filter_profanity=True)[0]["text"] == "oh s***"
+        assert h.render_for(filter_profanity=False)[0]["text"] == "oh shit"
+
+    def test_record_plain_round_trips_tx_echo(self):
+        h = StreamHistory()
+        tx = {"type": "tx_echo", "ts": "t", "callsign": "W5TST",
+              "operator": "Op", "text": "going mobile", "target_call": "ALL"}
+        h.record_plain(tx)
+        out = h.render_for(filter_profanity=True)
+        assert out == [tx]  # verbatim, unaffected by filter pref
+
+    def test_record_plain_does_not_alias_caller_dict(self):
+        h = StreamHistory()
+        tx = {"type": "tx_echo", "text": "orig"}
+        h.record_plain(tx)
+        tx["text"] = "mutated after record"
+        assert h.render_for(filter_profanity=True)[0]["text"] == "orig"
+
+    def test_patch_updates_callsign_spans_of_matching_entry(self):
+        h = StreamHistory()
+        h.record_rx({"type": "rx_message", "utterance_id": "u1",
+                     "callsign_spans": []}, "raw", "raw")
+        h.patch("u1", [[0, 5, "W5TST"]])
+        assert h.render_for(True)[0]["callsign_spans"] == [[0, 5, "W5TST"]]
+
+    def test_patch_unknown_utterance_is_noop(self):
+        h = StreamHistory()
+        h.record_rx({"type": "rx_message", "utterance_id": "u1"}, "raw", "raw")
+        h.patch("does-not-exist", [[0, 1, "X"]])  # must not raise
+        assert "callsign_spans" not in h.render_for(True)[0]
+
+    def test_clear_empties_buffer(self):
+        h = StreamHistory()
+        h.record_rx({"type": "chat_echo"}, "a", "a")
+        h.clear()
+        assert h.render_for(True) == []
+
+    def test_cap_evicts_oldest_entries(self):
+        h = StreamHistory(max_entries=3)
+        for i in range(5):
+            h.record_plain({"type": "tx_echo", "text": f"m{i}"})
+        out = h.render_for(True)
+        assert [m["text"] for m in out] == ["m2", "m3", "m4"]
 
 
 # ---------------------------------------------------------------------------
