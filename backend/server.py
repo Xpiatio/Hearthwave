@@ -309,7 +309,85 @@ class ConnectionManager:
             self._clients.pop(ws, None)
 
 
+# Cap on the shared stream backfill — most-recent N messages kept since the
+# last clear. High enough to cover a long net, bounded so memory can't grow
+# without limit.
+_STREAM_HISTORY_MAX = 2000
+
+
+class StreamHistory:
+    """Shared, in-memory record of the message stream (rx/tx/chat).
+
+    Every message the server broadcasts to the log is recorded here so a client
+    that connects later can be backfilled with everything since the last clear.
+    Profanity-filterable entries keep both the raw and masked text so each
+    joining client sees the variant matching its own ``filter_profanity`` pref
+    (mirroring :meth:`ConnectionManager.broadcast_rx`).
+
+    In-memory only by design — a backend restart starts with an empty stream.
+    All access happens on the single asyncio event loop, so no lock is needed.
+
+    Bounded to the most recent ``max_entries`` messages so a long-running net
+    can't grow the buffer without limit; the oldest entries roll off (logged at
+    debug) once the cap is reached.
+    """
+
+    def __init__(self, max_entries: int = _STREAM_HISTORY_MAX) -> None:
+        self._entries: list[dict] = []
+        self._max_entries = max_entries
+
+    def _trim(self) -> None:
+        overflow = len(self._entries) - self._max_entries
+        if overflow > 0:
+            del self._entries[:overflow]
+            _log.debug("StreamHistory: dropped %d oldest entries (cap %d)",
+                       overflow, self._max_entries)
+
+    def record_rx(self, base_msg: dict, raw_text: str, filtered_text: str) -> None:
+        """Record a profanity-filterable message (rx_message final / chat_echo)."""
+        msg = dict(base_msg)
+        msg.setdefault("ts", utc_now_iso())
+        self._entries.append({
+            "msg": msg,
+            "raw": raw_text,
+            "filtered": filtered_text,
+            "utterance_id": base_msg.get("utterance_id"),
+        })
+        self._trim()
+
+    def record_plain(self, msg: dict) -> None:
+        """Record a message broadcast verbatim to all clients (tx_echo)."""
+        self._entries.append({
+            "msg": dict(msg),
+            "raw": None,
+            "filtered": None,
+            "utterance_id": None,
+        })
+        self._trim()
+
+    def patch(self, utterance_id: str, callsign_spans: list) -> None:
+        """Update the callsign spans of a previously recorded rx entry."""
+        for rec in reversed(self._entries):
+            if rec["utterance_id"] == utterance_id:
+                rec["msg"]["callsign_spans"] = callsign_spans
+                return
+
+    def clear(self) -> None:
+        self._entries = []
+
+    def render_for(self, filter_profanity: bool) -> list[dict]:
+        """Return the stream as a list of messages, text resolved per pref."""
+        out: list[dict] = []
+        for rec in self._entries:
+            msg = dict(rec["msg"])
+            if rec["raw"] is not None:
+                msg["text"] = rec["filtered"] if filter_profanity else rec["raw"]
+            out.append(msg)
+        return out
+
+
 _manager = ConnectionManager()
+_stream_history = StreamHistory()
 
 
 # ---------------------------------------------------------------------------
@@ -578,6 +656,17 @@ async def _rx_pump() -> None:
                 raw_text=raw_text,
                 filtered_text=filtered_text,
             )
+            if not partial:
+                _stream_history.record_rx(
+                    {
+                        "type": "rx_message",
+                        "utterance_id": utterance_id,
+                        "callsign_spans": callsign_spans,
+                        "source": source,
+                    },
+                    raw_text,
+                    filtered_text,
+                )
 
             if cross_prev_uid and cross_prev_spans:
                 await _manager.broadcast({
@@ -585,6 +674,7 @@ async def _rx_pump() -> None:
                     "utterance_id": cross_prev_uid,
                     "callsign_spans": cross_prev_spans,
                 })
+                _stream_history.patch(cross_prev_uid, cross_prev_spans)
 
             if not partial:
                 asyncio.create_task(
@@ -725,7 +815,7 @@ async def _tx_pump() -> None:
                 continue
 
             if not is_preview and chat_text is not None:
-                await _manager.broadcast({
+                tx_echo_msg = {
                     "type": "tx_echo",
                     "ts": now.isoformat(),
                     "callsign": payload.get("callsign") or _config.callsign,
@@ -734,7 +824,9 @@ async def _tx_pump() -> None:
                     "text": chat_text,
                     "target_call": payload.get("target_call") or "ALL",
                     "target_name": payload.get("target_name") or "",
-                })
+                }
+                await _manager.broadcast(tx_echo_msg)
+                _stream_history.record_plain(tx_echo_msg)
 
             # Pause STT before keying so the radio receiver doesn't
             # transcribe TTS audio bleeding back through the radio.
@@ -897,7 +989,7 @@ async def _handle_voice_tx(payload: dict) -> None:
                 _log.warning("voice_tx STT error: %s", exc)
 
         chat_text = transcription or "[unintelligible]"
-        await _manager.broadcast({
+        tx_echo_msg = {
             "type":         "tx_echo",
             "ts":           now.isoformat(),
             "callsign":     callsign,
@@ -906,7 +998,9 @@ async def _handle_voice_tx(payload: dict) -> None:
             "text":         chat_text,
             "target_call":  "ALL",
             "target_name":  "",
-        })
+        }
+        await _manager.broadcast(tx_echo_msg)
+        _stream_history.record_plain(tx_echo_msg)
 
         # Key PTT and play raw voice audio
         ptt = make_ptt(_config)
@@ -1255,6 +1349,7 @@ async def _lifespan(app: FastAPI):
     _has_transmitted = False
     _level_window = collections.deque(maxlen=_LEVEL_WINDOW_SIZE)
     _attendance.clear()
+    _stream_history.clear()
     _pending_stations = {}
     _auto_add_tasks = {}
     _voice_cache.clear()
@@ -1576,6 +1671,10 @@ async def websocket_endpoint(
         is_admin=bool(profile.get("is_admin", False)),
         prefs={**DEFAULT_PREFS, **profile.get("prefs", {})},
     )
+    # Snapshot the stream backfill *before* registering the socket (no await in
+    # between, so no interleaving): anything broadcast after `add` reaches this
+    # client live only, anything before is in the snapshot only — never both.
+    history_msgs = _stream_history.render_for(state.prefs.get("filter_profanity", True))
     _manager.add(ws, state)
     client_ip = _extract_ip(ws.headers, str(ws.client.host) if ws.client else "unknown")
     _log.info("Client connected: %s (user=%s)", ws.client, user_id)
@@ -1593,6 +1692,9 @@ async def websocket_endpoint(
     await _manager.send_to(ws, _build_attendance_payload())
     await _manager.send_to(ws, _build_pending_payload())
     await _manager.send_to(ws, {"type": "voices_list", "voices": _list_voices()})
+    # Backfill the shared message stream accumulated since the last clear
+    # (snapshotted above, before this socket joined the broadcast set).
+    await _manager.send_to(ws, {"type": "chat_history", "messages": history_msgs})
     cached_online = is_online_cached()
     if cached_online is not None:
         await _manager.send_to(ws, {"type": "online_status", "online": cached_online})
@@ -1681,17 +1783,19 @@ async def websocket_endpoint(
                 sender_display = (
                     (_users_store.get_public_one(state.user_id) or {}).get("display_name") or ""
                 ) if _users_store else ""
+                chat_echo_base = {
+                    "type": "chat_echo",
+                    "ts": utc_now_iso(),
+                    "display_name": sender_display,
+                    "operator": data.get("operator") or "",
+                    "callsign": data.get("callsign") or "",
+                }
                 await _manager.broadcast_rx(
-                    {
-                        "type": "chat_echo",
-                        "ts": utc_now_iso(),
-                        "display_name": sender_display,
-                        "operator": data.get("operator") or "",
-                        "callsign": data.get("callsign") or "",
-                    },
+                    chat_echo_base,
                     text,
                     mask_profanity(text),
                 )
+                _stream_history.record_rx(chat_echo_base, text, mask_profanity(text))
 
             elif msg_type == "add_contact":
                 if _contacts_store is None:
@@ -1763,6 +1867,16 @@ async def websocket_endpoint(
             elif msg_type == "clear_attendance":
                 _attendance.clear()
                 await _manager.broadcast(_build_attendance_payload())
+
+            elif msg_type == "clear_chat":
+                # Admin-only, and global: wipe the shared stream for everyone.
+                if not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
+                    continue
+                _stream_history.clear()
+                await _manager.broadcast({"type": "chat_cleared"})
+                if _audit_log:
+                    _audit_log.log("admin_action", user_id=state.user_id, ip=client_ip, detail="clear_chat")
 
             elif msg_type == "list_journals":
                 if _config is None:

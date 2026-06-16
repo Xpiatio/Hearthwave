@@ -111,6 +111,20 @@ export interface SystemMsgMsg {
   text: string;
 }
 
+// One entry of the shared stream backfill (rx/tx/chat), as recorded server-side.
+export type StoredStreamMsg = RxMessageMsg | TxEchoMsg | ChatEchoMsg;
+
+// Sent once on connect: the whole shared message stream since the last clear.
+export interface ChatHistoryMsg {
+  type: 'chat_history';
+  messages: StoredStreamMsg[];
+}
+
+// Broadcast when an admin clears the chat — every client wipes its local log.
+export interface ChatClearedMsg {
+  type: 'chat_cleared';
+}
+
 // Attendance
 export interface AttendanceStation {
   callsign: string;
@@ -371,6 +385,8 @@ export type WsMessage =
   | TxStatusMsg
   | TxEchoMsg
   | ChatEchoMsg
+  | ChatHistoryMsg
+  | ChatClearedMsg
   | SystemMsgMsg
   | SessionAttendanceMsg
   | JournalsMsg
