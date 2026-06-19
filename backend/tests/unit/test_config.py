@@ -495,3 +495,29 @@ class TestVoxPrimer:
 
     def test_ms_override(self):
         assert make_config(vox_primer_ms=500).vox_primer_ms == 500
+
+
+# ---------------------------------------------------------------------------
+# Monitoring beacon
+# ---------------------------------------------------------------------------
+
+class TestMonitoringBeaconDefaults:
+    def test_enabled_default_false(self):
+        assert ServerConfig().monitoring_beacon_enabled is False
+
+    def test_interval_default_900(self):
+        assert ServerConfig().monitoring_beacon_interval == 900
+
+    def test_text_default(self):
+        assert ServerConfig().monitoring_beacon_text == "{callsign} Hearthwave base, monitoring."
+
+
+class TestMonitoringBeaconOverrides:
+    def test_enabled_override(self):
+        assert make_config(monitoring_beacon_enabled=True).monitoring_beacon_enabled is True
+
+    def test_interval_override(self):
+        assert make_config(monitoring_beacon_interval=300).monitoring_beacon_interval == 300
+
+    def test_text_override(self):
+        assert make_config(monitoring_beacon_text="CQ {callsign}").monitoring_beacon_text == "CQ {callsign}"
