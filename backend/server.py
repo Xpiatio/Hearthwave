@@ -145,6 +145,7 @@ from backend.text.metadata import extract_name_location
 from backend.text.shorthand import expand_tty_abbreviations
 from backend.text.profanity import mask_profanity
 from backend.text.placeholders import find_placeholders
+from backend.text.primer import prepend_primer_word
 from backend.tts.synthesizer import TTSSynthesizer
 from backend.beacon.monitoring import format_monitoring_call, should_emit_beacon
 
@@ -865,6 +866,8 @@ async def _tx_pump() -> None:
                 # to the radio.  Browsers are text-only for TX; nothing is streamed
                 # to clients (that would double-key audio on the base station, which
                 # runs a browser AND the radio).
+                if _config.vox_primer_word_enabled:
+                    text = prepend_primer_word(text, _config.vox_primer_word)
                 ptt = make_ptt(_config)
                 synth_timeout = _config.tx_synthesis_timeout_seconds
                 try:

@@ -974,3 +974,75 @@ class TestSetServerConfigVoxPrimerWord:
             status = next(f for f in frames if f["type"] == "status")
             assert status["vox_primer_word"] == "transmit"
             assert status["vox_primer_word_enabled"] is False
+
+
+class TestTxAppliesPrimerWord:
+    def test_enabled_prepends_word_to_synth_text(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        cfg["vox_primer_word_enabled"] = True
+        cfg["vox_primer_word"] = "transmit"
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()
+        captured: dict[str, str] = {}
+        synth_done = threading.Event()
+
+        async def _capture_synth(_voice, text, *_args, **_kwargs):
+            captured["text"] = text
+            synth_done.set()
+            return None, None
+
+        mock_tts.synthesize_to_buffer = _capture_synth
+
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch("backend.server.make_ptt", return_value=MagicMock()),
+            patch("piper.PiperVoice"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "tx_message", "callsign": "W5TST", "text": "hello"})
+                    _drain_until_idle(ws)
+                synth_done.wait(timeout=2.0)
+
+        assert "text" in captured, "synthesize_to_buffer was never called"
+        assert captured["text"].startswith("transmit. "), captured["text"]
+
+    def test_disabled_does_not_prepend(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)  # word primer off by default
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()
+        captured: dict[str, str] = {}
+        synth_done = threading.Event()
+
+        async def _capture_synth(_voice, text, *_args, **_kwargs):
+            captured["text"] = text
+            synth_done.set()
+            return None, None
+
+        mock_tts.synthesize_to_buffer = _capture_synth
+
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch("backend.server.make_ptt", return_value=MagicMock()),
+            patch("piper.PiperVoice"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "tx_message", "callsign": "W5TST", "text": "hello"})
+                    _drain_until_idle(ws)
+                synth_done.wait(timeout=2.0)
+
+        assert "text" in captured, "synthesize_to_buffer was never called"
+        assert not captured["text"].startswith("transmit. "), captured["text"]
