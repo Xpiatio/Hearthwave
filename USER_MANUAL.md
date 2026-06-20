@@ -1,6 +1,6 @@
 # Hearthwave User Manual
 
-> **Version:** v2.6.2
+> **Version:** v2.7.0
 
 This manual covers day-to-day operation of Hearthwave as a GMRS family hub or neighborhood watch base station — a shared radio operating station where every household member or watch volunteer connects from their own device. For installation and server setup, see [README.md](README.md).
 
@@ -80,7 +80,7 @@ The **login screen** appears automatically. Select your name from the profile li
 
 **New to the station?** Your administrator creates your account and gives you your initial password. You can change it any time via the account menu (see [Your account](#14-your-account)).
 
-The login screen shows the **Hearthwave logo** and an **About** link beneath the sign-in form. The About link displays the running version (e.g. *v2.6.2*) and opens the **About Hearthwave** dialog with project links and FCC information. Once signed in, you can reopen this dialog any time from the **logo in the top bar** or the **About Hearthwave** entry in the account menu.
+The login screen shows the **Hearthwave logo** and an **About** link beneath the sign-in form. The About link displays the running version (e.g. *v2.7.0*) and opens the **About Hearthwave** dialog with project links and FCC information. Once signed in, you can reopen this dialog any time from the **logo in the top bar** or the **About Hearthwave** entry in the account menu.
 
 If the server is unreachable, the status bar shows **OFFLINE** in amber. Refresh the page or contact your administrator.
 
@@ -259,6 +259,8 @@ Quick messages are stored in your browser's local storage — they are per-brows
 GMRS regulations require your station to identify with the callsign at least every 15 minutes. Hearthwave handles this automatically — every outgoing message is wrapped with the station callsign and the timer resets.
 
 **Manual "THIS IS" ID:** Tap the **THIS IS** button to send a standalone identification in NATO phonetics (e.g., *"This is Whiskey Quebec Zulu X-Ray 9 9 9"*). Use this at the start of a session or when required by net control. A `[TX] Station ID` entry appears in chat for all connected users.
+
+**Monitoring beacon (optional):** Hearthwave can also send a periodic presence call — *"<CALLSIGN> Hearthwave base, monitoring."* — on a fixed timer, announcing that the station is listening even when no one is on frequency. It is **off by default**. Enable it with the `monitoring_beacon_enabled` config key, and tune `monitoring_beacon_interval` (seconds between beacons, default 900) and `monitoring_beacon_text` (the spoken phrase; `{callsign}` is substituted). The beacon transmits only when the channel is clear, is suppressed while NCS mode is active, and — because it leads with your callsign — satisfies the FCC station ID when it airs, so it never double-IDs with the automatic identification above.
 
 ---
 
