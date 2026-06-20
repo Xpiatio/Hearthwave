@@ -94,6 +94,10 @@ class NCSPlugin(BasePlugin):
         self._announce_task: asyncio.Task | None = None
         self._seen_alerts: set[str] = set()
 
+    def is_active(self) -> bool:
+        """True while NCS / net-control mode is running."""
+        return self._active
+
     # ------------------------------------------------------------------
     # BasePlugin hooks
     # ------------------------------------------------------------------
