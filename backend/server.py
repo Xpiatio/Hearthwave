@@ -146,6 +146,7 @@ from backend.text.shorthand import expand_tty_abbreviations
 from backend.text.profanity import mask_profanity
 from backend.text.placeholders import find_placeholders
 from backend.tts.synthesizer import TTSSynthesizer
+from backend.beacon.monitoring import format_monitoring_call, should_emit_beacon
 
 import sounddevice as sd
 
@@ -198,6 +199,13 @@ _level_window: collections.deque = collections.deque(maxlen=_LEVEL_WINDOW_SIZE)
 # FCC ID-rule state — asyncio-only (both writers are asyncio tasks; no cross-thread writes)
 _last_id_time: datetime.datetime | None = None
 _has_transmitted: bool = False
+
+# Monitoring-beacon state — asyncio-only (single writer: the beacon pump task).
+_last_beacon_time: datetime.datetime | None = None
+
+# Set at startup to the live NCSPlugin instance so the beacon can suppress
+# itself while a net is active.
+_ncs_plugin = None
 
 # Pending stations — unknown callsigns detected in RX transcripts this session.
 # Maps CALLSIGN → {"name": str, "location": str} with heuristic values from the
@@ -1211,6 +1219,43 @@ async def _id_rule_pump() -> None:
             _log.error("_id_rule_pump error: %s", exc)
 
 
+async def _monitoring_beacon_pump() -> None:
+    """Emit a periodic presence beacon when enabled and the channel is clear.
+
+    Unlike _id_rule_pump (activity-gated), this fires on a fixed cadence. It is
+    suppressed while NCS mode is active, and when it fires it also resets the
+    FCC ID timer — the phrase contains the callsign, so it satisfies the ID.
+    """
+    global _last_beacon_time, _last_id_time, _has_transmitted
+    while True:
+        try:
+            await asyncio.sleep(60)
+            if _config is None:
+                continue
+            now = datetime.datetime.now(datetime.timezone.utc)
+            elapsed = (now - _last_beacon_time).total_seconds() if _last_beacon_time else float("inf")
+            ncs_active = _ncs_plugin.is_active() if _ncs_plugin is not None else False
+            if not should_emit_beacon(
+                enabled=_config.monitoring_beacon_enabled,
+                ncs_active=ncs_active,
+                channel_clear=_channel_clear,
+                elapsed=elapsed,
+                interval=_config.monitoring_beacon_interval,
+            ):
+                continue
+            spoken = format_monitoring_call(_config.monitoring_beacon_text, _config.callsign)
+            _last_beacon_time = now
+            _last_id_time = now
+            _has_transmitted = False
+            _log.info("Monitoring beacon: broadcasting presence announcement.")
+            await _manager.broadcast({"type": "tx_status", "status": "transmitting"})
+            await _tx_queue.put({"text": spoken, "_pre_formatted": True})
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            _log.error("_monitoring_beacon_pump error: %s", exc)
+
+
 async def _online_status_pump() -> None:
     """Probe FCC API reachability and broadcast online_status every 30 seconds.
 
@@ -1262,7 +1307,7 @@ async def _lifespan(app: FastAPI):
     """Startup / shutdown wiring."""
     global _config, _contacts_store, _users_store, _token_store, _stt_worker, _synthesizer, _monitor
     global _stt_out_queue, _tx_queue, _tts_event_queue, _background_tasks, _tx_abort_event
-    global _audio_level, _radio_error, _channel_clear, _last_id_time, _has_transmitted
+    global _audio_level, _radio_error, _channel_clear, _last_id_time, _has_transmitted, _last_beacon_time, _ncs_plugin
     global _level_window, _attendance, _spectro, _monitor_chunk_cb
     global _pending_stations, _auto_add_tasks, _event_loop, _audit_log
 
@@ -1347,6 +1392,7 @@ async def _lifespan(app: FastAPI):
     _channel_clear = True
     _last_id_time = None
     _has_transmitted = False
+    _last_beacon_time = None
     _level_window = collections.deque(maxlen=_LEVEL_WINDOW_SIZE)
     _attendance.clear()
     _stream_history.clear()
@@ -1385,7 +1431,7 @@ async def _lifespan(app: FastAPI):
 
     # Register plugins — must happen after _tx_queue and _config are initialised.
     from backend.plugins.ncs import NCSPlugin
-    plugin_registry.register(NCSPlugin(
+    _ncs_plugin = NCSPlugin(
         broadcast_fn=_manager.broadcast,
         tx_queue=_tx_queue,
         config_getter=lambda: _config,
@@ -1394,7 +1440,8 @@ async def _lifespan(app: FastAPI):
         add_contact_fn=lambda c: _contacts_store.add_contact(c) if _contacts_store else [],
         update_contact_fn=lambda cs, u, original_name=None: _contacts_store.update_contact(cs, u, original_name=original_name) if _contacts_store else [],
         broadcast_contacts_fn=lambda contacts: _manager.broadcast({"type": "contacts", "contacts": contacts}),
-    ))
+    )
+    plugin_registry.register(_ncs_plugin)
 
     _synthesizer = TTSSynthesizer(
         out_queue=_tts_event_queue,
@@ -1408,6 +1455,7 @@ async def _lifespan(app: FastAPI):
         asyncio.create_task(_tx_pump(), name="tx-pump"),
         asyncio.create_task(_status_pump(), name="status-pump"),
         asyncio.create_task(_id_rule_pump(), name="id-rule-pump"),
+        asyncio.create_task(_monitoring_beacon_pump(), name="monitoring-beacon-pump"),
         asyncio.create_task(_spectro.run(), name="spectro-pump"),
         asyncio.create_task(_online_status_pump(), name="online-status-pump"),
         asyncio.create_task(_voices_watcher_pump(), name="voices-watcher"),
