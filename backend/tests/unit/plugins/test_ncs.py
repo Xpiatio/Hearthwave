@@ -1012,3 +1012,18 @@ class TestAnnouncementLoop:
         ncs._channel_clear = channel_raises
         with patch("asyncio.sleep", side_effect=fake_sleep):
             await ncs._announcement_loop(0)
+
+
+# ---------------------------------------------------------------------------
+# is_active accessor
+# ---------------------------------------------------------------------------
+
+class TestIsActive:
+    def test_inactive_by_default(self):
+        ncs = make_ncs()
+        assert ncs.is_active() is False
+
+    def test_active_after_flag_set(self):
+        ncs = make_ncs()
+        ncs._active = True
+        assert ncs.is_active() is True
