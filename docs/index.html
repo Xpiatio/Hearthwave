@@ -622,7 +622,7 @@ footer{ border-top:1px solid var(--line); padding:54px 0 40px; color:var(--text-
       <div class="console">
         <div class="console-top"><i class="tl r"></i><i class="tl y"></i><i class="tl g"></i><span class="freq mono">STATION ID</span></div>
         <div class="console-body" style="min-height:auto;padding:24px">
-          <div class="msg" style="opacity:1;transform:none;animation:none"><span class="who tx">AUTO-ID</span><div class="txt">“WROA123 Hearthwave base, monitoring.”<small>Sent automatically · every 15 min during activity</small></div></div>
+          <div class="msg" style="opacity:1;transform:none;animation:none"><span class="who tx">BEACON</span><div class="txt">“WROA123 Hearthwave base, monitoring.”<small>Optional beacon · every 15 min when enabled</small></div></div>
           <div class="msg" style="opacity:1;transform:none;animation:none"><span class="who rx">RX</span><div class="txt">Mom: “Heading home, ETA ten minutes.”<small>Transcribed · logged to today's journal</small></div></div>
           <div class="msg" style="opacity:1;transform:none;animation:none"><span class="who tx">TX</span><div class="txt">You typed → spoken on air: “Copy, dinner's ready.”<small>Voice synthesis · WROA123</small></div></div>
         </div>
@@ -793,7 +793,7 @@ const lines=[
   {who:'rx', t:'Dad: "Pulling into the driveway now."', s:'Transcribed live · CH 18'},
   {who:'tx', t:'You typed → spoken on air: "Copy, gate is open."', s:'Voice synthesis · WROA123'},
   {who:'rx', t:'Neighbor: "Power flickered on Oak St, all good here."', s:'Transcribed live · logged'},
-  {who:'tx', t:'AUTO-ID: "WROA123 Hearthwave base, monitoring."', s:'Station ID · automatic'},
+  {who:'tx', t:'BEACON: "WROA123 Hearthwave base, monitoring."', s:'Monitoring beacon · optional'},
   {who:'rx', t:'Mom: "Grabbing milk, anything else?"', s:'Transcribed live · CH 18'},
 ];
 const feed=document.getElementById('feed');
