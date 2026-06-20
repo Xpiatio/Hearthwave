@@ -934,3 +934,43 @@ class TestTxMessageVoiceAs:
         mock_users.get_by_display_name.return_value = None
         loaded = self._run(cfg, mock_users, "Ghost")
         assert "fake_voice" in loaded
+
+
+# ---------------------------------------------------------------------------
+# set_server_config — vox priming word
+# ---------------------------------------------------------------------------
+
+class TestSetServerConfigVoxPrimerWord:
+    def _send_and_get_status(self, ws, data):
+        with patch("backend.config.ServerConfig.save"):
+            ws.send_json({"type": "set_server_config", **data})
+            return ws.receive_json()
+
+    def test_word_and_enabled_reflected_in_status(self, client):
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            msg = self._send_and_get_status(
+                ws, {"vox_primer_word_enabled": True, "vox_primer_word": "break"}
+            )
+            assert msg["type"] == "status"
+            assert msg["vox_primer_word_enabled"] is True
+            assert msg["vox_primer_word"] == "break"
+
+    def test_word_is_trimmed(self, client):
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            msg = self._send_and_get_status(ws, {"vox_primer_word": "  transmit  "})
+            assert msg["vox_primer_word"] == "transmit"
+
+    def test_word_capped_at_64_chars(self, client):
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            msg = self._send_and_get_status(ws, {"vox_primer_word": "x" * 100})
+            assert msg["vox_primer_word"] == "x" * 64
+
+    def test_status_default_word_is_transmit(self, client):
+        with client.websocket_connect(WS_URL) as ws:
+            frames = _drain_initial(ws)
+            status = next(f for f in frames if f["type"] == "status")
+            assert status["vox_primer_word"] == "transmit"
+            assert status["vox_primer_word_enabled"] is False
