@@ -279,6 +279,23 @@ class ServerConfig(dict):
         """Seconds between automated net announcements while NCS is active (default 600)."""
         return int(self.get("ncs_announcement_interval", 600))
 
+    # ---- monitoring beacon ----------------------------------------------
+
+    @property
+    def monitoring_beacon_enabled(self) -> bool:
+        """Emit a periodic presence beacon over the air (default off)."""
+        return bool(self.get("monitoring_beacon_enabled", False))
+
+    @property
+    def monitoring_beacon_interval(self) -> int:
+        """Seconds between monitoring beacons (default 900)."""
+        return int(self.get("monitoring_beacon_interval", 900))
+
+    @property
+    def monitoring_beacon_text(self) -> str:
+        """Beacon phrase template; {callsign} is substituted before TTS."""
+        return self.get("monitoring_beacon_text", "{callsign} Hearthwave base, monitoring.")
+
     # ---- server ----------------------------------------------------------
 
     @property
