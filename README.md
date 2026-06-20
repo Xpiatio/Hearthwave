@@ -214,8 +214,16 @@ npm run build      # production build
 
 ## Plugin system
 
-Plugins are React components that receive `PluginProps` (send, lastMessage,
-contacts, channelClear, transmitting) and register themselves at module init:
+Hearthwave has two independent plugin surfaces: **frontend** plugins (React UI
+panels) and **backend** plugins (`BasePlugin` hooks into the audio/message
+pipeline). NCS and SKYWARN are implemented as a backend plugin
+(`backend/plugins/ncs.py`) with a matching frontend panel.
+
+### Frontend plugins
+
+Frontend plugins are React components that receive `PluginProps` (send,
+lastMessage, contacts, channelClear, transmitting) and register themselves at
+module init:
 
 ```typescript
 import { registerPlugin } from '../plugins';
@@ -228,8 +236,51 @@ registerPlugin({
 ```
 
 The app shell mounts registered plugins in the draggable panel area via
-`PluginSlot`. Backend plugins extend `BasePlugin` and hook into the RX/TX
-pipeline via `on_rx`, `on_tx`, and `on_ws_message`.
+`PluginSlot`.
+
+### Backend plugins
+
+Backend plugins subclass `BasePlugin` (`backend/plugins/base.py`) and register an
+instance with the singleton `plugin_registry` **before the server accepts
+connections** (the NCS plugin is registered this way during server startup). Every
+hook is a no-op by default — override only the ones you need.
+
+```python
+from backend.plugins.base import BasePlugin
+from backend.plugins.registry import plugin_registry
+
+
+class WordGuard(BasePlugin):
+    async def on_rx_final(self, text: str) -> None:
+        # Runs after each finalized transcript is broadcast to clients.
+        log_to_disk(text)
+
+    async def on_audio_tx_pre_queue(self, payload: dict) -> dict | None:
+        # Block any outgoing transmission containing a banned word.
+        if "classified" in payload.get("text", "").lower():
+            return None            # None blocks the transmit
+        return payload             # return the (optionally modified) payload to allow it
+
+
+plugin_registry.register(WordGuard())
+```
+
+#### Hooks
+
+There are five hooks. They fire in plugin **registration order**.
+
+| Hook | Sync/async | Fires when | Return value |
+| --- | --- | --- | --- |
+| `on_client_message_received(payload, reply=None)` | async | Any connected client sends a WebSocket message | Ignored. `payload` is a copy — mutating it has no effect. `reply(msg: dict)` is an optional async callable that sends `msg` back to the originating client. |
+| `on_audio_rx_start()` | async | The squelch detector opens (incoming carrier detected) | Ignored. Bridged from the STT worker thread to the event loop automatically. |
+| `on_audio_rx_chunk(chunk)` | **sync** | Each raw audio chunk is captured from the input device | Ignored. `chunk` is a float32 numpy array at 16 kHz. **Hot path on the STT worker thread — keep it fast; do not `await` or call asyncio APIs.** |
+| `on_rx_final(text)` | async | Each finalized (non-partial) RX transcript is broadcast | Ignored. |
+| `on_audio_tx_pre_queue(payload)` | async | Before TX text enters the synthesis queue | Return `payload` (optionally modified) to allow the transmit, or `None` to block it. Plugins run in registration order and the **first to return `None` wins**. Modifiable fields: `text`, `_filter_profanity`, `_voice_name`, `_length_scale`. |
+
+Dispatch is exception-isolated: if a hook raises, the registry logs it and moves
+on to the next plugin (for `on_audio_tx_pre_queue`, a raising plugin is treated as
+pass-through, not a block). See `backend/plugins/registry.py` for the dispatchers
+and `backend/plugins/ncs.py` for a complete real-world plugin.
 
 ## License
 
