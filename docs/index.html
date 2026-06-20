@@ -494,7 +494,7 @@ footer{ border-top:1px solid var(--line); padding:54px 0 40px; color:var(--text-
       <div class="pill reveal">
         <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 2a15 15 0 0 0 0 20M12 2a15 15 0 0 1 0 20M3 9h18M3 15h18"/></svg></div>
         <h3>Built-in access</h3>
-        <p>Big-type mode, high contrast, keyboard PTT, and senior-friendly defaults — not bolted on, built in.</p>
+        <p>Keyboard PTT, large default type, light &amp; dark themes, and screen-reader labelling — not bolted on, built in.</p>
       </div>
     </div>
   </div>
@@ -522,9 +522,9 @@ footer{ border-top:1px solid var(--line); padding:54px 0 40px; color:var(--text-
       <div class="card reveal"><span class="k">PROFILES</span><h3>Multi-user</h3><p>Per-operator logins, voices, and preferences — one shared station.</p></div>
       <div class="card reveal"><span class="k">TX</span><h3>Voice &amp; keyboard PTT</h3><p>Push to talk from a key, a button, or speak — your choice.</p></div>
       <div class="card reveal"><span class="k">SKYWARN</span><h3>Weather alerts</h3><p>Built-in SKYWARN net control and severe-weather scripts.</p></div>
-      <div class="card wide reveal"><span class="k">LOGS</span><h3>Session journals &amp; FCC callsign lookup</h3><p>Every contact logged and searchable; resolve any callsign against the FCC database without leaving the page.</p></div>
-      <div class="card reveal"><span class="k">DISPLAY</span><h3>Senior-friendly</h3><p>Large type, high contrast, calm motion — usable by everyone at home.</p></div>
-      <div class="card reveal"><span class="k">AUDIO</span><h3>Priority mixer</h3><p>Real-time spectrogram and a mixer that keeps voice on top.</p></div>
+      <div class="card wide reveal"><span class="k">LOGS</span><h3>Session journals &amp; FCC callsign lookup</h3><p>Every contact logged to a session journal; resolve any callsign against an FCC license lookup without leaving the page.</p></div>
+      <div class="card reveal"><span class="k">DISPLAY</span><h3>Senior-friendly</h3><p>Large type, light &amp; dark themes, clear layout — usable by everyone at home.</p></div>
+      <div class="card reveal"><span class="k">AUDIO</span><h3>Spectrogram &amp; conditioning</h3><p>Real-time frequency display, with AGC and transmit-audio conditioning.</p></div>
     </div>
   </div>
 </section>
@@ -637,7 +637,7 @@ footer{ border-top:1px solid var(--line); padding:54px 0 40px; color:var(--text-
     <div class="sec-head reveal">
       <span class="eyebrow">Modules</span>
       <h2>Extend it <span class="grad">for your net.</span></h2>
-      <p class="lead">Hearthwave ships with two plugins built in. More can be added without touching the core server.</p>
+      <p class="lead">Hearthwave ships with two plugins built in. New ones subclass a base plugin and register at startup.</p>
     </div>
     <div class="mods">
       <div class="mod reveal">
@@ -664,7 +664,7 @@ footer{ border-top:1px solid var(--line); padding:54px 0 40px; color:var(--text-
     <div class="mod-build reveal">
       <div>
         <h3>Build your own plugin</h3>
-        <p>Plugins hook into five events: <code>on_rx_final</code>, <code>on_audio_rx_chunk</code>, <code>on_audio_tx_pre_queue</code>, and more. Subclass <code>BasePlugin</code> and drop it in — no core changes needed.</p>
+        <p>Plugins hook into five events: <code>on_rx_final</code>, <code>on_audio_rx_chunk</code>, <code>on_audio_tx_pre_queue</code>, and two more. Subclass <code>BasePlugin</code> and register it at startup.</p>
       </div>
       <a class="btn btn-primary" style="flex:none" href="https://github.com/Xpiatio/Hearthwave#plugins" target="_blank" rel="noopener">Plugin docs →</a>
     </div>
@@ -719,7 +719,7 @@ footer{ border-top:1px solid var(--line); padding:54px 0 40px; color:var(--text-
       <div class="req reveal">
         <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></div>
         <h4>VOX, or a USB PTT dongle</h4>
-        <p>VOX keying needs no wiring (a primer tone opens the radio first). Or key PTT via a USB serial adapter (RTS/DTR) or a CM108 sound-card GPIO.</p>
+        <p>VOX keying needs no wiring (a primer tone opens the radio first). Or key PTT via a USB serial adapter (RTS/DTR).</p>
       </div>
       <div class="req reveal">
         <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M10 6h4M12 17v.01"/></svg></div>
