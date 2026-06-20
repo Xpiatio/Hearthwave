@@ -936,6 +936,14 @@ async def _tx_pump() -> None:
                     finally:
                         ptt.unkey()
 
+                    # A monitoring beacon leads with the callsign, so once it has
+                    # keyed and aired it satisfies the FCC 15-minute ID. Reset the
+                    # ID timer here (confirmed air) rather than at enqueue — a beacon
+                    # discarded for a busy channel must not disarm the ID pump.
+                    if payload.get("_beacon") and not operator_aborted:
+                        _last_id_time = now
+                        _has_transmitted = False
+
             while True:
                 try:
                     _tts_event_queue.get_nowait()
@@ -1223,10 +1231,12 @@ async def _monitoring_beacon_pump() -> None:
     """Emit a periodic presence beacon when enabled and the channel is clear.
 
     Unlike _id_rule_pump (activity-gated), this fires on a fixed cadence. It is
-    suppressed while NCS mode is active, and when it fires it also resets the
-    FCC ID timer — the phrase contains the callsign, so it satisfies the ID.
+    suppressed while NCS mode is active. When the transmission actually airs,
+    `_tx_pump` resets the FCC ID timer (the phrase leads with the callsign, so it
+    satisfies the ID); the reset happens on confirmed air, not here, so a beacon
+    discarded for a busy channel never disarms the ID pump.
     """
-    global _last_beacon_time, _last_id_time, _has_transmitted
+    global _last_beacon_time
     while True:
         try:
             await asyncio.sleep(60)
@@ -1245,11 +1255,9 @@ async def _monitoring_beacon_pump() -> None:
                 continue
             spoken = format_monitoring_call(_config.monitoring_beacon_text, _config.callsign)
             _last_beacon_time = now
-            _last_id_time = now
-            _has_transmitted = False
             _log.info("Monitoring beacon: broadcasting presence announcement.")
             await _manager.broadcast({"type": "tx_status", "status": "transmitting"})
-            await _tx_queue.put({"text": spoken, "_pre_formatted": True})
+            await _tx_queue.put({"text": spoken, "_pre_formatted": True, "_beacon": True})
         except asyncio.CancelledError:
             break
         except Exception as exc:
