@@ -975,6 +975,15 @@ class TestSetServerConfigVoxPrimerWord:
             assert status["vox_primer_word"] == "transmit"
             assert status["vox_primer_word_enabled"] is False
 
+    def test_non_string_word_ignored(self, client):
+        # JSON null / numbers must not overwrite the word (str(None) would
+        # otherwise make the radio speak the literal "None").
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            for bad in (None, 123, ["transmit"]):
+                msg = self._send_and_get_status(ws, {"vox_primer_word": bad})
+                assert msg["vox_primer_word"] == "transmit"
+
 
 class TestTxAppliesPrimerWord:
     def test_enabled_prepends_word_to_synth_text(self, tmp_path):

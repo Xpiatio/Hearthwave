@@ -1622,8 +1622,8 @@ async def _ws_handle_set_server_config(ws: WebSocket, data: dict, state: "Connec
     if "vox_primer_word_enabled" in data:
         _config["vox_primer_word_enabled"] = bool(data["vox_primer_word_enabled"])
 
-    if "vox_primer_word" in data:
-        _config["vox_primer_word"] = str(data["vox_primer_word"]).strip()[:64]
+    if "vox_primer_word" in data and isinstance(data["vox_primer_word"], str):
+        _config["vox_primer_word"] = data["vox_primer_word"].strip()[:64]
 
     if "stt_debug_capture" in data:
         enabled = bool(data["stt_debug_capture"])
