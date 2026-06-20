@@ -37,6 +37,10 @@
     "journals_dir": "/data/journals",
     "contacts_file": "/data/contacts.json",
 
+    "monitoring_beacon_enabled": false,
+    "monitoring_beacon_interval": 900,
+    "monitoring_beacon_text": "{callsign} Hearthwave base, monitoring.",
+
     "host": "0.0.0.0",
     "port": 8765
 }
