@@ -17,7 +17,7 @@ without touching core server logic.
 Hearthwave is a fork of GMRS-TTY that replaces the desktop PySide6 UI with a
 browser-based React frontend communicating over WebSocket.
 
-> **Latest release:** v2.6.2
+> **Latest release:** v2.7.0
 
 ## Who uses it
 
@@ -31,6 +31,10 @@ browser-based React frontend communicating over WebSocket.
 
 ## Features
 
+- **Monitoring beacon** — an optional, periodic presence call
+  (`{callsign} Hearthwave base, monitoring.`) on a fixed timer. Off by default;
+  suppressed during NCS mode, transmits only on a clear channel, and doubles as
+  your FCC station ID when it airs (configurable interval and phrase)
 - **Refreshed brand** — a new Hearthwave logo (a home sheltering a radio set,
   with signal waves cresting off the roof) across the login screen, top bar,
   About dialog, and favicon, plus a redesigned project website that defaults to
