@@ -153,7 +153,7 @@ private tunnel.
 | Server | x86 mini PC or NUC (e.g. Intel N100; N305 or better recommended when running the two-tier final pass); ARM not supported |
 | RAM | 8 GB minimum, 16 GB recommended — Whisper STT is memory-intensive, and the optional two-tier final-pass model adds ~1.5 GB while active |
 | Audio | A two-way audio path to the radio's combo (speaker/mic) jack — either the computer's built-in 3.5 mm jack or a USB audio adapter (see [Connecting the radio](#connecting-the-radio)) |
-| PTT | VOX (no wiring — uses the VOX primer tone), a USB serial dongle (RTS/DTR), or a CM108 sound-card GPIO |
+| PTT | VOX (no wiring — uses the VOX primer tone), or a USB serial dongle (RTS/DTR) |
 | OS | Ubuntu 22.04+ or Debian 12+ recommended; Docker required |
 | Radio | Any GMRS transceiver with an external speaker/mic (combo) jack |
 
@@ -169,10 +169,9 @@ sound card. Two paths both work:
    the computer's built-in 3.5 mm headset/combo jack. Simplest setup; key the
    radio with **VOX** and enable the **VOX primer tone** so the radio is fully
    keyed before speech begins.
-2. **USB audio adapter** — run the K1 cable into a USB sound card (a CM108 fob,
-   DigiRig, or similar). Useful when the computer has no usable analog jack, or
-   when you want a dedicated card with hardware PTT. Here you can key PTT over a
-   USB serial dongle (RTS/DTR) or a CM108 adapter's GPIO pin instead of VOX.
+2. **USB audio adapter** — run the K1 cable into a USB sound card (a DigiRig or
+   similar). Useful when the computer has no usable analog jack. Here you can key
+   PTT over a USB serial dongle (RTS/DTR) instead of VOX.
 
 Pick the input/output devices and PTT mode on first run from the Setup screen,
 and adjust them later under **Admin Settings**.
