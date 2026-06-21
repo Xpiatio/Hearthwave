@@ -95,9 +95,10 @@ interface Props {
   /** When true, render just the form body (no Dialog chrome) for embedding in
    *  a tabbed SettingsDialog. The Save button is kept; Cancel/title are not. */
   embedded?: boolean;
+  onRescanVocabulary?: () => void;
 }
 
-export function ServerConfigPanel({ open, onClose, config, onSave, embedded = false }: Props) {
+export function ServerConfigPanel({ open, onClose, config, onSave, embedded = false, onRescanVocabulary }: Props) {
   const [vadThreshold, setVadThreshold] = useState(0.5);
   const [whisperModel, setWhisperModel] = useState('small.en');
   const [whisperModelFinal, setWhisperModelFinal] = useState('');
@@ -379,6 +380,16 @@ export function ServerConfigPanel({ open, onClose, config, onSave, embedded = fa
                 Add
               </Button>
             </Box>
+            {onRescanVocabulary && (
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={onRescanVocabulary}
+                sx={{ mt: 1 }}
+              >
+                Rescan vocabulary
+              </Button>
+            )}
           </Box>
 
           <Divider />

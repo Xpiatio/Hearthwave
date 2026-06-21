@@ -174,10 +174,17 @@ class ServerConfig(dict):
 
     @property
     def saved_phrases(self) -> list:
-        return list(self.get("saved_phrases", [
-            "break break", "copy that", "go ahead", "over", "10-4", "clear",
-            "QSL", "QSY", "QRZ", "standing by",
-        ]))
+        # Default empty: curated radio vocabulary now lives in backend/stt/vocab.py
+        # and is assembled server-side. saved_phrases holds only the operator's
+        # custom additions.
+        return list(self.get("saved_phrases", []))
+
+    @property
+    def stt_vocab_max_callsigns(self) -> int:
+        """Max number of contact callsigns to include in Whisper initial_prompt.
+        Callsigns are ~6 tokens each; smaller limit leaves room for procedure
+        vocabulary and custom phrases within the ~223-token budget."""
+        return int(self.get("stt_vocab_max_callsigns", 15))
 
     # ---- radio / service -------------------------------------------------
 

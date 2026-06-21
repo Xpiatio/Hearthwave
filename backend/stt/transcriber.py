@@ -14,7 +14,8 @@ class WhisperTranscriber:
 
     def __init__(self, model, saved_phrases=()):
         self.model = model
-        self.initial_prompt = self._build_prompt(saved_phrases)
+        self._count_tokens = self._make_token_counter(model)
+        self.initial_prompt = self._build_prompt(saved_phrases, count_tokens=self._count_tokens)
 
     @classmethod
     def load(cls, model_path, saved_phrases=(), *, cpu_threads=None):
@@ -47,16 +48,37 @@ class WhisperTranscriber:
     # token confidence and are almost always noise hallucinations.
     _AVG_LOGPROB_THRESHOLD = -1.0
 
+    # Whisper keeps only ~223 prompt tokens (the tail). Callers order phrases
+    # lowest-priority-first, so trimming from the front drops generic vocab
+    # while callsigns/custom phrases survive. 220 leaves a small margin.
+    _MAX_PROMPT_TOKENS = 220
+
     @staticmethod
-    def _build_prompt(phrases) -> str:
+    def _make_token_counter(model):
+        """Return a callable(str)->int. Uses the model's Whisper tokenizer when
+        available; falls back to a coarse char/4 heuristic (e.g. in unit tests
+        with no model)."""
+        tok = getattr(model, "hf_tokenizer", None)
+        if tok is not None:
+            return lambda s: len(tok.encode(s).ids)
+        return lambda s: max(1, len(s) // 4)
+
+    @staticmethod
+    def _build_prompt(phrases, *, count_tokens) -> str:
         base = "GMRS radio."
-        if phrases:
-            return f"{base} Phrases: {', '.join(phrases)}."
+        phrases = [p for p in (phrases or []) if p]
+        if not phrases:
+            return base
+        while phrases:
+            prompt = f"{base} Phrases: {', '.join(phrases)}."
+            if count_tokens(prompt) <= WhisperTranscriber._MAX_PROMPT_TOKENS:
+                return prompt
+            phrases.pop(0)
         return base
 
     def update_prompt(self, saved_phrases=()) -> None:
         """Rebuild the initial_prompt from a new phrase list (thread-safe via GIL)."""
-        self.initial_prompt = self._build_prompt(saved_phrases)
+        self.initial_prompt = self._build_prompt(saved_phrases, count_tokens=self._count_tokens)
 
     def transcribe(self, audio, *, vad_filter=True, drop_low_confidence=True):
         """Return transcribed text, or None when the output is empty or

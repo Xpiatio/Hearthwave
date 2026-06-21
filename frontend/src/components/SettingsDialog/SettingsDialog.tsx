@@ -30,6 +30,7 @@ interface Props {
   // System tab (ServerConfigPanel)
   serverConfig: ServerProps['config'];
   onServerConfigSave: ServerProps['onSave'];
+  onRescanVocabulary?: () => void;
 }
 
 /**
@@ -49,6 +50,7 @@ export function SettingsDialog({
   usersPanel,
   serverConfig,
   onServerConfigSave,
+  onRescanVocabulary,
 }: Props) {
   const [tab, setTab] = useState(0);
 
@@ -89,6 +91,7 @@ export function SettingsDialog({
             onClose={onClose}
             config={serverConfig}
             onSave={onServerConfigSave}
+            onRescanVocabulary={onRescanVocabulary}
           />
         </Box>
       </DialogContent>

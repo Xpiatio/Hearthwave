@@ -132,15 +132,6 @@ class TestTextDefaults:
     def test_saved_phrases_default_is_list(self):
         assert isinstance(ServerConfig().saved_phrases, list)
 
-    def test_saved_phrases_default_contains_expected_phrases(self):
-        phrases = ServerConfig().saved_phrases
-        assert "break break" in phrases
-        assert "copy that" in phrases
-        assert "over" in phrases
-
-    def test_saved_phrases_default_has_ten_entries(self):
-        assert len(ServerConfig().saved_phrases) == 10
-
 
 class TestTextOverrides:
     def test_filter_profanity_can_be_disabled(self):
@@ -157,7 +148,7 @@ class TestTextOverrides:
     def test_saved_phrases_returns_copy(self):
         cfg = ServerConfig()
         cfg.saved_phrases.clear()  # mutating the returned list must not affect the next call
-        assert len(cfg.saved_phrases) == 10
+        assert len(cfg.saved_phrases) == 0  # default is empty list
 
 
 # ---------------------------------------------------------------------------
@@ -521,6 +512,18 @@ class TestMonitoringBeaconOverrides:
 
     def test_text_override(self):
         assert make_config(monitoring_beacon_text="CQ {callsign}").monitoring_beacon_text == "CQ {callsign}"
+
+
+# ---------------------------------------------------------------------------
+# STT vocabulary biasing
+# ---------------------------------------------------------------------------
+
+def test_saved_phrases_default_empty():
+    assert ServerConfig().saved_phrases == []
+
+
+def test_stt_vocab_max_callsigns_default():
+    assert ServerConfig().stt_vocab_max_callsigns == 15
 
 
 # ---------------------------------------------------------------------------

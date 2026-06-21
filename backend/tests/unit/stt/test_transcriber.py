@@ -7,6 +7,10 @@ import numpy as np
 from backend.stt.transcriber import WhisperTranscriber
 
 
+def _wordcount(s):  # fake tokenizer: 1 token per word
+    return len(s.split())
+
+
 def _make(phrases=()):
     return WhisperTranscriber(model=MagicMock(), saved_phrases=phrases)
 
@@ -74,24 +78,39 @@ class TestTranscribeFiltering:
 
 class TestBuildPrompt:
     def test_empty_list_returns_base(self):
-        assert WhisperTranscriber._build_prompt([]) == "GMRS radio."
+        assert WhisperTranscriber._build_prompt([], count_tokens=_wordcount) == "GMRS radio."
 
     def test_empty_tuple_returns_base(self):
-        assert WhisperTranscriber._build_prompt(()) == "GMRS radio."
+        assert WhisperTranscriber._build_prompt((), count_tokens=_wordcount) == "GMRS radio."
 
     def test_single_phrase(self):
-        assert WhisperTranscriber._build_prompt(["break break"]) == (
+        assert WhisperTranscriber._build_prompt(["break break"], count_tokens=_wordcount) == (
             "GMRS radio. Phrases: break break."
         )
 
     def test_multiple_phrases_joined(self):
-        assert WhisperTranscriber._build_prompt(["over", "10-4", "QSL"]) == (
+        assert WhisperTranscriber._build_prompt(["over", "10-4", "QSL"], count_tokens=_wordcount) == (
             "GMRS radio. Phrases: over, 10-4, QSL."
         )
 
     def test_phrases_containing_commas_pass_through(self):
-        result = WhisperTranscriber._build_prompt(["break, break"])
+        result = WhisperTranscriber._build_prompt(["break, break"], count_tokens=_wordcount)
         assert result == "GMRS radio. Phrases: break, break."
+
+    def test_build_prompt_frames_phrases(self):
+        from backend.stt.transcriber import WhisperTranscriber
+        out = WhisperTranscriber._build_prompt(["over", "KE8AAA"], count_tokens=_wordcount)
+        assert out == "GMRS radio. Phrases: over, KE8AAA."
+
+    def test_build_prompt_token_trims_keeping_tail(self):
+        from backend.stt.transcriber import WhisperTranscriber
+        # Force a tiny budget by using a counter that overcounts, proving the
+        # front is dropped and the high-priority tail token survives.
+        phrases = [f"term{i}" for i in range(300)] + ["KE8ZZZ"]
+        out = WhisperTranscriber._build_prompt(phrases, count_tokens=_wordcount)
+        assert _wordcount(out) <= WhisperTranscriber._MAX_PROMPT_TOKENS
+        assert out.endswith("KE8ZZZ.")
+        assert "term0," not in out
 
 
 # ---------------------------------------------------------------------------
