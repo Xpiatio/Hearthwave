@@ -47,11 +47,22 @@ class WhisperTranscriber:
     # token confidence and are almost always noise hallucinations.
     _AVG_LOGPROB_THRESHOLD = -1.0
 
+    # Whisper keeps only ~224 tokens of initial_prompt. ~700 chars ≈ ~200 tokens
+    # leaves headroom. Callers order phrases lowest-priority-first, so trimming
+    # from the front drops generic vocab while callsigns/custom phrases survive.
+    _MAX_PROMPT_CHARS = 700
+
     @staticmethod
     def _build_prompt(phrases) -> str:
         base = "GMRS radio."
-        if phrases:
-            return f"{base} Phrases: {', '.join(phrases)}."
+        phrases = [p for p in (phrases or []) if p]
+        if not phrases:
+            return base
+        while phrases:
+            prompt = f"{base} Phrases: {', '.join(phrases)}."
+            if len(prompt) <= WhisperTranscriber._MAX_PROMPT_CHARS:
+                return prompt
+            phrases.pop(0)
         return base
 
     def update_prompt(self, saved_phrases=()) -> None:
