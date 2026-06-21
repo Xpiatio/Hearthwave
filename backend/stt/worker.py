@@ -163,9 +163,6 @@ class STTWorker:
         # finalized utterance is re-transcribed whole on a low-priority
         # thread and broadcast as a replacing final.
         self.whisper_model_final = (whisper_model_final or "").strip()
-        self.whisper_model_final_path = (
-            str(self._MODELS_DIR / self.whisper_model_final) if self.whisper_model_final else ""
-        )
         self.final_max_s = float(final_max_s)
         self.stt_final_device = stt_final_device
         self._final_q: "queue.Queue | None" = (
@@ -743,12 +740,6 @@ class STTWorker:
         """Load a single backend's final transcriber, or None on missing dir."""
         path = self._final_model_path(backend)
         if not os.path.isdir(path):
-            self._emit_error(
-                f"Final-pass model not found at '{path}'. Run "
-                f"'python bootstrap_models.py --final-model {self.whisper_model_final}' "
-                f"(backend={backend}), then copy Models/ here. "
-                f"Falling back to single-pass transcription."
-            )
             return None
         self._emit_status(f"Loading final-pass model {self.whisper_model_final} ({backend})...")
         cores = os.cpu_count() or 2
@@ -779,12 +770,24 @@ class STTWorker:
                 self._emit_error(f"GPU final-pass load failed ({e}); falling back to CPU.")
                 transcriber = None
             if transcriber is None:
+                self._emit_status(
+                    f"Final-pass GPU model not available; falling back to CPU."
+                )
                 backend = "cpu"
         if transcriber is None:
             try:
                 transcriber = self._load_one_final("cpu")
             except Exception as e:
                 self._emit_error(f"Failed to load final-pass model: {e}")
+                return None
+            if transcriber is None:
+                path = self._final_model_path("cpu")
+                self._emit_error(
+                    f"Final-pass model not found at '{path}'. Run "
+                    f"'python bootstrap_models.py --final-model {self.whisper_model_final}' "
+                    f"then copy Models/ here. "
+                    f"Falling back to single-pass transcription."
+                )
                 return None
 
         if transcriber is not None and cache is not None:
