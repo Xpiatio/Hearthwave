@@ -25,13 +25,8 @@ services:
       - /run/user/${PULSE_UID:-1000}/pulse:/run/pulse:ro
     environment:
       - PULSE_SERVER=unix:/run/pulse/native
-      - HSA_OVERRIDE_GFX_VERSION=${HSA_OVERRIDE_GFX_VERSION:-10.3.0}
     devices:
       - /dev/snd:/dev/snd
-      - /dev/kfd:/dev/kfd
-      - /dev/dri:/dev/dri
-    group_add:
-      - "${RENDER_GID:-992}"
     restart: unless-stopped
     networks:
       - radio
