@@ -1,4 +1,4 @@
-import { createTheme } from '@mui/material/styles';
+import { createTheme, type Theme } from '@mui/material/styles';
 
 export function makeTheme(dark: boolean) {
   return createTheme({
@@ -103,6 +103,24 @@ export function makeTheme(dark: boolean) {
             color: '#F9FAFB',
             fontWeight: 700,
           }),
+        },
+      },
+    },
+  });
+}
+
+export function withTouchDensity(theme: Theme): Theme {
+  return createTheme(theme, {
+    components: {
+      MuiButton: {
+        styleOverrides: {
+          root: { minHeight: 56 },
+          sizeLarge: { minHeight: 64 },
+        },
+      },
+      MuiIconButton: {
+        styleOverrides: {
+          root: { minHeight: 52, minWidth: 52 },
         },
       },
     },
