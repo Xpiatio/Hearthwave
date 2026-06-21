@@ -3,7 +3,9 @@ import userEvent from '@testing-library/user-event'
 import { ThemeProvider } from '@mui/material/styles'
 import { makeTheme } from '../../../theme'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { createRef } from 'react'
 import { AdminPanel } from '../AdminPanel'
+import type { AdminPanelHandle } from '../AdminPanel'
 import type { VoiceOption } from '../../../types/ws'
 
 function render(ui: React.ReactElement) {
@@ -377,5 +379,33 @@ describe('AdminPanel', () => {
     expect(props.onSave).toHaveBeenCalledWith(
       expect.objectContaining({ voice: 'voice_en_us_2' })
     )
+  })
+
+  // -------------------------------------------------------------------------
+  // Imperative handle, dirty reporting, hideSaveButton
+  // -------------------------------------------------------------------------
+
+  it('exposes an imperative save() that calls onSave without closing', async () => {
+    const onSave = vi.fn(); const onClose = vi.fn()
+    const ref = createRef<AdminPanelHandle>()
+    render(<AdminPanel {...makeDefaultProps()} ref={ref} onSave={onSave} onClose={onClose} embedded />)
+    ref.current!.save()
+    expect(onSave).toHaveBeenCalledTimes(1)
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('reports dirty state via onDirtyChange when a field changes', async () => {
+    const onDirtyChange = vi.fn()
+    render(<AdminPanel {...makeDefaultProps()} embedded onDirtyChange={onDirtyChange} />)
+    // initial mount reports clean
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false)
+    const nameField = screen.getByLabelText(/station name/i)
+    await userEvent.type(nameField, 'X')
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true)
+  })
+
+  it('hides the embedded Save button when hideSaveButton is set', () => {
+    render(<AdminPanel {...makeDefaultProps()} embedded hideSaveButton />)
+    expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument()
   })
 })
