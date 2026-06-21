@@ -20,6 +20,11 @@ RUN if [ "$COMPUTE_BACKEND" = "cuda" ]; then \
         pip install --no-cache-dir --prefix=/install onnxruntime-gpu; \
     elif [ "$COMPUTE_BACKEND" = "openvino" ]; then \
         pip install --no-cache-dir --prefix=/install openvino onnxruntime-openvino; \
+    elif [ "$COMPUTE_BACKEND" = "rocm" ]; then \
+        pip install --no-cache-dir --prefix=/install \
+            --index-url https://download.pytorch.org/whl/rocm6.4 \
+            torch torchaudio && \
+        pip install --no-cache-dir --prefix=/install transformers accelerate; \
     fi
 
 # ── Stage 2: runtime ────────────────────────────────────────────────────────
