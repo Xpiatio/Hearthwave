@@ -151,9 +151,12 @@ export interface MobileAppProps {
   publishSnack: string | null;
   errorSnack: string | null;
   journalSavedSnack: string | null;
+  vocabSnack: string | null;
   onClosePublishSnack: () => void;
   onCloseErrorSnack: () => void;
   onCloseJournalSavedSnack: () => void;
+  onCloseVocabSnack: () => void;
+  onRescanVocabulary?: () => void;
 }
 
 export function MobileApp({
@@ -229,9 +232,12 @@ export function MobileApp({
   publishSnack,
   errorSnack,
   journalSavedSnack,
+  vocabSnack,
   onClosePublishSnack,
   onCloseErrorSnack,
   onCloseJournalSavedSnack,
+  onCloseVocabSnack,
+  onRescanVocabulary,
 }: MobileAppProps) {
   const [tab, setTab] = useState(0);
   const messageInputRef = useRef<MessageInputHandle>(null);
@@ -375,6 +381,7 @@ export function MobileApp({
         onPreviewVoice={onPreviewVoice}
         serverConfig={serverConfig}
         onServerConfigSave={onServerConfigSave}
+        onRescanVocabulary={onRescanVocabulary}
         usersPanel={profile.is_admin && (
           <UsersPanel
             profiles={profiles}
@@ -416,6 +423,17 @@ export function MobileApp({
       >
         <Alert onClose={onCloseJournalSavedSnack} severity="success" aria-live="polite" aria-atomic="true" sx={{ width: '100%' }}>
           {journalSavedSnack}
+        </Alert>
+      </Snackbar>
+
+      <Snackbar
+        open={vocabSnack !== null}
+        autoHideDuration={4000}
+        onClose={onCloseVocabSnack}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={onCloseVocabSnack} severity="success" aria-live="polite" aria-atomic="true" sx={{ width: '100%' }}>
+          {vocabSnack}
         </Alert>
       </Snackbar>
     </Box>

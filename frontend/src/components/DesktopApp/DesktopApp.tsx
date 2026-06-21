@@ -194,9 +194,12 @@ export interface DesktopAppProps {
   publishSnack: string | null;
   errorSnack: string | null;
   journalSavedSnack: string | null;
+  vocabSnack: string | null;
   onClosePublishSnack: () => void;
   onCloseErrorSnack: () => void;
   onCloseJournalSavedSnack: () => void;
+  onCloseVocabSnack: () => void;
+  onRescanVocabulary?: () => void;
 }
 
 export function DesktopApp({
@@ -310,9 +313,12 @@ export function DesktopApp({
   publishSnack,
   errorSnack,
   journalSavedSnack,
+  vocabSnack,
   onClosePublishSnack,
   onCloseErrorSnack,
   onCloseJournalSavedSnack,
+  onCloseVocabSnack,
+  onRescanVocabulary,
 }: DesktopAppProps) {
   const messageInputRef = useRef<MessageInputHandle>(null);
   const sensors = useSensors(
@@ -536,6 +542,7 @@ export function DesktopApp({
         onPreviewVoice={onPreviewVoice}
         serverConfig={serverConfig}
         onServerConfigSave={onServerConfigSave}
+        onRescanVocabulary={onRescanVocabulary}
         usersPanel={profile.is_admin && (
           <UsersPanel
             profiles={profiles}
@@ -595,6 +602,23 @@ export function DesktopApp({
           aria-atomic="true"
         >
           {journalSavedSnack}
+        </Alert>
+      </Snackbar>
+
+      <Snackbar
+        open={vocabSnack !== null}
+        autoHideDuration={4000}
+        onClose={onCloseVocabSnack}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={onCloseVocabSnack}
+          severity="success"
+          sx={{ width: '100%' }}
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {vocabSnack}
         </Alert>
       </Snackbar>
     </Box>
