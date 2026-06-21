@@ -18,29 +18,16 @@ NATO: tuple[str, ...] = (
     "X-ray", "Yankee", "Zulu",
 )
 
-CB: tuple[str, ...] = (
-    "breaker", "breaker breaker", "what's your twenty", "smokey", "bear",
-    "handle", "good buddy", "back door", "front door", "ratchet jaw", "ears",
-    "negatory", "come back", "wall to wall", "ten codes", "kojak with a kodak",
+# High-value procedure words and Q-codes. Kept deliberately small: the full
+# curated set consumed Whisper's entire ~223-token initial_prompt budget,
+# leaving no room for contact callsigns (~6 tokens each). See spec revision.
+PROCEDURE: tuple[str, ...] = (
+    "over", "out", "roger", "affirmative", "negative", "copy that",
+    "say again", "standing by", "break break", "CQ", "QSL", "QSY", "QRZ",
+    "seventy three",
 )
 
-HAM: tuple[str, ...] = (
-    "CQ", "QSL", "QSY", "QRZ", "QRM", "QRN", "QTH", "QSO", "QRP", "QRT", "QSB",
-    "QRO", "roger", "affirmative", "say again", "monitoring", "seventy three",
-)
-
-GMRS: tuple[str, ...] = (
-    "GMRS", "repeater", "simplex", "duplex", "privacy code", "PL tone",
-    "kerchunk", "channel", "split tone", "travel tone",
-)
-
-MURS: tuple[str, ...] = (
-    "MURS", "blue dot", "green dot", "multi use radio service",
-)
-
-# Priority order among curated sets does not matter (all rank below saved
-# phrases and callsigns), but the concatenation is fixed for determinism.
-CURATED: tuple[str, ...] = NATO + CB + HAM + GMRS + MURS
+CURATED: tuple[str, ...] = NATO + PROCEDURE
 
 
 def assemble_phrases(callsigns, saved_phrases, *, max_callsigns) -> list[str]:

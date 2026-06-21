@@ -1,13 +1,16 @@
 from backend.stt import vocab
 
 
-def test_curated_sets_present():
-    # NATO alphabet fully represented; a few band terms present.
+def test_curated_core_is_nato_plus_procedure():
+    # NATO fully present
     assert "Alfa" in vocab.CURATED and "Zulu" in vocab.CURATED
-    assert "breaker" in vocab.CURATED      # CB
-    assert "QSL" in vocab.CURATED          # HAM
-    assert "repeater" in vocab.CURATED     # GMRS
-    assert "MURS" in vocab.CURATED         # MURS
+    # key procedure words / Q-codes present
+    for t in ("over", "roger", "say again", "standing by", "QSL", "CQ"):
+        assert t in vocab.CURATED
+    # CB slang and band-identifier extras were dropped from the core
+    for t in ("breaker", "kerchunk", "MURS", "good buddy", "ratchet jaw"):
+        assert t not in vocab.CURATED
+    assert len(vocab.CURATED) == 40
 
 
 def test_callsigns_come_last_so_they_survive_tail_trim():

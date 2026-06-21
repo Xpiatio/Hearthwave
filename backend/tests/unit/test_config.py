@@ -526,4 +526,4 @@ def test_saved_phrases_default_empty():
 
 
 def test_stt_vocab_max_callsigns_default():
-    assert ServerConfig().stt_vocab_max_callsigns == 100
+    assert ServerConfig().stt_vocab_max_callsigns == 15
