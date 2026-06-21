@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, forwardRef, useImperativeHandle, useRef } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -108,9 +108,49 @@ interface Props {
    *  a tabbed SettingsDialog. The Save button is kept; Cancel/title are not. */
   embedded?: boolean;
   onRescanVocabulary?: () => void;
+  /** When true, suppress the embedded/standalone Save button (e.g. a parent
+   *  dialog supplies its own footer Save button via the imperative ref). */
+  hideSaveButton?: boolean;
+  /** Called whenever the form's dirty state changes relative to the seed
+   *  snapshot captured when the panel was last opened or imperatively saved. */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
-export function ServerConfigPanel({ open, onClose, config, onSave, embedded = false, onRescanVocabulary }: Props) {
+export interface ServerConfigPanelHandle {
+  save(): void;
+}
+
+function valuesFromConfig(c: ServerConfig): ServerConfigSaveValues {
+  return {
+    vad_threshold: c.vadThreshold,
+    whisper_model: c.whisperModel,
+    whisper_model_final: c.whisperModelFinal,
+    squelch_adaptive: c.squelchAdaptive,
+    stt_debug_capture: c.sttDebugCapture,
+    tx_conditioning: c.txConditioning,
+    vox_primer_enabled: c.voxPrimerEnabled,
+    vox_primer_ms: c.voxPrimerMs,
+    vox_primer_word_enabled: c.voxPrimerWordEnabled,
+    vox_primer_word: c.voxPrimerWord.trim(),
+    ptt_mode: c.pttMode,
+    ptt_serial_port: c.pttSerialPort.trim(),
+    ptt_serial_line: c.pttSerialLine,
+    monitor_passthrough: c.monitorPassthrough,
+    attendance_enabled: c.attendanceEnabled,
+    saved_phrases: c.savedPhrases,
+    meshcore_enabled: c.meshcoreEnabled,
+    meshcore_serial_port: c.meshcoreSerialPort.trim(),
+    meshcore_baud: c.meshcoreBaud,
+    meshcore_max_packet_length: c.meshcoreMaxPacketLength,
+    meshcore_prefix_separator: c.meshcorePrefixSeparator,
+    meshcore_channel_idx: c.meshcoreChannelIdx,
+  };
+}
+
+export const ServerConfigPanel = forwardRef<ServerConfigPanelHandle, Props>(function ServerConfigPanel(
+  { open, onClose, config, onSave, embedded = false, onRescanVocabulary, hideSaveButton = false, onDirtyChange },
+  ref
+) {
   const [vadThreshold, setVadThreshold] = useState(0.5);
   const [whisperModel, setWhisperModel] = useState('small.en');
   const [whisperModelFinal, setWhisperModelFinal] = useState('');
@@ -134,6 +174,8 @@ export function ServerConfigPanel({ open, onClose, config, onSave, embedded = fa
   const [meshcoreMaxPacketLength, setMeshcoreMaxPacketLength] = useState(140);
   const [meshcorePrefixSeparator, setMeshcorePrefixSeparator] = useState(': ');
   const [meshcoreChannelIdx, setMeshcoreChannelIdx] = useState(0);
+
+  const seedRef = useRef<string>('');
 
   // Re-initialize only when dialog opens — prevent live WS updates from
   // resetting in-progress edits.
@@ -162,8 +204,19 @@ export function ServerConfigPanel({ open, onClose, config, onSave, embedded = fa
     setMeshcoreMaxPacketLength(config.meshcoreMaxPacketLength);
     setMeshcorePrefixSeparator(config.meshcorePrefixSeparator);
     setMeshcoreChannelIdx(config.meshcoreChannelIdx);
+    // Compute seed from config directly (state setters are async), mirroring
+    // buildValues() serialization.
+    seedRef.current = JSON.stringify(valuesFromConfig(config));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // For embedded panels that start open=true (always open), seed on first mount.
+  useEffect(() => {
+    if (!embedded) return;
+    seedRef.current = JSON.stringify(valuesFromConfig(config));
+    // Only run on first mount for the embedded case.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleAddPhrase() {
     const trimmed = newPhrase.trim();
@@ -176,8 +229,8 @@ export function ServerConfigPanel({ open, onClose, config, onSave, embedded = fa
     setSavedPhrases((prev) => prev.filter((p) => p !== phrase));
   }
 
-  function handleSave() {
-    onSave({
+  function buildValues(): ServerConfigSaveValues {
+    return {
       vad_threshold: vadThreshold,
       whisper_model: whisperModel,
       whisper_model_final: whisperModelFinal,
@@ -200,7 +253,24 @@ export function ServerConfigPanel({ open, onClose, config, onSave, embedded = fa
       meshcore_max_packet_length: meshcoreMaxPacketLength,
       meshcore_prefix_separator: meshcorePrefixSeparator,
       meshcore_channel_idx: meshcoreChannelIdx,
-    });
+    };
+  }
+
+  // Report dirty on every render (cheap; React bails out on equal state).
+  useEffect(() => {
+    onDirtyChange?.(JSON.stringify(buildValues()) !== seedRef.current);
+  });
+
+  function commitValues() {
+    const values = buildValues();
+    onSave(values);
+    seedRef.current = JSON.stringify(values);
+  }
+
+  useImperativeHandle(ref, () => ({ save: commitValues }));
+
+  function handleSave() { // used only by the embedded/standalone button
+    commitValues();
     onClose();
   }
 
@@ -584,7 +654,7 @@ export function ServerConfigPanel({ open, onClose, config, onSave, embedded = fa
         </Box>
   );
 
-  const saveButton = (
+  const saveButton = hideSaveButton ? null : (
     <Button onClick={handleSave} variant="contained">Save</Button>
   );
 
@@ -609,4 +679,4 @@ export function ServerConfigPanel({ open, onClose, config, onSave, embedded = fa
       </DialogActions>
     </Dialog>
   );
-}
+});

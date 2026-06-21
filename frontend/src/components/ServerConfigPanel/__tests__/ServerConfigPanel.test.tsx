@@ -3,8 +3,9 @@ import userEvent from '@testing-library/user-event'
 import { ThemeProvider } from '@mui/material/styles'
 import { makeTheme } from '../../../theme'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { createRef } from 'react'
 import { ServerConfigPanel } from '../ServerConfigPanel'
-import type { ServerConfig } from '../ServerConfigPanel'
+import type { ServerConfig, ServerConfigPanelHandle } from '../ServerConfigPanel'
 
 function render(ui: React.ReactElement) {
   return rtlRender(
@@ -462,4 +463,22 @@ describe('ServerConfigPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /rescan vocabulary/i }));
     expect(onRescanVocabulary).toHaveBeenCalledTimes(1);
   });
+
+  // -------------------------------------------------------------------------
+  // Imperative ref + hideSaveButton
+  // -------------------------------------------------------------------------
+
+  it('exposes imperative save() that calls onSave without closing', () => {
+    const onSave = vi.fn(); const onClose = vi.fn()
+    const ref = createRef<ServerConfigPanelHandle>()
+    render(<ServerConfigPanel {...makeDefaultProps()} ref={ref} onSave={onSave} onClose={onClose} embedded />)
+    ref.current!.save()
+    expect(onSave).toHaveBeenCalledTimes(1)
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('hides the embedded Save button when hideSaveButton is set', () => {
+    render(<ServerConfigPanel {...makeDefaultProps()} embedded hideSaveButton />)
+    expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument()
+  })
 })
