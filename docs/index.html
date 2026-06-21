@@ -639,7 +639,7 @@ footer{ border-top:1px solid var(--line); padding:54px 0 40px; color:var(--text-
     <div class="sec-head reveal">
       <span class="eyebrow">Modules</span>
       <h2>Extend it <span class="grad">for your net.</span></h2>
-      <p class="lead">Hearthwave ships with two plugins built in. New ones subclass a base plugin and register at startup.</p>
+      <p class="lead">Hearthwave ships with three plugins built in. New ones subclass a base plugin and register at startup.</p>
     </div>
     <div class="mods">
       <div class="mod reveal">
@@ -662,11 +662,21 @@ footer{ border-top:1px solid var(--line); padding:54px 0 40px; color:var(--text-
           <li><span class="s">✦</span><span><b>Per-county targeting</b> — set your NWS zone code once in config — only alerts relevant to your area come through.</span></li>
         </ul>
       </div>
+      <div class="mod reveal">
+        <div class="mod-top"><h3>MeshCore Bridge</h3><span class="badge">BUILT-IN</span></div>
+        <p>Forwards every transmission onto a MeshCore LoRa mesh over a USB Companion radio, so your group stays in contact off-grid.</p>
+        <ul>
+          <li><span class="s">✦</span><span><b>Name-prefixed</b> — each message reaches the mesh as <code>Ben: …</code>, so mesh-only members know who is talking.</span></li>
+          <li><span class="s">✦</span><span><b>Outbound only</b> — only what you transmit is bridged; received radio traffic is never forwarded.</span></li>
+          <li><span class="s">✦</span><span><b>Fits one frame</b> — a live character counter caps the message box to the mesh packet length minus the name prefix.</span></li>
+          <li><span class="s">✦</span><span><b>Never blocks the radio</b> — best-effort, non-blocking forward; the over always airs on GMRS normally.</span></li>
+        </ul>
+      </div>
     </div>
     <div class="mod-build reveal">
       <div>
         <h3>Build your own plugin</h3>
-        <p>Plugins hook into five events: <code>on_rx_final</code>, <code>on_audio_rx_chunk</code>, <code>on_audio_tx_pre_queue</code>, and two more. Subclass <code>BasePlugin</code> and register it at startup.</p>
+        <p>Plugins hook into six events: <code>on_rx_final</code>, <code>on_audio_rx_chunk</code>, <code>on_audio_tx_pre_queue</code>, <code>on_config_changed</code>, and two more. Subclass <code>BasePlugin</code> and register it at startup.</p>
       </div>
       <a class="btn btn-primary" style="flex:none" href="https://github.com/Xpiatio/Hearthwave#plugins" target="_blank" rel="noopener">Plugin docs →</a>
     </div>
