@@ -66,6 +66,24 @@ def known_callsigns(contacts: list[ContactDict]) -> set[str]:
     return known
 
 
+def ordered_callsigns(contacts: list[ContactDict]) -> list[str]:
+    """Return UPPERCASED callsigns in contacts-file insertion order, pulled from
+    every populated callsign field, deduped preserving first appearance. Skips
+    the 'ALL' open-call shortcut and blanks. Order matters here (unlike
+    known_callsigns, which returns an unordered set) so the STT vocabulary cap
+    can keep the most-recently-added callsigns."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for c in contacts or []:
+        for field in _CALLSIGN_FIELDS:
+            cs = normalize_callsign(c.get(field, ""))
+            if not cs or cs == "ALL" or cs in seen:
+                continue
+            seen.add(cs)
+            out.append(cs)
+    return out
+
+
 def index_contacts_by_callsign(contacts: list[ContactDict]) -> dict[str, list[ContactDict]]:
     """Return {UPPERCASED_CALLSIGN: [contact, …]} for use as a fast lookup.
 
