@@ -1,3 +1,5 @@
+import logging
+
 from backend.stt import vocab
 
 
@@ -30,7 +32,6 @@ def test_dedup_keeps_highest_priority_occurrence():
 
 
 def test_callsign_cap_keeps_newest_and_logs(caplog):
-    import logging
     calls = [f"K{i:04d}" for i in range(105)]
     with caplog.at_level(logging.INFO):
         out = vocab.assemble_phrases(calls, [], max_callsigns=100)

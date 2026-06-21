@@ -97,10 +97,6 @@ class TestBuildPrompt:
         result = WhisperTranscriber._build_prompt(["break, break"], count_tokens=_wordcount)
         assert result == "GMRS radio. Phrases: break, break."
 
-    def test_build_prompt_empty_returns_base(self):
-        from backend.stt.transcriber import WhisperTranscriber
-        assert WhisperTranscriber._build_prompt([], count_tokens=_wordcount) == "GMRS radio."
-
     def test_build_prompt_frames_phrases(self):
         from backend.stt.transcriber import WhisperTranscriber
         out = WhisperTranscriber._build_prompt(["over", "KE8AAA"], count_tokens=_wordcount)

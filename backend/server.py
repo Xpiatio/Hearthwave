@@ -457,7 +457,13 @@ def _assemble_stt_phrases() -> "list[str]":
 
 def _rebuild_stt_vocabulary() -> int:
     """Push a freshly assembled bias list to the live worker. Returns the term
-    count (0 if no worker yet)."""
+    count (0 if no worker yet).
+
+    Runs synchronously on the asyncio event loop and re-tokenizes via the model
+    tokenizer.  This is acceptable at LAN scale (tens-to-hundreds of contacts).
+    If contact counts grow large, offloading to a thread pool executor is a
+    documented follow-up.
+    """
     if _stt_worker is None:
         return 0
     phrases = _assemble_stt_phrases()

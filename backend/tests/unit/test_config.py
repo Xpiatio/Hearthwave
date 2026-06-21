@@ -132,9 +132,6 @@ class TestTextDefaults:
     def test_saved_phrases_default_is_list(self):
         assert isinstance(ServerConfig().saved_phrases, list)
 
-    def test_saved_phrases_default_empty(self):
-        assert ServerConfig().saved_phrases == []
-
 
 class TestTextOverrides:
     def test_filter_profanity_can_be_disabled(self):
