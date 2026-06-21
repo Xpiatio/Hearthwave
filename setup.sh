@@ -189,6 +189,12 @@ if ! $VOICE_ONLY; then
     echo "==> Two-tier final-pass model:"
     fetch_whisper_model "$FINAL_MODEL"
     echo "  Set whisper_model_final=\"${FINAL_MODEL}\" in data/config.json to enable it."
+    # When COMPUTE_BACKEND=rocm, also stage the final model in HF transformers
+    # format (Models/STT/<name>-hf) for the GPU final pass.
+    if [[ -n "$FINAL_MODEL" && "${COMPUTE_BACKEND:-cpu}" == "rocm" ]]; then
+      echo "==> Staging HF-format final model for GPU: ${FINAL_MODEL}"
+      python3 bootstrap_models.py --final-model "$FINAL_MODEL" --final-backend gpu
+    fi
   fi
 fi
 
