@@ -193,6 +193,7 @@ export default function App() {
   const [publishSnack, setPublishSnack] = useState<string | null>(null);
   const [errorSnack, setErrorSnack] = useState<string | null>(null);
   const [journalSavedSnack, setJournalSavedSnack] = useState<string | null>(null);
+  const [vocabSnack, setVocabSnack] = useState<string | null>(null);
   const [voicePreviewBusy, setVoicePreviewBusy] = useState(false);
 
   // FCC / Callsigns
@@ -630,6 +631,10 @@ export default function App() {
       case 'verify_all_complete':
         setVerifyAllComplete(true);
         break;
+
+      case 'vocabulary_rescanned':
+        setVocabSnack(`Biasing ${msg.term_count} terms (${msg.callsign_count} callsigns).`);
+        break;
     }
   }, [setProfile]);
 
@@ -798,6 +803,10 @@ export default function App() {
 
   function handleServerConfigSave(values: ServerConfigSaveValues) {
     send({ type: 'set_server_config', ...values });
+  }
+
+  function handleRescanVocabulary() {
+    send({ type: 'rescan_vocabulary' });
   }
 
   function handleToggleDark() {
@@ -977,6 +986,7 @@ export default function App() {
   function handleClosePublishSnack() { setPublishSnack(null); }
   function handleCloseErrorSnack() { setErrorSnack(null); }
   function handleCloseJournalSavedSnack() { setJournalSavedSnack(null); }
+  function handleCloseVocabSnack() { setVocabSnack(null); }
   function handleVerifyAllDismiss() { setVerifyAllComplete(false); }
 
   const isMobile = useMobileDetect();
@@ -1075,6 +1085,7 @@ export default function App() {
     onToggleAdmin: handleToggleAdmin,
     onAdminSave: handleAdminSave,
     onServerConfigSave: handleServerConfigSave,
+    onRescanVocabulary: handleRescanVocabulary,
     showContacts,
     pendingPrefilledCallsign,
     pendingPrefilledName,
@@ -1091,9 +1102,11 @@ export default function App() {
     publishSnack,
     errorSnack,
     journalSavedSnack,
+    vocabSnack,
     onClosePublishSnack: handleClosePublishSnack,
     onCloseErrorSnack: handleCloseErrorSnack,
     onCloseJournalSavedSnack: handleCloseJournalSavedSnack,
+    onCloseVocabSnack: handleCloseVocabSnack,
   };
 
   return (
