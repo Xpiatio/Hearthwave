@@ -524,3 +524,23 @@ def test_saved_phrases_default_empty():
 
 def test_stt_vocab_max_callsigns_default():
     assert ServerConfig().stt_vocab_max_callsigns == 15
+
+
+# ---------------------------------------------------------------------------
+# VOX priming word
+# ---------------------------------------------------------------------------
+
+class TestVoxPrimerWordDefaults:
+    def test_enabled_default_false(self):
+        assert ServerConfig().vox_primer_word_enabled is False
+
+    def test_word_default_transmit(self):
+        assert ServerConfig().vox_primer_word == "transmit"
+
+
+class TestVoxPrimerWordOverrides:
+    def test_enabled_override(self):
+        assert make_config(vox_primer_word_enabled=True).vox_primer_word_enabled is True
+
+    def test_word_override(self):
+        assert make_config(vox_primer_word="break").vox_primer_word == "break"

@@ -1048,3 +1048,124 @@ class TestContactMutationTriggersVocabRebuild:
         assert mock_stt.update_phrases.called, "update_phrases not called after delete_contact"
         last_phrases = mock_stt.update_phrases.call_args[0][0]
         assert "KE8YYY" not in last_phrases, f"KE8YYY still in phrase list after delete: {last_phrases}"
+
+
+# ---------------------------------------------------------------------------
+# set_server_config — vox priming word
+# ---------------------------------------------------------------------------
+
+class TestSetServerConfigVoxPrimerWord:
+    def _send_and_get_status(self, ws, data):
+        with patch("backend.config.ServerConfig.save"):
+            ws.send_json({"type": "set_server_config", **data})
+            return ws.receive_json()
+
+    def test_word_and_enabled_reflected_in_status(self, client):
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            msg = self._send_and_get_status(
+                ws, {"vox_primer_word_enabled": True, "vox_primer_word": "break"}
+            )
+            assert msg["type"] == "status"
+            assert msg["vox_primer_word_enabled"] is True
+            assert msg["vox_primer_word"] == "break"
+
+    def test_word_is_trimmed(self, client):
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            msg = self._send_and_get_status(ws, {"vox_primer_word": "  transmit  "})
+            assert msg["vox_primer_word"] == "transmit"
+
+    def test_word_capped_at_64_chars(self, client):
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            msg = self._send_and_get_status(ws, {"vox_primer_word": "x" * 100})
+            assert msg["vox_primer_word"] == "x" * 64
+
+    def test_status_default_word_is_transmit(self, client):
+        with client.websocket_connect(WS_URL) as ws:
+            frames = _drain_initial(ws)
+            status = next(f for f in frames if f["type"] == "status")
+            assert status["vox_primer_word"] == "transmit"
+            assert status["vox_primer_word_enabled"] is False
+
+    def test_non_string_word_ignored(self, client):
+        # JSON null / numbers must not overwrite the word (str(None) would
+        # otherwise make the radio speak the literal "None").
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            for bad in (None, 123, ["transmit"]):
+                msg = self._send_and_get_status(ws, {"vox_primer_word": bad})
+                assert msg["vox_primer_word"] == "transmit"
+
+
+class TestTxAppliesPrimerWord:
+    def test_enabled_prepends_word_to_synth_text(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        cfg["vox_primer_word_enabled"] = True
+        cfg["vox_primer_word"] = "transmit"
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()
+        captured: dict[str, str] = {}
+        synth_done = threading.Event()
+
+        async def _capture_synth(_voice, text, *_args, **_kwargs):
+            captured["text"] = text
+            synth_done.set()
+            return None, None
+
+        mock_tts.synthesize_to_buffer = _capture_synth
+
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch("backend.server.make_ptt", return_value=MagicMock()),
+            patch("piper.PiperVoice"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "tx_message", "callsign": "W5TST", "text": "hello"})
+                    _drain_until_idle(ws)
+                synth_done.wait(timeout=2.0)
+
+        assert "text" in captured, "synthesize_to_buffer was never called"
+        assert captured["text"].startswith("transmit. "), captured["text"]
+
+    def test_disabled_does_not_prepend(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)  # word primer off by default
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()
+        captured: dict[str, str] = {}
+        synth_done = threading.Event()
+
+        async def _capture_synth(_voice, text, *_args, **_kwargs):
+            captured["text"] = text
+            synth_done.set()
+            return None, None
+
+        mock_tts.synthesize_to_buffer = _capture_synth
+
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch("backend.server.make_ptt", return_value=MagicMock()),
+            patch("piper.PiperVoice"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "tx_message", "callsign": "W5TST", "text": "hello"})
+                    _drain_until_idle(ws)
+                synth_done.wait(timeout=2.0)
+
+        assert "text" in captured, "synthesize_to_buffer was never called"
+        assert not captured["text"].startswith("transmit. "), captured["text"]

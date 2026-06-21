@@ -33,6 +33,10 @@ const serverConfig = {
   pttSerialLine: 'RTS',
   monitorPassthrough: false,
   attendanceEnabled: false,
+  voxPrimerEnabled: false,
+  voxPrimerMs: 300,
+  voxPrimerWordEnabled: false,
+  voxPrimerWord: 'transmit',
   savedPhrases: [],
 }
 
