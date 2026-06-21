@@ -27,6 +27,11 @@ services:
       - PULSE_SERVER=unix:/run/pulse/native
     devices:
       - /dev/snd:/dev/snd
+      # MeshCore plugin: pass through the Companion radio's serial device.
+      # Uncomment and match your host's port (also set it in the Server Config
+      # panel → MeshCore device). Left commented so `docker compose up` works on
+      # hosts without the device attached.
+      # - /dev/ttyUSB0:/dev/ttyUSB0
     restart: unless-stopped
     networks:
       - radio

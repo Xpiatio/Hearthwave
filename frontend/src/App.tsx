@@ -29,6 +29,8 @@ import type {
 import type { ChatEntry } from './components/ChatDisplay/ChatDisplay';
 import type { SpectrogramHandle } from './components/Spectrogram/Spectrogram';
 import type { ServerConfig, ServerConfigSaveValues } from './components/ServerConfigPanel/ServerConfigPanel';
+import { resolveTxComposition } from './plugins';
+import './plugins/meshcore'; // registers the MeshCore TX-composition contributor
 import { LoginScreen } from './components/LoginScreen/LoginScreen';
 import { SetupScreen } from './components/SetupScreen/SetupScreen';
 import { DesktopApp } from './components/DesktopApp/DesktopApp';
@@ -160,6 +162,12 @@ export default function App() {
     monitorPassthrough: false,
     attendanceEnabled: false,
     savedPhrases: [],
+    meshcoreEnabled: false,
+    meshcoreSerialPort: '/dev/ttyUSB0',
+    meshcoreBaud: 115200,
+    meshcoreMaxPacketLength: 140,
+    meshcorePrefixSeparator: ': ',
+    meshcoreChannelIdx: 0,
   });
 
   // Panel order — initialized from localStorage to avoid FOUC; overridden by profile on load
@@ -394,6 +402,12 @@ export default function App() {
           monitorPassthrough: msg.monitor_passthrough ?? prev.monitorPassthrough,
           attendanceEnabled: msg.attendance_enabled ?? prev.attendanceEnabled,
           savedPhrases: msg.saved_phrases ?? prev.savedPhrases,
+          meshcoreEnabled: msg.meshcore_enabled ?? prev.meshcoreEnabled,
+          meshcoreSerialPort: msg.meshcore_serial_port ?? prev.meshcoreSerialPort,
+          meshcoreBaud: msg.meshcore_baud ?? prev.meshcoreBaud,
+          meshcoreMaxPacketLength: msg.meshcore_max_packet_length ?? prev.meshcoreMaxPacketLength,
+          meshcorePrefixSeparator: msg.meshcore_prefix_separator ?? prev.meshcorePrefixSeparator,
+          meshcoreChannelIdx: msg.meshcore_channel_idx ?? prev.meshcoreChannelIdx,
         }));
         break;
 
@@ -1027,7 +1041,12 @@ export default function App() {
     );
   }
 
+  // Active TX-composition constraint contributed by plugins (e.g. MeshCore caps
+  // the message length so the prefixed packet fits one mesh frame).
+  const txComposition = resolveTxComposition({ profile, serverConfig });
+
   const sharedProps = {
+    txComposition,
     profile: profile!,
     profiles,
     connected,

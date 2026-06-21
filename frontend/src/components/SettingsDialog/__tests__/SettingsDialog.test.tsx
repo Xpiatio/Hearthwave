@@ -38,6 +38,12 @@ const serverConfig = {
   voxPrimerWordEnabled: false,
   voxPrimerWord: 'transmit',
   savedPhrases: [],
+  meshcoreEnabled: false,
+  meshcoreSerialPort: '/dev/ttyMESH0',
+  meshcoreBaud: 115200,
+  meshcoreMaxPacketLength: 140,
+  meshcorePrefixSeparator: ': ',
+  meshcoreChannelIdx: 0,
 }
 
 function makeProps(overrides: Record<string, unknown> = {}) {

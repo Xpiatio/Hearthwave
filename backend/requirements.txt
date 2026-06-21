@@ -17,3 +17,7 @@ pyserial
 onnxruntime
 speechbrain
 huggingface_hub
+# Optional: enables the MeshCore plugin (outbound LoRa mesh bridge). The plugin
+# imports it lazily and degrades gracefully when absent, so it is safe to omit
+# on installs that don't use MeshCore.
+meshcore

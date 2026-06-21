@@ -1215,6 +1215,13 @@ def _build_status() -> dict:
         "monitor_passthrough": bool(_config.monitor_passthrough) if _config else False,
         "attendance_enabled": bool(_config.attendance_enabled) if _config else False,
         "saved_phrases": _config.saved_phrases if _config else [],
+        # MeshCore plugin
+        "meshcore_enabled": bool(_config.meshcore_enabled) if _config else False,
+        "meshcore_serial_port": (_config.meshcore_serial_port if _config else "/dev/ttyUSB0"),
+        "meshcore_baud": int(_config.meshcore_baud) if _config else 115200,
+        "meshcore_max_packet_length": int(_config.meshcore_max_packet_length) if _config else 140,
+        "meshcore_prefix_separator": (_config.meshcore_prefix_separator if _config else ": "),
+        "meshcore_channel_idx": int(_config.meshcore_channel_idx) if _config else 0,
     }
 
 
@@ -1486,6 +1493,15 @@ async def _lifespan(app: FastAPI):
     )
     plugin_registry.register(_ncs_plugin)
 
+    # MeshCore must register AFTER NCS: the TX gate chain stops on the first
+    # plugin that blocks (e.g. NCS BREAK-BREAK), so a blocked TX is never
+    # forwarded to the mesh.
+    from backend.plugins.meshcore import MeshCorePlugin
+    plugin_registry.register(MeshCorePlugin(config_getter=lambda: _config))
+
+    # Let plugins open connections / start pollers from the loaded config.
+    await plugin_registry.dispatch_config_changed(_config)
+
     _synthesizer = TTSSynthesizer(
         out_queue=_tts_event_queue,
         compute_backend=compute,
@@ -1698,8 +1714,33 @@ async def _ws_handle_set_server_config(ws: WebSocket, data: dict, state: "Connec
             if _stt_worker is not None:
                 _rebuild_stt_vocabulary()
 
+    # MeshCore plugin settings
+    if "meshcore_enabled" in data:
+        _config["meshcore_enabled"] = bool(data["meshcore_enabled"])
+    if "meshcore_serial_port" in data:
+        _config["meshcore_serial_port"] = str(data["meshcore_serial_port"]).strip()
+    if "meshcore_baud" in data:
+        try:
+            _config["meshcore_baud"] = int(data["meshcore_baud"])
+        except (TypeError, ValueError):
+            pass
+    if "meshcore_max_packet_length" in data:
+        try:
+            _config["meshcore_max_packet_length"] = max(1, int(data["meshcore_max_packet_length"]))
+        except (TypeError, ValueError):
+            pass
+    if "meshcore_prefix_separator" in data and isinstance(data["meshcore_prefix_separator"], str):
+        _config["meshcore_prefix_separator"] = data["meshcore_prefix_separator"][:16]
+    if "meshcore_channel_idx" in data:
+        try:
+            _config["meshcore_channel_idx"] = max(0, int(data["meshcore_channel_idx"]))
+        except (TypeError, ValueError):
+            pass
+
     _config.save()
     await _manager.broadcast(_build_status())
+    # Let plugins react to the new config (MeshCore connects/disconnects here).
+    await plugin_registry.dispatch_config_changed(_config)
 
     if stt_restart_needed and _stt_worker is not None and _stt_listening:
         _stt_worker.stop()

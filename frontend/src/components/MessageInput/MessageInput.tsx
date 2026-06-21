@@ -23,10 +23,16 @@ interface Props {
   onSend: (text: string, targetCall: string, targetName: string) => void;
   onChat?: (text: string) => void;
   onStandaloneId?: () => void;
+  /** When set (by an active plugin, e.g. MeshCore), cap the message length and
+   *  show a live character counter. The cap already accounts for any sender
+   *  prefix the plugin adds downstream. */
+  maxLength?: number;
+  /** Short label shown beside the counter (e.g. "MeshCore"). */
+  composeHint?: string;
 }
 
 export const MessageInput = forwardRef<MessageInputHandle, Props>(
-  ({ transmitting, contacts, onSend, onChat, onStandaloneId }, ref) => {
+  ({ transmitting, contacts, onSend, onChat, onStandaloneId, maxLength, composeHint }, ref) => {
     const [draft, setDraft] = useState('');
     const [targetKey, setTargetKey] = useState('');
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -37,6 +43,10 @@ export const MessageInput = forwardRef<MessageInputHandle, Props>(
         textareaRef.current?.focus();
       },
     }));
+
+    function applyDraft(value: string) {
+      setDraft(maxLength != null ? value.slice(0, maxLength) : value);
+    }
 
     const sortedContacts = [...contacts].sort((a, b) =>
       a.callsign.toUpperCase().localeCompare(b.callsign.toUpperCase())
@@ -115,16 +125,28 @@ export const MessageInput = forwardRef<MessageInputHandle, Props>(
           rows={2}
           fullWidth
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => applyDraft(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={transmitting}
           placeholder={transmitting ? '' : 'Enter your message here… (Ctrl+Enter to send)'}
           slotProps={{
             htmlInput: {
               'aria-label': 'Message text — press Ctrl+Enter or use the Send button to transmit',
+              ...(maxLength != null ? { maxLength } : {}),
             },
           }}
         />
+
+        {maxLength != null && (
+          <Typography
+            variant="caption"
+            color={draft.length >= maxLength ? 'error' : 'text.secondary'}
+            sx={{ alignSelf: 'flex-end' }}
+            aria-live="polite"
+          >
+            {composeHint ? `${composeHint} · ` : ''}{draft.length} / {maxLength}
+          </Typography>
+        )}
 
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button
