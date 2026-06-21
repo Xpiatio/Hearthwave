@@ -40,6 +40,8 @@ from backend.audio.vad import load_vad_model, make_vad_iterator
 from backend.stt.preprocess import preprocess_segment
 from backend.stt.segmenter import SpeechSegmenter
 from backend.stt.transcriber import WhisperTranscriber
+from backend.stt.gpu_transcriber import GpuWhisperTranscriber
+from backend.stt._device import rocm_available
 
 
 @dataclass
@@ -120,6 +122,7 @@ class STTWorker:
         min_speech_s: "float | None" = None,
         whisper_model_final: str = "",
         final_max_s: float = 60.0,
+        stt_final_device: str = "auto",
         # Optional event callbacks — all called from the worker thread;
         # implementations must be thread-safe (e.g. loop.call_soon_threadsafe).
         on_audio_level: "Callable[[int], None] | None" = None,
@@ -160,10 +163,8 @@ class STTWorker:
         # finalized utterance is re-transcribed whole on a low-priority
         # thread and broadcast as a replacing final.
         self.whisper_model_final = (whisper_model_final or "").strip()
-        self.whisper_model_final_path = (
-            str(self._MODELS_DIR / self.whisper_model_final) if self.whisper_model_final else ""
-        )
         self.final_max_s = float(final_max_s)
+        self.stt_final_device = stt_final_device
         self._final_q: "queue.Queue | None" = (
             queue.Queue(maxsize=8) if self.whisper_model_final else None
         )
@@ -722,9 +723,35 @@ class STTWorker:
         except queue.Full:
             self._emit_result(uid, "", False)
 
+    def _resolve_final_backend(self) -> str:
+        """'gpu' or 'cpu' — honoring config and GPU availability."""
+        if self.stt_final_device == "cpu":
+            return "cpu"
+        if self.stt_final_device == "gpu":
+            return "gpu"
+        return "gpu" if rocm_available() else "cpu"
+
+    def _final_model_path(self, backend: str) -> str:
+        """CT2 dir for CPU, '<name>-hf' dir for the GPU transformers model."""
+        name = self.whisper_model_final + ("-hf" if backend == "gpu" else "")
+        return str(self._MODELS_DIR / name)
+
+    def _load_one_final(self, backend: str):
+        """Load a single backend's final transcriber, or None on missing dir."""
+        path = self._final_model_path(backend)
+        if not os.path.isdir(path):
+            return None
+        self._emit_status(f"Loading final-pass model {self.whisper_model_final} ({backend})...")
+        cores = os.cpu_count() or 2
+        cls = GpuWhisperTranscriber if backend == "gpu" else WhisperTranscriber
+        return cls.load(
+            path, saved_phrases=self.saved_phrases, cpu_threads=max(1, cores // 2)
+        )
+
     def _load_final_transcriber(self):
         """Lazy-load the final-pass model (cached across Listen toggles).
-        Returns None on failure — the caller falls back to plain finals."""
+        Selects GPU vs CPU; any GPU failure falls back to CPU. Returns None
+        only when no backend can load (caller then emits plain finals)."""
         cache = self._model_cache
         if (
             cache is not None
@@ -733,30 +760,40 @@ class STTWorker:
         ):
             cache.whisper_final.update_prompt(self.saved_phrases)
             return cache.whisper_final
-        if not os.path.isdir(self.whisper_model_final_path):
-            self._emit_error(
-                f"Final-pass Whisper model not found at '{self.whisper_model_final_path}'. "
-                f"Run 'python bootstrap_models.py --model {self.whisper_model_final}' on an "
-                f"internet-connected machine, then copy Models/ here. "
-                f"Falling back to single-pass transcription."
-            )
-            return None
-        try:
-            self._emit_status(f"Loading final-pass model {self.whisper_model_final}...")
-            # Half the cores so the fast path always has headroom.
-            cores = os.cpu_count() or 2
-            transcriber = WhisperTranscriber.load(
-                self.whisper_model_final_path,
-                saved_phrases=self.saved_phrases,
-                cpu_threads=max(1, cores // 2),
-            )
-            if cache is not None:
-                cache.whisper_final = transcriber
-                cache.final_model_name = self.whisper_model_final
-            return transcriber
-        except Exception as e:
-            self._emit_error(f"Failed to load final-pass model: {e}")
-            return None
+
+        backend = self._resolve_final_backend()
+        transcriber = None
+        if backend == "gpu":
+            try:
+                transcriber = self._load_one_final("gpu")
+            except Exception as e:
+                self._emit_error(f"GPU final-pass load failed ({e}); falling back to CPU.")
+                transcriber = None
+            if transcriber is None:
+                self._emit_status(
+                    f"Final-pass GPU model not available; falling back to CPU."
+                )
+                backend = "cpu"
+        if transcriber is None:
+            try:
+                transcriber = self._load_one_final("cpu")
+            except Exception as e:
+                self._emit_error(f"Failed to load final-pass model: {e}")
+                return None
+            if transcriber is None:
+                path = self._final_model_path("cpu")
+                self._emit_error(
+                    f"Final-pass model not found at '{path}'. Run "
+                    f"'python bootstrap_models.py --final-model {self.whisper_model_final}' "
+                    f"then copy Models/ here. "
+                    f"Falling back to single-pass transcription."
+                )
+                return None
+
+        if transcriber is not None and cache is not None:
+            cache.whisper_final = transcriber
+            cache.final_model_name = self.whisper_model_final
+        return transcriber
 
     def _final_pass_loop(self, final_q: queue.Queue, bandpass_sos) -> None:
         """Re-transcribe whole utterances with the larger model and emit

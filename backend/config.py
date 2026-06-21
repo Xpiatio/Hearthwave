@@ -80,6 +80,13 @@ class ServerConfig(dict):
         return float(self.get("stt_final_max_s", 60.0))
 
     @property
+    def stt_final_device(self) -> str:
+        """Where the whole-utterance final pass runs:
+        'auto' (GPU if a ROCm GPU is present, else CPU), 'gpu', or 'cpu'."""
+        val = str(self.get("stt_final_device", "auto")).strip().lower()
+        return val if val in ("auto", "gpu", "cpu") else "auto"
+
+    @property
     def squelch_open_threshold(self) -> float:
         return float(self.get("squelch_open_threshold", 0.05))
 

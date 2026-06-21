@@ -494,6 +494,7 @@ def _make_stt_worker() -> STTWorker:
         min_speech_s=_config.stt_min_speech_s,
         whisper_model_final=_config.whisper_model_final,
         final_max_s=_config.stt_final_max_s,
+        stt_final_device=_config.stt_final_device,
         on_audio_level=_on_stt_audio_level,
         on_audio_chunk=_audio_chunk_fanout,
         on_capture_event=_on_stt_capture_event,
