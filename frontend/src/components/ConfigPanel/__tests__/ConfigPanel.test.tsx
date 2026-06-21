@@ -318,4 +318,20 @@ describe('ConfigPanel', () => {
     expect(within(listbox).getByText('System Default (microphone)')).toBeInTheDocument()
     expect(within(listbox).getByText('System Audio Output (loopback)')).toBeInTheDocument()
   })
+
+  // -------------------------------------------------------------------------
+  // hideHeader prop
+  // -------------------------------------------------------------------------
+
+  it('renders the Configuration header by default', () => {
+    render(<ConfigPanel {...makeDefaultProps()} />)
+    expect(screen.getByText('Configuration')).toBeInTheDocument()
+  })
+
+  it('hides the header when hideHeader is set', () => {
+    render(<ConfigPanel {...makeDefaultProps()} hideHeader />)
+    expect(screen.queryByText('Configuration')).not.toBeInTheDocument()
+    // controls still present
+    expect(screen.getByLabelText('Profanity Filter')).toBeInTheDocument()
+  })
 })
