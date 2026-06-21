@@ -189,3 +189,24 @@ class TestGetAll:
         copy.clear()
         # Internal state must be unaffected.
         assert len(empty_store.get_all()) == 1
+
+
+# ---------------------------------------------------------------------------
+# Tests: ordered_callsigns
+# ---------------------------------------------------------------------------
+
+def test_ordered_callsigns_preserves_file_order_and_dedups():
+    from backend.persistence.contacts import ordered_callsigns
+    contacts = [
+        {"callsign": "ke8aaa", "gmrs_callsign": "WRAA111"},
+        {"callsign": "ALL"},                       # skipped
+        {"callsign": "KE8BBB", "ham_callsign": ""},  # blank skipped
+        {"callsign": "KE8AAA"},                    # dup of first, skipped
+    ]
+    assert ordered_callsigns(contacts) == ["KE8AAA", "WRAA111", "KE8BBB"]
+
+
+def test_ordered_callsigns_empty():
+    from backend.persistence.contacts import ordered_callsigns
+    assert ordered_callsigns([]) == []
+    assert ordered_callsigns(None) == []

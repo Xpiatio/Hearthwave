@@ -439,4 +439,15 @@ describe('ServerConfigPanel', () => {
       })
     )
   })
+
+  // -------------------------------------------------------------------------
+  // Rescan vocabulary button
+  // -------------------------------------------------------------------------
+
+  it('calls onRescanVocabulary when the rescan button is clicked', () => {
+    const onRescanVocabulary = vi.fn();
+    render(<ServerConfigPanel {...makeDefaultProps()} onRescanVocabulary={onRescanVocabulary} />);
+    fireEvent.click(screen.getByRole('button', { name: /rescan vocabulary/i }));
+    expect(onRescanVocabulary).toHaveBeenCalledTimes(1);
+  });
 })

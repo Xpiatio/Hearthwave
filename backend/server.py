@@ -127,6 +127,7 @@ from backend.persistence.contacts import (
     ContactsStore,
     known_callsigns,
     normalize_callsign,
+    ordered_callsigns,
 )
 from backend.persistence.audit import AuditLog
 from backend.auth_ratelimit import _extract_ip, get_client_ip
@@ -443,6 +444,34 @@ def _audio_chunk_fanout(chunk) -> None:
     plugin_registry.dispatch_audio_rx_chunk(chunk)
 
 
+def _assemble_stt_phrases() -> "list[str]":
+    """Assemble the full STT bias list (curated vocab + saved phrases + contact
+    callsigns) ordered lowest-priority-first. Shared by worker construction and
+    live rebuilds."""
+    from backend.stt import vocab
+    contacts = _contacts_store.get_all() if _contacts_store else []
+    callsigns = ordered_callsigns(contacts)
+    phrases = _config.saved_phrases if _config else []
+    max_cs = _config.stt_vocab_max_callsigns if _config else 100
+    return vocab.assemble_phrases(callsigns, phrases, max_callsigns=max_cs)
+
+
+def _rebuild_stt_vocabulary() -> int:
+    """Push a freshly assembled bias list to the live worker. Returns the term
+    count (0 if no worker yet).
+
+    Runs synchronously on the asyncio event loop and re-tokenizes via the model
+    tokenizer.  This is acceptable at LAN scale (tens-to-hundreds of contacts).
+    If contact counts grow large, offloading to a thread pool executor is a
+    documented follow-up.
+    """
+    if _stt_worker is None:
+        return 0
+    phrases = _assemble_stt_phrases()
+    _stt_worker.update_phrases(phrases)
+    return len(phrases)
+
+
 def _make_stt_worker() -> STTWorker:
     """Build an STTWorker from the current _config and module callbacks.
 
@@ -456,7 +485,7 @@ def _make_stt_worker() -> STTWorker:
         vad_threshold=_config.vad_threshold,
         system_monitor_sink=_config.system_monitor_sink,
         rx_mode=_config.rx_mode,
-        saved_phrases=_config.saved_phrases,
+        saved_phrases=_assemble_stt_phrases(),
         debug_capture=_config.stt_debug_capture,
         debug_dir=_config.stt_debug_dir,
         squelch_open_threshold=_config.squelch_open_threshold,
@@ -1666,7 +1695,7 @@ async def _ws_handle_set_server_config(ws: WebSocket, data: dict, state: "Connec
                 p.strip()[:120] for p in phrases[:50] if p.strip()
             ]
             if _stt_worker is not None:
-                _stt_worker.update_phrases(_config.saved_phrases)
+                _rebuild_stt_vocabulary()
 
     _config.save()
     await _manager.broadcast(_build_status())
@@ -1875,6 +1904,7 @@ async def websocket_endpoint(
                     contact = {k: v for k, v in data.items() if k != "type"}
                     updated = _contacts_store.add_contact(contact)
                     await _manager.broadcast({"type": "contacts", "contacts": updated})
+                    _rebuild_stt_vocabulary()
                 except ValueError as exc:
                     await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
 
@@ -1894,6 +1924,7 @@ async def websocket_endpoint(
                 try:
                     updated = _contacts_store.update_contact(cs, updates, original_name=original_name)
                     await _manager.broadcast({"type": "contacts", "contacts": updated})
+                    _rebuild_stt_vocabulary()
                 except KeyError as exc:
                     await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
 
@@ -2123,6 +2154,7 @@ async def websocket_endpoint(
                             "type": "contacts",
                             "contacts": _contacts_store.get_all(),
                         })
+                        _rebuild_stt_vocabulary()
                     await _manager.send_to(ws, {"type": "verify_all_complete"})
 
                 task = asyncio.create_task(_do_verify_all())
@@ -2154,8 +2186,20 @@ async def websocket_endpoint(
                 try:
                     updated = _contacts_store.delete_contact(cs, name=contact_name)
                     await _manager.broadcast({"type": "contacts", "contacts": updated})
+                    _rebuild_stt_vocabulary()
                 except KeyError as exc:
                     await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
+
+            elif msg_type == "rescan_vocabulary":
+                count = _rebuild_stt_vocabulary()
+                contacts = _contacts_store.get_all() if _contacts_store else []
+                max_cs = _config.stt_vocab_max_callsigns if _config else 100
+                cs_count = min(len(ordered_callsigns(contacts)), max_cs)
+                await _manager.send_to(ws, {
+                    "type": "vocabulary_rescanned",
+                    "term_count": count,
+                    "callsign_count": cs_count,
+                })
 
             elif msg_type == "set_service_mode":
                 if _config is None:

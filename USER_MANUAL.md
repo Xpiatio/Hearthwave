@@ -1,6 +1,6 @@
 # Hearthwave User Manual
 
-> **Version:** v2.7.0
+> **Version:** v2.7.1
 
 This manual covers day-to-day operation of Hearthwave as a GMRS family hub or neighborhood watch base station — a shared radio operating station where every household member or watch volunteer connects from their own device. For installation and server setup, see [README.md](README.md).
 
@@ -33,6 +33,7 @@ This manual covers day-to-day operation of Hearthwave as a GMRS family hub or ne
 21. [Admin Settings dialog (admin)](#21-admin-settings-dialog-admin)
 22. [Plugin system](#22-plugin-system)
 23. [FCC compliance and remote access](#23-fcc-compliance-and-remote-access)
+24. [Transcription vocabulary biasing](#24-transcription-vocabulary-biasing)
 
 ---
 
@@ -80,7 +81,7 @@ The **login screen** appears automatically. Select your name from the profile li
 
 **New to the station?** Your administrator creates your account and gives you your initial password. You can change it any time via the account menu (see [Your account](#14-your-account)).
 
-The login screen shows the **Hearthwave logo** and an **About** link beneath the sign-in form. The About link displays the running version (e.g. *v2.7.0*) and opens the **About Hearthwave** dialog with project links and FCC information. Once signed in, you can reopen this dialog any time from the **logo in the top bar** or the **About Hearthwave** entry in the account menu.
+The login screen shows the **Hearthwave logo** and an **About** link beneath the sign-in form. The About link displays the running version (e.g. *v2.7.1*) and opens the **About Hearthwave** dialog with project links and FCC information. Once signed in, you can reopen this dialog any time from the **logo in the top bar** or the **About Hearthwave** entry in the account menu.
 
 If the server is unreachable, the status bar shows **OFFLINE** in amber. Refresh the page or contact your administrator.
 
@@ -844,3 +845,19 @@ If you expose Hearthwave to the public internet (outside your home network):
 3. **Use listen-only accounts for monitoring** — if anyone outside the licence needs to hear the station, create a listen-only account so they can listen but cannot key the radio
 
 The NCS plugin contacts `api.weather.gov` for SKYWARN alerts and the FCC API for callsign verification. Both are outbound read-only requests from your server and do not create any radio interconnection.
+
+---
+
+## 24. Transcription vocabulary biasing
+
+Both transcription passes — the fast live pass and the optional higher-accuracy final pass — are biased toward radio vocabulary: the NATO phonetic alphabet (Alpha through Zulu), common procedure words (Roger, Wilco, Over, Out, Break, etc.), and standard Q-codes (QRM, QRN, QSB, QSY, etc.). On top of that built-in list, Hearthwave automatically includes the callsigns of all your saved contacts, so the recognizer is primed for the station IDs it is most likely to hear on your channel.
+
+Because Whisper's initial-prompt budget is limited, callsigns are prioritized over general keywords. Only the most-recently-added contacts (approximately 15) are included when the contact list is long — if you have many saved stations, the newest or most active ones are most likely to benefit.
+
+### How to use
+
+Vocabulary biasing is active by default — no setup required. The built-in radio keywords are always present. Your contacts' callsigns are added automatically as you build your contact book.
+
+The bias refreshes live: adding, editing, or deleting a contact or a saved phrase updates the vocabulary immediately for the next transmission. If you want to force a rebuild — for example after importing a batch of contacts — use the **Rescan vocabulary** button in **Settings → server config** (near the saved-phrases box). After rescanning, a confirmation shows how many terms and callsigns are now active.
+
+To add your own domain-specific terms (net names, repeater IDs, local place names, unusual callsign prefixes), enter them in the **Saved phrases** box in server config. Each entry contributes to the vocabulary budget alongside the built-in keywords.

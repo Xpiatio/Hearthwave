@@ -937,6 +937,120 @@ class TestTxMessageVoiceAs:
 
 
 # ---------------------------------------------------------------------------
+# rescan_vocabulary — WS handler response
+# ---------------------------------------------------------------------------
+
+class TestRescanVocabulary:
+    def test_response_includes_term_and_callsign_counts(self, tmp_path):
+        """rescan_vocabulary must reply with vocabulary_rescanned carrying
+        term_count and callsign_count that reflect the current contacts and
+        config.  We add two contacts first, then trigger the rescan."""
+        with _ws_server(tmp_path) as (tc, cfg):
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                # Add two contacts so the callsign_count is non-trivial.
+                ws.send_json({"type": "add_contact", "callsign": "W9AAA", "name": "Alpha"})
+                _next_of_type(ws, "contacts")
+                ws.send_json({"type": "add_contact", "callsign": "W9BBB", "name": "Bravo"})
+                _next_of_type(ws, "contacts")
+                # Now request a vocabulary rescan.
+                ws.send_json({"type": "rescan_vocabulary"})
+                reply = _next_of_type(ws, "vocabulary_rescanned")
+        assert reply is not None, "no vocabulary_rescanned reply received"
+        assert reply["type"] == "vocabulary_rescanned"
+        # Two callsigns were added; both are within the default cap of 15.
+        assert reply["callsign_count"] == 2
+        # term_count must be at least the two callsigns plus CURATED (40 terms).
+        assert reply["term_count"] >= 2 + 40
+
+    def test_callsign_count_capped_at_max_callsigns(self, tmp_path):
+        """callsign_count must never exceed stt_vocab_max_callsigns."""
+        with _ws_server(tmp_path) as (tc, cfg):
+            cfg["stt_vocab_max_callsigns"] = 1
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                ws.send_json({"type": "add_contact", "callsign": "W9AAA", "name": "Alpha"})
+                _next_of_type(ws, "contacts")
+                ws.send_json({"type": "add_contact", "callsign": "W9BBB", "name": "Bravo"})
+                _next_of_type(ws, "contacts")
+                ws.send_json({"type": "rescan_vocabulary"})
+                reply = _next_of_type(ws, "vocabulary_rescanned")
+        assert reply is not None
+        assert reply["callsign_count"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Contact mutations trigger _rebuild_stt_vocabulary
+# ---------------------------------------------------------------------------
+
+class TestContactMutationTriggersVocabRebuild:
+    """add_contact and delete_contact must each cause _rebuild_stt_vocabulary
+    to fire, which in turn calls update_phrases on the STT worker.  The
+    observable effect is that the mock worker's update_phrases receives the
+    new (or reduced) callsign in the phrase list."""
+
+    @staticmethod
+    def _run_with_mock_stt(tmp_path):
+        """Spin up the app with an instrumented STT mock and return it alongside
+        a factory for making WS sessions.  Returns (TestClient, mock_stt)."""
+        cfg = _minimal_cfg(tmp_path)
+        cfg.save = MagicMock()
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()
+        return cfg, mock_stt, mock_tts, mock_users, mock_tokens
+
+    def test_add_contact_triggers_rebuild(self, tmp_path):
+        """After add_contact the STT worker's update_phrases is called with the
+        new callsign included in the phrase list."""
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = self._run_with_mock_stt(tmp_path)
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch("backend.server.sd.query_devices", return_value=[]),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "add_contact", "callsign": "KE8ZZZ", "name": "Test"})
+                    _next_of_type(ws, "contacts")
+        # update_phrases must have been called at least once after add_contact.
+        # The last call must include the new callsign.
+        assert mock_stt.update_phrases.called, "update_phrases was never called after add_contact"
+        last_phrases = mock_stt.update_phrases.call_args[0][0]
+        assert "KE8ZZZ" in last_phrases, f"KE8ZZZ missing from final phrase list: {last_phrases}"
+
+    def test_delete_contact_triggers_rebuild(self, tmp_path):
+        """After delete_contact the STT worker's update_phrases is called and
+        the removed callsign is no longer present in the phrase list."""
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = self._run_with_mock_stt(tmp_path)
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch("backend.server.sd.query_devices", return_value=[]),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    # Add then immediately remove a contact.
+                    ws.send_json({"type": "add_contact", "callsign": "KE8YYY", "name": "Del"})
+                    _next_of_type(ws, "contacts")
+                    mock_stt.update_phrases.reset_mock()
+                    ws.send_json({"type": "delete_contact", "callsign": "KE8YYY"})
+                    _next_of_type(ws, "contacts")
+        assert mock_stt.update_phrases.called, "update_phrases not called after delete_contact"
+        last_phrases = mock_stt.update_phrases.call_args[0][0]
+        assert "KE8YYY" not in last_phrases, f"KE8YYY still in phrase list after delete: {last_phrases}"
+
+
+# ---------------------------------------------------------------------------
 # set_server_config — vox priming word
 # ---------------------------------------------------------------------------
 

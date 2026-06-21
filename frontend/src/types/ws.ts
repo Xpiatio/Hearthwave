@@ -217,6 +217,12 @@ export interface VerifyAllCompleteMsg {
   type: 'verify_all_complete';
 }
 
+export interface VocabularyRescannedMsg {
+  type: 'vocabulary_rescanned';
+  term_count: number;
+  callsign_count: number;
+}
+
 export interface OnlineStatusMsg {
   type: 'online_status';
   online: boolean;
@@ -401,6 +407,7 @@ export type WsMessage =
   | ContactAutoAddedMsg
   | FccLookupResultMsg
   | VerifyAllCompleteMsg
+  | VocabularyRescannedMsg
   | OnlineStatusMsg
   | SpectrogramRowMsg
   | InputDevicesMsg
