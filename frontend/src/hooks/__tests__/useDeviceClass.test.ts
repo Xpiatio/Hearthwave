@@ -25,7 +25,7 @@ describe('useDeviceClass', () => {
   beforeEach(() => vi.restoreAllMocks());
 
   it('returns "phone" for coarse pointer at narrow width', () => {
-    installMatchMedia((q) => q.includes('pointer: coarse') || q.includes('max-width: 600px'));
+    installMatchMedia((q) => q.includes('pointer: coarse') && q.includes('max-width: 600px') && !q.includes('min-width'));
     const { result } = renderHook(() => useDeviceClass());
     expect(result.current).toBe('phone');
   });
