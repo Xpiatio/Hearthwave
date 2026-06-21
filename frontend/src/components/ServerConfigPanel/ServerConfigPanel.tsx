@@ -58,6 +58,8 @@ export interface ServerConfig {
   txConditioning: boolean;
   voxPrimerEnabled: boolean;
   voxPrimerMs: number;
+  voxPrimerWordEnabled: boolean;
+  voxPrimerWord: string;
   pttMode: string;
   pttSerialPort: string;
   pttSerialLine: string;
@@ -75,6 +77,8 @@ export interface ServerConfigSaveValues {
   tx_conditioning: boolean;
   vox_primer_enabled: boolean;
   vox_primer_ms: number;
+  vox_primer_word_enabled: boolean;
+  vox_primer_word: string;
   ptt_mode: string;
   ptt_serial_port: string;
   ptt_serial_line: string;
@@ -102,6 +106,8 @@ export function ServerConfigPanel({ open, onClose, config, onSave, embedded = fa
   const [txConditioning, setTxConditioning] = useState(false);
   const [voxPrimerEnabled, setVoxPrimerEnabled] = useState(false);
   const [voxPrimerMs, setVoxPrimerMs] = useState(300);
+  const [voxPrimerWordEnabled, setVoxPrimerWordEnabled] = useState(false);
+  const [voxPrimerWord, setVoxPrimerWord] = useState('transmit');
   const [pttMode, setPttMode] = useState('manual');
   const [pttSerialPort, setPttSerialPort] = useState('');
   const [pttSerialLine, setPttSerialLine] = useState('RTS');
@@ -122,6 +128,8 @@ export function ServerConfigPanel({ open, onClose, config, onSave, embedded = fa
     setTxConditioning(config.txConditioning);
     setVoxPrimerEnabled(config.voxPrimerEnabled);
     setVoxPrimerMs(config.voxPrimerMs);
+    setVoxPrimerWordEnabled(config.voxPrimerWordEnabled);
+    setVoxPrimerWord(config.voxPrimerWord);
     setPttMode(config.pttMode);
     setPttSerialPort(config.pttSerialPort);
     setPttSerialLine(config.pttSerialLine);
@@ -153,6 +161,8 @@ export function ServerConfigPanel({ open, onClose, config, onSave, embedded = fa
       tx_conditioning: txConditioning,
       vox_primer_enabled: voxPrimerEnabled,
       vox_primer_ms: voxPrimerMs,
+      vox_primer_word_enabled: voxPrimerWordEnabled,
+      vox_primer_word: voxPrimerWord.trim(),
       ptt_mode: pttMode,
       ptt_serial_port: pttSerialPort.trim(),
       ptt_serial_line: pttSerialLine,
@@ -277,6 +287,30 @@ export function ServerConfigPanel({ open, onClose, config, onSave, embedded = fa
             disabled={!voxPrimerEnabled}
             onChange={(e) => setVoxPrimerMs(Math.max(0, Math.min(2000, Number(e.target.value) || 0)))}
             slotProps={{ htmlInput: { min: 0, max: 2000, step: 50 } }}
+            sx={{ maxWidth: 200 }}
+          />
+
+          <FormControlLabel
+            control={
+              <Switch
+                checked={voxPrimerWordEnabled}
+                onChange={(e) => setVoxPrimerWordEnabled(e.target.checked)}
+                size="small"
+              />
+            }
+            label="VOX priming word"
+          />
+          <Typography variant="caption" sx={{ color: 'text.secondary', mt: -1.5 }}>
+            Speak a word (e.g. "transmit") right after the primer tone and before
+            the message, so a VOX-keyed radio is keyed on a clear spoken keyword.
+            Different radios may need different words.
+          </Typography>
+          <TextField
+            label="Priming word"
+            size="small"
+            value={voxPrimerWord}
+            disabled={!voxPrimerWordEnabled}
+            onChange={(e) => setVoxPrimerWord(e.target.value.slice(0, 64))}
             sx={{ maxWidth: 200 }}
           />
 

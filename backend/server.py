@@ -145,6 +145,7 @@ from backend.text.metadata import extract_name_location
 from backend.text.shorthand import expand_tty_abbreviations
 from backend.text.profanity import mask_profanity
 from backend.text.placeholders import find_placeholders
+from backend.text.primer import prepend_primer_word
 from backend.tts.synthesizer import TTSSynthesizer
 from backend.beacon.monitoring import format_monitoring_call, should_emit_beacon
 
@@ -865,6 +866,8 @@ async def _tx_pump() -> None:
                 # to the radio.  Browsers are text-only for TX; nothing is streamed
                 # to clients (that would double-key audio on the base station, which
                 # runs a browser AND the radio).
+                if _config.vox_primer_word_enabled:
+                    text = prepend_primer_word(text, _config.vox_primer_word)
                 ptt = make_ptt(_config)
                 synth_timeout = _config.tx_synthesis_timeout_seconds
                 try:
@@ -1174,6 +1177,8 @@ def _build_status() -> dict:
         "tx_conditioning": bool(_config.tx_conditioning) if _config else False,
         "vox_primer_enabled": bool(_config.vox_primer_enabled) if _config else False,
         "vox_primer_ms": int(_config.vox_primer_ms) if _config else 300,
+        "vox_primer_word_enabled": bool(_config.vox_primer_word_enabled) if _config else False,
+        "vox_primer_word": (_config.vox_primer_word if _config else "transmit"),
         "ptt_mode": (_config.ptt_mode if _config else "manual"),
         "ptt_serial_port": (_config.ptt_serial_port if _config else ""),
         "ptt_serial_line": (_config.ptt_serial_line if _config else "RTS"),
@@ -1613,6 +1618,12 @@ async def _ws_handle_set_server_config(ws: WebSocket, data: dict, state: "Connec
             _config["vox_primer_ms"] = max(0, min(2000, ms))
         except (TypeError, ValueError):
             pass
+
+    if "vox_primer_word_enabled" in data:
+        _config["vox_primer_word_enabled"] = bool(data["vox_primer_word_enabled"])
+
+    if "vox_primer_word" in data and isinstance(data["vox_primer_word"], str):
+        _config["vox_primer_word"] = data["vox_primer_word"].strip()[:64]
 
     if "stt_debug_capture" in data:
         enabled = bool(data["stt_debug_capture"])
