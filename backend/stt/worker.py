@@ -241,6 +241,9 @@ class STTWorker:
         self.saved_phrases = list(phrases)
         if self._model_cache is not None:
             self._model_cache.whisper.update_prompt(self.saved_phrases)
+            final = getattr(self._model_cache, "whisper_final", None)
+            if final is not None:
+                final.update_prompt(self.saved_phrases)
 
     # ------------------------------------------------------------------
     # Private helpers — emit helpers bridge thread → asyncio queue/callbacks
