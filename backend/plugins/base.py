@@ -16,6 +16,7 @@ class BasePlugin:
       on_audio_rx_chunk           — each raw audio chunk from input device (sync, hot path)
       on_rx_final                 — each finalized RX transcript (async)
       on_audio_tx_pre_queue       — before TX text enters synthesis queue (async, can block TX)
+      on_config_changed           — server config (re)loaded at startup / after admin save (async)
     """
 
     async def on_client_message_received(self, payload: dict, reply=None) -> None:
@@ -53,3 +54,11 @@ class BasePlugin:
         Modifiable fields: 'text', '_filter_profanity', '_voice_name', '_length_scale'.
         """
         return payload
+
+    async def on_config_changed(self, config) -> None:
+        """Called after server config is (re)loaded — once at startup (after the
+        plugin is registered) and again whenever an admin saves settings.
+
+        Plugins react to config changes here — open/close external connections,
+        restart pollers, re-read tunables. config is the live ServerConfig.
+        """

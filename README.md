@@ -10,7 +10,8 @@ laptop — no app install required.
 
 Built-in plugins add Net Control Station (NCS) mode with a live check-in roster
 and six traffic priority levels, SKYWARN weather alerts sourced directly from the
-National Weather Service, and an instant audio replay buffer. The plugin
+National Weather Service, an instant audio replay buffer, and a MeshCore bridge
+that forwards every transmission onto a LoRa mesh for off-grid reach. The plugin
 architecture is open — additional capabilities wire into the radio pipeline
 without touching core server logic.
 
@@ -72,6 +73,12 @@ browser-based React frontend communicating over WebSocket.
   levels, and one-click callsign check-in/out
 - **SKYWARN alerts** — live National Weather Service alerts pushed to all users
   with browser notification support
+- **MeshCore bridge** — an optional plugin that forwards every transmission onto a
+  MeshCore LoRa mesh over a USB Companion radio, prefixed with the sender's name
+  (received radio traffic is never forwarded). When enabled, the message box shows
+  a live character counter and caps input to the mesh packet length minus the name
+  prefix, so each over fits a single mesh frame. Shares a mesh-forwarder layer with
+  a planned Meshtastic plugin
 - **Journals** — AI-assisted session summaries with full transcript export
 - **Contacts** — shared contact book with FCC license lookup; multiple family members sharing the same GMRS callsign are stored as separate records and addressed individually by name
 - **Spectrogram** — real-time frequency display (voice or full range, viridis or
@@ -251,7 +258,11 @@ npm run build      # production build
 Hearthwave has two independent plugin surfaces: **frontend** plugins (React UI
 panels) and **backend** plugins (`BasePlugin` hooks into the audio/message
 pipeline). NCS and SKYWARN are implemented as a backend plugin
-(`backend/plugins/ncs.py`) with a matching frontend panel.
+(`backend/plugins/ncs.py`) with a matching frontend panel. The MeshCore bridge
+(`backend/plugins/meshcore.py`) is a second built-in, built on a shared
+`MeshForwarderPlugin` base (`backend/plugins/mesh_forwarder.py`) that a future
+Meshtastic plugin will reuse — a concrete forwarder supplies only its config
+mapping and transport.
 
 ### Frontend plugins
 
@@ -271,6 +282,14 @@ registerPlugin({
 
 The app shell mounts registered plugins in the draggable panel area via
 `PluginSlot`.
+
+A plugin can also constrain the core message input without the input knowing
+about any specific plugin, via the **TX-composition endpoint**
+(`registerTxComposition` in `frontend/src/plugins/index.ts`). A contributor
+returns a `{ maxLength, hint }` for the current profile + server config; the input
+honours the most restrictive contributor (live character counter + length cap).
+MeshCore registers one (`frontend/src/plugins/meshcore/`) so its packet-length
+budget is enforced as you type.
 
 ### Backend plugins
 
@@ -301,7 +320,7 @@ plugin_registry.register(WordGuard())
 
 #### Hooks
 
-There are five hooks. They fire in plugin **registration order**.
+There are six hooks. They fire in plugin **registration order**.
 
 | Hook | Sync/async | Fires when | Return value |
 | --- | --- | --- | --- |
@@ -310,11 +329,14 @@ There are five hooks. They fire in plugin **registration order**.
 | `on_audio_rx_chunk(chunk)` | **sync** | Each raw audio chunk is captured from the input device | Ignored. `chunk` is a float32 numpy array at 16 kHz. **Hot path on the STT worker thread — keep it fast; do not `await` or call asyncio APIs.** |
 | `on_rx_final(text)` | async | Each finalized (non-partial) RX transcript is broadcast | Ignored. |
 | `on_audio_tx_pre_queue(payload)` | async | Before TX text enters the synthesis queue | Return `payload` (optionally modified) to allow the transmit, or `None` to block it. Plugins run in registration order and the **first to return `None` wins**. Modifiable fields: `text`, `_filter_profanity`, `_voice_name`, `_length_scale`. |
+| `on_config_changed(config)` | async | Server config is (re)loaded — once at startup and again after every admin save | Ignored. React to setting changes here: open/close connections, restart pollers, re-read tunables. MeshCore uses it to connect or disconnect its serial link when its settings change. |
 
 Dispatch is exception-isolated: if a hook raises, the registry logs it and moves
 on to the next plugin (for `on_audio_tx_pre_queue`, a raising plugin is treated as
-pass-through, not a block). See `backend/plugins/registry.py` for the dispatchers
-and `backend/plugins/ncs.py` for a complete real-world plugin.
+pass-through, not a block). See `backend/plugins/registry.py` for the dispatchers,
+`backend/plugins/ncs.py` for a full-featured plugin, and
+`backend/plugins/mesh_forwarder.py` + `backend/plugins/meshcore.py` for a compact
+forwarder built on a reusable base.
 
 ## License
 

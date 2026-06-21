@@ -74,6 +74,12 @@ export interface StatusMsg {
   monitor_passthrough?: boolean;
   attendance_enabled?: boolean;
   saved_phrases?: string[];
+  meshcore_enabled?: boolean;
+  meshcore_serial_port?: string;
+  meshcore_baud?: number;
+  meshcore_max_packet_length?: number;
+  meshcore_prefix_separator?: string;
+  meshcore_channel_idx?: number;
 }
 
 export interface ContactsMsg {

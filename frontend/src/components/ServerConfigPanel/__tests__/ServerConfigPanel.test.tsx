@@ -30,6 +30,12 @@ function makeConfig(overrides: Partial<ServerConfig> = {}): ServerConfig {
     voxPrimerMs: 300,
     voxPrimerWordEnabled: false,
     voxPrimerWord: 'transmit',
+    meshcoreEnabled: false,
+    meshcoreSerialPort: '/dev/ttyMESH0',
+    meshcoreBaud: 115200,
+    meshcoreMaxPacketLength: 140,
+    meshcorePrefixSeparator: ': ',
+    meshcoreChannelIdx: 0,
     ...overrides,
   }
 }
@@ -213,6 +219,12 @@ describe('ServerConfigPanel', () => {
       vox_primer_ms: 300,
       vox_primer_word_enabled: false,
       vox_primer_word: 'transmit',
+      meshcore_enabled: false,
+      meshcore_serial_port: '/dev/ttyMESH0',
+      meshcore_baud: 115200,
+      meshcore_max_packet_length: 140,
+      meshcore_prefix_separator: ': ',
+      meshcore_channel_idx: 0,
     })
     expect(props.onClose).toHaveBeenCalledTimes(1)
   })

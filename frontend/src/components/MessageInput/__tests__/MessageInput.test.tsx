@@ -322,6 +322,54 @@ describe('MessageInput', () => {
     })
   })
 
+  describe('character limit (TX composition)', () => {
+    it('shows no counter when maxLength is not set', () => {
+      render(<MessageInput transmitting={false} contacts={[]} onSend={vi.fn()} />)
+      expect(screen.queryByText(/\d+\s*\/\s*\d+/)).not.toBeInTheDocument()
+    })
+
+    it('renders a live counter with the hint when maxLength is set', async () => {
+      const user = userEvent.setup()
+      render(
+        <MessageInput transmitting={false} contacts={[]} onSend={vi.fn()} maxLength={20} composeHint="MeshCore" />
+      )
+      expect(screen.getByText(/MeshCore/)).toBeInTheDocument()
+      expect(screen.getByText(/0\s*\/\s*20/)).toBeInTheDocument()
+      await user.type(screen.getByRole('textbox', { name: /message text/i }), 'hello')
+      expect(screen.getByText(/5\s*\/\s*20/)).toBeInTheDocument()
+    })
+
+    it('clamps typed text to maxLength', async () => {
+      const user = userEvent.setup()
+      render(
+        <MessageInput transmitting={false} contacts={[]} onSend={vi.fn()} maxLength={5} composeHint="MeshCore" />
+      )
+      const box = screen.getByRole('textbox', { name: /message text/i })
+      await user.type(box, '0123456789')
+      expect(box).toHaveValue('01234')
+      expect(screen.getByText(/5\s*\/\s*5/)).toBeInTheDocument()
+    })
+
+    it('does not send more than maxLength characters', async () => {
+      const user = userEvent.setup()
+      const onSend = vi.fn()
+      render(
+        <MessageInput transmitting={false} contacts={[]} onSend={onSend} maxLength={5} composeHint="MeshCore" />
+      )
+      const box = screen.getByRole('textbox', { name: /message text/i })
+      await user.type(box, 'abcdefghij')
+      await user.click(screen.getByRole('button', { name: /press to send message/i }))
+      expect(onSend).toHaveBeenCalledWith('abcde', 'ALL', '')
+    })
+
+    it('has no a11y violations with the counter', async () => {
+      const { container } = render(
+        <MessageInput transmitting={false} contacts={[]} onSend={vi.fn()} maxLength={20} composeHint="MeshCore" />
+      )
+      expect(await axe(container)).toHaveNoViolations()
+    })
+  })
+
   describe('accessibility', () => {
     it('has no violations with contacts list', async () => {
       const { container } = render(

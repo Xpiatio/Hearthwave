@@ -522,6 +522,75 @@ class TestSetServerConfigSavedPhrases:
 
 
 # ---------------------------------------------------------------------------
+# set_server_config — MeshCore settings sanitization
+# ---------------------------------------------------------------------------
+
+class TestSetServerConfigMeshCore:
+    """Validate the MeshCore input sanitization in set_server_config.
+
+    Left meshcore_enabled false except where toggling is the point, so no serial
+    connection is attempted. _config.save() is patched (read-only /data in tests).
+    """
+
+    def _send(self, ws, payload):
+        with patch("backend.config.ServerConfig.save"):
+            ws.send_json({"type": "set_server_config", **payload})
+            return ws.receive_json()
+
+    def test_valid_values_reflected_in_status(self, client):
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            msg = self._send(ws, {
+                "meshcore_serial_port": "  /dev/ttyACM0  ",
+                "meshcore_baud": 9600,
+                "meshcore_max_packet_length": 200,
+                "meshcore_channel_idx": 3,
+                "meshcore_prefix_separator": " > ",
+            })
+            assert msg["type"] == "status"
+            assert msg["meshcore_serial_port"] == "/dev/ttyACM0"  # trimmed
+            assert msg["meshcore_baud"] == 9600
+            assert msg["meshcore_max_packet_length"] == 200
+            assert msg["meshcore_channel_idx"] == 3
+            assert msg["meshcore_prefix_separator"] == " > "
+
+    def test_non_numeric_baud_ignored(self, client):
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            self._send(ws, {"meshcore_baud": 9600})
+            msg = self._send(ws, {"meshcore_baud": "not-a-number"})
+            assert msg["meshcore_baud"] == 9600  # unchanged
+
+    def test_max_packet_length_clamped_to_minimum_one(self, client):
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            msg = self._send(ws, {"meshcore_max_packet_length": 0})
+            assert msg["meshcore_max_packet_length"] == 1
+            msg = self._send(ws, {"meshcore_max_packet_length": -50})
+            assert msg["meshcore_max_packet_length"] == 1
+
+    def test_negative_channel_clamped_to_zero(self, client):
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            msg = self._send(ws, {"meshcore_channel_idx": -2})
+            assert msg["meshcore_channel_idx"] == 0
+
+    def test_separator_truncated_to_16_chars(self, client):
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            msg = self._send(ws, {"meshcore_prefix_separator": "x" * 40})
+            assert msg["meshcore_prefix_separator"] == "x" * 16
+
+    def test_enabled_flag_reflected_in_status(self, client):
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            msg = self._send(ws, {"meshcore_enabled": True})
+            assert msg["meshcore_enabled"] is True
+            msg = self._send(ws, {"meshcore_enabled": False})
+            assert msg["meshcore_enabled"] is False
+
+
+# ---------------------------------------------------------------------------
 # Audio output device (drives the radio) — listing, setting, admin gating
 # ---------------------------------------------------------------------------
 
