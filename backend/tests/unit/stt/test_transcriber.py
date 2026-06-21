@@ -93,6 +93,24 @@ class TestBuildPrompt:
         result = WhisperTranscriber._build_prompt(["break, break"])
         assert result == "GMRS radio. Phrases: break, break."
 
+    def test_build_prompt_empty_returns_base(self):
+        from backend.stt.transcriber import WhisperTranscriber
+        assert WhisperTranscriber._build_prompt([]) == "GMRS radio."
+
+    def test_build_prompt_frames_phrases(self):
+        from backend.stt.transcriber import WhisperTranscriber
+        assert WhisperTranscriber._build_prompt(["over", "KE8AAA"]) == \
+            "GMRS radio. Phrases: over, KE8AAA."
+
+    def test_build_prompt_front_trims_keeping_tail(self):
+        from backend.stt.transcriber import WhisperTranscriber
+        # Many long low-priority terms followed by a high-priority callsign tail.
+        phrases = [f"longgenericterm{i:03d}" for i in range(100)] + ["KE8ZZZ"]
+        prompt = WhisperTranscriber._build_prompt(phrases)
+        assert len(prompt) <= WhisperTranscriber._MAX_PROMPT_CHARS
+        assert prompt.endswith("KE8ZZZ.")          # tail survived
+        assert "longgenericterm000" not in prompt   # front dropped
+
 
 # ---------------------------------------------------------------------------
 # __init__ sets initial_prompt
