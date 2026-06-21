@@ -5,8 +5,8 @@ import { useMobileDetect } from '../useMobileDetect'
 function mockMatchMedia(pointer: boolean, maxWidth: boolean) {
   return vi.fn().mockImplementation((query: string) => ({
     matches:
-      query === '(pointer: coarse)' ? pointer :
-      query === '(max-width: 600px)' ? maxWidth :
+      query === '(pointer: coarse) and (max-width: 600px)' ? (pointer && maxWidth) :
+      query === '(pointer: coarse) and (min-width: 601px) and (max-width: 1200px)' ? (pointer && !maxWidth) :
       false,
     media: query,
     onchange: null,
@@ -25,22 +25,22 @@ describe('useMobileDetect', () => {
     Object.defineProperty(window, 'matchMedia', { value: originalMatchMedia, writable: true })
   })
 
-  it('returns true when pointer:coarse matches (touch device)', () => {
+  it('returns false when only pointer:coarse matches (tablet, not phone)', () => {
     Object.defineProperty(window, 'matchMedia', {
       value: mockMatchMedia(true, false),
       writable: true,
     })
     const { result } = renderHook(() => useMobileDetect())
-    expect(result.current).toBe(true)
+    expect(result.current).toBe(false)
   })
 
-  it('returns true when max-width:600px matches (narrow viewport fallback)', () => {
+  it('returns false when only max-width:600px matches (desktop, not phone)', () => {
     Object.defineProperty(window, 'matchMedia', {
       value: mockMatchMedia(false, true),
       writable: true,
     })
     const { result } = renderHook(() => useMobileDetect())
-    expect(result.current).toBe(true)
+    expect(result.current).toBe(false)
   })
 
   it('returns true when both pointer:coarse and max-width:600px match', () => {

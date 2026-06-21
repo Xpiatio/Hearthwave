@@ -1,8 +1,5 @@
-import { useMemo } from 'react';
+import { useDeviceClass } from './useDeviceClass';
 
 export function useMobileDetect(): boolean {
-  return useMemo(() => (
-    window.matchMedia('(pointer: coarse)').matches ||
-    window.matchMedia('(max-width: 600px)').matches
-  ), []);
+  return useDeviceClass() === 'phone';
 }
