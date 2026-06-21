@@ -17,7 +17,7 @@ without touching core server logic.
 Hearthwave is a fork of GMRS-TTY that replaces the desktop PySide6 UI with a
 browser-based React frontend communicating over WebSocket.
 
-> **Latest release:** v2.7.1
+> **Latest release:** v2.8.0
 
 ## Who uses it
 
@@ -44,6 +44,13 @@ browser-based React frontend communicating over WebSocket.
   optional larger model (e.g. `distil-large-v3`) re-transcribes each completed
   transmission in full, replacing the live text with a higher-accuracy final —
   without truncating long overs or dropping a callsign the live pass already heard
+- **GPU-accelerated final pass (ROCm)** — the whole-utterance final pass can run
+  on an AMD GPU via ROCm while streaming stays on CPU, eliminating the CPU
+  contention that otherwise stalls live transcription during a final pass (measured:
+  streaming latency during a final pass dropped from +105% to +3% on a Radeon 680M).
+  Configurable via `stt_final_device` (`auto` / `gpu` / `cpu`); falls back to CPU
+  automatically if no ROCm GPU is present. ROCm deployment is build-from-source only
+  (see [deployment profiles](#quick-start))
 - **Cuts through static** — adaptive squelch tracks the channel noise floor so
   weak carriers pre-trigger capture, a 1-second pre-roll plus carrier-drop
   finalize stops the first and last words from being clipped
@@ -157,6 +164,7 @@ private tunnel.
 |---|---|
 | Server | x86 mini PC or NUC (e.g. Intel N100; N305 or better recommended when running the two-tier final pass); ARM not supported |
 | RAM | 8 GB minimum, 16 GB recommended — Whisper STT is memory-intensive, and the optional two-tier final-pass model adds ~1.5 GB while active |
+| GPU (optional) | AMD GPU with amdgpu / ROCm kernel driver — offloads the final pass to the GPU, eliminating CPU contention during transcription. CPU-only operation is fully supported without a GPU |
 | Audio | A two-way audio path to the radio's combo (speaker/mic) jack — either the computer's built-in 3.5 mm jack or a USB audio adapter (see [Connecting the radio](#connecting-the-radio)) |
 | PTT | VOX (no wiring — uses the VOX primer tone), or a USB serial dongle (RTS/DTR) |
 | OS | Ubuntu 22.04+ or Debian 12+ recommended; Docker required |
@@ -183,13 +191,23 @@ and adjust them later under **Admin Settings**.
 
 ## Quick start
 
+Hearthwave ships with three deployment profiles. Choose the one that matches your hardware:
+
+| Profile | Compose file | Setup script | Notes |
+|---|---|---|---|
+| **CPU** (default) | `docker-compose.yml` | `setup-cpu.sh` (or `setup.sh`) | Prebuilt image — recommended for most users |
+| **AMD GPU (ROCm)** | `docker-compose.rocm.yml` | `setup-rocm.sh` | Runs the final pass on an AMD GPU; **image built locally** (~28 GB, not published to registry) |
+| **NVIDIA GPU (CUDA)** | `docker-compose.cuda.yml` | `setup-cuda.sh` | **Stub — not yet validated**; structure is in place but untested |
+
+### CPU install (default)
+
 ```bash
 # 1. Clone the repo
 git clone https://github.com/Xpiatio/Hearthwave
 cd Hearthwave
 
 # 2. Run setup (creates .env and configures audio)
-./setup.sh
+./setup.sh          # forwards to setup-cpu.sh
 
 # 3. Start the stack
 docker compose up -d
@@ -197,6 +215,18 @@ docker compose up -d
 # 4. Open in your browser
 http://your-server-ip
 ```
+
+### AMD GPU (ROCm) install
+
+```bash
+./setup-rocm.sh     # builds the local ROCm image and stages the HF-format final-pass model
+docker compose -f docker-compose.rocm.yml up -d
+```
+
+Requires an AMD GPU with the amdgpu / ROCm kernel driver, the host `render` group, and
+`HSA_OVERRIDE_GFX_VERSION` set appropriately (default `10.3.0`, needed for APUs such as
+the Radeon 680M that are not officially listed in the ROCm supported-GPU table). See
+[USER_MANUAL.md](USER_MANUAL.md) for full prerequisites.
 
 On first launch the Setup screen appears — create the admin account and configure
 your callsign, audio devices, and PTT interface.

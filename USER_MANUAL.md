@@ -1,6 +1,6 @@
 # Hearthwave User Manual
 
-> **Version:** v2.7.1
+> **Version:** v2.8.0
 
 This manual covers day-to-day operation of Hearthwave as a GMRS family hub or neighborhood watch base station — a shared radio operating station where every household member or watch volunteer connects from their own device. For installation and server setup, see [README.md](README.md).
 
@@ -34,6 +34,7 @@ This manual covers day-to-day operation of Hearthwave as a GMRS family hub or ne
 22. [Plugin system](#22-plugin-system)
 23. [FCC compliance and remote access](#23-fcc-compliance-and-remote-access)
 24. [Transcription vocabulary biasing](#24-transcription-vocabulary-biasing)
+25. [Deployment profiles and GPU acceleration (admin)](#25-deployment-profiles-and-gpu-acceleration-admin)
 
 ---
 
@@ -81,7 +82,7 @@ The **login screen** appears automatically. Select your name from the profile li
 
 **New to the station?** Your administrator creates your account and gives you your initial password. You can change it any time via the account menu (see [Your account](#14-your-account)).
 
-The login screen shows the **Hearthwave logo** and an **About** link beneath the sign-in form. The About link displays the running version (e.g. *v2.7.1*) and opens the **About Hearthwave** dialog with project links and FCC information. Once signed in, you can reopen this dialog any time from the **logo in the top bar** or the **About Hearthwave** entry in the account menu.
+The login screen shows the **Hearthwave logo** and an **About** link beneath the sign-in form. The About link displays the running version (e.g. *v2.8.0*) and opens the **About Hearthwave** dialog with project links and FCC information. Once signed in, you can reopen this dialog any time from the **logo in the top bar** or the **About Hearthwave** entry in the account menu.
 
 If the server is unreachable, the status bar shows **OFFLINE** in amber. Refresh the page or contact your administrator.
 
@@ -731,6 +732,7 @@ The **Admin Settings** dialog is accessible to admin accounts only. Open it from
 | VAD threshold | Sensitivity of voice activity detection. Lower = more sensitive; higher = requires stronger signal. Changing this restarts the STT worker. |
 | Whisper model | Which Whisper model the server uses for live (streaming) transcription. Changing this restarts the STT worker. |
 | Final-pass model | Optional larger model that re-transcribes each completed transmission in full once the other station unkeys, replacing the live partial text with a more accurate final. The final pass never truncates a long transmission or drops a callsign the live pass already heard — if it returns a short or empty result, the complete live text is kept. Choose **Off** for single-pass, or a larger model such as `distil-large-v3` (recommended). The model must be staged first (see below) and adds ~1.5 GB RAM only while active. Changing this restarts the STT worker. |
+| Final-pass device | Where the whole-utterance final pass runs: `auto` (GPU if a ROCm GPU is present, else CPU), `gpu`, or `cpu`. Requires the ROCm deployment profile to use GPU. See [section 25](#25-deployment-profiles-and-gpu-acceleration-admin). |
 | Adaptive squelch | Tracks the channel noise floor and opens at 3× it, so weak carriers pre-trigger audio capture instead of clipping the first word. Leave off on consistently strong signals; enable on noisy or distant channels. Restarts the STT worker. |
 | TX conditioning | Band-limits, compresses, and levels synthesized speech before it drives the radio's microphone input — clearer over narrowband FM. Browser read-aloud is unaffected. Takes effect immediately. |
 | STT debug capture | Saves raw / segmented / processed audio plus transcripts for each utterance, for offline word-error-rate evaluation. For tuning only — leave off in normal operation. Restarts the STT worker. |
@@ -861,3 +863,72 @@ Vocabulary biasing is active by default — no setup required. The built-in radi
 The bias refreshes live: adding, editing, or deleting a contact or a saved phrase updates the vocabulary immediately for the next transmission. If you want to force a rebuild — for example after importing a batch of contacts — use the **Rescan vocabulary** button in **Settings → server config** (near the saved-phrases box). After rescanning, a confirmation shows how many terms and callsigns are now active.
 
 To add your own domain-specific terms (net names, repeater IDs, local place names, unusual callsign prefixes), enter them in the **Saved phrases** box in server config. Each entry contributes to the vocabulary budget alongside the built-in keywords.
+
+---
+
+## 25. Deployment profiles and GPU acceleration (admin)
+
+Hearthwave ships with three Docker deployment profiles. The profile you choose determines which compose file and setup script to run, and whether the STT final pass can be offloaded to a GPU.
+
+### Deployment profiles
+
+| Profile | Compose file | Setup script | Image source |
+|---|---|---|---|
+| **CPU** (default) | `docker-compose.yml` | `setup.sh` / `setup-cpu.sh` | Prebuilt — pulled from registry |
+| **AMD GPU (ROCm)** | `docker-compose.rocm.yml` | `setup-rocm.sh` | Built locally (~28 GB) — **not published** |
+| **NVIDIA GPU (CUDA)** | `docker-compose.cuda.yml` | `setup-cuda.sh` | **Stub only — not yet validated** |
+
+The CPU profile is recommended for most users. The ROCm profile is available for servers with a supported AMD GPU and requires building the Docker image locally — it is not available as a prebuilt download.
+
+> **CUDA note:** The NVIDIA CUDA profile is a documented stub. The compose file and setup script are in place but have not been validated. Do not rely on it for production use.
+
+### GPU-accelerated final pass (AMD ROCm)
+
+The whole-utterance final pass — where a larger Whisper model re-transcribes each completed transmission in full — can run on an AMD GPU via ROCm. The live streaming pass always stays on CPU, where it runs fastest on most hardware.
+
+**Why this matters:** On a CPU-only host, the final pass competes with the streaming pass for CPU cores. On a Radeon 680M (a typical integrated APU), this raised streaming latency by about 105% while a final pass was running. Offloading the final pass to the GPU reduced that to roughly 3%. The win is contention relief, not raw transcription speed.
+
+### `stt_final_device` setting
+
+Control where the final pass runs with the `stt_final_device` key in `data/config.json` (System tab of Admin Settings is the recommended way to change it):
+
+| Value | Behaviour |
+|---|---|
+| `auto` (default) | Uses the GPU if a ROCm GPU is detected; falls back to CPU otherwise |
+| `gpu` | Always attempts GPU; falls back to CPU if loading fails |
+| `cpu` | Always uses CPU |
+
+Setting `stt_final_device` to `cpu` takes effect on the next STT worker restart and requires no rebuild or redeployment.
+
+### ROCm prerequisites
+
+To use the ROCm profile your server must meet these requirements:
+
+- An AMD GPU with the **amdgpu / ROCm kernel driver** loaded on the host
+- The host user running Docker must be in the **`render` group** (the container uses `/dev/kfd` for GPU access)
+- **`HSA_OVERRIDE_GFX_VERSION`** — set by `setup-rocm.sh` to `10.3.0` by default. This override is required for GPUs not officially listed in ROCm's supported-hardware table (such as the Radeon 680M / gfx1035). Adjust if your GPU uses a different GFX version.
+
+The ROCm Docker image is built locally by `setup-rocm.sh`. This takes considerable time and disk space (~28 GB) and is a one-time operation. The image is not pushed to any registry; it stays on your machine.
+
+### Starting with the ROCm profile
+
+```bash
+# Build the image and stage the HF-format final-pass model
+./setup-rocm.sh
+
+# Start the stack
+docker compose -f docker-compose.rocm.yml up -d
+```
+
+The final-pass model (`distil-large-v3`) is staged in HF transformers format by `setup-rocm.sh` alongside the CT2 model used by the CPU path.
+
+### Automatic fallback
+
+If no ROCm GPU is detected (or if the GPU fails to load at runtime), the final pass falls back to CPU automatically. The streaming pass is never affected — if even the CPU final pass fails, the server falls back to plain finals (the last live partial). Failures in the final pass never interrupt transcription.
+
+### Rollback
+
+To switch back to CPU-only operation at any time:
+
+- **No rebuild needed:** set `stt_final_device` to `cpu` in Admin Settings (System tab) and restart the STT worker.
+- **Full rollback:** set `COMPUTE_BACKEND=cpu` and restart with `docker-compose.yml` instead of `docker-compose.rocm.yml`.
