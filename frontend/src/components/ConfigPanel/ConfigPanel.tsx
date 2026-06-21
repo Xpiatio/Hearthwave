@@ -24,6 +24,7 @@ interface Props {
   onSpectroColormapChange: (cm: 'viridis' | 'grayscale') => void;
   onSpectroFreqRangeChange: (range: 'voice' | 'full') => void;
   onSpectroTimeWindowChange: (s: number) => void;
+  hideHeader?: boolean;
 }
 
 export function ConfigPanel({
@@ -45,6 +46,7 @@ export function ConfigPanel({
   onSpectroColormapChange,
   onSpectroFreqRangeChange,
   onSpectroTimeWindowChange,
+  hideHeader = false,
 }: Props) {
   const isLoopback = inputDevice === 'system_monitor';
 
@@ -61,17 +63,8 @@ export function ConfigPanel({
     ? outputDevices
     : [{ label: 'System Default (speaker)', id: -1 }];
 
-  return (
-    <Paper
-      elevation={0}
-      square
-      sx={{ borderBottom: 1, borderColor: 'divider', overflow: 'hidden' }}
-      role="region"
-      aria-label="Configuration"
-    >
-      <PanelHeader title="Configuration" gradient="linear-gradient(135deg, #1A3A5C 0%, #1E4976 100%)" />
-
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center', px: 2, py: 1.5 }}>
+  const body = (
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center', px: 2, py: 1.5 }}>
 
         {/* Text / content toggles */}
         <FormControlLabel
@@ -189,6 +182,20 @@ export function ConfigPanel({
           </ToggleButtonGroup>
         </Box>
       </Box>
+    );
+
+  if (hideHeader) {
+    return (
+      <Box role="region" aria-label="Configuration" sx={{ overflow: 'hidden' }}>
+        {body}
+      </Box>
+    );
+  }
+
+  return (
+    <Paper elevation={0} square sx={{ borderBottom: 1, borderColor: 'divider', overflow: 'hidden' }} role="region" aria-label="Configuration">
+      <PanelHeader title="Configuration" gradient="linear-gradient(135deg, #1A3A5C 0%, #1E4976 100%)" />
+      {body}
     </Paper>
   );
 }
