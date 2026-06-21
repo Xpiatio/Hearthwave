@@ -1,0 +1,61 @@
+# Hearthwave — AMD ROCm deployment (build-from-source).
+# Standalone: run directly, no base file needed:
+#   bash setup-rocm.sh           # one-time host prep + model staging
+#   docker compose -f docker-compose.rocm.yml up --build
+#
+# Runs the STT final pass on an AMD GPU via ROCm. The streaming pass stays on
+# CPU. Requires: amdgpu kernel driver, the host 'render' group, and (for
+# unsupported GPUs like the Radeon 680M / gfx1035) HSA_OVERRIDE_GFX_VERSION.
+# setup-rocm.sh writes RENDER_GID / HSA_OVERRIDE_GFX_VERSION / PULSE_UID to .env.
+name: hearthwave
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        COMPUTE_BACKEND: rocm
+    volumes:
+      - ./data:/data
+      - ./Voices:/app/Voices:ro
+      - ./Models:/app/backend/Models:ro
+      - /run/user/${PULSE_UID:-1000}/pulse:/run/pulse:ro
+    environment:
+      - PULSE_SERVER=unix:/run/pulse/native
+      # gfx override so unsupported GPUs present as a supported gfx1030.
+      - HSA_OVERRIDE_GFX_VERSION=${HSA_OVERRIDE_GFX_VERSION:-10.3.0}
+    devices:
+      - /dev/snd:/dev/snd
+      - /dev/kfd:/dev/kfd      # ROCm compute device
+      - /dev/dri:/dev/dri      # GPU render nodes
+    group_add:
+      - "${RENDER_GID:-992}"   # host 'render' group GID (getent group render)
+    restart: unless-stopped
+    networks:
+      - radio
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8765/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:8080"
+    volumes:
+      - ./data:/data:ro
+    depends_on:
+      backend:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - radio
+
+networks:
+  radio:
+    driver: bridge
