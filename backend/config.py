@@ -169,7 +169,10 @@ class ServerConfig(dict):
 
     @property
     def stt_vocab_max_callsigns(self) -> int:
-        return int(self.get("stt_vocab_max_callsigns", 100))
+        """Max number of contact callsigns to include in Whisper initial_prompt.
+        Callsigns are ~6 tokens each; smaller limit leaves room for procedure
+        vocabulary and custom phrases within the ~223-token budget."""
+        return int(self.get("stt_vocab_max_callsigns", 15))
 
     # ---- radio / service -------------------------------------------------
 
