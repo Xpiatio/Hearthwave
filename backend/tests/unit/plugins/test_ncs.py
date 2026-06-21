@@ -1027,3 +1027,35 @@ class TestIsActive:
         ncs = make_ncs()
         ncs._active = True
         assert ncs.is_active() is True
+
+
+# ---------------------------------------------------------------------------
+# on_config_changed — conform to the shared plugin lifecycle endpoint
+# ---------------------------------------------------------------------------
+
+class TestNCSOnConfigChanged:
+    async def test_noop_when_net_inactive(self):
+        ncs = make_ncs()
+        assert ncs._active is False
+        await ncs.on_config_changed(make_config(ncs_zone="MIZ071"))
+        assert ncs._nws_task is None  # nothing started while inactive
+
+    async def test_starts_poll_when_zone_added_mid_net(self):
+        """A net started with no zone should begin polling once a zone is set."""
+        ncs = make_ncs(config=make_config(ncs_zone=""))
+        ncs._active = True  # simulate an active net with no poll task
+        assert ncs._nws_task is None
+        cfg = make_config(ncs_zone="MIZ071")
+        with patch.object(ncs, "_nws_poll_loop", new=AsyncMock()):
+            await ncs.on_config_changed(cfg)
+        assert ncs._nws_task is not None
+        ncs._nws_task.cancel()
+
+    async def test_does_not_double_start_poll(self):
+        ncs = make_ncs()
+        ncs._active = True
+        sentinel = asyncio.create_task(asyncio.sleep(3600))
+        ncs._nws_task = sentinel
+        await ncs.on_config_changed(make_config(ncs_zone="MIZ071"))
+        assert ncs._nws_task is sentinel  # unchanged
+        sentinel.cancel()

@@ -21,6 +21,7 @@ import { PendingStationsBar } from '../PendingStationsBar/PendingStationsBar';
 import { ContactsDialog } from '../ContactsDialog/ContactsDialog';
 import { SettingsDialog } from '../SettingsDialog/SettingsDialog';
 import type { ServerConfig, ServerConfigSaveValues } from '../ServerConfigPanel/ServerConfigPanel';
+import type { TxComposition } from '../../plugins';
 import { UsersPanel } from '../UsersPanel/UsersPanel';
 import type {
   StatusMsg,
@@ -80,6 +81,7 @@ export interface MobileAppProps {
   onSend: (text: string, targetCall: string, targetName: string) => void;
   onChat: (text: string) => void;
   onStandaloneId: () => void;
+  txComposition: TxComposition | null;
   onVoicePttStart: () => void;
   onVoicePttChunk: (b64: string) => void;
   onVoicePttEnd: () => void;
@@ -187,6 +189,7 @@ export function MobileApp({
   onSend,
   onChat,
   onStandaloneId,
+  txComposition,
   onVoicePttStart,
   onVoicePttChunk,
   onVoicePttEnd,
@@ -310,6 +313,8 @@ export function MobileApp({
               onSend={onSend}
               onChat={onChat}
               onStandaloneId={onStandaloneId}
+              maxLength={txComposition?.maxLength}
+              composeHint={txComposition?.hint}
             />
           )}
         </Box>

@@ -33,6 +33,7 @@ def spy_plugin(
     on_audio_rx_chunk=None,
     on_rx_final=None,
     on_audio_tx_pre_queue=None,
+    on_config_changed=None,
 ) -> BasePlugin:
     """Return a BasePlugin subclass with overrideable async/sync hooks."""
     plugin = BasePlugin()
@@ -46,6 +47,8 @@ def spy_plugin(
         plugin.on_rx_final = on_rx_final
     if on_audio_tx_pre_queue is not None:
         plugin.on_audio_tx_pre_queue = on_audio_tx_pre_queue
+    if on_config_changed is not None:
+        plugin.on_config_changed = on_config_changed
     return plugin
 
 
@@ -420,6 +423,56 @@ class TestDispatchTxPreQueue:
         with caplog.at_level(logging.DEBUG, logger="backend.plugins.registry"):
             result = await registry.dispatch_tx_pre_queue({"text": "block"})
         assert result is None
+
+
+# ---------------------------------------------------------------------------
+# dispatch_config_changed
+# ---------------------------------------------------------------------------
+
+class TestDispatchConfigChanged:
+    async def test_calls_all_plugins_with_config(self):
+        received = []
+
+        async def hook(config):
+            received.append(config)
+
+        cfg = {"meshcore_enabled": True}
+        registry = make_registry(
+            spy_plugin(on_config_changed=hook),
+            spy_plugin(on_config_changed=hook),
+        )
+        await registry.dispatch_config_changed(cfg)
+        assert received == [cfg, cfg]
+
+    async def test_swallows_exception_and_continues(self):
+        calls = []
+
+        async def bad_hook(config):
+            raise RuntimeError("config boom")
+
+        async def good_hook(config):
+            calls.append(True)
+
+        registry = make_registry(
+            spy_plugin(on_config_changed=bad_hook),
+            spy_plugin(on_config_changed=good_hook),
+        )
+        await registry.dispatch_config_changed({})
+        assert calls == [True]
+
+    async def test_no_plugins_does_not_raise(self):
+        await PluginRegistry().dispatch_config_changed({})
+
+    async def test_exception_logged(self, caplog):
+        import logging
+
+        async def bad_hook(config):
+            raise ValueError("reconnect failed")
+
+        registry = make_registry(spy_plugin(on_config_changed=bad_hook))
+        with caplog.at_level(logging.ERROR, logger="backend.plugins.registry"):
+            await registry.dispatch_config_changed({})
+        assert "on_config_changed" in caplog.text
 
 
 # ---------------------------------------------------------------------------

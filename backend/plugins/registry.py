@@ -74,5 +74,13 @@ class PluginRegistry:
             payload = result
         return payload
 
+    async def dispatch_config_changed(self, config) -> None:
+        """Notify all plugins that server config was (re)loaded (fire-and-forget)."""
+        for plugin in self._plugins:
+            try:
+                await plugin.on_config_changed(config)
+            except Exception:
+                _log.exception("Plugin %s raised in on_config_changed", type(plugin).__name__)
+
 
 plugin_registry = PluginRegistry()
