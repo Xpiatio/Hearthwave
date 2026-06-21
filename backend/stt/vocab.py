@@ -30,7 +30,7 @@ PROCEDURE: tuple[str, ...] = (
 CURATED: tuple[str, ...] = NATO + PROCEDURE
 
 
-def assemble_phrases(callsigns, saved_phrases, *, max_callsigns) -> list[str]:
+def assemble_phrases(callsigns: list[str], saved_phrases: list[str], *, max_callsigns: int) -> list[str]:
     """Build the ordered bias list, lowest priority first.
 
     Order: CURATED -> saved_phrases -> callsigns (callsigns last so they sit in
