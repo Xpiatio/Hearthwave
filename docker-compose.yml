@@ -1,3 +1,9 @@
+# Pin the Compose project name so `docker compose` from this directory always
+# targets the same stack. Without this, the project defaults to the directory
+# name (e.g. 'radio-tty'), which spins up a parallel stack that collides on
+# port 80 with an install started under a different name.
+name: hearthwave
+
 services:
   backend:
     build:
