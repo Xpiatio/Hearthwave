@@ -544,3 +544,44 @@ class TestVoxPrimerWordOverrides:
 
     def test_word_override(self):
         assert make_config(vox_primer_word="break").vox_primer_word == "break"
+
+
+# ---------------------------------------------------------------------------
+# MeshCore plugin
+# ---------------------------------------------------------------------------
+
+class TestMeshCoreDefaults:
+    def test_enabled_default_false(self):
+        assert ServerConfig().meshcore_enabled is False
+
+    def test_serial_port_default(self):
+        assert ServerConfig().meshcore_serial_port == "/dev/ttyUSB0"
+
+    def test_baud_default(self):
+        assert ServerConfig().meshcore_baud == 115200
+
+    def test_max_packet_length_default(self):
+        assert ServerConfig().meshcore_max_packet_length == 140
+
+    def test_prefix_separator_default(self):
+        assert ServerConfig().meshcore_prefix_separator == ": "
+
+    def test_channel_idx_default(self):
+        assert ServerConfig().meshcore_channel_idx == 0
+
+
+class TestMeshCoreOverrides:
+    def test_enabled_override(self):
+        assert make_config(meshcore_enabled=True).meshcore_enabled is True
+
+    def test_serial_port_override(self):
+        assert make_config(meshcore_serial_port="/dev/ttyACM0").meshcore_serial_port == "/dev/ttyACM0"
+
+    def test_max_packet_length_override(self):
+        assert make_config(meshcore_max_packet_length=200).meshcore_max_packet_length == 200
+
+    def test_max_packet_length_coerces_to_int(self):
+        assert make_config(meshcore_max_packet_length="180").meshcore_max_packet_length == 180
+
+    def test_channel_idx_override(self):
+        assert make_config(meshcore_channel_idx=3).meshcore_channel_idx == 3

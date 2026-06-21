@@ -73,6 +73,17 @@ class TestBasePluginDefaults:
         plugin = BasePlugin()
         assert isinstance(plugin, BasePlugin)
 
+    async def test_on_config_changed_returns_none(self):
+        plugin = BasePlugin()
+        result = await plugin.on_config_changed({"meshcore_enabled": True})
+        assert result is None
+
+    async def test_on_config_changed_accepts_arbitrary_config(self):
+        """Default impl must accept any config object without inspecting it."""
+        plugin = BasePlugin()
+        assert await plugin.on_config_changed(None) is None
+        assert await plugin.on_config_changed({}) is None
+
     async def test_multiple_hook_calls_are_independent(self):
         """Repeated calls produce the same result — no state accumulates."""
         plugin = BasePlugin()

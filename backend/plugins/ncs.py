@@ -171,6 +171,15 @@ class NCSPlugin(BasePlugin):
             return None  # Block TX while BREAK BREAK is active
         return payload
 
+    async def on_config_changed(self, config) -> None:
+        """React to a config save. If a net is active and an NWS zone has been
+        configured but no poll loop is running yet, start polling now (a net may
+        have been opened before the zone was set)."""
+        if not self._active:
+            return
+        if config.ncs_zone and (self._nws_task is None or self._nws_task.done()):
+            self._nws_task = asyncio.create_task(self._nws_poll_loop(), name="ncs-nws-poll")
+
     # ------------------------------------------------------------------
     # Internal handlers
     # ------------------------------------------------------------------

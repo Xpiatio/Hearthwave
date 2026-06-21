@@ -305,6 +305,39 @@ class ServerConfig(dict):
         """Seconds between automated net announcements while NCS is active (default 600)."""
         return int(self.get("ncs_announcement_interval", 600))
 
+    # ---- MeshCore plugin (outbound LoRa mesh bridge) --------------------
+
+    @property
+    def meshcore_enabled(self) -> bool:
+        """Forward accepted TX onto the MeshCore mesh (default off)."""
+        return bool(self.get("meshcore_enabled", False))
+
+    @property
+    def meshcore_serial_port(self) -> str:
+        """Serial device of the MeshCore Companion radio (default /dev/ttyUSB0)."""
+        return self.get("meshcore_serial_port", "/dev/ttyUSB0")
+
+    @property
+    def meshcore_baud(self) -> int:
+        """Baud rate for the MeshCore Companion serial link (default 115200)."""
+        return int(self.get("meshcore_baud", 115200))
+
+    @property
+    def meshcore_max_packet_length(self) -> int:
+        """Max characters in one MeshCore text packet, including the sender prefix
+        (default 140 — verify against the MeshCore firmware in use)."""
+        return int(self.get("meshcore_max_packet_length", 140))
+
+    @property
+    def meshcore_prefix_separator(self) -> str:
+        """Joins the sender name and the message body on the mesh (default ': ')."""
+        return self.get("meshcore_prefix_separator", ": ")
+
+    @property
+    def meshcore_channel_idx(self) -> int:
+        """MeshCore channel index to transmit on (default 0)."""
+        return int(self.get("meshcore_channel_idx", 0))
+
     # ---- monitoring beacon ----------------------------------------------
 
     @property

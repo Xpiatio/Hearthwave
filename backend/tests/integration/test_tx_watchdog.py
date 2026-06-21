@@ -95,12 +95,15 @@ WS_URL = "/ws?token=test"
 # online_status).  Drain until voices_list is seen so tests start clean.
 # ---------------------------------------------------------------------------
 
-def _drain_initial(ws, limit: int = 10) -> list[dict]:
+def _drain_initial(ws, limit: int = 12) -> list[dict]:
+    # The on-connect burst ends with chat_history (the shared-stream backfill,
+    # sent after voices_list). Drain through it so a later bare receive_json()
+    # sees the frame the test actually expects, not a leftover initial frame.
     frames = []
     for _ in range(limit):
         msg = ws.receive_json()
         frames.append(msg)
-        if msg.get("type") == "voices_list":
+        if msg.get("type") == "chat_history":
             break
     return frames
 
