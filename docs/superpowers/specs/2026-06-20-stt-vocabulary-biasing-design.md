@@ -4,6 +4,37 @@
 **Status:** Approved (design)
 **Project:** Hearthwave (Radio-TTY)
 
+## Revision — post-build, 2026-06-20 (token-budget reality)
+
+The final whole-branch review + tokenizer measurements (faster-whisper 1.2.1,
+`small.en`) invalidated the original char-budget tuning. Hard facts:
+
+- Whisper keeps only ~223 prompt tokens. The original 73-term curated set =
+  **221 tokens by itself** — it consumed the entire budget.
+- Callsigns cost **~6 tokens each** (alphanumerics tokenize near per-character),
+  so `max_callsigns=100` was physically unreachable (~36 fit, alone).
+- Result: with any contacts, callsigns-first + front-trim evicted ALL curated
+  vocab. The headline curated biasing was effectively dead in real deployments.
+
+Decisions (user-approved):
+
+1. **Trim curated to a 40-term high-value core** — NATO (26) + 14 procedure
+   words / Q-codes (over, out, roger, affirmative, negative, copy that, say
+   again, standing by, break break, CQ, QSL, QSY, QRZ, seventy three) = 111
+   tokens. CB slang and band-identifier extras dropped (operators add their own
+   via saved phrases).
+2. **Token-accurate budgeting** — `_build_prompt` trims by real token count via
+   the model tokenizer (`WhisperModel.hf_tokenizer`), budget `_MAX_PROMPT_TOKENS
+   = 220`, with a char-based heuristic fallback when no tokenizer (unit tests).
+   Replaces the unreliable `_MAX_PROMPT_CHARS` proxy.
+3. **`stt_vocab_max_callsigns` default 100 → 15** — core (111) + 15 callsigns
+   (~94) ≈ 205 tokens, fits under 220 with both halves active. Documented that
+   callsigns are token-expensive and only the newest ~15 bias the prompt.
+4. **Final-pass engine live refresh (review Important #1)** —
+   `STTWorker.update_phrases` now refreshes BOTH the fast and final Whisper
+   caches, so live contact/phrase changes reach the authoritative replacing
+   transcript without a worker restart.
+
 ## Goal
 
 Bias both Whisper STT engines toward radio-domain vocabulary (CB, HAM, GMRS,
