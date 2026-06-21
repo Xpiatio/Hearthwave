@@ -1,6 +1,6 @@
 import os
 
-from backend.constants import HALLUCINATIONS
+from backend.stt._prompt import build_prompt, is_hallucination, MAX_PROMPT_TOKENS
 
 
 class WhisperTranscriber:
@@ -48,10 +48,8 @@ class WhisperTranscriber:
     # token confidence and are almost always noise hallucinations.
     _AVG_LOGPROB_THRESHOLD = -1.0
 
-    # Whisper keeps only ~223 prompt tokens (the tail). Callers order phrases
-    # lowest-priority-first, so trimming from the front drops generic vocab
-    # while callsigns/custom phrases survive. 220 leaves a small margin.
-    _MAX_PROMPT_TOKENS = 220
+    # Kept as a class attribute alias for backward compatibility (tests import it).
+    _MAX_PROMPT_TOKENS = MAX_PROMPT_TOKENS
 
     @staticmethod
     def _make_token_counter(model):
@@ -65,16 +63,7 @@ class WhisperTranscriber:
 
     @staticmethod
     def _build_prompt(phrases, *, count_tokens) -> str:
-        base = "GMRS radio."
-        phrases = [p for p in (phrases or []) if p]
-        if not phrases:
-            return base
-        while phrases:
-            prompt = f"{base} Phrases: {', '.join(phrases)}."
-            if count_tokens(prompt) <= WhisperTranscriber._MAX_PROMPT_TOKENS:
-                return prompt
-            phrases.pop(0)
-        return base
+        return build_prompt(phrases, count_tokens=count_tokens)
 
     def update_prompt(self, saved_phrases=()) -> None:
         """Rebuild the initial_prompt from a new phrase list (thread-safe via GIL)."""
@@ -108,7 +97,6 @@ class WhisperTranscriber:
                 continue
             kept.append(seg.text.strip())
         text = " ".join(kept).strip()
-        normalized = text.lower().strip(".,!?;: ")
-        if not text or normalized in HALLUCINATIONS:
+        if is_hallucination(text):
             return None
         return text
