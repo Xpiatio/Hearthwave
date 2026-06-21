@@ -28,6 +28,8 @@ function makeConfig(overrides: Partial<ServerConfig> = {}): ServerConfig {
     savedPhrases: [],
     voxPrimerEnabled: false,
     voxPrimerMs: 300,
+    voxPrimerWordEnabled: false,
+    voxPrimerWord: 'transmit',
     ...overrides,
   }
 }
@@ -209,6 +211,8 @@ describe('ServerConfigPanel', () => {
       saved_phrases: [],
       vox_primer_enabled: false,
       vox_primer_ms: 300,
+      vox_primer_word_enabled: false,
+      vox_primer_word: 'transmit',
     })
     expect(props.onClose).toHaveBeenCalledTimes(1)
   })
@@ -415,6 +419,24 @@ describe('ServerConfigPanel', () => {
     await user.click(screen.getByRole('button', { name: /save/i }))
     expect(props.onSave).toHaveBeenCalledWith(
       expect.objectContaining({ vox_primer_enabled: true, vox_primer_ms: 300 })
+    )
+  })
+
+  it('toggles the VOX priming word and passes word + flag to onSave', async () => {
+    const user = userEvent.setup()
+    const props = makeDefaultProps({ voxPrimerWordEnabled: true, voxPrimerWord: 'transmit' })
+    render(<ServerConfigPanel {...props} />)
+
+    const field = screen.getByLabelText('Priming word')
+    await user.clear(field)
+    await user.type(field, 'break')
+    await user.click(screen.getByRole('button', { name: /save/i }))
+
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vox_primer_word_enabled: true,
+        vox_primer_word: 'break',
+      })
     )
   })
 })

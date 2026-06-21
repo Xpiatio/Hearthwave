@@ -521,3 +521,23 @@ class TestMonitoringBeaconOverrides:
 
     def test_text_override(self):
         assert make_config(monitoring_beacon_text="CQ {callsign}").monitoring_beacon_text == "CQ {callsign}"
+
+
+# ---------------------------------------------------------------------------
+# VOX priming word
+# ---------------------------------------------------------------------------
+
+class TestVoxPrimerWordDefaults:
+    def test_enabled_default_false(self):
+        assert ServerConfig().vox_primer_word_enabled is False
+
+    def test_word_default_transmit(self):
+        assert ServerConfig().vox_primer_word == "transmit"
+
+
+class TestVoxPrimerWordOverrides:
+    def test_enabled_override(self):
+        assert make_config(vox_primer_word_enabled=True).vox_primer_word_enabled is True
+
+    def test_word_override(self):
+        assert make_config(vox_primer_word="break").vox_primer_word == "break"

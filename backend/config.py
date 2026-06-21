@@ -135,6 +135,18 @@ class ServerConfig(dict):
         return int(self.get("vox_primer_ms", 300))
 
     @property
+    def vox_primer_word_enabled(self) -> bool:
+        """Speak a configurable priming word (e.g. "transmit") after the VOX
+        primer tone and before the message, so a VOX-keyed radio is keyed on a
+        clear spoken keyword.  Different radios may need different words."""
+        return bool(self.get("vox_primer_word_enabled", False))
+
+    @property
+    def vox_primer_word(self) -> str:
+        """The spoken VOX priming word."""
+        return str(self.get("vox_primer_word", "transmit"))
+
+    @property
     def voices_dir(self) -> Path:
         raw = self.get("voices_dir")
         if raw:
