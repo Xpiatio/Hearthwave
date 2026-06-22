@@ -1411,7 +1411,6 @@ async def _lifespan(app: FastAPI):
                 is_admin=True,
                 prefs={
                     "dark_mode": False,
-                    "panel_order": ["config", "attendance", "journal"],
                     "filter_profanity": _config.filter_profanity,
                     "listen_only": _config.listen_only,
                     "spectro_colormap": _config.spectro_colormap,
@@ -2391,7 +2390,7 @@ async def websocket_endpoint(
             elif msg_type == "save_user_prefs":
                 if _users_store is None:
                     continue
-                allowed = {"dark_mode", "panel_order", "filter_profanity", "listen_only",
+                allowed = {"dark_mode", "filter_profanity", "listen_only",
                            "read_aloud", "notifications_enabled", "spectro_colormap", "spectro_time_window_s",
                            "tts_voice", "tts_length_scale"}
                 updates = {k: v for k, v in data.get("prefs", data).items() if k in allowed}
