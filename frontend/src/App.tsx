@@ -1123,6 +1123,8 @@ export default function App() {
           spectroRef={spectroRef}
         />
       )}
+      {/* isAdmin is UX-only gating (hides Station/System tabs). Server enforces
+          admin authorization on set_admin_config / set_server_config. */}
       <SettingsDialog
         open={showSettings}
         onClose={handleToggleSettings}

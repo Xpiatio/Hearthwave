@@ -77,6 +77,21 @@ export interface AdminPanelHandle {
   save(): void;
 }
 
+/** Build the seed JSON object from a config snapshot, mirroring buildValues(). */
+function seedFromConfig(config: AdminConfig): string {
+  return JSON.stringify({
+    callsign: (config.stationCallsign || '').toUpperCase() || 'N0CALL',
+    name: config.stationName,
+    location: config.stationLocation,
+    voice: config.stationVoice,
+    tts_length_scale: config.stationLengthScale,
+    gemini_api_key: '', // key is write-only (geminiApiKeySet)
+    journals_dir: config.journalsDir,
+    ncs_zone: (config.ncsZone || '').toUpperCase(),
+    rx_mode: config.rxMode || 'voice',
+  });
+}
+
 export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPanel(
   { open, onClose, config, voices, voicePreviewBusy, onSave, onPreviewVoice, children,
     embedded = false, hideSaveButton = false, onDirtyChange },
@@ -111,34 +126,14 @@ export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPane
     setShowKey(false);
     // Compute seed from config directly (state setters are async), mirroring
     // buildValues() serialization. geminiKey initializes to '' on open.
-    seedRef.current = JSON.stringify({
-      callsign: (config.stationCallsign || '').toUpperCase() || 'N0CALL',
-      name: config.stationName,
-      location: config.stationLocation,
-      voice: config.stationVoice,
-      tts_length_scale: config.stationLengthScale,
-      gemini_api_key: '', // key is write-only (geminiApiKeySet)
-      journals_dir: config.journalsDir,
-      ncs_zone: (config.ncsZone || '').toUpperCase(),
-      rx_mode: config.rxMode || 'voice',
-    });
+    seedRef.current = seedFromConfig(config);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // For embedded panels that start open=true (always open), seed on first mount.
   useEffect(() => {
     if (!embedded) return;
-    seedRef.current = JSON.stringify({
-      callsign: (config.stationCallsign || '').toUpperCase() || 'N0CALL',
-      name: config.stationName,
-      location: config.stationLocation,
-      voice: config.stationVoice,
-      tts_length_scale: config.stationLengthScale,
-      gemini_api_key: '',
-      journals_dir: config.journalsDir,
-      ncs_zone: (config.ncsZone || '').toUpperCase(),
-      rx_mode: config.rxMode || 'voice',
-    });
+    seedRef.current = seedFromConfig(config);
     // Only run on first mount for the embedded case.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

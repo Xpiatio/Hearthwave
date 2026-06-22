@@ -14,8 +14,6 @@ function installMatchMedia(matchFor: (q: string) => boolean) {
     removeEventListener: (_: string, cb: Listener) => {
       const i = listeners.indexOf(cb); if (i >= 0) listeners.splice(i, 1);
     },
-    addListener: (cb: Listener) => listeners.push(cb),
-    removeListener: () => {},
     dispatchEvent: () => true,
   })) as unknown as typeof window.matchMedia;
   return listeners;
@@ -41,5 +39,14 @@ describe('useDeviceClass', () => {
     installMatchMedia(() => false);
     const { result } = renderHook(() => useDeviceClass());
     expect(result.current).toBe('desktop');
+  });
+
+  it('removes change listeners on unmount (effect cleanup)', () => {
+    const listeners = installMatchMedia(() => false);
+    const { unmount } = renderHook(() => useDeviceClass());
+    // The hook registers one listener per query (PHONE_Q + TABLET_Q = 2 listeners).
+    expect(listeners.length).toBeGreaterThan(0);
+    unmount();
+    expect(listeners).toHaveLength(0);
   });
 });

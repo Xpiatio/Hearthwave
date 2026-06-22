@@ -61,4 +61,53 @@ describe('SettingsDialog', () => {
     render(<SettingsDialog {...makeProps()} />)
     expect(screen.getByText('Settings')).toBeInTheDocument()
   })
+
+  describe('discard-guard on Close', () => {
+    it('does NOT call window.confirm when closing a clean (unmodified) dialog', async () => {
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+      render(<SettingsDialog {...makeProps()} />)
+      await userEvent.click(screen.getByRole('button', { name: /^close$/i }))
+      expect(confirm).not.toHaveBeenCalled()
+    })
+
+    it('calls window.confirm when closing a dirty dialog', async () => {
+      vi.spyOn(window, 'confirm').mockReturnValue(false)
+      render(<SettingsDialog {...makeProps()} />)
+      await userEvent.click(screen.getByText('Profanity Filter'))
+      await userEvent.click(screen.getByRole('button', { name: /^close$/i }))
+      expect(window.confirm).toHaveBeenCalledTimes(1)
+    })
+
+    it('does NOT call onClose when dirty and confirm returns false', async () => {
+      const onClose = vi.fn()
+      vi.spyOn(window, 'confirm').mockReturnValue(false)
+      render(<SettingsDialog {...makeProps({ onClose })} />)
+      await userEvent.click(screen.getByText('Profanity Filter'))
+      await userEvent.click(screen.getByRole('button', { name: /^close$/i }))
+      expect(onClose).not.toHaveBeenCalled()
+    })
+
+    it('DOES call onClose when dirty and confirm returns true', async () => {
+      const onClose = vi.fn()
+      vi.spyOn(window, 'confirm').mockReturnValue(true)
+      render(<SettingsDialog {...makeProps({ onClose })} />)
+      await userEvent.click(screen.getByText('Profanity Filter'))
+      await userEvent.click(screen.getByRole('button', { name: /^close$/i }))
+      expect(onClose).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('footer Save commits a dirty Station tab (via admin ref) without closing', async () => {
+    const onAdminSave = vi.fn()
+    render(<SettingsDialog {...makeProps({ onAdminSave })} />)
+    // Switch to Station tab
+    await userEvent.click(screen.getByRole('tab', { name: 'Station' }))
+    // Modify Station Name to make AdminPanel dirty
+    const nameField = screen.getByLabelText(/station name/i)
+    await userEvent.clear(nameField)
+    await userEvent.type(nameField, 'New Name')
+    // Click footer Save
+    await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
+    expect(onAdminSave).toHaveBeenCalledTimes(1)
+  })
 })

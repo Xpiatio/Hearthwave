@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button, Tabs, Tab, Box, Snackbar, Alert,
   useMediaQuery, useTheme,
@@ -79,11 +79,15 @@ export function SettingsDialog(props: Props) {
     if (open) {
       const s = seedPrefs();
       setDraft(s); setPrefsSeed(s); setTab(0); setAdminDirty(false); setServerDirty(false);
+      setSaved(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const prefsDirty = JSON.stringify(draft) !== JSON.stringify(prefsSeed);
+  const prefsDirty = useMemo(
+    () => JSON.stringify(draft) !== JSON.stringify(prefsSeed),
+    [draft, prefsSeed],
+  );
   const dirty = prefsDirty || (isAdmin && (adminDirty || serverDirty));
 
   function applyPrefs() {
