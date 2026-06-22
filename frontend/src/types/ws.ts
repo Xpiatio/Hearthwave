@@ -296,7 +296,6 @@ export interface VoicesListMsg {
 // User profile and prefs
 export interface UserPrefs {
   dark_mode: boolean;
-  panel_order: string[];
   filter_profanity: boolean;
   listen_only: boolean;
   read_aloud: boolean;
