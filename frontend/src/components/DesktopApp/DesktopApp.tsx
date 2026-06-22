@@ -19,10 +19,7 @@ import { QuickMessages } from '../QuickMessages/QuickMessages';
 import { ContactsDialog } from '../ContactsDialog/ContactsDialog';
 import { PendingStationsBar } from '../PendingStationsBar/PendingStationsBar';
 import { ConfigPanel } from '../ConfigPanel/ConfigPanel';
-import { SettingsDialog } from '../SettingsDialog/SettingsDialog';
-import type { ServerConfig, ServerConfigSaveValues } from '../ServerConfigPanel/ServerConfigPanel';
 import type { TxComposition } from '../../plugins';
-import { UsersPanel } from '../UsersPanel/UsersPanel';
 import type {
   StatusMsg,
   Contact,
@@ -41,7 +38,6 @@ import type { AdminConfig, JournalResultDraft, PendingStation } from '../../type
 export interface DesktopAppProps {
   // Identity & connection
   profile: UserProfile;
-  profiles: UserProfile[];
   connected: boolean;
   isOnline: boolean | null;
   stationStatus: string;
@@ -113,21 +109,8 @@ export interface DesktopAppProps {
 
   // Admin / server config
   adminConfig: AdminConfig;
-  serverConfig: ServerConfig;
   voices: VoiceOption[];
   voicePreviewBusy: boolean;
-  onAdminSave: (values: {
-    callsign: string;
-    name: string;
-    location: string;
-    voice: string;
-    tts_length_scale: number;
-    gemini_api_key: string;
-    journals_dir: string;
-    ncs_zone: string;
-    rx_mode: string;
-  }) => void;
-  onServerConfigSave: (values: ServerConfigSaveValues) => void;
   onPreviewVoice: (voiceId: string) => void;
   onSaveTtsPrefs: (prefs: { voice: string; length_scale: number }) => void;
 
@@ -162,15 +145,15 @@ export interface DesktopAppProps {
   showJournal: boolean;
   showContacts: boolean;
   showConfig: boolean;
-  showAdmin: boolean;
   showNcs: boolean;
+  showSettings: boolean;
   panelOrder: string[];
   onToggleAttendance: () => void;
   onToggleJournal: () => void;
   onToggleContacts: () => void;
   onToggleConfig: () => void;
-  onToggleAdmin: () => void;
   onToggleNcs: () => void;
+  onToggleSettings: () => void;
   onPanelDragEnd: (event: DragEndEvent) => void;
   onPanelMove: (fromIndex: number, toIndex: number) => void;
 
@@ -201,12 +184,10 @@ export interface DesktopAppProps {
   onCloseErrorSnack: () => void;
   onCloseJournalSavedSnack: () => void;
   onCloseVocabSnack: () => void;
-  onRescanVocabulary?: () => void;
 }
 
 export function DesktopApp({
   profile,
-  profiles,
   connected,
   isOnline,
   stationStatus,
@@ -261,11 +242,8 @@ export function DesktopApp({
   onSpectroFreqRangeChange,
   onSpectroTimeWindowChange,
   adminConfig,
-  serverConfig,
   voices,
   voicePreviewBusy,
-  onAdminSave,
-  onServerConfigSave,
   onPreviewVoice,
   onSaveTtsPrefs,
   onUpdateProfile,
@@ -289,15 +267,15 @@ export function DesktopApp({
   showJournal,
   showContacts,
   showConfig,
-  showAdmin,
   showNcs,
+  showSettings,
   panelOrder,
   onToggleAttendance,
   onToggleJournal,
   onToggleContacts,
-  onToggleConfig,
-  onToggleAdmin,
+  onToggleConfig: _onToggleConfig,
   onToggleNcs,
+  onToggleSettings,
   onPanelDragEnd,
   onPanelMove,
   pendingPrefilledCallsign,
@@ -321,7 +299,6 @@ export function DesktopApp({
   onCloseErrorSnack,
   onCloseJournalSavedSnack,
   onCloseVocabSnack,
-  onRescanVocabulary,
 }: DesktopAppProps) {
   const messageInputRef = useRef<MessageInputHandle>(null);
   const sensors = useSensors(
@@ -351,10 +328,8 @@ export function DesktopApp({
         onToggleJournal={onToggleJournal}
         showContacts={showContacts}
         onToggleContacts={onToggleContacts}
-        showConfig={showConfig}
-        onToggleConfig={onToggleConfig}
-        showAdmin={showAdmin}
-        onToggleAdmin={onToggleAdmin}
+        showSettings={showSettings}
+        onToggleSettings={onToggleSettings}
         showNcs={showNcs}
         onToggleNcs={onToggleNcs}
         showWaterfall={showWaterfall}
@@ -535,28 +510,6 @@ export function DesktopApp({
         verifyAllComplete={verifyAllComplete}
         onSend={send}
         onVerifyAllDismiss={onVerifyAllDismiss}
-      />
-
-      <SettingsDialog
-        open={showAdmin}
-        onClose={onToggleAdmin}
-        adminConfig={adminConfig}
-        voices={voices}
-        voicePreviewBusy={voicePreviewBusy}
-        onAdminSave={onAdminSave}
-        onPreviewVoice={onPreviewVoice}
-        serverConfig={serverConfig}
-        onServerConfigSave={onServerConfigSave}
-        onRescanVocabulary={onRescanVocabulary}
-        usersPanel={profile.is_admin && (
-          <UsersPanel
-            profiles={profiles}
-            currentUserId={profile.id}
-            onCreateProfile={(data) => send({ type: 'create_profile', ...data })}
-            onDeleteProfile={(userId) => send({ type: 'delete_profile', user_id: userId })}
-            onResetLockout={(userId) => send({ type: 'reset_lockout', user_id: userId })}
-          />
-        )}
       />
 
       <Snackbar

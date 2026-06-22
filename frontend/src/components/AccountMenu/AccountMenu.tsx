@@ -24,7 +24,6 @@ import EditIcon from '@mui/icons-material/Edit';
 import LockIcon from '@mui/icons-material/Lock';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SettingsIcon from '@mui/icons-material/Settings';
-import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { AboutDialog } from '../AboutDialog/AboutDialog';
 import type { UserProfile, VoiceOption } from '../../types/ws';
@@ -51,15 +50,13 @@ interface Props {
   onPreviewVoice: (voiceId: string) => void;
   stationLengthScale: number;
   onSaveTtsPrefs: (prefs: { voice: string; length_scale: number }) => void;
-  showConfig: boolean;
-  onToggleConfig: () => void;
-  showAdmin: boolean;
-  onToggleAdmin: () => void;
+  showSettings: boolean;
+  onToggleSettings: () => void;
 }
 
 const EMOJI_OPTIONS = ['👤', '👨', '👩', '👦', '👧', '🧑', '👴', '👵', '🧔', '👮'];
 
-export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogout, voices, voicePreviewBusy, onPreviewVoice, stationLengthScale, onSaveTtsPrefs, showConfig, onToggleConfig, showAdmin, onToggleAdmin }: Props) {
+export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogout, voices, voicePreviewBusy, onPreviewVoice, stationLengthScale, onSaveTtsPrefs, showSettings, onToggleSettings }: Props) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
@@ -170,16 +167,10 @@ export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogo
           Change Password
         </MenuItem>
         <Divider />
-        <MenuItem selected={showConfig} onClick={() => { onToggleConfig(); handleClose(); }}>
+        <MenuItem selected={showSettings} onClick={() => { onToggleSettings(); handleClose(); }}>
           <ListItemIcon><SettingsIcon fontSize="small" /></ListItemIcon>
           Settings
         </MenuItem>
-        {profile.is_admin && (
-          <MenuItem selected={showAdmin} onClick={() => { onToggleAdmin(); handleClose(); }}>
-            <ListItemIcon><AdminPanelSettingsIcon fontSize="small" /></ListItemIcon>
-            Admin Settings
-          </MenuItem>
-        )}
         <Divider />
         <MenuItem onClick={() => { setAboutOpen(true); handleClose(); }}>
           <ListItemIcon><InfoOutlinedIcon fontSize="small" /></ListItemIcon>

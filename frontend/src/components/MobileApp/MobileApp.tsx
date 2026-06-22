@@ -19,10 +19,7 @@ import { AttendancePanel } from '../AttendancePanel/AttendancePanel';
 import { JournalPanel } from '../JournalPanel/JournalPanel';
 import { PendingStationsBar } from '../PendingStationsBar/PendingStationsBar';
 import { ContactsDialog } from '../ContactsDialog/ContactsDialog';
-import { SettingsDialog } from '../SettingsDialog/SettingsDialog';
-import type { ServerConfig, ServerConfigSaveValues } from '../ServerConfigPanel/ServerConfigPanel';
 import type { TxComposition } from '../../plugins';
-import { UsersPanel } from '../UsersPanel/UsersPanel';
 import type {
   StatusMsg,
   Contact,
@@ -38,7 +35,6 @@ import type { AdminConfig, JournalResultDraft, PendingStation } from '../../type
 export interface MobileAppProps {
   // Identity & connection
   profile: UserProfile;
-  profiles: UserProfile[];
   effectiveCallsign: string;
   connected: boolean;
   isOnline: boolean | null;
@@ -115,23 +111,8 @@ export interface MobileAppProps {
 
   // Admin / server
   adminConfig: AdminConfig;
-  serverConfig: ServerConfig;
-  showConfig: boolean;
-  showAdmin: boolean;
-  onToggleConfig: () => void;
-  onToggleAdmin: () => void;
-  onAdminSave: (values: {
-    callsign: string;
-    name: string;
-    location: string;
-    voice: string;
-    tts_length_scale: number;
-    gemini_api_key: string;
-    journals_dir: string;
-    ncs_zone: string;
-    rx_mode: string;
-  }) => void;
-  onServerConfigSave: (values: ServerConfigSaveValues) => void;
+  showSettings: boolean;
+  onToggleSettings: () => void;
 
   // Contacts
   showContacts: boolean;
@@ -158,12 +139,10 @@ export interface MobileAppProps {
   onCloseErrorSnack: () => void;
   onCloseJournalSavedSnack: () => void;
   onCloseVocabSnack: () => void;
-  onRescanVocabulary?: () => void;
 }
 
 export function MobileApp({
   profile,
-  profiles,
   effectiveCallsign,
   connected,
   showCallsignChips,
@@ -212,13 +191,8 @@ export function MobileApp({
   onPreviewVoice,
   onSaveTtsPrefs,
   adminConfig,
-  serverConfig,
-  showConfig,
-  showAdmin,
-  onToggleConfig,
-  onToggleAdmin,
-  onAdminSave,
-  onServerConfigSave,
+  showSettings,
+  onToggleSettings,
   showContacts,
   pendingPrefilledCallsign,
   pendingPrefilledName,
@@ -240,7 +214,6 @@ export function MobileApp({
   onCloseErrorSnack,
   onCloseJournalSavedSnack,
   onCloseVocabSnack,
-  onRescanVocabulary,
 }: MobileAppProps) {
   const [tab, setTab] = useState(0);
   const messageInputRef = useRef<MessageInputHandle>(null);
@@ -263,8 +236,7 @@ export function MobileApp({
         voices={voices}
         voicePreviewBusy={voicePreviewBusy}
         stationLengthScale={adminConfig.stationLengthScale}
-        showConfig={showConfig}
-        showAdmin={showAdmin}
+        showSettings={showSettings}
         onToggleSttListening={onToggleSttListening}
         onToggleReadAloud={onToggleReadAloud}
         onToggleNotifications={onToggleNotifications}
@@ -280,8 +252,7 @@ export function MobileApp({
         onLogout={onLogout}
         onPreviewVoice={onPreviewVoice}
         onSaveTtsPrefs={onSaveTtsPrefs}
-        onToggleConfig={onToggleConfig}
-        onToggleAdmin={onToggleAdmin}
+        onToggleSettings={onToggleSettings}
       />
 
       <PendingStationsBar
@@ -374,28 +345,6 @@ export function MobileApp({
         verifyAllComplete={verifyAllComplete}
         onSend={send}
         onVerifyAllDismiss={onVerifyAllDismiss}
-      />
-
-      <SettingsDialog
-        open={showAdmin}
-        onClose={onToggleAdmin}
-        adminConfig={adminConfig}
-        voices={voices}
-        voicePreviewBusy={voicePreviewBusy}
-        onAdminSave={onAdminSave}
-        onPreviewVoice={onPreviewVoice}
-        serverConfig={serverConfig}
-        onServerConfigSave={onServerConfigSave}
-        onRescanVocabulary={onRescanVocabulary}
-        usersPanel={profile.is_admin && (
-          <UsersPanel
-            profiles={profiles}
-            currentUserId={profile.id}
-            onCreateProfile={(data) => send({ type: 'create_profile', ...data })}
-            onDeleteProfile={(userId) => send({ type: 'delete_profile', user_id: userId })}
-            onResetLockout={(userId) => send({ type: 'reset_lockout', user_id: userId })}
-          />
-        )}
       />
 
       <Snackbar
