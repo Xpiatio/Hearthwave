@@ -40,10 +40,8 @@ interface Props {
   onToggleJournal: () => void;
   showContacts: boolean;
   onToggleContacts: () => void;
-  showConfig: boolean;
-  onToggleConfig: () => void;
-  showAdmin: boolean;
-  onToggleAdmin: () => void;
+  showSettings: boolean;
+  onToggleSettings: () => void;
   showNcs: boolean;
   onToggleNcs: () => void;
   showWaterfall: boolean;
@@ -93,10 +91,8 @@ export function TopBar({
   onToggleJournal,
   showContacts,
   onToggleContacts,
-  showConfig,
-  onToggleConfig,
-  showAdmin,
-  onToggleAdmin,
+  showSettings,
+  onToggleSettings,
   showNcs,
   onToggleNcs,
   showWaterfall,
@@ -155,10 +151,8 @@ export function TopBar({
           onPreviewVoice={onPreviewVoice}
           stationLengthScale={stationLengthScale}
           onSaveTtsPrefs={onSaveTtsPrefs}
-          showConfig={showConfig}
-          onToggleConfig={onToggleConfig}
-          showAdmin={showAdmin}
-          onToggleAdmin={onToggleAdmin}
+          showSettings={showSettings}
+          onToggleSettings={onToggleSettings}
         />
 
         <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />

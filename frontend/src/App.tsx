@@ -35,6 +35,8 @@ import { LoginScreen } from './components/LoginScreen/LoginScreen';
 import { SetupScreen } from './components/SetupScreen/SetupScreen';
 import { DesktopApp } from './components/DesktopApp/DesktopApp';
 import { MobileApp } from './components/MobileApp/MobileApp';
+import { SettingsDialog } from './components/SettingsDialog/SettingsDialog';
+import { UsersPanel } from './components/UsersPanel/UsersPanel';
 import { useMobileDetect } from './hooks/useMobileDetect';
 import './App.css';
 
@@ -144,7 +146,7 @@ export default function App() {
   const [showJournal, setShowJournal] = useState(false);
   const [showContacts, setShowContacts] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
-  const [showAdmin, setShowAdmin] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [serverConfig, setServerConfig] = useState<ServerConfig>({
     vadThreshold: 0.5,
     whisperModel: 'small.en',
@@ -976,14 +978,14 @@ export default function App() {
   const stationStatus = connected ? 'READY' : 'OFFLINE';
   const showCallsignChips = serviceMode === 'GMRS';
 
+  function handleToggleConfig() { setShowConfig((v) => !v); }
   function handleToggleAttendance() { setShowAttendance((v) => !v); }
   function handleToggleJournal() { setShowJournal((v) => !v); }
   function handleToggleContacts() {
     if (showContacts) handleContactsClose();
     else setShowContacts(true);
   }
-  function handleToggleConfig() { setShowConfig((v) => !v); }
-  function handleToggleAdmin() { setShowAdmin((v) => !v); }
+  const handleToggleSettings = () => setShowSettings((v) => !v);
   function handleToggleNcs() {
     const next = !showNcs;
     setShowNcs(next);
@@ -1048,7 +1050,6 @@ export default function App() {
   const sharedProps = {
     txComposition,
     profile: profile!,
-    profiles,
     connected,
     isOnline,
     showCallsignChips,
@@ -1101,14 +1102,8 @@ export default function App() {
     onToggleSttListening: handleToggleSttListening,
     onToggleDark: handleToggleDark,
     adminConfig,
-    serverConfig,
-    showConfig,
-    showAdmin,
-    onToggleConfig: handleToggleConfig,
-    onToggleAdmin: handleToggleAdmin,
-    onAdminSave: handleAdminSave,
-    onServerConfigSave: handleServerConfigSave,
-    onRescanVocabulary: handleRescanVocabulary,
+    showSettings,
+    onToggleSettings: handleToggleSettings,
     showContacts,
     pendingPrefilledCallsign,
     pendingPrefilledName,
@@ -1173,6 +1168,8 @@ export default function App() {
           onToggleWaterfall={handleToggleWaterfall}
           showAttendance={showAttendance}
           showJournal={showJournal}
+          showConfig={showConfig}
+          onToggleConfig={handleToggleConfig}
           showNcs={showNcs}
           panelOrder={panelOrder}
           onToggleAttendance={handleToggleAttendance}
@@ -1185,6 +1182,46 @@ export default function App() {
           spectroRef={spectroRef}
         />
       )}
+      <SettingsDialog
+        open={showSettings}
+        onClose={handleToggleSettings}
+        isAdmin={!!profile?.is_admin}
+        filterProfanity={filterProfanity}
+        fuzzyCallsign={fuzzyCallsign}
+        inputDevice={inputDevice}
+        systemMonitorSink={systemMonitorSink}
+        inputDevices={inputDevices}
+        monitorSinks={monitorSinks}
+        outputDevice={outputDevice}
+        outputDevices={outputDevices}
+        spectroColormap={spectroColormap}
+        spectroFreqRange={spectroFreqRange}
+        spectroTimeWindowS={spectroTimeWindowS}
+        onToggleProfanity={handleToggleProfanity}
+        onToggleFuzzy={handleToggleFuzzy}
+        onInputDeviceChange={handleInputDeviceChange}
+        onOutputDeviceChange={handleOutputDeviceChange}
+        onSpectroColormapChange={handleSpectroColormapChange}
+        onSpectroFreqRangeChange={handleSpectroFreqRangeChange}
+        onSpectroTimeWindowChange={handleSpectroTimeWindowChange}
+        adminConfig={adminConfig}
+        voices={voices}
+        voicePreviewBusy={voicePreviewBusy}
+        onAdminSave={handleAdminSave}
+        onPreviewVoice={handlePreviewVoice}
+        serverConfig={serverConfig}
+        onServerConfigSave={handleServerConfigSave}
+        onRescanVocabulary={handleRescanVocabulary}
+        usersPanel={profile?.is_admin && (
+          <UsersPanel
+            profiles={profiles}
+            currentUserId={profile.id}
+            onCreateProfile={(data) => send({ type: 'create_profile', ...data })}
+            onDeleteProfile={(userId) => send({ type: 'delete_profile', user_id: userId })}
+            onResetLockout={(userId) => send({ type: 'reset_lockout', user_id: userId })}
+          />
+        )}
+      />
     </ThemeProvider>
   );
 }
