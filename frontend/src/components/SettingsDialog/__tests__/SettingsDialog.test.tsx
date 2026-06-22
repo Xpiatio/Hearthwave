@@ -1,101 +1,113 @@
-import React from 'react'
-import { render as rtlRender, screen, fireEvent } from '@testing-library/react'
-import { ThemeProvider } from '@mui/material/styles'
-import { makeTheme } from '../../../theme'
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi } from 'vitest'
 import { SettingsDialog } from '../SettingsDialog'
 
-function render(ui: React.ReactElement) {
-  return rtlRender(<ThemeProvider theme={makeTheme(false)}>{ui}</ThemeProvider>)
-}
-
-const adminConfig = {
-  stationCallsign: 'WSLZ233',
-  stationName: 'Bob',
-  stationLocation: 'Grand Rapids',
-  stationVoice: '',
-  stationLengthScale: 1,
-  geminiApiKeySet: false,
-  journalsDir: '',
-  ncsZone: '',
-  rxMode: 'voice',
-}
-
-const serverConfig = {
-  vadThreshold: 0.5,
-  whisperModel: 'small.en',
-  whisperModelFinal: '',
-  squelchAdaptive: false,
-  sttDebugCapture: false,
-  txConditioning: false,
-  pttMode: 'manual',
-  pttSerialPort: '',
-  pttSerialLine: 'RTS',
-  monitorPassthrough: false,
-  attendanceEnabled: false,
-  voxPrimerEnabled: false,
-  voxPrimerMs: 300,
-  voxPrimerWordEnabled: false,
-  voxPrimerWord: 'transmit',
-  savedPhrases: [],
-  meshcoreEnabled: false,
-  meshcoreSerialPort: '/dev/ttyMESH0',
-  meshcoreBaud: 115200,
-  meshcoreMaxPacketLength: 140,
-  meshcorePrefixSeparator: ': ',
-  meshcoreChannelIdx: 0,
-}
-
-function makeProps(overrides: Record<string, unknown> = {}) {
+function makeProps(overrides = {}) {
   return {
-    open: true,
-    onClose: vi.fn(),
-    adminConfig,
-    voices: [],
-    voicePreviewBusy: false,
-    onAdminSave: vi.fn(),
-    onPreviewVoice: vi.fn(),
-    serverConfig,
-    onServerConfigSave: vi.fn(),
+    open: true, onClose: vi.fn(), isAdmin: true,
+    filterProfanity: false, fuzzyCallsign: false, inputDevice: -1, systemMonitorSink: '',
+    inputDevices: [], monitorSinks: [], outputDevice: -1, outputDevices: [],
+    spectroColormap: 'viridis' as const, spectroFreqRange: 'full' as const, spectroTimeWindowS: 30,
+    onToggleProfanity: vi.fn(), onToggleFuzzy: vi.fn(), onInputDeviceChange: vi.fn(),
+    onOutputDeviceChange: vi.fn(), onSpectroColormapChange: vi.fn(),
+    onSpectroFreqRangeChange: vi.fn(), onSpectroTimeWindowChange: vi.fn(),
+    adminConfig: {
+      stationCallsign: 'N0CALL', stationName: '', stationLocation: '', stationVoice: '',
+      stationLengthScale: 1, geminiApiKeySet: false, journalsDir: '', ncsZone: '', rxMode: 'voice',
+    },
+    voices: [], voicePreviewBusy: false, onAdminSave: vi.fn(), onPreviewVoice: vi.fn(),
+    serverConfig: {
+      vadThreshold: 0.5, whisperModel: 'base', whisperModelFinal: '', squelchAdaptive: false,
+      sttDebugCapture: false, txConditioning: false, voxPrimerEnabled: false, voxPrimerMs: 0,
+      voxPrimerWordEnabled: false, voxPrimerWord: '', pttMode: 'manual', pttSerialPort: '',
+      pttSerialLine: 'RTS', monitorPassthrough: false, attendanceEnabled: false, savedPhrases: [],
+      meshcoreEnabled: false, meshcoreSerialPort: '', meshcoreBaud: 115200,
+      meshcoreMaxPacketLength: 180, meshcorePrefixSeparator: ': ', meshcoreChannelIdx: 0,
+    },
+    onServerConfigSave: vi.fn(), onRescanVocabulary: vi.fn(),
     ...overrides,
-  } as React.ComponentProps<typeof SettingsDialog>
+  }
 }
 
 describe('SettingsDialog', () => {
-  it('renders Station and System tabs', () => {
+  it('shows all three tabs for an admin', () => {
     render(<SettingsDialog {...makeProps()} />)
+    expect(screen.getByRole('tab', { name: 'Preferences' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Station' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'System' })).toBeInTheDocument()
   })
 
-  it('shows the Station tab by default; its Save calls onAdminSave', () => {
+  it('shows only Preferences for a non-admin (no tab bar)', () => {
+    render(<SettingsDialog {...makeProps({ isAdmin: false })} />)
+    expect(screen.queryByRole('tab', { name: 'Station' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'System' })).not.toBeInTheDocument()
+  })
+
+  it('disables Save until something changes, then applies a preference on Save and stays open', async () => {
+    const onToggleProfanity = vi.fn(); const onClose = vi.fn()
+    render(<SettingsDialog {...makeProps({ onToggleProfanity, onClose })} />)
+    const save = screen.getByRole('button', { name: /^save$/i })
+    expect(save).toBeDisabled()
+    await userEvent.click(screen.getByText('Profanity Filter'))
+    expect(save).toBeEnabled()
+    await userEvent.click(save)
+    expect(onToggleProfanity).toHaveBeenCalledTimes(1)
+    expect(onClose).not.toHaveBeenCalled()        // stays open
+    expect(screen.getByText(/settings saved/i)).toBeInTheDocument()
+  })
+
+  it('titles the dialog "Settings"', () => {
+    render(<SettingsDialog {...makeProps()} />)
+    expect(screen.getByText('Settings')).toBeInTheDocument()
+  })
+
+  describe('discard-guard on Close', () => {
+    it('does NOT call window.confirm when closing a clean (unmodified) dialog', async () => {
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+      render(<SettingsDialog {...makeProps()} />)
+      await userEvent.click(screen.getByRole('button', { name: /^close$/i }))
+      expect(confirm).not.toHaveBeenCalled()
+    })
+
+    it('calls window.confirm when closing a dirty dialog', async () => {
+      vi.spyOn(window, 'confirm').mockReturnValue(false)
+      render(<SettingsDialog {...makeProps()} />)
+      await userEvent.click(screen.getByText('Profanity Filter'))
+      await userEvent.click(screen.getByRole('button', { name: /^close$/i }))
+      expect(window.confirm).toHaveBeenCalledTimes(1)
+    })
+
+    it('does NOT call onClose when dirty and confirm returns false', async () => {
+      const onClose = vi.fn()
+      vi.spyOn(window, 'confirm').mockReturnValue(false)
+      render(<SettingsDialog {...makeProps({ onClose })} />)
+      await userEvent.click(screen.getByText('Profanity Filter'))
+      await userEvent.click(screen.getByRole('button', { name: /^close$/i }))
+      expect(onClose).not.toHaveBeenCalled()
+    })
+
+    it('DOES call onClose when dirty and confirm returns true', async () => {
+      const onClose = vi.fn()
+      vi.spyOn(window, 'confirm').mockReturnValue(true)
+      render(<SettingsDialog {...makeProps({ onClose })} />)
+      await userEvent.click(screen.getByText('Profanity Filter'))
+      await userEvent.click(screen.getByRole('button', { name: /^close$/i }))
+      expect(onClose).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('footer Save commits a dirty Station tab (via admin ref) without closing', async () => {
     const onAdminSave = vi.fn()
     render(<SettingsDialog {...makeProps({ onAdminSave })} />)
-    // Only the active (Station) tab's Save is accessible; the hidden System
-    // tabpanel's Save is excluded from role queries.
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    // Switch to Station tab
+    await userEvent.click(screen.getByRole('tab', { name: 'Station' }))
+    // Modify Station Name to make AdminPanel dirty
+    const nameField = screen.getByLabelText(/station name/i)
+    await userEvent.clear(nameField)
+    await userEvent.type(nameField, 'New Name')
+    // Click footer Save
+    await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
     expect(onAdminSave).toHaveBeenCalledTimes(1)
-  })
-
-  it('switching to the System tab and saving calls onServerConfigSave only', () => {
-    const onAdminSave = vi.fn()
-    const onServerConfigSave = vi.fn()
-    render(<SettingsDialog {...makeProps({ onAdminSave, onServerConfigSave })} />)
-    fireEvent.click(screen.getByRole('tab', { name: 'System' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-    expect(onServerConfigSave).toHaveBeenCalledTimes(1)
-    expect(onAdminSave).not.toHaveBeenCalled()
-  })
-
-  it('Close button calls onClose', () => {
-    const onClose = vi.fn()
-    render(<SettingsDialog {...makeProps({ onClose })} />)
-    fireEvent.click(screen.getByRole('button', { name: /close/i }))
-    expect(onClose).toHaveBeenCalledTimes(1)
-  })
-
-  it('renders the provided users panel on the Station tab', () => {
-    render(<SettingsDialog {...makeProps({ usersPanel: <div>USERS_PANEL_MARKER</div> })} />)
-    expect(screen.getByText('USERS_PANEL_MARKER')).toBeInTheDocument()
   })
 })
