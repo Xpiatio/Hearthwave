@@ -51,10 +51,8 @@ function makeProps(overrides: Partial<Parameters<typeof AccountMenu>[0]> = {}) {
     onPreviewVoice: vi.fn(),
     stationLengthScale: 1.0,
     onSaveTtsPrefs: vi.fn(),
-    showConfig: false,
-    onToggleConfig: vi.fn(),
-    showAdmin: false,
-    onToggleAdmin: vi.fn(),
+    showSettings: false,
+    onToggleSettings: vi.fn(),
     ...overrides,
   }
 }
@@ -110,16 +108,8 @@ describe('AccountMenu', () => {
       })
     })
 
-    it('shows Admin Settings menu item for admin users', async () => {
+    it('never shows Admin Settings menu item (unified dialog handles admin tabs)', async () => {
       render(<AccountMenu {...makeProps({ profile: { ...mockProfile, is_admin: true } })} />)
-      fireEvent.click(screen.getByRole('button', { name: /account menu/i }))
-      await waitFor(() => {
-        expect(screen.getByText('Admin Settings')).toBeInTheDocument()
-      })
-    })
-
-    it('hides Admin Settings menu item for non-admin users', async () => {
-      render(<AccountMenu {...makeProps({ profile: { ...mockProfile, is_admin: false } })} />)
       fireEvent.click(screen.getByRole('button', { name: /account menu/i }))
       await waitFor(() => {
         expect(screen.queryByText('Admin Settings')).not.toBeInTheDocument()
@@ -137,22 +127,13 @@ describe('AccountMenu', () => {
       expect(onLogout).toHaveBeenCalledTimes(1)
     })
 
-    it('calls onToggleConfig when Settings clicked', async () => {
-      const onToggleConfig = vi.fn()
-      render(<AccountMenu {...makeProps({ onToggleConfig })} />)
-      fireEvent.click(screen.getByRole('button', { name: /account menu/i }))
-      await waitFor(() => screen.getByText('Settings'))
-      fireEvent.click(screen.getByText('Settings'))
-      expect(onToggleConfig).toHaveBeenCalledTimes(1)
-    })
-
-    it('calls onToggleAdmin when Admin Settings clicked', async () => {
-      const onToggleAdmin = vi.fn()
-      render(<AccountMenu {...makeProps({ onToggleAdmin, profile: { ...mockProfile, is_admin: true } })} />)
-      fireEvent.click(screen.getByRole('button', { name: /account menu/i }))
-      await waitFor(() => screen.getByText('Admin Settings'))
-      fireEvent.click(screen.getByText('Admin Settings'))
-      expect(onToggleAdmin).toHaveBeenCalledTimes(1)
+    it('renders a single Settings item that toggles settings', async () => {
+      const onToggleSettings = vi.fn()
+      render(<AccountMenu {...makeProps({ showSettings: false, onToggleSettings })} />)
+      await userEvent.click(screen.getByRole('button', { name: /account menu/i }))
+      await userEvent.click(screen.getByText('Settings'))
+      expect(onToggleSettings).toHaveBeenCalled()
+      expect(screen.queryByText('Admin Settings')).not.toBeInTheDocument()
     })
   })
 

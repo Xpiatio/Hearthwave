@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, forwardRef, useImperativeHandle, useRef } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -65,9 +65,38 @@ interface Props {
   /** When true, render just the form body (no Dialog chrome) for embedding in
    *  a tabbed SettingsDialog. The Save button is kept; Cancel/title are not. */
   embedded?: boolean;
+  /** When true, suppress the embedded/standalone Save button (e.g. a parent
+   *  dialog supplies its own footer Save button via the imperative ref). */
+  hideSaveButton?: boolean;
+  /** Called whenever the form's dirty state changes relative to the seed
+   *  snapshot captured when the panel was last opened or imperatively saved. */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
-export function AdminPanel({ open, onClose, config, voices, voicePreviewBusy, onSave, onPreviewVoice, children, embedded = false }: Props) {
+export interface AdminPanelHandle {
+  save(): void;
+}
+
+/** Build the seed JSON object from a config snapshot, mirroring buildValues(). */
+function seedFromConfig(config: AdminConfig): string {
+  return JSON.stringify({
+    callsign: (config.stationCallsign || '').toUpperCase() || 'N0CALL',
+    name: config.stationName,
+    location: config.stationLocation,
+    voice: config.stationVoice,
+    tts_length_scale: config.stationLengthScale,
+    gemini_api_key: '', // key is write-only (geminiApiKeySet)
+    journals_dir: config.journalsDir,
+    ncs_zone: (config.ncsZone || '').toUpperCase(),
+    rx_mode: config.rxMode || 'voice',
+  });
+}
+
+export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPanel(
+  { open, onClose, config, voices, voicePreviewBusy, onSave, onPreviewVoice, children,
+    embedded = false, hideSaveButton = false, onDirtyChange },
+  ref
+) {
   const [callsign, setCallsign] = useState('');
   const [name, setName] = useState('');
   const [location, setLocation] = useState('');
@@ -78,6 +107,8 @@ export function AdminPanel({ open, onClose, config, voices, voicePreviewBusy, on
   const [ncsZone, setNcsZone] = useState('');
   const [rxMode, setRxMode] = useState('voice');
   const [showKey, setShowKey] = useState(false);
+
+  const seedRef = useRef<string>('');
 
   // Only re-initialize when the dialog opens. Keeping `config` out of the dep
   // array prevents incoming WS status messages from resetting in-progress edits.
@@ -93,11 +124,22 @@ export function AdminPanel({ open, onClose, config, voices, voicePreviewBusy, on
     setNcsZone(config.ncsZone);
     setRxMode(config.rxMode || 'voice');
     setShowKey(false);
+    // Compute seed from config directly (state setters are async), mirroring
+    // buildValues() serialization. geminiKey initializes to '' on open.
+    seedRef.current = seedFromConfig(config);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  function handleSave() {
-    onSave({
+  // For embedded panels that start open=true (always open), seed on first mount.
+  useEffect(() => {
+    if (!embedded) return;
+    seedRef.current = seedFromConfig(config);
+    // Only run on first mount for the embedded case.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function buildValues() {
+    return {
       callsign: callsign.trim().toUpperCase() || 'N0CALL',
       name: name.trim(),
       location: location.trim(),
@@ -107,7 +149,24 @@ export function AdminPanel({ open, onClose, config, voices, voicePreviewBusy, on
       journals_dir: journalsDir.trim(),
       ncs_zone: ncsZone.trim().toUpperCase(),
       rx_mode: rxMode,
-    });
+    };
+  }
+
+  // Report dirty on every render (cheap; React bails out on equal state).
+  useEffect(() => {
+    onDirtyChange?.(JSON.stringify(buildValues()) !== seedRef.current);
+  });
+
+  function commitValues() {
+    const values = buildValues();
+    onSave(values);
+    seedRef.current = JSON.stringify(values);
+  }
+
+  useImperativeHandle(ref, () => ({ save: commitValues }));
+
+  function handleSave() { // used only by the embedded/standalone button
+    commitValues();
     onClose();
   }
 
@@ -284,7 +343,7 @@ export function AdminPanel({ open, onClose, config, voices, voicePreviewBusy, on
         </Box>
   );
 
-  const saveButton = (
+  const saveButton = hideSaveButton ? null : (
     <Button onClick={handleSave} variant="contained">Save</Button>
   );
 
@@ -309,4 +368,4 @@ export function AdminPanel({ open, onClose, config, voices, voicePreviewBusy, on
       </DialogActions>
     </Dialog>
   );
-}
+});

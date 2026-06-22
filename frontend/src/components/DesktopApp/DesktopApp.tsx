@@ -1,8 +1,4 @@
 import { useRef } from 'react';
-import { DndContext, useSensors, useSensor, PointerSensor, KeyboardSensor } from '@dnd-kit/core';
-import type { DragEndEvent } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
-import { DraggablePanel } from '../DraggablePanel/DraggablePanel';
 import { Box, Snackbar, Alert } from '@mui/material';
 import { TopBar } from '../TopBar/TopBar';
 import { ChatDisplay } from '../ChatDisplay/ChatDisplay';
@@ -18,20 +14,13 @@ import type { SpectrogramHandle } from '../Spectrogram/Spectrogram';
 import { QuickMessages } from '../QuickMessages/QuickMessages';
 import { ContactsDialog } from '../ContactsDialog/ContactsDialog';
 import { PendingStationsBar } from '../PendingStationsBar/PendingStationsBar';
-import { ConfigPanel } from '../ConfigPanel/ConfigPanel';
-import { SettingsDialog } from '../SettingsDialog/SettingsDialog';
-import type { ServerConfig, ServerConfigSaveValues } from '../ServerConfigPanel/ServerConfigPanel';
 import type { TxComposition } from '../../plugins';
-import { UsersPanel } from '../UsersPanel/UsersPanel';
 import type {
   StatusMsg,
   Contact,
   AttendanceStation,
   JournalEntry,
   FccLookupResultMsg,
-  InputDeviceOption,
-  MonitorSinkOption,
-  OutputDeviceOption,
   UserProfile,
   VoiceOption,
   WsMessage,
@@ -41,7 +30,6 @@ import type { AdminConfig, JournalResultDraft, PendingStation } from '../../type
 export interface DesktopAppProps {
   // Identity & connection
   profile: UserProfile;
-  profiles: UserProfile[];
   connected: boolean;
   isOnline: boolean | null;
   stationStatus: string;
@@ -91,43 +79,14 @@ export interface DesktopAppProps {
   onVoicePttCancel: () => void;
   onTxAbort: () => void;
 
-  // Config panel
-  filterProfanity: boolean;
-  fuzzyCallsign: boolean;
-  inputDevice: string | number;
-  systemMonitorSink: string;
-  inputDevices: InputDeviceOption[];
-  monitorSinks: MonitorSinkOption[];
-  outputDevice: number;
-  outputDevices: OutputDeviceOption[];
+  // Spectrogram display (read-only view props; config lives in SettingsDialog)
   spectroColormap: 'viridis' | 'grayscale';
-  spectroFreqRange: 'voice' | 'full';
   spectroTimeWindowS: number;
-  onToggleProfanity: () => void;
-  onToggleFuzzy: () => void;
-  onInputDeviceChange: (device: string | number, sink: string) => void;
-  onOutputDeviceChange: (device: number) => void;
-  onSpectroColormapChange: (cm: 'viridis' | 'grayscale') => void;
-  onSpectroFreqRangeChange: (range: 'voice' | 'full') => void;
-  onSpectroTimeWindowChange: (s: number) => void;
 
   // Admin / server config
   adminConfig: AdminConfig;
-  serverConfig: ServerConfig;
   voices: VoiceOption[];
   voicePreviewBusy: boolean;
-  onAdminSave: (values: {
-    callsign: string;
-    name: string;
-    location: string;
-    voice: string;
-    tts_length_scale: number;
-    gemini_api_key: string;
-    journals_dir: string;
-    ncs_zone: string;
-    rx_mode: string;
-  }) => void;
-  onServerConfigSave: (values: ServerConfigSaveValues) => void;
   onPreviewVoice: (voiceId: string) => void;
   onSaveTtsPrefs: (prefs: { voice: string; length_scale: number }) => void;
 
@@ -161,18 +120,13 @@ export interface DesktopAppProps {
   showAttendance: boolean;
   showJournal: boolean;
   showContacts: boolean;
-  showConfig: boolean;
-  showAdmin: boolean;
   showNcs: boolean;
-  panelOrder: string[];
+  showSettings: boolean;
   onToggleAttendance: () => void;
   onToggleJournal: () => void;
   onToggleContacts: () => void;
-  onToggleConfig: () => void;
-  onToggleAdmin: () => void;
   onToggleNcs: () => void;
-  onPanelDragEnd: (event: DragEndEvent) => void;
-  onPanelMove: (fromIndex: number, toIndex: number) => void;
+  onToggleSettings: () => void;
 
   // Contacts dialog
   pendingPrefilledCallsign: string | undefined;
@@ -201,12 +155,10 @@ export interface DesktopAppProps {
   onCloseErrorSnack: () => void;
   onCloseJournalSavedSnack: () => void;
   onCloseVocabSnack: () => void;
-  onRescanVocabulary?: () => void;
 }
 
 export function DesktopApp({
   profile,
-  profiles,
   connected,
   isOnline,
   stationStatus,
@@ -242,30 +194,11 @@ export function DesktopApp({
   onVoicePttEnd,
   onVoicePttCancel,
   onTxAbort,
-  filterProfanity,
-  fuzzyCallsign,
-  inputDevice,
-  systemMonitorSink,
-  inputDevices,
-  monitorSinks,
-  outputDevice,
-  outputDevices,
   spectroColormap,
-  spectroFreqRange,
   spectroTimeWindowS,
-  onToggleProfanity,
-  onToggleFuzzy,
-  onInputDeviceChange,
-  onOutputDeviceChange,
-  onSpectroColormapChange,
-  onSpectroFreqRangeChange,
-  onSpectroTimeWindowChange,
   adminConfig,
-  serverConfig,
   voices,
   voicePreviewBusy,
-  onAdminSave,
-  onServerConfigSave,
   onPreviewVoice,
   onSaveTtsPrefs,
   onUpdateProfile,
@@ -288,18 +221,13 @@ export function DesktopApp({
   showAttendance,
   showJournal,
   showContacts,
-  showConfig,
-  showAdmin,
   showNcs,
-  panelOrder,
+  showSettings,
   onToggleAttendance,
   onToggleJournal,
   onToggleContacts,
-  onToggleConfig,
-  onToggleAdmin,
   onToggleNcs,
-  onPanelDragEnd,
-  onPanelMove,
+  onToggleSettings,
   pendingPrefilledCallsign,
   pendingPrefilledName,
   pendingPrefilledLocation,
@@ -321,13 +249,8 @@ export function DesktopApp({
   onCloseErrorSnack,
   onCloseJournalSavedSnack,
   onCloseVocabSnack,
-  onRescanVocabulary,
 }: DesktopAppProps) {
   const messageInputRef = useRef<MessageInputHandle>(null);
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
 
   return (
     <Box
@@ -351,10 +274,8 @@ export function DesktopApp({
         onToggleJournal={onToggleJournal}
         showContacts={showContacts}
         onToggleContacts={onToggleContacts}
-        showConfig={showConfig}
-        onToggleConfig={onToggleConfig}
-        showAdmin={showAdmin}
-        onToggleAdmin={onToggleAdmin}
+        showSettings={showSettings}
+        onToggleSettings={onToggleSettings}
         showNcs={showNcs}
         onToggleNcs={onToggleNcs}
         showWaterfall={showWaterfall}
@@ -382,103 +303,24 @@ export function DesktopApp({
         onTxAbort={onTxAbort}
       />
 
-      <DndContext sensors={sensors} onDragEnd={onPanelDragEnd}>
-        <SortableContext items={panelOrder} strategy={verticalListSortingStrategy}>
-          {panelOrder.map((id, index) => {
-            if (id === 'config' && showConfig) {
-              return (
-                <DraggablePanel
-                  key="config"
-                  id="config"
-                  onMoveUp={index > 0 ? () => onPanelMove(index, index - 1) : undefined}
-                  onMoveDown={index < panelOrder.length - 1 ? () => onPanelMove(index, index + 1) : undefined}
-                >
-                  <ConfigPanel
-                    filterProfanity={filterProfanity}
-                    fuzzyCallsign={fuzzyCallsign}
-                    inputDevice={inputDevice}
-                    systemMonitorSink={systemMonitorSink}
-                    inputDevices={inputDevices}
-                    monitorSinks={monitorSinks}
-                    outputDevice={outputDevice}
-                    outputDevices={outputDevices}
-                    spectroColormap={spectroColormap}
-                    spectroFreqRange={spectroFreqRange}
-                    spectroTimeWindowS={spectroTimeWindowS}
-                    onToggleProfanity={onToggleProfanity}
-                    onToggleFuzzy={onToggleFuzzy}
-                    onInputDeviceChange={onInputDeviceChange}
-                    onOutputDeviceChange={onOutputDeviceChange}
-                    onSpectroColormapChange={onSpectroColormapChange}
-                    onSpectroFreqRangeChange={onSpectroFreqRangeChange}
-                    onSpectroTimeWindowChange={onSpectroTimeWindowChange}
-                  />
-                </DraggablePanel>
-              );
-            }
-            if (id === 'attendance' && showAttendance) {
-              return (
-                <DraggablePanel
-                  key="attendance"
-                  id="attendance"
-                  onMoveUp={index > 0 ? () => onPanelMove(index, index - 1) : undefined}
-                  onMoveDown={index < panelOrder.length - 1 ? () => onPanelMove(index, index + 1) : undefined}
-                >
-                  <AttendancePanel
-                    stations={attendanceStations}
-                    onClear={onClearAttendance}
-                  />
-                </DraggablePanel>
-              );
-            }
-            if (id === 'journal' && showJournal) {
-              return (
-                <DraggablePanel
-                  key="journal"
-                  id="journal"
-                  onMoveUp={index > 0 ? () => onPanelMove(index, index - 1) : undefined}
-                  onMoveDown={index < panelOrder.length - 1 ? () => onPanelMove(index, index + 1) : undefined}
-                >
-                  <JournalPanel
-                    journals={journals}
-                    pendingResult={journalResult}
-                    generating={journalGenerating}
-                    journalError={journalError}
-                    rxTexts={rxTexts}
-                    rxCallsigns={rxCallsigns}
-                    onListJournals={onListJournals}
-                    onGenerate={onGenerate}
-                    onSave={onSaveJournal}
-                    onDelete={onDeleteJournal}
-                    onPublish={onPublishJournal}
-                    onUnpublish={onUnpublishJournal}
-                    onDismissResult={onDismissJournalResult}
-                  />
-                </DraggablePanel>
-              );
-            }
-            if (id === 'ncs' && showNcs) {
-              return (
-                <DraggablePanel
-                  key="ncs"
-                  id="ncs"
-                  onMoveUp={index > 0 ? () => onPanelMove(index, index - 1) : undefined}
-                  onMoveDown={index < panelOrder.length - 1 ? () => onPanelMove(index, index + 1) : undefined}
-                >
-                  <NCSPanel
-                    send={send}
-                    lastMessage={lastMessage}
-                    contacts={contacts}
-                    channelClear={channelClear}
-                    transmitting={transmitting}
-                  />
-                </DraggablePanel>
-              );
-            }
-            return null;
-          })}
-        </SortableContext>
-      </DndContext>
+      <>
+        {showAttendance && (
+          <AttendancePanel stations={attendanceStations} onClear={onClearAttendance} />
+        )}
+        {showJournal && (
+          <JournalPanel
+            journals={journals} pendingResult={journalResult} generating={journalGenerating}
+            journalError={journalError} rxTexts={rxTexts} rxCallsigns={rxCallsigns}
+            onListJournals={onListJournals} onGenerate={onGenerate} onSave={onSaveJournal}
+            onDelete={onDeleteJournal} onPublish={onPublishJournal} onUnpublish={onUnpublishJournal}
+            onDismissResult={onDismissJournalResult}
+          />
+        )}
+        {showNcs && (
+          <NCSPanel send={send} lastMessage={lastMessage} contacts={contacts}
+                    channelClear={channelClear} transmitting={transmitting} />
+        )}
+      </>
 
       <PendingStationsBar
         stations={pendingStations}
@@ -535,28 +377,6 @@ export function DesktopApp({
         verifyAllComplete={verifyAllComplete}
         onSend={send}
         onVerifyAllDismiss={onVerifyAllDismiss}
-      />
-
-      <SettingsDialog
-        open={showAdmin}
-        onClose={onToggleAdmin}
-        adminConfig={adminConfig}
-        voices={voices}
-        voicePreviewBusy={voicePreviewBusy}
-        onAdminSave={onAdminSave}
-        onPreviewVoice={onPreviewVoice}
-        serverConfig={serverConfig}
-        onServerConfigSave={onServerConfigSave}
-        onRescanVocabulary={onRescanVocabulary}
-        usersPanel={profile.is_admin && (
-          <UsersPanel
-            profiles={profiles}
-            currentUserId={profile.id}
-            onCreateProfile={(data) => send({ type: 'create_profile', ...data })}
-            onDeleteProfile={(userId) => send({ type: 'delete_profile', user_id: userId })}
-            onResetLockout={(userId) => send({ type: 'reset_lockout', user_id: userId })}
-          />
-        )}
       />
 
       <Snackbar

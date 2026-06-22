@@ -1,8 +1,6 @@
 import { useState, useCallback, useRef, useMemo } from 'react';
-import type { DragEndEvent } from '@dnd-kit/core';
-import { arrayMove } from '@dnd-kit/sortable';
 import { ThemeProvider, CssBaseline, Box, CircularProgress } from '@mui/material';
-import { makeTheme } from './theme';
+import { makeTheme, withTouchDensity } from './theme';
 import { useAuth } from './hooks/useAuth';
 import { useWebSocket } from './hooks/useWebSocket';
 import type {
@@ -35,7 +33,9 @@ import { LoginScreen } from './components/LoginScreen/LoginScreen';
 import { SetupScreen } from './components/SetupScreen/SetupScreen';
 import { DesktopApp } from './components/DesktopApp/DesktopApp';
 import { MobileApp } from './components/MobileApp/MobileApp';
-import { useMobileDetect } from './hooks/useMobileDetect';
+import { SettingsDialog } from './components/SettingsDialog/SettingsDialog';
+import { UsersPanel } from './components/UsersPanel/UsersPanel';
+import { useDeviceClass } from './hooks/useDeviceClass';
 import './App.css';
 
 let entryCounter = 0;
@@ -143,8 +143,7 @@ export default function App() {
   const [showAttendance, setShowAttendance] = useState(false);
   const [showJournal, setShowJournal] = useState(false);
   const [showContacts, setShowContacts] = useState(false);
-  const [showConfig, setShowConfig] = useState(false);
-  const [showAdmin, setShowAdmin] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [serverConfig, setServerConfig] = useState<ServerConfig>({
     vadThreshold: 0.5,
     whisperModel: 'small.en',
@@ -170,15 +169,6 @@ export default function App() {
     meshcoreChannelIdx: 0,
   });
 
-  // Panel order — initialized from localStorage to avoid FOUC; overridden by profile on load
-  const [panelOrder, setPanelOrder] = useState<string[]>(
-    () => {
-      try {
-        return JSON.parse(localStorage.getItem('radio_tty_panel_order') ?? '["config","attendance","journal"]');
-      } catch { return ['config', 'attendance', 'journal']; }
-    }
-  );
-
   // Dark mode — initialized from localStorage to avoid FOUC; overridden by profile on load
   const [darkMode, setDarkMode] = useState(
     () => localStorage.getItem('radio_tty_dark_mode') === 'true'
@@ -188,7 +178,15 @@ export default function App() {
   const [showWaterfall, setShowWaterfall] = useState(
     () => localStorage.getItem('radio_tty_show_waterfall') !== 'false'
   );
-  const theme = useMemo(() => makeTheme(darkMode), [darkMode]);
+
+  const deviceClass = useDeviceClass();
+  const isMobile = deviceClass === 'phone';
+
+  const baseTheme = useMemo(() => makeTheme(darkMode), [darkMode]);
+  const theme = useMemo(
+    () => (deviceClass === 'tablet' ? withTouchDensity(baseTheme) : baseTheme),
+    [baseTheme, deviceClass],
+  );
 
   // Attendance
   const [attendanceStations, setAttendanceStations] = useState<AttendanceStation[]>([]);
@@ -419,10 +417,6 @@ export default function App() {
         if (prefs.dark_mode !== undefined) {
           setDarkMode(prefs.dark_mode);
           localStorage.setItem('radio_tty_dark_mode', String(prefs.dark_mode));
-        }
-        if (prefs.panel_order) {
-          setPanelOrder(prefs.panel_order);
-          localStorage.setItem('radio_tty_panel_order', JSON.stringify(prefs.panel_order));
         }
         if (prefs.filter_profanity !== undefined) setFilterProfanity(prefs.filter_profanity);
         if (prefs.listen_only !== undefined) setListenOnly(prefs.listen_only);
@@ -908,29 +902,6 @@ export default function App() {
     [rxMessages]
   );
 
-  function handlePanelDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (over && active.id !== over.id) {
-      setPanelOrder((prev) => {
-        const oldIndex = prev.indexOf(String(active.id));
-        const newIndex = prev.indexOf(String(over.id));
-        const next = arrayMove(prev, oldIndex, newIndex);
-        localStorage.setItem('radio_tty_panel_order', JSON.stringify(next));
-        send({ type: 'save_user_prefs', prefs: { panel_order: next } });
-        return next;
-      });
-    }
-  }
-
-  function handlePanelMove(fromIndex: number, toIndex: number) {
-    setPanelOrder((prev) => {
-      const next = arrayMove(prev, fromIndex, toIndex);
-      localStorage.setItem('radio_tty_panel_order', JSON.stringify(next));
-      send({ type: 'save_user_prefs', prefs: { panel_order: next } });
-      return next;
-    });
-  }
-
   const handleListJournals = useCallback(() => {
     send({ type: 'list_journals' });
   }, [send]);
@@ -982,14 +953,9 @@ export default function App() {
     if (showContacts) handleContactsClose();
     else setShowContacts(true);
   }
-  function handleToggleConfig() { setShowConfig((v) => !v); }
-  function handleToggleAdmin() { setShowAdmin((v) => !v); }
+  const handleToggleSettings = () => setShowSettings((v) => !v);
   function handleToggleNcs() {
-    const next = !showNcs;
-    setShowNcs(next);
-    setPanelOrder((prev) =>
-      next && !prev.includes('ncs') ? [...prev, 'ncs'] : prev.filter((id) => id !== 'ncs' || next)
-    );
+    setShowNcs((v) => !v);
   }
   function handleDismissPending(cs: string) { send({ type: 'dismiss_pending', callsign: cs }); }
   function handleDismissAllPending() { send({ type: 'dismiss_all_pending' }); }
@@ -1006,8 +972,6 @@ export default function App() {
   function handleCloseJournalSavedSnack() { setJournalSavedSnack(null); }
   function handleCloseVocabSnack() { setVocabSnack(null); }
   function handleVerifyAllDismiss() { setVerifyAllComplete(false); }
-
-  const isMobile = useMobileDetect();
 
   // Show a blank screen while validating existing token on startup.
   if (authLoading) {
@@ -1048,7 +1012,6 @@ export default function App() {
   const sharedProps = {
     txComposition,
     profile: profile!,
-    profiles,
     connected,
     isOnline,
     showCallsignChips,
@@ -1101,14 +1064,8 @@ export default function App() {
     onToggleSttListening: handleToggleSttListening,
     onToggleDark: handleToggleDark,
     adminConfig,
-    serverConfig,
-    showConfig,
-    showAdmin,
-    onToggleConfig: handleToggleConfig,
-    onToggleAdmin: handleToggleAdmin,
-    onAdminSave: handleAdminSave,
-    onServerConfigSave: handleServerConfigSave,
-    onRescanVocabulary: handleRescanVocabulary,
+    showSettings,
+    onToggleSettings: handleToggleSettings,
     showContacts,
     pendingPrefilledCallsign,
     pendingPrefilledName,
@@ -1151,40 +1108,63 @@ export default function App() {
         <DesktopApp
           {...sharedProps}
           stationStatus={stationStatus}
-          filterProfanity={filterProfanity}
-          fuzzyCallsign={fuzzyCallsign}
-          inputDevice={inputDevice}
-          systemMonitorSink={systemMonitorSink}
-          inputDevices={inputDevices}
-          monitorSinks={monitorSinks}
-          outputDevice={outputDevice}
-          outputDevices={outputDevices}
           spectroColormap={spectroColormap}
-          spectroFreqRange={spectroFreqRange}
           spectroTimeWindowS={spectroTimeWindowS}
-          onToggleProfanity={handleToggleProfanity}
-          onToggleFuzzy={handleToggleFuzzy}
-          onInputDeviceChange={handleInputDeviceChange}
-          onOutputDeviceChange={handleOutputDeviceChange}
-          onSpectroColormapChange={handleSpectroColormapChange}
-          onSpectroFreqRangeChange={handleSpectroFreqRangeChange}
-          onSpectroTimeWindowChange={handleSpectroTimeWindowChange}
           showWaterfall={showWaterfall}
           onToggleWaterfall={handleToggleWaterfall}
           showAttendance={showAttendance}
           showJournal={showJournal}
           showNcs={showNcs}
-          panelOrder={panelOrder}
           onToggleAttendance={handleToggleAttendance}
           onToggleJournal={handleToggleJournal}
           onToggleContacts={handleToggleContacts}
           onToggleNcs={handleToggleNcs}
-          onPanelDragEnd={handlePanelDragEnd}
-          onPanelMove={handlePanelMove}
           onClearChat={handleClearChat}
           spectroRef={spectroRef}
         />
       )}
+      {/* isAdmin is UX-only gating (hides Station/System tabs). Server enforces
+          admin authorization on set_admin_config / set_server_config. */}
+      <SettingsDialog
+        open={showSettings}
+        onClose={handleToggleSettings}
+        isAdmin={!!profile?.is_admin}
+        filterProfanity={filterProfanity}
+        fuzzyCallsign={fuzzyCallsign}
+        inputDevice={inputDevice}
+        systemMonitorSink={systemMonitorSink}
+        inputDevices={inputDevices}
+        monitorSinks={monitorSinks}
+        outputDevice={outputDevice}
+        outputDevices={outputDevices}
+        spectroColormap={spectroColormap}
+        spectroFreqRange={spectroFreqRange}
+        spectroTimeWindowS={spectroTimeWindowS}
+        onToggleProfanity={handleToggleProfanity}
+        onToggleFuzzy={handleToggleFuzzy}
+        onInputDeviceChange={handleInputDeviceChange}
+        onOutputDeviceChange={handleOutputDeviceChange}
+        onSpectroColormapChange={handleSpectroColormapChange}
+        onSpectroFreqRangeChange={handleSpectroFreqRangeChange}
+        onSpectroTimeWindowChange={handleSpectroTimeWindowChange}
+        adminConfig={adminConfig}
+        voices={voices}
+        voicePreviewBusy={voicePreviewBusy}
+        onAdminSave={handleAdminSave}
+        onPreviewVoice={handlePreviewVoice}
+        serverConfig={serverConfig}
+        onServerConfigSave={handleServerConfigSave}
+        onRescanVocabulary={handleRescanVocabulary}
+        usersPanel={profile?.is_admin && (
+          <UsersPanel
+            profiles={profiles}
+            currentUserId={profile.id}
+            onCreateProfile={(data) => send({ type: 'create_profile', ...data })}
+            onDeleteProfile={(userId) => send({ type: 'delete_profile', user_id: userId })}
+            onResetLockout={(userId) => send({ type: 'reset_lockout', user_id: userId })}
+          />
+        )}
+      />
     </ThemeProvider>
   );
 }

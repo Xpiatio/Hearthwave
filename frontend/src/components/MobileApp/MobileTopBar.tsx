@@ -31,8 +31,7 @@ interface MobileTopBarProps {
   voices: VoiceOption[];
   voicePreviewBusy: boolean;
   stationLengthScale: number;
-  showConfig: boolean;
-  showAdmin: boolean;
+  showSettings: boolean;
   onToggleSttListening: () => void;
   onToggleReadAloud: () => void;
   onToggleNotifications: () => void;
@@ -53,8 +52,7 @@ interface MobileTopBarProps {
   onLogout: () => void;
   onPreviewVoice: (voiceId: string) => void;
   onSaveTtsPrefs: (prefs: { voice: string; length_scale: number }) => void;
-  onToggleConfig: () => void;
-  onToggleAdmin: () => void;
+  onToggleSettings: () => void;
 }
 
 export function MobileTopBar({
@@ -70,8 +68,7 @@ export function MobileTopBar({
   voices,
   voicePreviewBusy,
   stationLengthScale,
-  showConfig,
-  showAdmin,
+  showSettings,
   onToggleSttListening,
   onToggleReadAloud,
   onToggleNotifications,
@@ -87,8 +84,7 @@ export function MobileTopBar({
   onLogout,
   onPreviewVoice,
   onSaveTtsPrefs,
-  onToggleConfig,
-  onToggleAdmin,
+  onToggleSettings,
 }: MobileTopBarProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -179,10 +175,8 @@ export function MobileTopBar({
               onPreviewVoice={onPreviewVoice}
               stationLengthScale={stationLengthScale}
               onSaveTtsPrefs={onSaveTtsPrefs}
-              showConfig={showConfig}
-              onToggleConfig={onToggleConfig}
-              showAdmin={showAdmin}
-              onToggleAdmin={onToggleAdmin}
+              showSettings={showSettings}
+              onToggleSettings={onToggleSettings}
             />
           </Box>
         </Box>
