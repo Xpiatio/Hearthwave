@@ -18,13 +18,13 @@ without touching core server logic.
 Hearthwave is a fork of GMRS-TTY that replaces the desktop PySide6 UI with a
 browser-based React frontend communicating over WebSocket.
 
-> **Latest release:** v2.8.0
+> **Latest release:** v2.9.0
 
 ## Who uses it
 
 - **Families** — one GMRS license covers the whole household. Each person gets
   their own account with their own voice and preferences. Kids on tablets, parents
-  on laptops, grandparents with large-touch mode — everyone on the same channel.
+  on laptops, grandparents with large, high-contrast type — everyone on the same channel.
 - **Neighborhood watch groups** — deploy Hearthwave as the watch's base station.
   Assign listen-only accounts to patrol volunteers and TX-capable accounts to
   designated net control operators. The NCS roster tracks who is active on each
@@ -84,12 +84,12 @@ browser-based React frontend communicating over WebSocket.
 - **Spectrogram** — real-time frequency display (voice or full range, viridis or
   grayscale colormaps)
 - **Attendance panel** — automatic log of every station heard this session
-- **Draggable panels** — desktop layout fully customisable with drag-and-drop
+- **Responsive layout** — phone, tablet, and desktop layouts chosen automatically; tablets get the full desktop view with larger, touch-friendly controls
 - **WCAG 2.2 AA** — full keyboard navigation, screen reader support, and ARIA
   labelling throughout the interface
 - **Chat vs Transmit split** — a CHAT action broadcasts a message to all operators' displays without keying the radio; TRANSMIT is the over-the-air action; chat lines are marked `[CHAT]` and are profanity-filtered per recipient
 - **Shared message stream** — the message log (RX, TX, and CHAT entries) is held server-side and shared across the base station and every web/mobile login, so a client that signs in or refreshes later sees the history accumulated since the last clear. The stream is kept in memory (a backend restart starts fresh) and capped to the most recent messages. Clearing the log is **admin-only and global** — an admin clear wipes the chat for everyone at once, after a confirmation prompt
-- **Unified Admin Settings** — the Admin panel and Server Config are merged into a single tabbed "Admin Settings" dialog (Station and System tabs, each with its own Save button)
+- **Unified Settings** — one **Settings** dialog for everyone: a **Preferences** tab available to all users (audio input/output devices, profanity filter, fuzzy callsign match, spectrogram options) plus admin-only **Station** and **System** tabs. A single **Save** in the footer commits changes across every tab at once; non-admins see only the Preferences tab
 - **VOX primer tone** — an optional short tone prepended to each transmission so a VOX-keyed radio is fully keyed before the message starts; configurable on/off and tone duration in milliseconds (System tab, off by default)
 - **Logo, About & version** — a Hearthwave logo on the login screen and in the top bar, plus an About dialog (opened from the account menu, the login-screen footer, or the top-bar logo) showing the running version, project links, and FCC information. The version is sourced from the backend `/health` endpoint
 - **Docker install** — single `docker compose up -d` gets you running
@@ -105,8 +105,8 @@ The interface uses a navy/blue design language that matches the
   with blue primary actions (`#2563EB`) and dark navy text
 - **Green** is reserved exclusively for radio status indicators: connected dot,
   transmitting state, PTT active, and received-message labels
-- **Gradient panel headers** — each panel type has a typed gradient (NCS and
-  Admin use a deeper blue; Config, Journals, and Attendance use base navy)
+- **Gradient panel headers** — each panel type has a typed gradient (NCS uses a
+  deeper blue; Journals and Attendance use base navy)
 - **WCAG 2.2 AA compliant** — all colour pairs meet 4.5:1 contrast for normal
   text and 3:1 for large text and UI components
 
@@ -114,15 +114,15 @@ The interface uses a navy/blue design language that matches the
 
 ```
 ┌──────────────────────────── TopBar ─────────────────────────────┐
-│ Callsign · Status · PTT · ABORT TX · Spectrogram · Account      │
+│ Callsign · Status · PTT · ABORT TX · Waterfall · Account        │
 ├─────────────────────────────────────────────────────────────────┤
-│              │                        │                          │
-│  Panels      │    Chat Display        │   Side Panels            │
-│  (draggable) │    (scrollable log)    │   (NCS / Journals /      │
-│              │                        │    Attendance)           │
-│              │                        │                          │
-├──────────────┴────────────────────────┴──────────────────────────┤
-│ StatusRow · ConfigPanel · PendingStationsBar · QuickMessages      │
+│  Panels (when opened): NCS · Journals · Attendance — fixed order  │
+├─────────────────────────────────────────────────────────────────┤
+│  Pending Stations bar                                             │
+├──────────────────────────┬──────────────────────────────────────┤
+│  Spectrogram (waterfall)  │   Chat Display (scrollable log)       │
+├──────────────────────────┴──────────────────────────────────────┤
+│  StatusRow · QuickMessages · Message Input                        │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -193,8 +193,9 @@ sound card. Two paths both work:
    similar). Useful when the computer has no usable analog jack. Here you can key
    PTT over a USB serial dongle (RTS/DTR) instead of VOX.
 
-Pick the input/output devices and PTT mode on first run from the Setup screen,
-and adjust them later under **Admin Settings**.
+Pick the input/output devices and PTT mode on first run from the Setup screen.
+Audio devices can be changed later on the **Preferences** tab of **Settings**;
+PTT mode lives on the admin-only **System** tab.
 
 ## Quick start
 
@@ -280,7 +281,7 @@ registerPlugin({
 });
 ```
 
-The app shell mounts registered plugins in the draggable panel area via
+The app shell mounts registered plugins in the panel area via
 `PluginSlot`.
 
 A plugin can also constrain the core message input without the input knowing
