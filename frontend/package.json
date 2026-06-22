@@ -1,7 +1,7 @@
 {
   "name": "hearthwave-frontend",
   "private": true,
-  "version": "2.7.1",
+  "version": "2.9.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

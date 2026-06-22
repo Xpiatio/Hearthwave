@@ -1,6 +1,6 @@
 # Hearthwave User Manual
 
-> **Version:** v2.8.0
+> **Version:** v2.9.0
 
 This manual covers day-to-day operation of Hearthwave as a GMRS family hub or neighborhood watch base station — a shared radio operating station where every household member or watch volunteer connects from their own device. For installation and server setup, see [README.md](README.md).
 
@@ -68,7 +68,7 @@ If no accounts exist yet, the **Setup** screen appears instead of the login scre
 
 1. Enter your **display name** and choose a **password** (minimum 8 characters, confirmed).
 2. Optionally fill in **operator name**, **call sign**, and **location** — these can be changed later.
-   - The call sign and location you enter here are saved to your personal profile **and** used to seed the station defaults in **Admin Settings**. Both can be adjusted independently afterward.
+   - The call sign and location you enter here are saved to your personal profile **and** used to seed the station defaults on the **Station tab of Settings**. Both can be adjusted independently afterward.
 3. Click **Create Account**. Your admin account is created and you are signed in automatically.
 
 After setup, go to **ADMIN → Users** to create accounts for other family members.
@@ -83,7 +83,7 @@ The **login screen** appears automatically. Select your name from the profile li
 
 **New to the station?** Your administrator creates your account and gives you your initial password. You can change it any time via the account menu (see [Your account](#14-your-account)).
 
-The login screen shows the **Hearthwave logo** and an **About** link beneath the sign-in form. The About link displays the running version (e.g. *v2.8.0*) and opens the **About Hearthwave** dialog with project links and FCC information. Once signed in, you can reopen this dialog any time from the **logo in the top bar** or the **About Hearthwave** entry in the account menu.
+The login screen shows the **Hearthwave logo** and an **About** link beneath the sign-in form. The About link displays the running version (e.g. *v2.9.0*) and opens the **About Hearthwave** dialog with project links and FCC information. Once signed in, you can reopen this dialog any time from the **logo in the top bar** or the **About Hearthwave** entry in the account menu.
 
 If the server is unreachable, the status bar shows **OFFLINE** in amber. Refresh the page or contact your administrator.
 
@@ -100,13 +100,15 @@ The desktop shows all panels simultaneously:
 
 ```
 ┌──────────────────────────── TopBar ─────────────────────────────┐
-│ [≡ panels]  Callsign ●  [PTT]  [ABORT TX]  [Spectrogram]  [👤] │
-├───────────────┬──────────────────────────┬───────────────────────┤
-│ Draggable     │  Chat Display            │  Side panels          │
-│ panels        │  (scrollable RX/TX log)  │  NCS / Journals /     │
-│               │                          │  Attendance           │
-├───────────────┴──────────────────────────┴───────────────────────┤
-│ Status · Config · Pending Stations · Quick Messages              │
+│ Callsign ●  [PTT]  [ABORT TX]  [Spectrogram]  [👤]              │
+├──────────────────────────────────────────────────────────────────┤
+│ Panels (when opened): NCS · Journals · Attendance — fixed order   │
+├──────────────────────────────────────────────────────────────────┤
+│ Pending Stations                                                   │
+├──────────────────────────┬───────────────────────────────────────┤
+│ Spectrogram (waterfall)   │  Chat Display (scrollable RX/TX log)   │
+├──────────────────────────┴───────────────────────────────────────┤
+│ Status · Quick Messages · Message Input                            │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -118,10 +120,9 @@ The desktop shows all panels simultaneously:
   appear with a green `[RX]` label; sent messages with a blue `[TX]` label;
   operator chat with a `[CHAT]` label. See
   [Shared, persisted message log](#shared-persisted-message-log).
-- **Draggable panels** — NCS, Journals, Attendance, and any installed plugins.
-  Drag the panel handle to reorder. Each panel has a coloured gradient header:
-  NCS and Admin use a blue gradient; Config, Journals, and Attendance use a
-  darker navy gradient.
+- **Panels** — NCS, Journals, Attendance, and any installed plugins appear in a
+  fixed order when opened. Each panel has a coloured gradient header: NCS uses a
+  blue gradient; Journals and Attendance use a darker navy gradient.
 - **StatusRow** — bottom bar showing radio status (READY / OFFLINE /
   TRANSMITTING), audio device, and connection count.
 
@@ -139,7 +140,7 @@ The desktop shows all panels simultaneously:
 
 ## 2a. Mobile interface
 
-On phones and narrow tablets Hearthwave shows a single-column view:
+On phones Hearthwave shows a single-column mobile view (tablets and larger screens get the desktop layout):
 
 ```
 ┌────────────────── TopBar (sticky) ──────────────────┐
@@ -232,7 +233,7 @@ The status bar shows **Transmitting** while the radio is keyed and returns to **
 
 **Placeholder tokens:** Include `{1}`, `{2}`, etc. as fill-in-the-blank slots. When you send, the system prompts you to fill in each before transmitting. Useful for templates: `Heading to {1} — ETA {2} minutes`.
 
-**Voice preview:** Open the Config panel and use the **Voice Test** button to hear your current TTS voice without keying the radio. To change your personal voice, see [Your account](#14-your-account).
+**Voice preview:** Open your account menu (the chip in the top bar) and click **Sample** next to the voice selector to hear the selected TTS voice without keying the radio. To change your personal voice, see [Your account](#14-your-account).
 
 **Listen-only mode:** When active, all TX controls are hidden. Your setting does not affect other users — each person controls their own TX access independently.
 
@@ -415,7 +416,7 @@ Open your personal settings panel by clicking your **account chip** in the top b
 | Input device | Which microphone/audio interface the server listens on |
 | System audio loopback | Capture from a PulseAudio sink (for radios on virtual cable) |
 
-> **Connecting the radio:** Hearthwave connects to the radio's **combo (speaker/mic) jack** — typically a Kenwood-style **K1** cable — either through the computer's built-in 3.5 mm jack or a USB sound card. A USB connection *to the radio itself* is not required. For a VOX-keyed radio, enable the **VOX primer tone** (see [Admin Settings](#21-admin-settings-dialog-admin)) so the radio opens before speech begins. Full wiring options are in the [README](README.md#connecting-the-radio).
+> **Connecting the radio:** Hearthwave connects to the radio's **combo (speaker/mic) jack** — typically a Kenwood-style **K1** cable — either through the computer's built-in 3.5 mm jack or a USB sound card. A USB connection *to the radio itself* is not required. For a VOX-keyed radio, enable the **VOX primer tone** (see [Settings → System tab](#21-admin-settings-dialog-admin)) so the radio opens before speech begins. Full wiring options are in the [README](README.md#connecting-the-radio).
 
 ### Radio & content (per-user)
 | Setting | Description |
@@ -439,12 +440,8 @@ Your personal TTS voice and speech speed are chosen in **Account → Edit Profil
 
 > Frequency range is a station-wide setting controlled by an admin.
 
-### Panel layout (per-user)
-
-The **Config**, **Stations**, and **Journal** panels on the left side of the screen can be reordered by dragging. Grab the drag handle on a panel header and move it up or down. The order is saved to your account and restored across devices.
-
 ### Station identity (admin only)
-The **callsign**, **name**, **location**, **default TTS voice**, **Gemini API key**, and **journals directory** are set on the **Station tab** of the **Admin Settings** dialog. These are shared by all users. Changes are persisted to `config.json`.
+The **callsign**, **name**, **location**, **default TTS voice**, **Gemini API key**, and **journals directory** are set on the **Station tab** of the **Settings** dialog (admin only). These are shared by all users. Changes are persisted to `config.json`.
 
 The **Default TTS Voice** dropdown sets which Piper voice the station uses when a user has not chosen a personal voice. Click the **mic icon** next to the dropdown to preview the selected voice without keying the radio.
 
@@ -467,7 +464,7 @@ Click your **name chip** in the top-left of the top bar to open the account menu
 ### Edit profile
 Change your **operator name** (shown in TX messages), **call sign**, **location**, **avatar emoji**, **TTS voice**, and **speech speed**. These are personal to your account and affect how your transmissions are identified — other users' transmissions use their own profile values.
 
-> **Station vs. personal callsign:** Each user can have their own call sign and location. Your personal call sign takes precedence over the station-wide callsign for your transmissions. If your profile has no call sign set, the station callsign (from Admin Settings) is used as a fallback.
+> **Station vs. personal callsign:** Each user can have their own call sign and location. Your personal call sign takes precedence over the station-wide callsign for your transmissions. If your profile has no call sign set, the station callsign (set on the Station tab of Settings) is used as a fallback.
 
 **TTS Voice:** Choose your personal Piper voice from the dropdown. Click **Sample** to hear it before saving — no radio is keyed. Select *Station Default* to fall back to whichever voice the administrator has configured. Each family member can use a different voice.
 
@@ -485,7 +482,7 @@ Ends your session on this device. Your preferences are saved and will be restore
 
 ## 15. Admin — managing users
 
-Admin accounts have access to the **Admin Settings** dialog via the account chip menu or the **ADMIN** button in the top bar. The dialog has two tabs: **Station** (station identity, user accounts, NCS / SKYWARN) and **System** (audio, STT, PTT, and advanced server settings — see [section 21](#21-admin-settings-dialog-admin)). The **NCS MODE** button in the top bar opens the NCS panel alongside the main interface without entering the settings dialog.
+Admin accounts open the **Settings** dialog from the **Settings** entry in the account chip menu. Beyond the **Preferences** tab that every user sees, admins also get two tabs: **Station** (station identity, user accounts, NCS / SKYWARN) and **System** (audio, STT, PTT, and advanced server settings — see [section 21](#21-admin-settings-dialog-admin)). The **NCS MODE** button in the top bar opens the NCS panel alongside the main interface without entering the settings dialog.
 
 ### User accounts
 
@@ -723,10 +720,10 @@ Decoded morse appears in chat as **[RX]** entries, identical in appearance to vo
 
 ## 21. Admin Settings dialog (admin)
 
-The **Admin Settings** dialog is accessible to admin accounts only. Open it from the account chip menu or via the **ADMIN** button in the top bar. It combines the former Admin panel and Server Config panel into a single tabbed dialog with two tabs:
+These settings live in the **Settings** dialog, opened from the **Settings** entry in the account chip menu. Every user sees a **Preferences** tab (personal options — see [section 13](#13-settings)); admin accounts additionally see the two admin-only tabs described here. A single **Save** button in the dialog footer commits changes across every tab at once and leaves the dialog open with a confirmation.
 
-- **Station tab** — station identity (callsign, name, location, default TTS voice, Gemini API key, journals directory), user accounts, and NCS / SKYWARN zone. Each section has its own **Save** button.
-- **System tab** — technical server-side settings (audio devices, STT, PTT, VOX, and advanced options). Each section has its own **Save** button.
+- **Station tab** — station identity (callsign, name, location, default TTS voice, Gemini API key, journals directory), user accounts, and NCS / SKYWARN zone.
+- **System tab** — technical server-side settings (audio devices, STT, PTT, VOX, and advanced options).
 
 ### System tab settings
 
@@ -749,7 +746,7 @@ The **Admin Settings** dialog is accessible to admin accounts only. Open it from
 | MeshCore — device | Serial device of the MeshCore Companion radio (e.g. `/dev/ttyUSB0`). In Docker the port must also be passed into the container (see section 22a). |
 | MeshCore — baud rate | Serial speed of the Companion link (default `115200`). |
 | MeshCore — max packet length | Characters per mesh packet, **including** the sender-name prefix (default `140`). This drives the message-box character limit. |
-| MeshCore — name separator | Joins the sender name and the message on the mesh (default `": "` → `Ben: hello`). |
+| MeshCore — name separator | Joins the sender name and the message on the mesh (default `": "` → `Alice: hello`). |
 | MeshCore — channel index | Which MeshCore channel to transmit on (default `0`). |
 
 > Changing a MeshCore setting reconnects (or disconnects) the serial link immediately — no server restart needed. Changing the port or baud rebuilds the link in place.
@@ -779,10 +776,10 @@ Then set **Final-pass model** to `distil-large-v3` in this panel (or `whisper_mo
 - **Multiple users:** Each family member signs into their own account. All clients see the same chat in real time — both received audio (RX) and outgoing transmissions (TX) — but each person's profanity filter, listen-only mode, and display preferences are independent.
 - **Across devices:** Your settings follow you. Sign in on your phone and get the same preferences as your tablet.
 - **Dark environments:** Toggle dark/light mode from the account menu (desktop) or the hamburger settings drawer (mobile). The public `/journal` page automatically adapts to your browser's dark mode preference.
-- **Slow or noisy transcription:** Adjust the VAD threshold in the **Server Config** panel (admin). Lower values (e.g. 0.3) are more sensitive; higher (e.g. 0.7) require a stronger signal. The setting can also be changed directly in `config.json` (`vad_threshold`).
+- **Slow or noisy transcription:** Adjust the VAD threshold on the **System** tab of Settings (admin). Lower values (e.g. 0.3) are more sensitive; higher (e.g. 0.7) require a stronger signal. The setting can also be changed directly in `config.json` (`vad_threshold`).
 - **FCC lookups not working:** The online indicator (dot in the top bar) shows internet connectivity. If it is gray, FCC verification is unavailable until connectivity is restored.
 - **Session locked out?** Wait 15 minutes or ask an admin to use **Admin → Users → Reset lockout**.
-- **On a phone or tablet:** The app automatically shows the mobile interface — bottom tabs for Chat, NCS, Journals, Status, and Settings. Tap the ≡ menu for dark mode and your account.
+- **On a phone:** The app automatically shows the mobile interface — bottom tabs for Chat, NCS, Journals, Status, and Settings. Tap the ≡ menu for dark mode and your account. **On a tablet**, you get the desktop layout with larger, touch-friendly controls.
 - **NCS traffic levels:** Use **IN-n-Out** for stations who only have a moment; use **Short Term** for those who can stay a few minutes but need to leave soon. Both are tracked in the roster and included in the end-of-net journal.
 - **Neighborhood watch groups:** Create one account per volunteer. Assign **listen-only** mode to members who should monitor but not transmit, and reserve TX-capable accounts for designated net control operators. The NCS roster and SKYWARN alerts work the same way they do for family nets — the watch's patrol log is automatically saved as a session journal at end of net.
 
@@ -843,7 +840,7 @@ When the plugin is on, the message box shows a live character counter (e.g. `Mes
 
 **Hardware and setup (admin)**
 
-- Connect a MeshCore **Companion** radio to the server by USB. Set the serial device, baud, max packet length, name separator, and channel on the **System** tab of Admin Settings (see [section 13](#13-settings)). Changes reconnect the link immediately — no restart.
+- Connect a MeshCore **Companion** radio to the server by USB. Set the serial device, baud, max packet length, name separator, and channel on the **System** tab of Settings (see [section 13](#13-settings)). Changes reconnect the link immediately — no restart.
 - In a Docker install, the serial device must also be passed into the container: uncomment the MeshCore `devices:` line in `docker-compose.yml` and set it to your host's port. The optional `meshcore` Python package must be installed for the link to come up; without it the plugin stays disabled and logs a hint.
 - The default max packet length (140) is a starting point — confirm the limit for the MeshCore firmware you are running.
 
@@ -927,7 +924,7 @@ The whole-utterance final pass — where a larger Whisper model re-transcribes e
 
 ### `stt_final_device` setting
 
-Control where the final pass runs with the `stt_final_device` key in `data/config.json` (System tab of Admin Settings is the recommended way to change it):
+Control where the final pass runs with the `stt_final_device` key in `data/config.json` (System tab of Settings is the recommended way to change it):
 
 | Value | Behaviour |
 |---|---|
@@ -967,5 +964,5 @@ If no ROCm GPU is detected (or if the GPU fails to load at runtime), the final p
 
 To switch back to CPU-only operation at any time:
 
-- **No rebuild needed:** set `stt_final_device` to `cpu` in Admin Settings (System tab) and restart the STT worker.
+- **No rebuild needed:** set `stt_final_device` to `cpu` in Settings (System tab) and restart the STT worker.
 - **Full rollback:** set `COMPUTE_BACKEND=cpu` and restart with `docker-compose.yml` instead of `docker-compose.rocm.yml`.
