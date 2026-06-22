@@ -86,10 +86,10 @@ export function makeTheme(dark: boolean) {
         styleOverrides: {
           root: ({ theme }) => ({
             backgroundColor:
-              theme.palette.mode === 'dark' ? '#0F2540' : '#1A3A5C',
+              theme.palette.mode === 'dark' ? '#0F2540' : '#C8D8EC',
             border: 'none',
             borderRadius: 0,
-            color: '#F9FAFB',
+            color: theme.palette.mode === 'dark' ? '#F9FAFB' : '#0F2540',
           }),
         },
       },

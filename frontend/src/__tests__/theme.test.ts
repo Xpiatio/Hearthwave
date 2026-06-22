@@ -14,3 +14,23 @@ describe('withTouchDensity', () => {
     expect(withTouchDensity(makeTheme(true)).palette.mode).toBe('dark');
   });
 });
+
+describe('AppBar (top header) theming', () => {
+  function appBarStyle(dark: boolean) {
+    const theme = makeTheme(dark);
+    const root = theme.components?.MuiAppBar?.styleOverrides?.root as any;
+    return root({ theme }) as { backgroundColor: string; color: string };
+  }
+
+  it('uses a dark bar with light text in dark mode', () => {
+    const style = appBarStyle(true);
+    expect(style.backgroundColor).toBe('#0F2540');
+    expect(style.color).toBe('#F9FAFB');
+  });
+
+  it('uses a light bar with dark text in light mode', () => {
+    const style = appBarStyle(false);
+    expect(style.backgroundColor).toBe('#C8D8EC');
+    expect(style.color).toBe('#0F2540');
+  });
+});
