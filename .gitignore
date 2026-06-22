@@ -19,8 +19,10 @@ venv/
 *.egg
 
 # Frontend
+node_modules/
 frontend/node_modules/
 frontend/dist/
+frontend/coverage/
 
 # Claude Code local settings (project settings.json is tracked)
 .claude/settings.local.json
