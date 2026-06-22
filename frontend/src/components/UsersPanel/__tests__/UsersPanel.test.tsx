@@ -24,7 +24,6 @@ function makeProfile(overrides: Partial<UserProfile> = {}): UserProfile {
     created_at: '2024-01-01T00:00:00Z',
     prefs: {
       dark_mode: false,
-      panel_order: [],
       filter_profanity: false,
       listen_only: false,
       read_aloud: false,

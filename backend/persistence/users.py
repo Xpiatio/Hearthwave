@@ -33,7 +33,6 @@ LOCKOUT_DURATION_MINUTES = 15
 
 DEFAULT_PREFS: dict = {
     "dark_mode": False,
-    "panel_order": ["config", "attendance", "journal"],
     "filter_profanity": True,
     "listen_only": False,
     "read_aloud": False,
