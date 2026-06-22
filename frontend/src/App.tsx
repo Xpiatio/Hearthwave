@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useMemo } from 'react';
 import { ThemeProvider, CssBaseline, Box, CircularProgress } from '@mui/material';
-import { makeTheme } from './theme';
+import { makeTheme, withTouchDensity } from './theme';
 import { useAuth } from './hooks/useAuth';
 import { useWebSocket } from './hooks/useWebSocket';
 import type {
@@ -35,7 +35,7 @@ import { DesktopApp } from './components/DesktopApp/DesktopApp';
 import { MobileApp } from './components/MobileApp/MobileApp';
 import { SettingsDialog } from './components/SettingsDialog/SettingsDialog';
 import { UsersPanel } from './components/UsersPanel/UsersPanel';
-import { useMobileDetect } from './hooks/useMobileDetect';
+import { useDeviceClass } from './hooks/useDeviceClass';
 import './App.css';
 
 let entryCounter = 0;
@@ -178,7 +178,15 @@ export default function App() {
   const [showWaterfall, setShowWaterfall] = useState(
     () => localStorage.getItem('radio_tty_show_waterfall') !== 'false'
   );
-  const theme = useMemo(() => makeTheme(darkMode), [darkMode]);
+
+  const deviceClass = useDeviceClass();
+  const isMobile = deviceClass === 'phone';
+
+  const baseTheme = useMemo(() => makeTheme(darkMode), [darkMode]);
+  const theme = useMemo(
+    () => (deviceClass === 'tablet' ? withTouchDensity(baseTheme) : baseTheme),
+    [baseTheme, deviceClass],
+  );
 
   // Attendance
   const [attendanceStations, setAttendanceStations] = useState<AttendanceStation[]>([]);
@@ -964,8 +972,6 @@ export default function App() {
   function handleCloseJournalSavedSnack() { setJournalSavedSnack(null); }
   function handleCloseVocabSnack() { setVocabSnack(null); }
   function handleVerifyAllDismiss() { setVerifyAllComplete(false); }
-
-  const isMobile = useMobileDetect();
 
   // Show a blank screen while validating existing token on startup.
   if (authLoading) {
