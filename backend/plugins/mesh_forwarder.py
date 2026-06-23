@@ -60,8 +60,9 @@ class MeshForwardConfig:
 class MeshForwarderPlugin(BasePlugin):
     """Forwards every accepted TX onto a mesh, prefixed with the sender's name."""
 
-    def __init__(self, config_getter) -> None:
-        self._config_getter = config_getter
+    def __init__(self) -> None:
+        # No-arg construction: the loader binds self.ctx before setup(). Config is
+        # read live via self.ctx.get_config() (the TX hook has no config argument).
         self._transport: MeshTransport | None = None
         self._transport_key_active = None
         self._queue: asyncio.Queue | None = asyncio.Queue(maxsize=_OUTBOUND_QUEUE_MAX)
@@ -105,6 +106,10 @@ class MeshForwarderPlugin(BasePlugin):
         else:
             await self._teardown()
 
+    async def on_unload(self) -> None:
+        """Drop the serial link + sender task when unloaded (hot-reload/uninstall)."""
+        await self._teardown()
+
     async def _ensure_connected(self, config) -> None:
         key = self._transport_key(config)
         # Connection params changed (e.g. serial port) — drop the stale link so
@@ -134,7 +139,7 @@ class MeshForwarderPlugin(BasePlugin):
     # -- TX forwarding (never blocks the radio path) -------------------
     async def on_audio_tx_pre_queue(self, payload: dict) -> dict | None:
         try:
-            cfg = self._read_config(self._config_getter())
+            cfg = self._read_config(self.ctx.get_config())
             if (
                 cfg.enabled
                 and self._transport is not None

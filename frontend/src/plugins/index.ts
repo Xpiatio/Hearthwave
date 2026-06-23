@@ -1,8 +1,13 @@
-import type React from 'react';
-import type { WsMessage, Contact, UserProfile } from '../types/ws';
-import type { ServerConfig } from '../components/ServerConfigPanel/ServerConfigPanel';
+// Frontend plugin support — fully declarative.
+//
+// Plugins ship NO browser code. The backend broadcasts each plugin's manifest
+// (config schema + capabilities) in the status message; the app renders settings
+// generically (see PluginConfigForm) and resolves TX-input constraints from the
+// declarative `tx_composition` capability here. There is no runtime JS loading.
+import type { PluginManifest, UserProfile, WsMessage, Contact } from '../types/ws';
 
-// Props every plugin component receives from the app shell.
+// Props the app shell passes to a built-in panel component (e.g. NCSPanel).
+// Third-party plugins do NOT ship components — this is for in-tree panels only.
 export interface PluginProps {
   send: (msg: unknown) => void;
   lastMessage: WsMessage | null;
@@ -11,53 +16,11 @@ export interface PluginProps {
   transmitting: boolean;
 }
 
-// A plugin registration entry: id, display label, and the React component to mount.
-export interface PluginDefinition {
-  id: string;
-  label: string;
-  component: React.ComponentType<PluginProps>;
-}
-
-// Runtime registry — plugins add themselves here at module init time.
-export const registeredPlugins: Record<string, PluginDefinition> = {};
-
-export function registerPlugin(def: PluginDefinition): void {
-  registeredPlugins[def.id] = def;
-}
-
-// ---------------------------------------------------------------------------
-// TX-composition endpoint
-//
-// A plugin can constrain how the core message input composes an outgoing TX —
-// e.g. a mesh bridge that caps message length so the packet fits one frame —
-// without the input component knowing about any specific plugin. Plugins
-// register a contributor; the input asks resolveTxComposition() for the active
-// (most restrictive) constraint and honors it.
-// ---------------------------------------------------------------------------
-
 export interface TxComposition {
   /** Hard cap on the number of characters the user may type. */
   maxLength: number;
   /** Short label shown beside the counter (e.g. "MeshCore"). */
   hint?: string;
-}
-
-export interface TxCompositionContext {
-  profile: UserProfile | null;
-  serverConfig: ServerConfig;
-}
-
-export type TxCompositionContributor = (ctx: TxCompositionContext) => TxComposition | null;
-
-const txCompositionContributors: TxCompositionContributor[] = [];
-
-export function registerTxComposition(fn: TxCompositionContributor): void {
-  txCompositionContributors.push(fn);
-}
-
-/** Drop all registered contributors. For test isolation and hot-reload. */
-export function resetTxComposition(): void {
-  txCompositionContributors.length = 0;
 }
 
 /** Fold candidate constraints to the most restrictive (smallest maxLength). */
@@ -70,7 +33,36 @@ export function foldCompositions(comps: (TxComposition | null)[]): TxComposition
   return winner;
 }
 
-/** Resolve the active TX constraint from all registered contributors. */
-export function resolveTxComposition(ctx: TxCompositionContext): TxComposition | null {
-  return foldCompositions(txCompositionContributors.map((fn) => fn(ctx)));
+function senderName(profile: UserProfile | null): string {
+  return profile?.display_name || profile?.operator_name || profile?.callsign || '';
+}
+
+/** A mesh-bridge-style plugin reserves room for the "<name><sep>" prefix it adds,
+ *  so the message input is capped at max_packet_length minus that prefix. */
+function compositionForPlugin(
+  plugin: PluginManifest,
+  profile: UserProfile | null,
+): TxComposition | null {
+  const tx = plugin.tx_composition;
+  if (!plugin.enabled || !tx) return null;
+  const maxLen = Number(plugin.config[tx.max_len_key]);
+  if (!Number.isFinite(maxLen)) return null;
+  const separator = String(plugin.config[tx.separator_key] ?? '');
+  const name = senderName(profile);
+  const prefixLen = name ? name.length + separator.length : 0;
+  return { maxLength: Math.max(1, maxLen - prefixLen), hint: tx.hint };
+}
+
+/** Resolve the active TX-input constraint from all enabled plugins' declared
+ *  tx_composition capabilities (most restrictive wins). */
+export function resolveTxComposition(
+  plugins: PluginManifest[],
+  profile: UserProfile | null,
+): TxComposition | null {
+  return foldCompositions(plugins.map((p) => compositionForPlugin(p, profile)));
+}
+
+/** Whether a plugin (by id) is present and enabled — gates plugin UI (e.g. NCS). */
+export function isPluginEnabled(plugins: PluginManifest[], id: string): boolean {
+  return plugins.some((p) => p.id === id && p.enabled);
 }

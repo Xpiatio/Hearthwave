@@ -23,12 +23,12 @@ import type {
   VoiceTxCancelPayload,
   TxAbortPayload,
   StoredStreamMsg,
+  PluginManifest,
 } from './types/ws';
 import type { ChatEntry } from './components/ChatDisplay/ChatDisplay';
 import type { SpectrogramHandle } from './components/Spectrogram/Spectrogram';
 import type { ServerConfig, ServerConfigSaveValues } from './components/ServerConfigPanel/ServerConfigPanel';
-import { resolveTxComposition } from './plugins';
-import './plugins/meshcore'; // registers the MeshCore TX-composition contributor
+import { resolveTxComposition, isPluginEnabled } from './plugins';
 import { LoginScreen } from './components/LoginScreen/LoginScreen';
 import { SetupScreen } from './components/SetupScreen/SetupScreen';
 import { DesktopApp } from './components/DesktopApp/DesktopApp';
@@ -161,13 +161,9 @@ export default function App() {
     monitorPassthrough: false,
     attendanceEnabled: false,
     savedPhrases: [],
-    meshcoreEnabled: false,
-    meshcoreSerialPort: '/dev/ttyUSB0',
-    meshcoreBaud: 115200,
-    meshcoreMaxPacketLength: 140,
-    meshcorePrefixSeparator: ': ',
-    meshcoreChannelIdx: 0,
   });
+  const [plugins, setPlugins] = useState<PluginManifest[]>([]);
+  const [pluginBusy, setPluginBusy] = useState(false);
 
   // Dark mode — initialized from localStorage to avoid FOUC; overridden by profile on load
   const [darkMode, setDarkMode] = useState(
@@ -400,13 +396,8 @@ export default function App() {
           monitorPassthrough: msg.monitor_passthrough ?? prev.monitorPassthrough,
           attendanceEnabled: msg.attendance_enabled ?? prev.attendanceEnabled,
           savedPhrases: msg.saved_phrases ?? prev.savedPhrases,
-          meshcoreEnabled: msg.meshcore_enabled ?? prev.meshcoreEnabled,
-          meshcoreSerialPort: msg.meshcore_serial_port ?? prev.meshcoreSerialPort,
-          meshcoreBaud: msg.meshcore_baud ?? prev.meshcoreBaud,
-          meshcoreMaxPacketLength: msg.meshcore_max_packet_length ?? prev.meshcoreMaxPacketLength,
-          meshcorePrefixSeparator: msg.meshcore_prefix_separator ?? prev.meshcorePrefixSeparator,
-          meshcoreChannelIdx: msg.meshcore_channel_idx ?? prev.meshcoreChannelIdx,
         }));
+        if (msg.plugins) setPlugins(msg.plugins);
         break;
 
       case 'user_profile': {
@@ -817,6 +808,54 @@ export default function App() {
     send({ type: 'set_server_config', ...values });
   }
 
+  function handlePluginsSave(draft: Record<string, Record<string, unknown>>) {
+    // Plugin enable + config drafts ride the server-config channel under a
+    // `plugins` namespace; the backend coerces values against each plugin's
+    // schema and enforces mutual exclusion (resolve_conflicts).
+    send({ type: 'set_server_config', plugins: draft });
+  }
+
+  function authHeaders(): Record<string, string> {
+    const t = localStorage.getItem('auth_token');
+    return t ? { Authorization: `Bearer ${t}` } : {};
+  }
+
+  async function handleInstallPlugin(file: File) {
+    setPluginBusy(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch('/plugins/install', { method: 'POST', body: form, headers: authHeaders() });
+      if (!res.ok) {
+        const detail = await res.text();
+        window.alert(`Install failed: ${detail || res.status}`);
+      }
+    } catch (err) {
+      window.alert(`Install failed: ${err}`);
+    } finally {
+      setPluginBusy(false);
+    }
+  }
+
+  async function handleReloadPlugin(id: string) {
+    setPluginBusy(true);
+    try {
+      await fetch(`/plugins/${encodeURIComponent(id)}/reload`, { method: 'POST', headers: authHeaders() });
+    } finally {
+      setPluginBusy(false);
+    }
+  }
+
+  async function handleUninstallPlugin(id: string) {
+    if (!window.confirm(`Uninstall plugin "${id}"? This removes its files.`)) return;
+    setPluginBusy(true);
+    try {
+      await fetch(`/plugins/${encodeURIComponent(id)}`, { method: 'DELETE', headers: authHeaders() });
+    } finally {
+      setPluginBusy(false);
+    }
+  }
+
   function handleRescanVocabulary() {
     send({ type: 'rescan_vocabulary' });
   }
@@ -1007,7 +1046,7 @@ export default function App() {
 
   // Active TX-composition constraint contributed by plugins (e.g. MeshCore caps
   // the message length so the prefixed packet fits one mesh frame).
-  const txComposition = resolveTxComposition({ profile, serverConfig });
+  const txComposition = resolveTxComposition(plugins, profile);
 
   const sharedProps = {
     txComposition,
@@ -1115,6 +1154,7 @@ export default function App() {
           showAttendance={showAttendance}
           showJournal={showJournal}
           showNcs={showNcs}
+          ncsEnabled={isPluginEnabled(plugins, 'ncs')}
           onToggleAttendance={handleToggleAttendance}
           onToggleJournal={handleToggleJournal}
           onToggleContacts={handleToggleContacts}
@@ -1155,6 +1195,12 @@ export default function App() {
         serverConfig={serverConfig}
         onServerConfigSave={handleServerConfigSave}
         onRescanVocabulary={handleRescanVocabulary}
+        plugins={plugins}
+        onPluginsSave={handlePluginsSave}
+        onInstallPlugin={handleInstallPlugin}
+        onReloadPlugin={handleReloadPlugin}
+        onUninstallPlugin={handleUninstallPlugin}
+        pluginBusy={pluginBusy}
         usersPanel={profile?.is_admin && (
           <UsersPanel
             profiles={profiles}

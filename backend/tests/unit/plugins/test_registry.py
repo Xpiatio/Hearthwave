@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from backend.plugins.base import BasePlugin
+from backend.plugins.base import BasePlugin, PluginManifest
 from backend.plugins.registry import PluginRegistry
 
 
@@ -69,11 +69,11 @@ class TestRegister:
         registry.register(p1)
         registry.register(p2)
         registry.register(p3)
-        assert registry._plugins == [p1, p2, p3]
+        assert registry._plugins == (p1, p2, p3)
 
     def test_register_empty_by_default(self):
         registry = PluginRegistry()
-        assert registry._plugins == []
+        assert registry._plugins == ()
 
     def test_register_logs_plugin_name(self, caplog):
         import logging
@@ -473,6 +473,190 @@ class TestDispatchConfigChanged:
         with caplog.at_level(logging.ERROR, logger="backend.plugins.registry"):
             await registry.dispatch_config_changed({})
         assert "on_config_changed" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# enabled-state gating of active hooks
+# ---------------------------------------------------------------------------
+
+def manifest_plugin(plugin_id, *, conflicts_with=(), default_enabled=False, **hooks) -> BasePlugin:
+    """A spy plugin that carries a manifest so it can be gated by config."""
+    plugin = spy_plugin(**hooks)
+    plugin.manifest = PluginManifest(
+        id=plugin_id, name=plugin_id.title(), description="x",
+        default_enabled=default_enabled, conflicts_with=tuple(conflicts_with),
+    )
+    return plugin
+
+
+def cfg(plugin_id, enabled):
+    """Namespaced config with one plugin's enabled flag set."""
+    return {"plugins": {plugin_id: {"enabled": enabled}}}
+
+
+class TestEnabledGating:
+    async def test_disabled_plugin_skips_active_hooks(self):
+        calls = []
+
+        async def hook(payload, reply=None):
+            calls.append(payload)
+
+        plugin = manifest_plugin("p", on_client_message_received=hook)
+        registry = make_registry(plugin)
+        registry.set_config_getter(lambda: cfg("p", False))
+        await registry.dispatch_client_message({"type": "x"})
+        assert calls == [], "disabled plugin must not receive active hooks"
+
+    async def test_enabled_plugin_receives_active_hooks(self):
+        calls = []
+
+        async def hook(payload, reply=None):
+            calls.append(payload)
+
+        plugin = manifest_plugin("p", on_client_message_received=hook)
+        registry = make_registry(plugin)
+        registry.set_config_getter(lambda: cfg("p", True))
+        await registry.dispatch_client_message({"type": "x"})
+        assert len(calls) == 1
+
+    def test_disabled_plugin_skips_sync_rx_chunk(self):
+        chunks = []
+        plugin = manifest_plugin("p", on_audio_rx_chunk=chunks.append)
+        registry = make_registry(plugin)
+        registry.set_config_getter(lambda: cfg("p", False))
+        registry.dispatch_audio_rx_chunk(b"\x00")
+        assert chunks == []
+
+    async def test_disabled_plugin_blocks_tx_gating_skipped(self):
+        """A disabled plugin that would block TX is skipped entirely."""
+        async def block(payload):
+            return None
+
+        plugin = manifest_plugin("p", on_audio_tx_pre_queue=block)
+        registry = make_registry(plugin)
+        registry.set_config_getter(lambda: cfg("p", False))
+        payload = {"text": "go"}
+        assert await registry.dispatch_tx_pre_queue(payload) is payload
+
+    async def test_config_changed_always_dispatched_even_when_disabled(self):
+        """on_config_changed must fire regardless of enabled state, so a plugin
+        can tear down its resources on the transition to disabled."""
+        received = []
+
+        async def hook(config):
+            received.append(config)
+
+        plugin = manifest_plugin("p", on_config_changed=hook)
+        registry = make_registry(plugin)
+        registry.set_config_getter(lambda: cfg("p", False))
+        await registry.dispatch_config_changed(cfg("p", False))
+        assert len(received) == 1
+
+    async def test_no_config_getter_treats_all_as_enabled(self):
+        """Backward compat: dispatch without a config getter calls every plugin."""
+        calls = []
+
+        async def hook(payload, reply=None):
+            calls.append(payload)
+
+        plugin = manifest_plugin("p", on_client_message_received=hook)
+        registry = make_registry(plugin)  # no set_config_getter
+        await registry.dispatch_client_message({"type": "x"})
+        assert len(calls) == 1
+
+
+# ---------------------------------------------------------------------------
+# manifests() + resolve_conflicts()
+# ---------------------------------------------------------------------------
+
+class TestManifests:
+    def test_lists_only_plugins_with_manifests(self):
+        registry = make_registry(
+            BasePlugin(),  # no manifest — excluded
+            manifest_plugin("meshcore", conflicts_with=("meshtastic",)),
+        )
+        out = registry.manifests(cfg("meshcore", True))
+        assert len(out) == 1
+        assert out[0]["id"] == "meshcore"
+        assert out[0]["enabled"] is True
+        assert out[0]["conflicts_with"] == ["meshtastic"]
+
+    def test_reflects_disabled_state(self):
+        registry = make_registry(manifest_plugin("p"))
+        out = registry.manifests({})  # namespace absent → disabled
+        assert out[0]["enabled"] is False
+
+    def test_default_enabled_applies_when_absent(self):
+        plugin = manifest_plugin("ncs", default_enabled=True)
+        registry = make_registry(plugin)
+        # Namespace absent → falls back to default_enabled (True).
+        assert registry.manifests({})[0]["enabled"] is True
+        # Explicit False overrides the default.
+        assert registry.manifests(cfg("ncs", False))[0]["enabled"] is False
+        # is_enabled honors the same default.
+        assert plugin.is_enabled({}) is True
+        assert plugin.is_enabled(cfg("ncs", False)) is False
+
+    def test_includes_config_schema_and_values(self):
+        from backend.plugins.base import ConfigField
+        plugin = manifest_plugin("p")
+        plugin.manifest = PluginManifest(
+            id="p", name="P", description="x",
+            config_schema=(ConfigField("port", "Port", "text", "/dev/ttyUSB0"),),
+        )
+        registry = make_registry(plugin)
+        out = registry.manifests({"plugins": {"p": {"port": "/dev/ttyACM0"}}})[0]
+        assert out["config_schema"][0]["key"] == "port"
+        assert out["config"]["port"] == "/dev/ttyACM0"  # stored value wins over default
+
+
+class TestUnregister:
+    async def test_unregister_removes_and_runs_on_unload(self):
+        unloaded = []
+
+        async def on_unload():
+            unloaded.append(True)
+
+        plugin = manifest_plugin("p")
+        plugin.on_unload = on_unload
+        registry = make_registry(plugin)
+        await registry.unregister(plugin)
+        assert registry.get("p") is None
+        assert unloaded == [True]
+
+    async def test_unregister_swallows_on_unload_error(self):
+        async def boom():
+            raise RuntimeError("teardown boom")
+
+        plugin = manifest_plugin("p")
+        plugin.on_unload = boom
+        registry = make_registry(plugin)
+        await registry.unregister(plugin)  # must not raise
+        assert registry.get("p") is None
+
+
+class TestResolveConflicts:
+    def test_enabling_one_disables_its_peer(self):
+        registry = make_registry(
+            manifest_plugin("meshcore", conflicts_with=("meshtastic",)),
+            manifest_plugin("meshtastic", conflicts_with=("meshcore",)),
+        )
+        config = {"plugins": {"meshcore": {"enabled": True}, "meshtastic": {"enabled": True}}}
+        registry.resolve_conflicts(config, newly_enabled_ids=["meshtastic"])
+        assert config["plugins"]["meshtastic"]["enabled"] is True  # winner stays on
+        assert config["plugins"]["meshcore"]["enabled"] is False   # peer auto-disabled
+
+    def test_no_conflict_leaves_config_untouched(self):
+        registry = make_registry(manifest_plugin("ncs"))
+        config = {"plugins": {"ncs": {"enabled": True}}}
+        registry.resolve_conflicts(config, newly_enabled_ids=["ncs"])
+        assert config["plugins"]["ncs"]["enabled"] is True
+
+    def test_unknown_id_is_ignored(self):
+        registry = make_registry(manifest_plugin("p"))
+        config = {"plugins": {"p": {"enabled": True}}}
+        registry.resolve_conflicts(config, newly_enabled_ids=["nope"])
+        assert config["plugins"]["p"]["enabled"] is True
 
 
 # ---------------------------------------------------------------------------

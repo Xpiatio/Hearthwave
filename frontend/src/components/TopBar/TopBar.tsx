@@ -43,6 +43,8 @@ interface Props {
   showSettings: boolean;
   onToggleSettings: () => void;
   showNcs: boolean;
+  /** Master enable state of the NCS plugin; when false the NCS button hides. */
+  ncsEnabled: boolean;
   onToggleNcs: () => void;
   showWaterfall: boolean;
   onToggleWaterfall: () => void;
@@ -94,6 +96,7 @@ export function TopBar({
   showSettings,
   onToggleSettings,
   showNcs,
+  ncsEnabled,
   onToggleNcs,
   showWaterfall,
   onToggleWaterfall,
@@ -202,7 +205,7 @@ export function TopBar({
           WATERFALL
         </ToggleButton>
 
-        {profile.is_admin && (
+        {profile.is_admin && ncsEnabled && (
           <Tooltip title={showNcs ? 'Hide Net Control Station panel' : 'Show Net Control Station panel'}>
             <ToggleButton
               value="ncs"

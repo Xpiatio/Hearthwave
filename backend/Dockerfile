@@ -57,9 +57,14 @@ WORKDIR /app
 
 COPY backend/ /app/backend/
 
+# Example/reference plugins, seeded into /data/plugins at runtime if that dir is
+# empty (see docker-entrypoint.sh). They demonstrate the plugin SDK and ship the
+# MeshCore + Meshtastic bridges as installable plugins rather than baked-in code.
+COPY examples/ /app/examples/
+
 # Pre-create data dirs with correct ownership; volume mounts may shadow these,
 # so docker-entrypoint.sh re-creates them at runtime after the mount is visible.
-RUN mkdir -p /data/journals /data/public \
+RUN mkdir -p /data/journals /data/public /data/plugins \
     && chown -R appuser:appuser /app /data
 
 COPY backend/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh

@@ -74,12 +74,47 @@ export interface StatusMsg {
   monitor_passthrough?: boolean;
   attendance_enabled?: boolean;
   saved_phrases?: string[];
-  meshcore_enabled?: boolean;
-  meshcore_serial_port?: string;
-  meshcore_baud?: number;
-  meshcore_max_packet_length?: number;
-  meshcore_prefix_separator?: string;
-  meshcore_channel_idx?: number;
+  /** Installed plugins: manifest + enabled state + config schema/values. */
+  plugins?: PluginManifest[];
+}
+
+/** One declarative setting a plugin exposes; the frontend renders a form field. */
+export interface PluginConfigField {
+  key: string;
+  label: string;
+  type: 'bool' | 'text' | 'number' | 'select' | string;
+  default: unknown;
+  help: string;
+  options: [string, string][];
+  minimum: number | null;
+  maximum: number | null;
+}
+
+/** Declarative "this plugin caps the message input like a mesh bridge" capability.
+ *  Keys reference fields in the plugin's own config namespace. */
+export interface PluginTxComposition {
+  max_len_key: string;
+  separator_key: string;
+  hint: string;
+}
+
+/** An installed plugin's manifest + current state, broadcast in StatusMsg.
+ *  Drives the admin Plugins manager (enable/disable, settings form, mutual
+ *  exclusion, load errors). State lives under config["plugins"][id]. */
+export interface PluginManifest {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  enabled: boolean;
+  /** Plugin ids that cannot be co-enabled (enabling this one disables them). */
+  conflicts_with: string[];
+  config_schema: PluginConfigField[];
+  /** Current values for each config_schema field (stored value or its default). */
+  config: Record<string, unknown>;
+  tx_composition: PluginTxComposition | null;
+  /** Present if the plugin failed to load (shown in the UI; not registered). */
+  error?: string;
 }
 
 export interface ContactsMsg {
