@@ -90,7 +90,7 @@ class MeshtasticPlugin(MeshForwarderPlugin):
             ConfigField("serial_port", "Meshtastic device", "text", "/dev/ttyUSB0",
                         help="Meshtastic serial device, e.g. /dev/ttyUSB0"),
             ConfigField("max_packet_length", "Max packet length", "number", 200, minimum=1,
-                        help="Characters per mesh packet, including the sender prefix."),
+                        help="UTF-8 bytes per mesh packet, including the sender prefix."),
             ConfigField("channel_idx", "Channel index", "number", 0, minimum=0,
                         help="0 is the primary channel."),
             ConfigField("prefix_separator", "Name separator", "text", ": ",
