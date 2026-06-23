@@ -17,7 +17,7 @@ import logging
 import urllib.request
 from typing import Callable, Optional
 
-from backend.plugins.base import BasePlugin
+from backend.plugins.base import BasePlugin, PluginManifest
 
 _log = logging.getLogger(__name__)
 
@@ -56,6 +56,14 @@ def _fetch_nws_alerts_sync(zone: str) -> list:
 
 class NCSPlugin(BasePlugin):
     """Net Control Station plugin — roster management, BREAK BREAK, replay buffer, NWS alerts."""
+
+    manifest = PluginManifest(
+        id="ncs",
+        name="Net Control Station",
+        description="Interactive net roster, BREAK-BREAK emergency interrupter, "
+        "15s replay buffer, and SKYWARN / NWS alert announcements.",
+        default_enabled=True,
+    )
 
     def __init__(
         self,
