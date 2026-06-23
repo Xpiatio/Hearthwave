@@ -92,11 +92,28 @@ class MeshForwarderPlugin(BasePlugin):
         )
 
     def build_message(self, payload: dict, cfg: MeshForwardConfig) -> str:
-        """Build the name-prefixed packet body, clamped to the mesh max length."""
+        """Build the name-prefixed packet body, clamped to the mesh max length.
+
+        The limit is in UTF-8 bytes (what the mesh radios actually measure on the
+        wire), not characters: a name or message with multibyte glyphs encodes to
+        more bytes than its character count, and the radio libs reject an oversized
+        payload rather than truncate it. We clamp on encoded length and never split
+        a multibyte sequence, so the result is always valid UTF-8 within the cap.
+        """
         name = self._sender_name(payload)
         prefix = f"{name}{cfg.prefix_separator}" if name else ""
         body = prefix + (payload.get("text") or "")
-        return body[: cfg.max_packet_length]
+        return self._clamp_utf8_bytes(body, cfg.max_packet_length)
+
+    @staticmethod
+    def _clamp_utf8_bytes(text: str, max_bytes: int) -> str:
+        """Truncate to at most max_bytes of UTF-8 without splitting a code point."""
+        encoded = text.encode("utf-8")
+        if len(encoded) <= max_bytes:
+            return text
+        # "ignore" drops the partial multibyte sequence left at the truncation
+        # boundary, guaranteeing valid UTF-8 no longer than max_bytes.
+        return encoded[:max_bytes].decode("utf-8", "ignore")
 
     # -- lifecycle (on_config_changed) ---------------------------------
     async def on_config_changed(self, config) -> None:
