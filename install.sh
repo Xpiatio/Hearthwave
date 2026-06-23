@@ -126,6 +126,8 @@ fi
 # ── 6. Data directory ────────────────────────────────────────────────────────
 
 mkdir -p data/journals
+# Drop directory for installable 3rd-party plugins (loaded from /data/plugins).
+mkdir -p data/plugins
 
 if [ ! -f data/config.json ]; then
     echo "==> Copying seed config..."
