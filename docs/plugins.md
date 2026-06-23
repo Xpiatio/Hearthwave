@@ -79,8 +79,31 @@ All hooks are optional no-ops; override what you need.
 | `async on_rx_final(text)` | each finalized receive transcript |
 | `async on_audio_tx_pre_queue(payload) -> dict \| None` | before a transmission is synthesized; return the payload to allow, `None` to block |
 
-Active hooks fire only while your plugin is **enabled**. `on_config_changed` always
-fires (so you can tear down when disabled).
+Active hooks fire only while your plugin is **enabled**. `on_config_changed` is the
+exception — it **always** fires, even when you're disabled, so you can tear down on
+the transition. So if you hold a resource (a connection, a background task), open or
+close it in `on_config_changed` based on your own enabled flag, and also release it
+in `on_unload`:
+
+```python
+async def on_config_changed(self, config):
+    if config.plugin_enabled("my_plugin"):
+        await self._connect(config.plugin_config("my_plugin"))
+    else:
+        await self._teardown()
+```
+
+**Reading your settings:** `on_config_changed(config)` receives the live config;
+elsewhere use `self.ctx.get_config()`. Your section is `config.plugin_config("<id>")`
+(a dict of your `config_schema` values) and your master toggle is
+`config.plugin_enabled("<id>")`.
+
+**Intercepting transmissions** (`on_audio_tx_pre_queue`): return the `payload`
+(optionally modified) to allow the transmit, or `None` to block it. Plugins run in
+registration order and the **first to return `None` wins**. The fields you may
+modify are `text`, `_filter_profanity`, `_voice_name`, and `_length_scale`. This
+hook must never block the radio — keep it fast and best-effort (the mesh examples
+enqueue onto their own queue and return immediately).
 
 ### `PluginContext` — `self.ctx`
 Bound before `setup()`. Your only door to core services:
