@@ -16,6 +16,8 @@ import os
 import tempfile
 from pathlib import Path
 
+from backend.constants import GAIN_MODES
+
 _log = logging.getLogger(__name__)
 
 CONFIG_FILE = Path(os.environ.get("RADIO_TTY_CONFIG", "/data/config.json"))
@@ -92,7 +94,7 @@ class ServerConfig(dict):
         'agc' (dynamic attack/release AGC), 'rms' (one-shot RMS normalize),
         or 'off' (no gain)."""
         val = str(self.get("stt_gain_mode", "agc")).strip().lower()
-        return val if val in ("agc", "rms", "off") else "agc"
+        return val if val in GAIN_MODES else "agc"
 
     @property
     def squelch_open_threshold(self) -> float:

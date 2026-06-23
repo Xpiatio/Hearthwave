@@ -108,7 +108,7 @@ from backend.ai.gemini_client import generate_journal as _gemini_generate
 from backend.audio.capture import enumerate_monitor_sources
 from backend.audio.spectro_task import SpectroTask
 from backend.config import ServerConfig
-from backend.constants import normalize_service, utc_now_iso
+from backend.constants import GAIN_MODES, normalize_service, utc_now_iso
 from backend.fcc.auto_add import CallsignLookupWorker
 from backend.fcc.crossref import apply_verification, verify_callsign
 from backend.fcc.id_rule import (
@@ -1813,7 +1813,7 @@ async def _ws_handle_set_server_config(ws: WebSocket, data: dict, state: "Connec
 
     if "stt_gain_mode" in data:
         mode = str(data["stt_gain_mode"]).strip().lower()
-        if mode in ("agc", "rms", "off") and mode != _config.stt_gain_mode:
+        if mode in GAIN_MODES and mode != _config.stt_gain_mode:
             _config["stt_gain_mode"] = mode
             stt_restart_needed = True
 

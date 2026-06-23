@@ -1136,6 +1136,66 @@ class TestContactMutationTriggersVocabRebuild:
 
 
 # ---------------------------------------------------------------------------
+# set_server_config — stt_gain_mode
+# ---------------------------------------------------------------------------
+
+class TestSetServerConfigSttGainMode:
+    """Validate stt_gain_mode handling in set_server_config.
+
+    A valid new mode must be persisted and trigger an STT restart; an invalid
+    mode must be silently ignored; a repeated same-mode must not trigger a
+    restart.  STTWorker.stop/join/start are mocked throughout so the test does
+    not require audio hardware.
+    """
+
+    def _send_and_get_status(self, ws, data):
+        with patch("backend.config.ServerConfig.save"):
+            ws.send_json({"type": "set_server_config", **data})
+            return ws.receive_json()
+
+    def test_valid_new_mode_persisted_and_triggers_restart(self, tmp_path):
+        """A valid mode change (agc→rms) is written to config and restarts the STT worker."""
+        with _ws_server(tmp_path) as (tc, cfg):
+            cfg["stt_gain_mode"] = "agc"
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                with (
+                    patch("backend.server._stt_listening", True),
+                    patch("backend.server._make_stt_worker") as mock_make,
+                    patch("backend.config.ServerConfig.save"),
+                ):
+                    mock_make.return_value = MagicMock(start=MagicMock(), join=AsyncMock())
+                    ws.send_json({"type": "set_server_config", "stt_gain_mode": "rms"})
+                    ws.receive_json()  # status broadcast
+                assert cfg["stt_gain_mode"] == "rms"
+
+    def test_invalid_mode_is_noop(self, tmp_path):
+        """An unrecognized mode must not be written to config."""
+        with _ws_server(tmp_path) as (tc, cfg):
+            cfg["stt_gain_mode"] = "agc"
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                msg = self._send_and_get_status(ws, {"stt_gain_mode": "loud"})
+                assert msg["type"] == "status"
+            assert cfg.get("stt_gain_mode") == "agc"
+
+    def test_unchanged_mode_does_not_trigger_restart(self, tmp_path):
+        """Sending the same mode as current must not set stt_restart_needed."""
+        with _ws_server(tmp_path) as (tc, cfg):
+            cfg["stt_gain_mode"] = "rms"
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                with (
+                    patch("backend.server._stt_listening", True),
+                    patch("backend.server._make_stt_worker") as mock_make,
+                    patch("backend.config.ServerConfig.save"),
+                ):
+                    ws.send_json({"type": "set_server_config", "stt_gain_mode": "rms"})
+                    ws.receive_json()  # status broadcast
+                    mock_make.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
 # set_server_config — vox priming word
 # ---------------------------------------------------------------------------
 

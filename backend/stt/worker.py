@@ -33,6 +33,7 @@ import numpy as np
 
 _log = logging.getLogger(__name__)
 
+from backend.constants import GAIN_MODES
 from backend.audio.capture import open_input_source
 from backend.audio.dsp import lowpass, make_bandpass_sos, make_lowpass_sos
 from backend.audio.squelch import SquelchDetector
@@ -166,7 +167,7 @@ class STTWorker:
         self.whisper_model_final = (whisper_model_final or "").strip()
         self.final_max_s = float(final_max_s)
         self.stt_final_device = stt_final_device
-        self.gain_mode = gain_mode if gain_mode in ("agc", "rms", "off") else "agc"
+        self.gain_mode = gain_mode if gain_mode in GAIN_MODES else "agc"
         self._final_q: "queue.Queue | None" = (
             queue.Queue(maxsize=8) if self.whisper_model_final else None
         )

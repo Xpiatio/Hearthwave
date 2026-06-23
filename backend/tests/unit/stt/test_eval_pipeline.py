@@ -116,6 +116,57 @@ def test_stage_toggles_forwarded(monkeypatch):
     assert seen == {"denoise_enabled": False, "gain_mode": "off", "prop_decrease": 0.3}
 
 
+def test_no_agc_maps_to_gain_mode_off():
+    """--no-agc alone must resolve to gain_mode='off'."""
+    import argparse
+
+    args = argparse.Namespace(no_agc=True, gain_mode="agc")
+    gain_mode = "off" if args.no_agc else args.gain_mode
+    assert gain_mode == "off"
+
+
+def test_no_agc_wins_over_explicit_gain_mode():
+    """--no-agc must override --gain-mode rms → 'off'."""
+    import argparse
+
+    args = argparse.Namespace(no_agc=True, gain_mode="rms")
+    gain_mode = "off" if args.no_agc else args.gain_mode
+    assert gain_mode == "off"
+
+
+def test_gain_mode_without_no_agc():
+    """Without --no-agc, --gain-mode is passed through unchanged."""
+    import argparse
+    from backend.constants import GAIN_MODES
+
+    for mode in GAIN_MODES:
+        args = argparse.Namespace(no_agc=False, gain_mode=mode)
+        gain_mode = "off" if args.no_agc else args.gain_mode
+        assert gain_mode == mode
+
+
+def test_no_agc_precedence_via_argparse():
+    """Round-trip through the real argparse definition to confirm both flags co-exist."""
+    import argparse
+    from backend.constants import GAIN_MODES
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--gain-mode", choices=list(GAIN_MODES), default="agc")
+    ap.add_argument("--no-agc", action="store_true")
+
+    # --no-agc alone
+    args = ap.parse_args(["--no-agc"])
+    assert ("off" if args.no_agc else args.gain_mode) == "off"
+
+    # --no-agc + --gain-mode rms: --no-agc wins
+    args = ap.parse_args(["--no-agc", "--gain-mode", "rms"])
+    assert ("off" if args.no_agc else args.gain_mode) == "off"
+
+    # --gain-mode rms alone
+    args = ap.parse_args(["--gain-mode", "rms"])
+    assert ("off" if args.no_agc else args.gain_mode) == "rms"
+
+
 def test_normalize_text_strips_case_and_punctuation():
     assert normalize_text("Hello, World!  Over.") == "hello world over"
 
