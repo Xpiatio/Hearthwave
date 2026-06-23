@@ -87,6 +87,14 @@ class ServerConfig(dict):
         return val if val in ("auto", "gpu", "cpu") else "auto"
 
     @property
+    def stt_gain_mode(self) -> str:
+        """Gain stage applied after bandpass/denoise, before transcription:
+        'agc' (dynamic attack/release AGC), 'rms' (one-shot RMS normalize),
+        or 'off' (no gain)."""
+        val = str(self.get("stt_gain_mode", "agc")).strip().lower()
+        return val if val in ("agc", "rms", "off") else "agc"
+
+    @property
     def squelch_open_threshold(self) -> float:
         return float(self.get("squelch_open_threshold", 0.05))
 
