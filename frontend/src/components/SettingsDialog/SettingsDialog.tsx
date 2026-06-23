@@ -6,7 +6,8 @@ import {
 import { ConfigPanel } from '../ConfigPanel/ConfigPanel';
 import { AdminPanel, type AdminPanelHandle } from '../AdminPanel/AdminPanel';
 import { ServerConfigPanel, type ServerConfigPanelHandle } from '../ServerConfigPanel/ServerConfigPanel';
-import type { InputDeviceOption, MonitorSinkOption, OutputDeviceOption } from '../../types/ws';
+import { PluginsPanel, type PluginDraft } from '../PluginsPanel/PluginsPanel';
+import type { InputDeviceOption, MonitorSinkOption, OutputDeviceOption, PluginManifest } from '../../types/ws';
 
 interface Props {
   open: boolean;
@@ -45,6 +46,19 @@ interface Props {
   serverConfig: React.ComponentProps<typeof ServerConfigPanel>['config'];
   onServerConfigSave: React.ComponentProps<typeof ServerConfigPanel>['onSave'];
   onRescanVocabulary?: () => void;
+
+  // Plugins tab (admin only)
+  plugins: PluginManifest[];
+  /** Persist plugin enable + config drafts (namespaced by plugin id). */
+  onPluginsSave: (draft: PluginDraft) => void;
+  /** Install a plugin from an uploaded .zip (immediate). */
+  onInstallPlugin?: (file: File) => void;
+  /** Reload a plugin from disk. */
+  onReloadPlugin?: (id: string) => void;
+  /** Uninstall a plugin. */
+  onUninstallPlugin?: (id: string) => void;
+  /** True while a plugin install/reload/uninstall request is in flight. */
+  pluginBusy?: boolean;
 }
 
 interface PrefsDraft {
@@ -65,6 +79,17 @@ export function SettingsDialog(props: Props) {
   const [adminDirty, setAdminDirty] = useState(false);
   const [serverDirty, setServerDirty] = useState(false);
 
+  // Plugins tab draft — { [pluginId]: { enabled, ...configValues } }, seeded from
+  // each plugin's broadcast enabled state + current config values.
+  const seedPlugins = (): PluginDraft =>
+    Object.fromEntries(props.plugins.map((p) => [p.id, { enabled: p.enabled, ...p.config }]));
+  const [pluginDraft, setPluginDraft] = useState<PluginDraft>(seedPlugins);
+  const [pluginSeed, setPluginSeed] = useState<PluginDraft>(seedPlugins);
+  const pluginsDirty = useMemo(
+    () => JSON.stringify(pluginDraft) !== JSON.stringify(pluginSeed),
+    [pluginDraft, pluginSeed],
+  );
+
   // Preferences draft, (re)seeded each time the dialog opens.
   const seedPrefs = (): PrefsDraft => ({
     filterProfanity: props.filterProfanity, fuzzyCallsign: props.fuzzyCallsign,
@@ -79,6 +104,8 @@ export function SettingsDialog(props: Props) {
     if (open) {
       const s = seedPrefs();
       setDraft(s); setPrefsSeed(s); setTab(0); setAdminDirty(false); setServerDirty(false);
+      const p = seedPlugins();
+      setPluginDraft(p); setPluginSeed(p);
       setSaved(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -88,7 +115,7 @@ export function SettingsDialog(props: Props) {
     () => JSON.stringify(draft) !== JSON.stringify(prefsSeed),
     [draft, prefsSeed],
   );
-  const dirty = prefsDirty || (isAdmin && (adminDirty || serverDirty));
+  const dirty = prefsDirty || (isAdmin && (adminDirty || serverDirty || pluginsDirty));
 
   function applyPrefs() {
     if (draft.filterProfanity !== prefsSeed.filterProfanity) props.onToggleProfanity();
@@ -105,6 +132,7 @@ export function SettingsDialog(props: Props) {
     if (prefsDirty) { applyPrefs(); setPrefsSeed(draft); }
     if (isAdmin && adminDirty) { adminRef.current?.save(); setAdminDirty(false); }
     if (isAdmin && serverDirty) { serverRef.current?.save(); setServerDirty(false); }
+    if (isAdmin && pluginsDirty) { props.onPluginsSave(pluginDraft); setPluginSeed(pluginDraft); }
     setSaved(true);
   }
 
@@ -123,6 +151,7 @@ export function SettingsDialog(props: Props) {
           <Tab label="Preferences" />
           <Tab label="Station" />
           <Tab label="System" />
+          <Tab label="Plugins" />
         </Tabs>
       )}
 
@@ -170,6 +199,18 @@ export function SettingsDialog(props: Props) {
               ref={serverRef} embedded hideSaveButton open={open} onClose={onClose}
               config={props.serverConfig} onSave={props.onServerConfigSave}
               onRescanVocabulary={props.onRescanVocabulary} onDirtyChange={setServerDirty}
+            />
+          </Box>
+        )}
+
+        {isAdmin && (
+          <Box role="tabpanel" hidden={tab !== 3}>
+            <PluginsPanel
+              plugins={props.plugins} value={pluginDraft} onChange={setPluginDraft}
+              onInstallFile={props.onInstallPlugin}
+              onReload={props.onReloadPlugin}
+              onUninstall={props.onUninstallPlugin}
+              busy={props.pluginBusy}
             />
           </Box>
         )}

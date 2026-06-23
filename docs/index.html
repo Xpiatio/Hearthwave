@@ -640,7 +640,7 @@ footer{ border-top:1px solid var(--line); padding:54px 0 40px; color:var(--text-
     <div class="sec-head reveal">
       <span class="eyebrow">Modules</span>
       <h2>Extend it <span class="grad">for your net.</span></h2>
-      <p class="lead">Hearthwave ships with three plugins built in. New ones subclass a base plugin and register at startup.</p>
+      <p class="lead">Hearthwave has a real, installable plugin system. Net Control is built in; MeshCore and Meshtastic ship as example plugins. Add more by dropping a folder into the plugins directory or uploading a <code>.zip</code> — hot-reloaded, no restart.</p>
     </div>
     <div class="mods">
       <div class="mod reveal">
@@ -664,8 +664,18 @@ footer{ border-top:1px solid var(--line); padding:54px 0 40px; color:var(--text-
         </ul>
       </div>
       <div class="mod reveal">
-        <div class="mod-top"><h3>MeshCore Bridge</h3><span class="badge">BUILT-IN</span></div>
-        <p>Forwards every transmission onto a MeshCore LoRa mesh over a USB Companion radio, so your group stays in contact off-grid.</p>
+        <div class="mod-top"><h3>MeshCore Bridge</h3><span class="badge">EXAMPLE PLUGIN</span></div>
+        <p>Ships as an example plugin. Forwards every transmission onto a MeshCore LoRa mesh over a USB Companion radio, so your group stays in contact off-grid.</p>
+        <ul>
+          <li><span class="s">✦</span><span><b>Name-prefixed</b> — each message reaches the mesh as <code>&lt;your name&gt;: …</code>, so mesh-only members know who is talking.</span></li>
+          <li><span class="s">✦</span><span><b>Outbound only</b> — only what you transmit is bridged; received radio traffic is never forwarded.</span></li>
+          <li><span class="s">✦</span><span><b>Fits one frame</b> — a live character counter caps the message box to the mesh packet length minus the name prefix.</span></li>
+          <li><span class="s">✦</span><span><b>Never blocks the radio</b> — best-effort, non-blocking forward; the over always airs on GMRS normally.</span></li>
+        </ul>
+      </div>
+      <div class="mod reveal">
+        <div class="mod-top"><h3>Meshtastic Bridge</h3><span class="badge">EXAMPLE PLUGIN</span></div>
+        <p>Ships as an example plugin. Forwards every transmission onto a Meshtastic LoRa mesh; mutually exclusive with MeshCore — run one mesh radio at a time.</p>
         <ul>
           <li><span class="s">✦</span><span><b>Name-prefixed</b> — each message reaches the mesh as <code>&lt;your name&gt;: …</code>, so mesh-only members know who is talking.</span></li>
           <li><span class="s">✦</span><span><b>Outbound only</b> — only what you transmit is bridged; received radio traffic is never forwarded.</span></li>
@@ -677,9 +687,9 @@ footer{ border-top:1px solid var(--line); padding:54px 0 40px; color:var(--text-
     <div class="mod-build reveal">
       <div>
         <h3>Build your own plugin</h3>
-        <p>Plugins hook into six events: <code>on_rx_final</code>, <code>on_audio_rx_chunk</code>, <code>on_audio_tx_pre_queue</code>, <code>on_config_changed</code>, and two more. Subclass <code>BasePlugin</code> and register it at startup.</p>
+        <p>Subclass <code>BasePlugin</code> and declare a <code>PluginManifest</code> with a declarative config schema — the app renders the settings form, so plugins ship no browser code. Access services through a <code>PluginContext</code> and hook into events like <code>on_rx_final</code>, <code>on_audio_rx_chunk</code>, <code>on_audio_tx_pre_queue</code>, <code>on_config_changed</code>, and <code>on_client_message_received</code>, plus <code>setup</code>/<code>on_unload</code> lifecycle. Install by dropping it into the plugins folder or uploading a <code>.zip</code>.</p>
       </div>
-      <a class="btn btn-primary" style="flex:none" href="https://github.com/Xpiatio/Hearthwave#plugins" target="_blank" rel="noopener">Plugin docs →</a>
+      <a class="btn btn-primary" style="flex:none" href="https://github.com/Xpiatio/Hearthwave/blob/master/docs/plugins.md" target="_blank" rel="noopener">Plugin docs →</a>
     </div>
   </div>
 </section>

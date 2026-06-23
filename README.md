@@ -8,12 +8,14 @@ wrapped with the FCC station callsign (§95.1751), and transmitted over the air.
 Each family member or watch volunteer signs in from their own phone, tablet, or
 laptop — no app install required.
 
-Built-in plugins add Net Control Station (NCS) mode with a live check-in roster
-and six traffic priority levels, SKYWARN weather alerts sourced directly from the
-National Weather Service, an instant audio replay buffer, and a MeshCore bridge
-that forwards every transmission onto a LoRa mesh for off-grid reach. The plugin
-architecture is open — additional capabilities wire into the radio pipeline
-without touching core server logic.
+Net Control Station (NCS) mode is built in, with a live check-in roster, six
+traffic priority levels, and SKYWARN weather alerts sourced directly from the
+National Weather Service. On top of that, Hearthwave has a true installable plugin
+system: drop a plugin into `/data/plugins` (or upload a `.zip` from the admin
+Settings) and it hot-loads into the radio pipeline without touching core server
+logic. MeshCore — a bridge that forwards every transmission onto a LoRa mesh for
+off-grid reach — ships as an example plugin, alongside a Meshtastic equivalent, to
+show how it's done.
 
 Hearthwave is a fork of GMRS-TTY that replaces the desktop PySide6 UI with a
 browser-based React frontend communicating over WebSocket.
@@ -73,12 +75,13 @@ browser-based React frontend communicating over WebSocket.
   levels, and one-click callsign check-in/out
 - **SKYWARN alerts** — live National Weather Service alerts pushed to all users
   with browser notification support
-- **MeshCore bridge** — an optional plugin that forwards every transmission onto a
-  MeshCore LoRa mesh over a USB Companion radio, prefixed with the sender's name
-  (received radio traffic is never forwarded). When enabled, the message box shows
-  a live character counter and caps input to the mesh packet length minus the name
-  prefix, so each over fits a single mesh frame. Shares a mesh-forwarder layer with
-  a planned Meshtastic plugin
+- **Installable plugin system** — drop a plugin directory under `/data/plugins`
+  or upload it as a `.zip` from the admin **Settings → Plugins** tab; plugins
+  hot-load (install/reload/uninstall with no restart) and declare their settings
+  declaratively, so the frontend renders a generic settings form automatically —
+  no browser code in a plugin. MeshCore (a USB Companion LoRa-mesh bridge) and
+  Meshtastic ship as mutually-exclusive **example plugins** you can study and
+  copy; see the authoring guide at [docs/plugins.md](docs/plugins.md)
 - **Journals** — AI-assisted session summaries with full transcript export
 - **Contacts** — shared contact book with FCC license lookup; multiple family members sharing the same GMRS callsign are stored as separate records and addressed individually by name
 - **Spectrogram** — real-time frequency display (voice or full range, viridis or
@@ -256,88 +259,109 @@ npm run build      # production build
 
 ## Plugin system
 
-Hearthwave has two independent plugin surfaces: **frontend** plugins (React UI
-panels) and **backend** plugins (`BasePlugin` hooks into the audio/message
-pipeline). NCS and SKYWARN are implemented as a backend plugin
-(`backend/plugins/ncs.py`) with a matching frontend panel. The MeshCore bridge
-(`backend/plugins/meshcore.py`) is a second built-in, built on a shared
-`MeshForwarderPlugin` base (`backend/plugins/mesh_forwarder.py`) that a future
-Meshtastic plugin will reuse — a concrete forwarder supplies only its config
-mapping and transport.
+Hearthwave has a true installable plugin system. A plugin is a directory
+containing a `plugin.py` placed under `/data/plugins/<id>/` (the directory name is
+the plugin id), or uploaded as a `.zip` from the admin **Settings → Plugins** tab.
+Plugins hot-load — install, reload, and uninstall happen live with no restart (a
+server restart is always a safe fallback). **Plugins ship no browser/React code:**
+they declare their settings via a config schema and the frontend renders a generic
+settings form automatically.
 
-### Frontend plugins
+### Writing a plugin
 
-Frontend plugins are React components that receive `PluginProps` (send,
-lastMessage, contacts, channelClear, transmitting) and register themselves at
-module init:
-
-```typescript
-import { registerPlugin } from '../plugins';
-
-registerPlugin({
-  id: 'my-plugin',
-  label: 'My Plugin',
-  component: MyPluginComponent,
-});
-```
-
-The app shell mounts registered plugins in the panel area via
-`PluginSlot`.
-
-A plugin can also constrain the core message input without the input knowing
-about any specific plugin, via the **TX-composition endpoint**
-(`registerTxComposition` in `frontend/src/plugins/index.ts`). A contributor
-returns a `{ maxLength, hint }` for the current profile + server config; the input
-honours the most restrictive contributor (live character counter + length cap).
-MeshCore registers one (`frontend/src/plugins/meshcore/`) so its packet-length
-budget is enforced as you type.
-
-### Backend plugins
-
-Backend plugins subclass `BasePlugin` (`backend/plugins/base.py`) and register an
-instance with the singleton `plugin_registry` **before the server accepts
-connections** (the NCS plugin is registered this way during server startup). Every
-hook is a no-op by default — override only the ones you need.
+Plugins import everything from the stable SDK at `backend/plugins/sdk.py`:
 
 ```python
-from backend.plugins.base import BasePlugin
-from backend.plugins.registry import plugin_registry
+from backend.plugins.sdk import BasePlugin, PluginManifest, ConfigField, PluginContext
+```
+
+A plugin subclasses `BasePlugin` and declares a `PluginManifest`:
+
+```python
+from backend.plugins.sdk import BasePlugin, PluginManifest, ConfigField
 
 
 class WordGuard(BasePlugin):
-    async def on_rx_final(self, text: str) -> None:
-        # Runs after each finalized transcript is broadcast to clients.
-        log_to_disk(text)
+    manifest = PluginManifest(
+        id="word-guard",
+        name="Word Guard",
+        description="Blocks outgoing transmissions containing a banned word.",
+        version="1.0.0",
+        default_enabled=False,
+        config_schema=(
+            ConfigField(key="banned_word", label="Banned word", type="text", default="classified"),
+        ),
+    )
 
     async def on_audio_tx_pre_queue(self, payload: dict) -> dict | None:
-        # Block any outgoing transmission containing a banned word.
-        if "classified" in payload.get("text", "").lower():
+        cfg = self.ctx.get_config().plugin_config("word-guard")
+        word = cfg.get("banned_word", "")
+        if word and word in payload.get("text", "").lower():
             return None            # None blocks the transmit
         return payload             # return the (optionally modified) payload to allow it
-
-
-plugin_registry.register(WordGuard())
 ```
 
-#### Hooks
+The loader binds a `PluginContext` to `self.ctx`, calls `setup()`, registers the
+plugin, then dispatches `on_config_changed`. Core services are reached through
+`self.ctx` — `broadcast`, `enqueue_tx`, `get_config`, `channel_clear`, `data_dir`,
+and `logger`. The `PluginManifest` fields are `id`, `name`, `description`,
+`version`, `default_enabled`, `conflicts_with`, `config_schema`, and
+`tx_composition`.
 
-There are six hooks. They fire in plugin **registration order**.
+### Configuration
+
+Each plugin's settings live under `config["plugins"][<id>]` — an `enabled` flag
+plus one key per `config_schema` field — and are managed from the admin-only
+**Settings → Plugins** tab: a list of installed plugins each with an enable
+toggle, an auto-generated settings form, version, a conflicts note, and
+Reload/Uninstall buttons, plus an **Install plugin (.zip)** button. Because
+plugins run with full server access, the tab carries a warning to that effect.
+
+### Hooks
+
+Every hook is a no-op by default — override only the ones you need. They fire in
+registration order, and dispatch is exception-isolated (a raising hook is logged
+and skipped; for `on_audio_tx_pre_queue` a raising plugin is treated as
+pass-through, not a block).
 
 | Hook | Sync/async | Fires when | Return value |
 | --- | --- | --- | --- |
+| `setup()` | async | Once when the plugin is loaded, after `ctx` is bound | Ignored. Acquire resources here. |
+| `on_unload()` | async | When the plugin is reloaded or uninstalled | Ignored. Release resources here. |
+| `on_config_changed(config)` | async | Server config is (re)loaded — once at load and again after every admin save | Ignored. React to setting changes here: open/close connections, restart pollers, re-read tunables. MeshCore uses it to connect or disconnect its serial link when its settings change. |
 | `on_client_message_received(payload, reply=None)` | async | Any connected client sends a WebSocket message | Ignored. `payload` is a copy — mutating it has no effect. `reply(msg: dict)` is an optional async callable that sends `msg` back to the originating client. |
 | `on_audio_rx_start()` | async | The squelch detector opens (incoming carrier detected) | Ignored. Bridged from the STT worker thread to the event loop automatically. |
 | `on_audio_rx_chunk(chunk)` | **sync** | Each raw audio chunk is captured from the input device | Ignored. `chunk` is a float32 numpy array at 16 kHz. **Hot path on the STT worker thread — keep it fast; do not `await` or call asyncio APIs.** |
 | `on_rx_final(text)` | async | Each finalized (non-partial) RX transcript is broadcast | Ignored. |
 | `on_audio_tx_pre_queue(payload)` | async | Before TX text enters the synthesis queue | Return `payload` (optionally modified) to allow the transmit, or `None` to block it. Plugins run in registration order and the **first to return `None` wins**. Modifiable fields: `text`, `_filter_profanity`, `_voice_name`, `_length_scale`. |
-| `on_config_changed(config)` | async | Server config is (re)loaded — once at startup and again after every admin save | Ignored. React to setting changes here: open/close connections, restart pollers, re-read tunables. MeshCore uses it to connect or disconnect its serial link when its settings change. |
 
-Dispatch is exception-isolated: if a hook raises, the registry logs it and moves
-on to the next plugin (for `on_audio_tx_pre_queue`, a raising plugin is treated as
-pass-through, not a block). See `backend/plugins/registry.py` for the dispatchers,
-`backend/plugins/ncs.py` for a full-featured plugin, and
-`backend/plugins/mesh_forwarder.py` + `backend/plugins/meshcore.py` for a compact
-forwarder built on a reusable base.
+A plugin can also constrain the core message input without the input knowing
+anything about it, by declaring the `tx_composition` field on its manifest. The
+input honours the most restrictive declaration across enabled plugins (live
+character counter + length cap). MeshCore declares one so its packet-length budget
+is enforced as you type.
+
+### Examples and built-ins
+
+MeshCore and Meshtastic are **example plugins**, shipped under
+`examples/plugins/` and seeded into `/data/plugins` on first run — reference
+implementations for writing your own, not core features. They are mutually
+exclusive (enabling one disables the other via `conflicts_with`). MeshCore bridges
+to a USB Companion radio over serial (with a configurable baud rate); Meshtastic
+is serial too (no baud setting). Both build on a shared `MeshForwarderPlugin` base
+(`backend/plugins/mesh_forwarder.py`, re-exported by the SDK) so a concrete
+forwarder supplies only its config mapping and transport.
+
+**NCS / SKYWARN remains built-in** — it is registered by the app rather than
+loaded from `/data/plugins`, because it is deeply integrated (contacts, FCC
+lookup, journals, and a rich panel). It still appears in the Plugins tab as a
+toggle (enabled by default), and its UI hides when disabled.
+
+See `backend/plugins/sdk.py` and `backend/plugins/loader.py` for the contract and
+loader, `examples/plugins/` for the example plugins, and
+[docs/plugins.md](docs/plugins.md) for the full authoring guide (package layout,
+SDK API, config schema, install/reload, trust model, and a copy-paste
+hello-world).
 
 ## License
 

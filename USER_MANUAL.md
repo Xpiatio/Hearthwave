@@ -31,8 +31,11 @@ This manual covers day-to-day operation of Hearthwave as a GMRS family hub or ne
 19. [Voice PTT (browser microphone)](#19-voice-ptt-browser-microphone)
 20. [CW (Morse code) receive mode](#20-cw-morse-code-receive-mode)
 21. [Admin Settings dialog (admin)](#21-admin-settings-dialog-admin)
-22. [Plugin system](#22-plugin-system)
-    - [22a. MeshCore mesh bridge](#22a-meshcore-mesh-bridge)
+22. [Plugins](#22-plugins)
+    - [22a. Installing and managing plugins](#22a-installing-and-managing-plugins)
+    - [22b. MeshCore example plugin](#22b-meshcore-example-plugin)
+    - [22c. Meshtastic example plugin](#22c-meshtastic-example-plugin)
+    - [22d. Writing your own plugin](#22d-writing-your-own-plugin)
 23. [FCC compliance and remote access](#23-fcc-compliance-and-remote-access)
 24. [Transcription vocabulary biasing](#24-transcription-vocabulary-biasing)
 25. [Deployment profiles and GPU acceleration (admin)](#25-deployment-profiles-and-gpu-acceleration-admin)
@@ -237,7 +240,7 @@ The status bar shows **Transmitting** while the radio is keyed and returns to **
 
 **Listen-only mode:** When active, all TX controls are hidden. Your setting does not affect other users — each person controls their own TX access independently.
 
-**Message length limit (MeshCore):** When the MeshCore plugin is enabled (see [section 22a](#22a-meshcore-mesh-bridge)), a live character counter appears under the message box (e.g. `MeshCore · 18 / 135`) and typing is capped so the message — plus the sender-name prefix added on the mesh — fits a single mesh packet. The counter turns red at the limit. With the plugin off there is no limit and no counter.
+**Message length limit (mesh-bridge plugins):** When a mesh-bridge plugin (MeshCore or Meshtastic) is enabled (see [section 22](#22-plugins)), a live character counter appears under the message box showing that plugin's hint (e.g. `MeshCore · 18 / 135` or `Meshtastic · 18 / 200`) and typing is capped so the message — plus the sender-name prefix added on the mesh — fits a single mesh packet. The counter turns red at the limit. With no such plugin enabled there is no limit and no counter. Each plugin's settings live in the **Plugins** tab of the Settings dialog.
 
 ---
 
@@ -482,7 +485,7 @@ Ends your session on this device. Your preferences are saved and will be restore
 
 ## 15. Admin — managing users
 
-Admin accounts open the **Settings** dialog from the **Settings** entry in the account chip menu. Beyond the **Preferences** tab that every user sees, admins also get two tabs: **Station** (station identity, user accounts, NCS / SKYWARN) and **System** (audio, STT, PTT, and advanced server settings — see [section 21](#21-admin-settings-dialog-admin)). The **NCS MODE** button in the top bar opens the NCS panel alongside the main interface without entering the settings dialog.
+Admin accounts open the **Settings** dialog from the **Settings** entry in the account chip menu. Beyond the **Preferences** tab that every user sees, admins also get three tabs: **Station** (station identity, user accounts, NCS / SKYWARN), **System** (audio, STT, PTT, and advanced server settings — see [section 21](#21-admin-settings-dialog-admin)), and **Plugins** (install, enable/disable, and configure plugins — see [section 22](#22-plugins)). The **NCS MODE** button in the top bar opens the NCS panel alongside the main interface without entering the settings dialog.
 
 ### User accounts
 
@@ -720,10 +723,11 @@ Decoded morse appears in chat as **[RX]** entries, identical in appearance to vo
 
 ## 21. Admin Settings dialog (admin)
 
-These settings live in the **Settings** dialog, opened from the **Settings** entry in the account chip menu. Every user sees a **Preferences** tab (personal options — see [section 13](#13-settings)); admin accounts additionally see the two admin-only tabs described here. A single **Save** button in the dialog footer commits changes across every tab at once and leaves the dialog open with a confirmation.
+These settings live in the **Settings** dialog, opened from the **Settings** entry in the account chip menu. Every user sees a **Preferences** tab (personal options — see [section 13](#13-settings)); admin accounts additionally see the three admin-only tabs described below. A single **Save** button in the dialog footer commits changes across every tab at once and leaves the dialog open with a confirmation.
 
 - **Station tab** — station identity (callsign, name, location, default TTS voice, Gemini API key, journals directory), user accounts, and NCS / SKYWARN zone.
 - **System tab** — technical server-side settings (audio devices, STT, PTT, VOX, and advanced options).
+- **Plugins tab** — install, enable/disable, configure, reload, and uninstall plugins (see [section 22](#22-plugins)). Per-plugin settings — including those for the MeshCore and Meshtastic example plugins — live here.
 
 ### System tab settings
 
@@ -742,14 +746,8 @@ These settings live in the **Settings** dialog, opened from the **Settings** ent
 | VOX primer tone | When enabled, a short tone is prepended to each transmission so a VOX-keyed radio is fully keyed before the message starts. Silence alone does not reliably trip many VOX radios; the tone guarantees the radio is open when the speech begins. Off by default. Also configurable: tone duration in milliseconds. Enable this only if your radio uses VOX keying. |
 | Monitor passthrough | When enabled, audio captured from the radio input is simultaneously played back through the output device. Useful when the radio is not directly audible at the operator position. Does not require a server restart. |
 | Attendance tracking | Enable or disable automatic callsign recording in the Stations panel. When disabled, the panel still exists but callsigns are not recorded automatically. |
-| MeshCore — forward to mesh | Master on/off for the MeshCore bridge. When on, every transmission is mirrored onto the MeshCore mesh; received radio traffic is never forwarded. Off by default. See [section 22a](#22a-meshcore-mesh-bridge). |
-| MeshCore — device | Serial device of the MeshCore Companion radio (e.g. `/dev/ttyUSB0`). In Docker the port must also be passed into the container (see section 22a). |
-| MeshCore — baud rate | Serial speed of the Companion link (default `115200`). |
-| MeshCore — max packet length | Characters per mesh packet, **including** the sender-name prefix (default `140`). This drives the message-box character limit. |
-| MeshCore — name separator | Joins the sender name and the message on the mesh (default `": "` → `Alice: hello`). |
-| MeshCore — channel index | Which MeshCore channel to transmit on (default `0`). |
 
-> Changing a MeshCore setting reconnects (or disconnects) the serial link immediately — no server restart needed. Changing the port or baud rebuilds the link in place.
+> Plugin settings — including the MeshCore and Meshtastic mesh-bridge example plugins — are no longer on the System tab. They now live on the **Plugins** tab (see [section 22](#22-plugins)).
 
 > Changes to VAD threshold, Whisper model, Final-pass model, Adaptive squelch, or STT debug capture trigger a live STT worker restart and will briefly interrupt transcription. TX conditioning and Saved Phrases changes take effect immediately.
 
@@ -785,47 +783,39 @@ Then set **Final-pass model** to `distil-large-v3` in this panel (or `whisper_mo
 
 ---
 
-## 22. Plugin system
+## 22. Plugins
 
-Hearthwave is built around a plugin architecture. New capabilities attach to the radio pipeline at defined hook points without requiring changes to the core server. Two features ship as plugins: the **NCS / SKYWARN** feature described in [section 16](#16-ncs--net-control-station-mode), and the **MeshCore mesh bridge** described in [section 22a](#22a-meshcore-mesh-bridge). They demonstrate what the system can do and serve as the template for future extensions.
+Hearthwave supports **installable third-party plugins** — self-contained add-ons that attach new capabilities to the radio pipeline without changing the core server. Plugins are installed and managed from the **Plugins** tab of the admin Settings dialog. Several plugins ship with Hearthwave: the **NCS / SKYWARN** net-control feature ([section 16](#16-ncs--net-control-station-mode)) is built in, and **MeshCore** ([section 22b](#22b-meshcore-example-plugin)) and **Meshtastic** ([section 22c](#22c-meshtastic-example-plugin)) are seeded as example plugins you can study, enable, or replace with your own.
 
-### How plugins work
-
-A plugin is a Python class (`BasePlugin`) that overrides one or more async methods. The server calls these methods at fixed points in the RX and TX pipelines:
-
-| Hook | When it fires |
-|------|--------------|
-| `on_client_message_received` | Any WebSocket message arrives from a connected client |
-| `on_audio_rx_start` | Squelch opens — a transmission is beginning |
-| `on_audio_rx_chunk` | Each audio chunk segmented by voice activity detection |
-| `on_rx_final` | Final transcript and detected callsigns are ready |
-| `on_audio_tx_pre_queue` | Synthesized audio is about to be sent to the radio |
-| `on_config_changed` | Server config is (re)loaded — at startup and after every admin save |
-
-Plugins can read data at any hook, inject TX audio, send WebSocket messages to clients, or interact with the contacts and attendance stores — all without modifying the core server. `on_config_changed` lets a plugin react to setting changes live (MeshCore connects or disconnects its serial link here when its settings are saved).
-
-On the frontend, plugins can register a React panel via `registerPlugin` in `frontend/src/plugins/index.ts`. The NCS panel (`NCSPanel/`) is an example: it receives WebSocket messages broadcast by the backend plugin and renders the roster, SKYWARN alerts, and controls. A plugin can also cap the core message box without the input depending on it, via the **TX-composition endpoint** (`registerTxComposition`) — MeshCore uses this for its packet-length budget and live character counter.
-
-### Potential future plugins
-
-These are examples of capabilities that could be added as self-contained plugins:
-
-| Plugin | What it would do |
-|--------|-----------------|
-| **Repeater controller** | Manage a GMRS repeater installation — auto-ID on interval, transmit timeout timer, courtesy tone |
-| **Scheduled voice briefing** | Announce NWS hourly forecasts or custom station reminders at configured times, independent of NCS mode |
-| **DTMF decoder / paging** | Detect DTMF touch-tones sent over the air and trigger alerts, macros, or gate automations |
-| **Transmission logger** | Write every received transmission — timestamp, duration, callsigns, and transcript — to a structured log file or SQLite database for later analysis |
-| **EAS tone detector** | Recognize Emergency Alert System two-tone attention signals and surface an immediate on-screen and audio alert to all connected users |
-| **AI call summarizer** | Generate a one-sentence briefing for each received transmission and push it alongside the transcript so operators can scan a busy channel at a glance |
-
-If you are a developer and want to build a plugin, see `backend/plugins/base.py` for the `BasePlugin` interface and `backend/plugins/ncs.py` for a complete working example.
+> **Trust warning:** Plugins run with **full server access** — they can read and transmit on the radio, touch your contacts and configuration, and reach the network. Only install plugins from sources you trust. The Plugins tab is admin-only and shows this warning prominently.
 
 ---
 
-## 22a. MeshCore mesh bridge
+## 22a. Installing and managing plugins
 
-The MeshCore plugin forwards every message you transmit onto a [MeshCore](https://meshcore.co.uk/) LoRa mesh network, so your group stays in contact even where there is no GMRS coverage or internet. It is **off by default** and is enabled by an admin.
+The **Plugins** tab is visible only to admin accounts. It lists every installed plugin, each with its own controls.
+
+**What a plugin is:** a directory containing a `plugin.py` file, stored under `/data/plugins/<id>/` — the directory name is the plugin's id. You can also install one as a `.zip` archive from the Plugins tab.
+
+**Per-plugin controls:** for each installed plugin the list shows:
+
+- An **enable / disable toggle.** Disabling a plugin hides its UI and stops its functionality immediately; the plugin stays installed and can be re-enabled later.
+- The plugin's **auto-generated settings form** — every setting the plugin declares, edited inline. (Each plugin's settings are stored under `config["plugins"][<id>]`.)
+- The plugin's **version** and a **conflicts note** when one applies (for example, MeshCore and Meshtastic are mutually exclusive — see below).
+- **Reload** — re-reads the plugin's code from disk, picking up changes without restarting the server.
+- **Uninstall** — removes the plugin and its directory.
+
+**Installing a plugin:** click **Install plugin (.zip)** and choose a `.zip` archive. The archive is unpacked into `/data/plugins/<id>/` and the plugin loads immediately.
+
+**Hot-reload:** install, reload, and uninstall all take effect live — no server restart is required. If a plugin ever misbehaves after a reload, restarting the server is a safe fallback that reloads every plugin cleanly from disk.
+
+---
+
+## 22b. MeshCore example plugin
+
+The MeshCore plugin forwards every message you transmit onto a [MeshCore](https://meshcore.co.uk/) LoRa mesh network, so your group stays in contact even where there is no GMRS coverage or internet. It ships as an **example plugin** seeded into `/data/plugins` on first run and is **disabled by default**; an admin enables it from the Plugins tab.
+
+> **Mutually exclusive with Meshtastic:** enabling MeshCore automatically disables the Meshtastic plugin, and vice versa. Only one mesh bridge runs at a time.
 
 **What it does**
 
@@ -838,13 +828,50 @@ The MeshCore plugin forwards every message you transmit onto a [MeshCore](https:
 
 When the plugin is on, the message box shows a live character counter (e.g. `MeshCore · 18 / 135`) and limits what you type so the message plus the name prefix fits one mesh packet. The limit is the configured **max packet length** minus your prefix length, so a longer display name leaves a little less room. The counter turns red at the limit.
 
-**Hardware and setup (admin)**
+**Settings (Plugins tab)**
 
-- Connect a MeshCore **Companion** radio to the server by USB. Set the serial device, baud, max packet length, name separator, and channel on the **System** tab of Settings (see [section 13](#13-settings)). Changes reconnect the link immediately — no restart.
+Enable the plugin from the Plugins tab and edit its settings there:
+
+| Setting | Description |
+|---------|-------------|
+| Device | Serial device of the MeshCore Companion radio (e.g. `/dev/ttyUSB0`). In Docker the port must also be passed into the container (see below). |
+| Baud rate | Serial speed of the Companion link (default `115200`). |
+| Max packet length | Characters per mesh packet, **including** the sender-name prefix (default `140`). This drives the message-box character limit. |
+| Channel index | Which MeshCore channel to transmit on (default `0`). |
+| Name separator | Joins the sender name and the message on the mesh (default `": "` → `Alice: hello`). |
+
+Changes reconnect (or disconnect) the serial link immediately — no server restart needed.
+
+- Connect a MeshCore **Companion** radio to the server by USB.
 - In a Docker install, the serial device must also be passed into the container: uncomment the MeshCore `devices:` line in `docker-compose.yml` and set it to your host's port. The optional `meshcore` Python package must be installed for the link to come up; without it the plugin stays disabled and logs a hint.
 - The default max packet length (140) is a starting point — confirm the limit for the MeshCore firmware you are running.
 
-A Meshtastic bridge is planned and will share the same forwarder foundation.
+---
+
+## 22c. Meshtastic example plugin
+
+The Meshtastic plugin is the second mesh-bridge example seeded into `/data/plugins` on first run. It works just like MeshCore — every transmitted message is mirrored, outbound only, onto a [Meshtastic](https://meshtastic.org/) mesh, **prefixed with the sender's name** — and is **disabled by default**.
+
+> **Mutually exclusive with MeshCore:** enabling Meshtastic automatically disables MeshCore, and vice versa. Only one mesh bridge runs at a time.
+
+When enabled, it adds the same live character counter under the message box, showing its own hint (e.g. `Meshtastic · 18 / 200`) and capping typing so the prefixed message fits one packet.
+
+**Settings (Plugins tab)**
+
+| Setting | Description |
+|---------|-------------|
+| Device | Serial device of the Meshtastic radio (e.g. `/dev/ttyUSB0`). In Docker the port must also be passed into the container. |
+| Max packet length | Characters per mesh packet, including the sender-name prefix. Drives the message-box character limit. |
+| Channel index | Which Meshtastic channel to transmit on. |
+| Name separator | Joins the sender name and the message on the mesh. |
+
+Meshtastic has no baud-rate setting (the device link is configured differently from MeshCore). Changes reconnect the link immediately — no restart.
+
+---
+
+## 22d. Writing your own plugin
+
+The two mesh-bridge plugins above are seeded into `/data/plugins` as references — copy one as a starting point for your own. A plugin is a directory with a `plugin.py` that subclasses `BasePlugin` and hooks into the RX/TX pipeline (receiving messages, injecting TX audio, capping the message box, registering a UI panel, and reacting to settings changes). For the full hook reference, the settings-form schema, the TX-composition / character-limit API, and packaging your plugin as an installable `.zip`, see the authoring guide at [`docs/plugins.md`](docs/plugins.md).
 
 ---
 

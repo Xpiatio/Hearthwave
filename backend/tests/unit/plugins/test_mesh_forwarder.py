@@ -49,6 +49,16 @@ class FakeTransport(MeshTransport):
         return self._connected
 
 
+class _Ctx:
+    """Minimal PluginContext stand-in exposing just get_config()."""
+
+    def __init__(self, config: dict) -> None:
+        self._config = config
+
+    def get_config(self) -> dict:
+        return self._config
+
+
 class FakeForwarder(MeshForwarderPlugin):
     """Concrete forwarder reading a plain dict.
 
@@ -58,7 +68,8 @@ class FakeForwarder(MeshForwarderPlugin):
     """
 
     def __init__(self, config: dict, transport: MeshTransport | None = None) -> None:
-        super().__init__(config_getter=lambda: config)
+        super().__init__()
+        self.ctx = _Ctx(config)
         self._fixed = transport
         self.created: list[MeshTransport] = []
 
@@ -141,7 +152,7 @@ class TestTxPreQueue:
     async def test_enqueue_failure_does_not_block_tx(self):
         """A broken enqueue must still return the payload (TX proceeds)."""
         fwd = FakeForwarder(make_config(enabled=True), FakeTransport())
-        await fwd.on_config_changed(fwd._config_getter())
+        await fwd.on_config_changed(fwd.ctx.get_config())
 
         class BoomQueue:
             def put_nowait(self, item):
@@ -161,7 +172,7 @@ class TestLifecycleAndDelivery:
     async def test_enabled_connects_and_starts_sender(self):
         transport = FakeTransport()
         fwd = FakeForwarder(make_config(enabled=True), transport)
-        await fwd.on_config_changed(fwd._config_getter())
+        await fwd.on_config_changed(fwd.ctx.get_config())
         assert transport.connect_calls == 1
         assert transport.is_connected
         assert fwd._sender_task is not None
@@ -180,7 +191,7 @@ class TestLifecycleAndDelivery:
     async def test_forwards_prefixed_message_to_transport(self):
         transport = FakeTransport()
         fwd = FakeForwarder(make_config(enabled=True, chan=2), transport)
-        await fwd.on_config_changed(fwd._config_getter())
+        await fwd.on_config_changed(fwd.ctx.get_config())
         await fwd.on_audio_tx_pre_queue({"_display_name": "Ben", "text": "hello mesh"})
         await asyncio.wait_for(fwd._queue.join(), timeout=1.0)
         assert transport.sent == [("Ben: hello mesh", 2)]
@@ -189,7 +200,7 @@ class TestLifecycleAndDelivery:
     async def test_send_failure_is_swallowed(self):
         transport = FakeTransport(fail_send=True)
         fwd = FakeForwarder(make_config(enabled=True), transport)
-        await fwd.on_config_changed(fwd._config_getter())
+        await fwd.on_config_changed(fwd.ctx.get_config())
         await fwd.on_audio_tx_pre_queue({"_display_name": "Ben", "text": "boom"})
         # join() returns once the item is marked done even though send raised
         await asyncio.wait_for(fwd._queue.join(), timeout=1.0)
@@ -230,7 +241,7 @@ class TestBoundedQueue:
 class TestTransportRebuild:
     async def test_teardown_clears_transport(self):
         fwd = FakeForwarder(make_config(enabled=True))
-        await fwd.on_config_changed(fwd._config_getter())
+        await fwd.on_config_changed(fwd.ctx.get_config())
         assert fwd._transport is not None
         await fwd._teardown()
         assert fwd._transport is None

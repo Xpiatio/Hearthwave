@@ -66,12 +66,6 @@ export interface ServerConfig {
   monitorPassthrough: boolean;
   attendanceEnabled: boolean;
   savedPhrases: string[];
-  meshcoreEnabled: boolean;
-  meshcoreSerialPort: string;
-  meshcoreBaud: number;
-  meshcoreMaxPacketLength: number;
-  meshcorePrefixSeparator: string;
-  meshcoreChannelIdx: number;
 }
 
 export interface ServerConfigSaveValues {
@@ -91,12 +85,6 @@ export interface ServerConfigSaveValues {
   monitor_passthrough: boolean;
   attendance_enabled: boolean;
   saved_phrases: string[];
-  meshcore_enabled: boolean;
-  meshcore_serial_port: string;
-  meshcore_baud: number;
-  meshcore_max_packet_length: number;
-  meshcore_prefix_separator: string;
-  meshcore_channel_idx: number;
 }
 
 interface Props {
@@ -138,17 +126,12 @@ function valuesFromConfig(c: ServerConfig): ServerConfigSaveValues {
     monitor_passthrough: c.monitorPassthrough,
     attendance_enabled: c.attendanceEnabled,
     saved_phrases: c.savedPhrases,
-    meshcore_enabled: c.meshcoreEnabled,
-    meshcore_serial_port: c.meshcoreSerialPort.trim(),
-    meshcore_baud: c.meshcoreBaud,
-    meshcore_max_packet_length: c.meshcoreMaxPacketLength,
-    meshcore_prefix_separator: c.meshcorePrefixSeparator,
-    meshcore_channel_idx: c.meshcoreChannelIdx,
   };
 }
 
 export const ServerConfigPanel = forwardRef<ServerConfigPanelHandle, Props>(function ServerConfigPanel(
-  { open, onClose, config, onSave, embedded = false, onRescanVocabulary, hideSaveButton = false, onDirtyChange },
+  { open, onClose, config, onSave, embedded = false, onRescanVocabulary, hideSaveButton = false, onDirtyChange,
+  },
   ref
 ) {
   const [vadThreshold, setVadThreshold] = useState(0.5);
@@ -168,12 +151,6 @@ export const ServerConfigPanel = forwardRef<ServerConfigPanelHandle, Props>(func
   const [attendanceEnabled, setAttendanceEnabled] = useState(false);
   const [savedPhrases, setSavedPhrases] = useState<string[]>([]);
   const [newPhrase, setNewPhrase] = useState('');
-  const [meshcoreEnabled, setMeshcoreEnabled] = useState(false);
-  const [meshcoreSerialPort, setMeshcoreSerialPort] = useState('/dev/ttyUSB0');
-  const [meshcoreBaud, setMeshcoreBaud] = useState(115200);
-  const [meshcoreMaxPacketLength, setMeshcoreMaxPacketLength] = useState(140);
-  const [meshcorePrefixSeparator, setMeshcorePrefixSeparator] = useState(': ');
-  const [meshcoreChannelIdx, setMeshcoreChannelIdx] = useState(0);
 
   const seedRef = useRef<string>('');
 
@@ -198,12 +175,6 @@ export const ServerConfigPanel = forwardRef<ServerConfigPanelHandle, Props>(func
     setAttendanceEnabled(config.attendanceEnabled);
     setSavedPhrases(config.savedPhrases ?? []);
     setNewPhrase('');
-    setMeshcoreEnabled(config.meshcoreEnabled);
-    setMeshcoreSerialPort(config.meshcoreSerialPort);
-    setMeshcoreBaud(config.meshcoreBaud);
-    setMeshcoreMaxPacketLength(config.meshcoreMaxPacketLength);
-    setMeshcorePrefixSeparator(config.meshcorePrefixSeparator);
-    setMeshcoreChannelIdx(config.meshcoreChannelIdx);
     // Compute seed from config directly (state setters are async), mirroring
     // buildValues() serialization.
     seedRef.current = JSON.stringify(valuesFromConfig(config));
@@ -247,12 +218,6 @@ export const ServerConfigPanel = forwardRef<ServerConfigPanelHandle, Props>(func
       monitor_passthrough: monitorPassthrough,
       attendance_enabled: attendanceEnabled,
       saved_phrases: savedPhrases,
-      meshcore_enabled: meshcoreEnabled,
-      meshcore_serial_port: meshcoreSerialPort.trim(),
-      meshcore_baud: meshcoreBaud,
-      meshcore_max_packet_length: meshcoreMaxPacketLength,
-      meshcore_prefix_separator: meshcorePrefixSeparator,
-      meshcore_channel_idx: meshcoreChannelIdx,
     };
   }
 
@@ -578,78 +543,6 @@ export const ServerConfigPanel = forwardRef<ServerConfigPanelHandle, Props>(func
           <Typography variant="caption" sx={{ color: 'text.secondary', mt: -1.5 }}>
             Log which callsigns are heard during the session.
           </Typography>
-
-          <Divider />
-
-          <Typography variant="overline" sx={{ color: 'text.secondary', lineHeight: 1 }}>
-            MeshCore (LoRa mesh bridge)
-          </Typography>
-
-          <FormControlLabel
-            control={
-              <Switch
-                checked={meshcoreEnabled}
-                onChange={(e) => setMeshcoreEnabled(e.target.checked)}
-                size="small"
-              />
-            }
-            label="Forward transmissions to MeshCore"
-          />
-          <Typography variant="caption" sx={{ color: 'text.secondary', mt: -1.5 }}>
-            Mirror each sent message onto the MeshCore mesh, prefixed with the
-            sender's name. Received radio traffic is never forwarded.
-          </Typography>
-
-          <TextField
-            label="MeshCore device"
-            value={meshcoreSerialPort}
-            onChange={(e) => setMeshcoreSerialPort(e.target.value)}
-            disabled={!meshcoreEnabled}
-            size="small"
-            fullWidth
-            helperText="MeshCore Companion serial device, e.g. /dev/ttyUSB0"
-          />
-
-          <TextField
-            label="Baud rate"
-            type="number"
-            value={meshcoreBaud}
-            onChange={(e) => setMeshcoreBaud(Number(e.target.value) || 115200)}
-            disabled={!meshcoreEnabled}
-            size="small"
-            fullWidth
-          />
-
-          <TextField
-            label="Max packet length"
-            type="number"
-            value={meshcoreMaxPacketLength}
-            onChange={(e) => setMeshcoreMaxPacketLength(Math.max(1, Number(e.target.value) || 1))}
-            disabled={!meshcoreEnabled}
-            size="small"
-            fullWidth
-            helperText="Characters per mesh packet, including the sender prefix."
-          />
-
-          <TextField
-            label="Channel index"
-            type="number"
-            value={meshcoreChannelIdx}
-            onChange={(e) => setMeshcoreChannelIdx(Math.max(0, Number(e.target.value) || 0))}
-            disabled={!meshcoreEnabled}
-            size="small"
-            fullWidth
-          />
-
-          <TextField
-            label="Name separator"
-            value={meshcorePrefixSeparator}
-            onChange={(e) => setMeshcorePrefixSeparator(e.target.value.slice(0, 16))}
-            disabled={!meshcoreEnabled}
-            size="small"
-            fullWidth
-            helperText='Joins the sender name and message, e.g. ": " → "Ben: hello"'
-          />
 
         </Box>
   );

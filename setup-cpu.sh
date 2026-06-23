@@ -57,7 +57,14 @@ ct2_repo_for "$WHISPER_MODEL" >/dev/null
 [[ -n "$FINAL_MODEL" ]] && ct2_repo_for "$FINAL_MODEL" >/dev/null
 
 echo "==> Creating directories..."
-mkdir -p data/journals data/public Voices "Models/STT"
+mkdir -p data/journals data/public data/plugins Voices "Models/STT"
+
+# Seed the example plugins (MeshCore + Meshtastic) on first setup so a fresh
+# install has working reference plugins to study / enable.
+if [[ -d examples/plugins && -z "$(ls -A data/plugins 2>/dev/null)" ]]; then
+  cp -r examples/plugins/. data/plugins/
+  echo "==> Seeded example plugins into data/plugins (MeshCore, Meshtastic)."
+fi
 
 if [[ ! -f data/config.json ]]; then
   if [[ -f data/config.json.example ]]; then
