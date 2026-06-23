@@ -122,6 +122,28 @@ class TestBuildMessage:
         assert out == "Ben: 01234"  # "Ben: " (5) + first 5 chars = 10
         assert len(out) == 10
 
+    def test_clamps_by_utf8_bytes_not_chars(self):
+        # The mesh limit is bytes on the wire, not characters. "é" is 2 UTF-8
+        # bytes, so a 5-byte cap fits two full "é" (4 bytes); a third would
+        # reach 6 bytes and is dropped.
+        cfg = self.fwd._read_config(make_config(max_len=5))
+        out = self.fwd.build_message({"text": "é" * 4}, cfg)  # 8 bytes
+        assert out == "éé"
+        assert len(out.encode("utf-8")) <= 5
+
+    def test_never_splits_a_multibyte_char(self):
+        # max 3 bytes: one "é" (2 bytes) fits; the second would span bytes 3-4,
+        # so the partial trailing byte must be dropped — never emit invalid UTF-8.
+        cfg = self.fwd._read_config(make_config(max_len=3))
+        out = self.fwd.build_message({"text": "é" * 5}, cfg)
+        assert out == "é"
+        assert len(out.encode("utf-8")) <= 3
+
+    def test_short_multibyte_message_is_unchanged(self):
+        cfg = self.fwd._read_config(make_config(max_len=140))
+        out = self.fwd.build_message({"_display_name": "Renée", "text": "café ☕"}, cfg)
+        assert out == "Renée: café ☕"
+
     def test_custom_separator(self):
         cfg = self.fwd._read_config(make_config(sep=" > "))
         assert self.fwd.build_message({"_display_name": "Ben", "text": "go"}, cfg) == "Ben > go"
