@@ -90,7 +90,7 @@ class MeshCorePlugin(MeshForwarderPlugin):
                         help="MeshCore Companion serial device, e.g. /dev/ttyUSB0"),
             ConfigField("baud", "Baud rate", "number", 115200, minimum=1),
             ConfigField("max_packet_length", "Max packet length", "number", 140, minimum=1,
-                        help="Characters per mesh packet, including the sender prefix."),
+                        help="UTF-8 bytes per mesh packet, including the sender prefix."),
             ConfigField("channel_idx", "Channel index", "number", 0, minimum=0),
             ConfigField("prefix_separator", "Name separator", "text", ": ",
                         help='Joins the sender name and message, e.g. ": " → "Ben: hello"'),
