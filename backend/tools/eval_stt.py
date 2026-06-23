@@ -42,7 +42,7 @@ class EvalPipelineConfig:
     chunk_samples: int = STTWorker.CHUNK_SAMPLES
     lowpass_enabled: bool = True
     denoise_enabled: bool = True
-    agc_enabled: bool = True
+    gain_mode: str = "agc"
     prop_decrease: float = 0.7
     squelch_open_threshold: float = STTWorker.SQUELCH_OPEN_THRESHOLD
     squelch_adaptive: bool = False
@@ -103,7 +103,7 @@ def run_pipeline(audio: np.ndarray, cfg: EvalPipelineConfig, transcriber, vad_it
                 seg_audio, sr, bandpass_sos,
                 denoise_enabled=cfg.denoise_enabled,
                 prop_decrease=cfg.prop_decrease,
-                agc_enabled=cfg.agc_enabled,
+                gain_mode=cfg.gain_mode,
             )
             text = transcriber.transcribe(processed)
             if not text:
@@ -187,7 +187,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--audio", required=True, help="WAV file, directory of WAVs, or debug-capture directory")
     ap.add_argument("--model", default="small.en", help="Whisper model for transcription")
     ap.add_argument("--no-denoise", action="store_true")
-    ap.add_argument("--no-agc", action="store_true")
+    ap.add_argument("--gain-mode", choices=["agc", "rms", "off"], default="agc",
+                    help="gain stage after bandpass/denoise")
+    ap.add_argument("--no-agc", action="store_true",
+                    help="deprecated alias for --gain-mode off")
     ap.add_argument("--no-lowpass", action="store_true")
     ap.add_argument("--prop-decrease", type=float, default=0.7)
     ap.add_argument("--vad-threshold", type=float, default=0.5)
@@ -200,7 +203,7 @@ def main(argv: list[str] | None = None) -> int:
     cfg = EvalPipelineConfig(
         lowpass_enabled=not args.no_lowpass,
         denoise_enabled=not args.no_denoise,
-        agc_enabled=not args.no_agc,
+        gain_mode="off" if args.no_agc else args.gain_mode,
         prop_decrease=args.prop_decrease,
         squelch_open_threshold=args.squelch_threshold,
         squelch_adaptive=args.adaptive_squelch,
