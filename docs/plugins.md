@@ -96,7 +96,9 @@ async def on_config_changed(self, config):
 **Reading your settings:** `on_config_changed(config)` receives the live config;
 elsewhere use `self.ctx.get_config()`. Your section is `config.plugin_config("<id>")`
 (a dict of your `config_schema` values) and your master toggle is
-`config.plugin_enabled("<id>")`.
+`config.plugin_enabled("<id>")`. Note `plugin_enabled` defaults to `False` when the
+toggle hasn't been set yet, so if your manifest sets `default_enabled=True`, pass the
+same default when you read it: `config.plugin_enabled("<id>", default=True)`.
 
 **Intercepting transmissions** (`on_audio_tx_pre_queue`): return the `payload`
 (optionally modified) to allow the transmit, or `None` to block it. Plugins run in
