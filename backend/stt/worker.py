@@ -123,6 +123,7 @@ class STTWorker:
         whisper_model_final: str = "",
         final_max_s: float = 60.0,
         stt_final_device: str = "auto",
+        gain_mode: str = "agc",
         # Optional event callbacks — all called from the worker thread;
         # implementations must be thread-safe (e.g. loop.call_soon_threadsafe).
         on_audio_level: "Callable[[int], None] | None" = None,
@@ -165,6 +166,7 @@ class STTWorker:
         self.whisper_model_final = (whisper_model_final or "").strip()
         self.final_max_s = float(final_max_s)
         self.stt_final_device = stt_final_device
+        self.gain_mode = gain_mode if gain_mode in ("agc", "rms", "off") else "agc"
         self._final_q: "queue.Queue | None" = (
             queue.Queue(maxsize=8) if self.whisper_model_final else None
         )
@@ -653,7 +655,9 @@ class STTWorker:
             try:
                 if final_enabled:
                     self._accumulate_for_final(uid, audio)
-                processed = preprocess_segment(audio, self.SAMPLE_RATE, bandpass_sos)
+                processed = preprocess_segment(
+                    audio, self.SAMPLE_RATE, bandpass_sos, gain_mode=self.gain_mode
+                )
                 if recorder is not None:
                     recorder.on_processed(uid, processed)
                 text = transcriber.transcribe(processed)
@@ -817,7 +821,9 @@ class STTWorker:
             text = None
             if transcriber is not None:
                 try:
-                    processed = preprocess_segment(audio, self.SAMPLE_RATE, bandpass_sos)
+                    processed = preprocess_segment(
+                        audio, self.SAMPLE_RATE, bandpass_sos, gain_mode=self.gain_mode
+                    )
                     # Whole utterance, already squelch-bounded: don't let VAD
                     # re-gating or a low-confidence drop truncate long messages.
                     text = transcriber.transcribe(
