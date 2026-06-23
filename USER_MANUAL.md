@@ -843,7 +843,7 @@ Enable the plugin from the Plugins tab and edit its settings there:
 Changes reconnect (or disconnect) the serial link immediately — no server restart needed.
 
 - Connect a MeshCore **Companion** radio to the server by USB.
-- In a Docker install, the serial device must also be passed into the container: uncomment the MeshCore `devices:` line in `docker-compose.yml` and set it to your host's port. The optional `meshcore` Python package must be installed for the link to come up; without it the plugin stays disabled and logs a hint.
+- In a Docker install, the serial device must also be passed into the container: uncomment the MeshCore `devices:` line in `docker-compose.yml` and set it to your host's port. The optional `meshcore` Python package must be installed for the link to come up; without it the plugin still loads and lists, but logs a hint and can't connect when enabled.
 - The default max packet length (140) is a starting point — confirm the limit for the MeshCore firmware you are running.
 
 ---
@@ -871,7 +871,7 @@ Meshtastic has no baud-rate setting (the device link is configured differently f
 
 ## 22d. Writing your own plugin
 
-The two mesh-bridge plugins above are seeded into `/data/plugins` as references — copy one as a starting point for your own. A plugin is a directory with a `plugin.py` that subclasses `BasePlugin` and hooks into the RX/TX pipeline (receiving messages, injecting TX audio, capping the message box, registering a UI panel, and reacting to settings changes). For the full hook reference, the settings-form schema, the TX-composition / character-limit API, and packaging your plugin as an installable `.zip`, see the authoring guide at [`docs/plugins.md`](docs/plugins.md).
+The two mesh-bridge plugins above are seeded into `/data/plugins` as references — copy one as a starting point for your own. A plugin is a directory with a `plugin.py` that subclasses `BasePlugin` and hooks into the RX/TX pipeline (receiving messages, queueing transmissions, capping the message box, and reacting to settings changes). It exposes its settings declaratively — the app renders the form, so a plugin ships no browser code. For the full hook reference, the settings-form schema, the TX-composition / character-limit API, and packaging your plugin as an installable `.zip`, see the authoring guide at [`docs/plugins.md`](docs/plugins.md).
 
 ---
 
