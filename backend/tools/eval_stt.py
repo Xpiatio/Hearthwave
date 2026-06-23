@@ -28,6 +28,7 @@ import numpy as np
 
 from backend.audio.dsp import lowpass, make_bandpass_sos, make_lowpass_sos
 from backend.audio.squelch import SquelchDetector
+from backend.constants import GAIN_MODES
 from backend.stt.preprocess import preprocess_segment
 from backend.stt.segmenter import SpeechSegmenter
 from backend.stt.worker import STTWorker
@@ -187,7 +188,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--audio", required=True, help="WAV file, directory of WAVs, or debug-capture directory")
     ap.add_argument("--model", default="small.en", help="Whisper model for transcription")
     ap.add_argument("--no-denoise", action="store_true")
-    ap.add_argument("--gain-mode", choices=["agc", "rms", "off"], default="agc",
+    ap.add_argument("--gain-mode", choices=list(GAIN_MODES), default="agc",
                     help="gain stage after bandpass/denoise")
     ap.add_argument("--no-agc", action="store_true",
                     help="deprecated alias for --gain-mode off")
