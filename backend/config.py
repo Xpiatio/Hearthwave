@@ -294,6 +294,8 @@ class ServerConfig(dict):
         return Path(raw) if raw else Path("/data/tokens.json")
 
     # ---- NCS / Net Control Station --------------------------------------
+    # NCS is a built-in plugin (id "ncs"); its master toggle lives in the plugin
+    # namespace (see plugin_* helpers below). These are Station-tab settings it reads.
 
     @property
     def ncs_zone(self) -> str:
@@ -305,38 +307,26 @@ class ServerConfig(dict):
         """Seconds between automated net announcements while NCS is active (default 600)."""
         return int(self.get("ncs_announcement_interval", 600))
 
-    # ---- MeshCore plugin (outbound LoRa mesh bridge) --------------------
+    # ---- plugins (namespaced config for installed plugins) --------------
+    # Each plugin's state lives under config["plugins"][id]: the master toggle at
+    # "enabled" plus one key per ConfigField. Built-in and 3rd-party plugins alike
+    # read/write through these helpers; nothing else in core knows plugin keys.
 
-    @property
-    def meshcore_enabled(self) -> bool:
-        """Forward accepted TX onto the MeshCore mesh (default off)."""
-        return bool(self.get("meshcore_enabled", False))
+    def plugin_config(self, plugin_id: str) -> dict:
+        """This plugin's stored config namespace (empty dict if none yet)."""
+        return (self.get("plugins") or {}).get(plugin_id) or {}
 
-    @property
-    def meshcore_serial_port(self) -> str:
-        """Serial device of the MeshCore Companion radio (default /dev/ttyUSB0)."""
-        return self.get("meshcore_serial_port", "/dev/ttyUSB0")
+    def set_plugin_config(self, plugin_id: str, values: dict) -> None:
+        """Merge *values* into config["plugins"][plugin_id] (in place)."""
+        plugins = self.setdefault("plugins", {})
+        plugins.setdefault(plugin_id, {}).update(values)
 
-    @property
-    def meshcore_baud(self) -> int:
-        """Baud rate for the MeshCore Companion serial link (default 115200)."""
-        return int(self.get("meshcore_baud", 115200))
+    def plugin_enabled(self, plugin_id: str, default: bool = False) -> bool:
+        """Master toggle for *plugin_id*."""
+        return bool(self.plugin_config(plugin_id).get("enabled", default))
 
-    @property
-    def meshcore_max_packet_length(self) -> int:
-        """Max characters in one MeshCore text packet, including the sender prefix
-        (default 140 — verify against the MeshCore firmware in use)."""
-        return int(self.get("meshcore_max_packet_length", 140))
-
-    @property
-    def meshcore_prefix_separator(self) -> str:
-        """Joins the sender name and the message body on the mesh (default ': ')."""
-        return self.get("meshcore_prefix_separator", ": ")
-
-    @property
-    def meshcore_channel_idx(self) -> int:
-        """MeshCore channel index to transmit on (default 0)."""
-        return int(self.get("meshcore_channel_idx", 0))
+    def set_plugin_enabled(self, plugin_id: str, enabled: bool) -> None:
+        self.set_plugin_config(plugin_id, {"enabled": bool(enabled)})
 
     # ---- monitoring beacon ----------------------------------------------
 
@@ -367,6 +357,38 @@ class ServerConfig(dict):
 
     # ---- serialization ---------------------------------------------------------
 
+    #: One-time migration of pre-namespace flat plugin keys (released in v2.9.0 for
+    #: MeshCore) into config["plugins"][id]. Maps legacy flat key -> namespaced key.
+    _LEGACY_PLUGIN_KEYS = {
+        "meshcore": {
+            "meshcore_enabled": "enabled",
+            "meshcore_serial_port": "serial_port",
+            "meshcore_baud": "baud",
+            "meshcore_max_packet_length": "max_packet_length",
+            "meshcore_prefix_separator": "prefix_separator",
+            "meshcore_channel_idx": "channel_idx",
+        },
+        "meshtastic": {
+            "meshtastic_enabled": "enabled",
+            "meshtastic_serial_port": "serial_port",
+            "meshtastic_max_packet_length": "max_packet_length",
+            "meshtastic_prefix_separator": "prefix_separator",
+            "meshtastic_channel_idx": "channel_idx",
+        },
+        "ncs": {"ncs_enabled": "enabled"},
+    }
+
+    def _migrate_legacy_plugin_keys(self) -> None:
+        """Fold legacy flat plugin keys into the plugins namespace, in place.
+        A pre-existing namespaced value always wins; legacy keys are then removed."""
+        for plugin_id, mapping in self._LEGACY_PLUGIN_KEYS.items():
+            for legacy_key, new_key in mapping.items():
+                if legacy_key not in self:
+                    continue
+                section = self.setdefault("plugins", {}).setdefault(plugin_id, {})
+                section.setdefault(new_key, self[legacy_key])
+                del self[legacy_key]
+
     @classmethod
     def load(cls, path: Path = CONFIG_FILE) -> "ServerConfig":
         """Load config from *path*, returning a ServerConfig with defaults if the
@@ -384,6 +406,7 @@ class ServerConfig(dict):
                     )
             except (json.JSONDecodeError, OSError) as exc:
                 _log.warning("Could not load config %s: %s; using defaults.", path, exc)
+        instance._migrate_legacy_plugin_keys()
         return instance
 
     def save(self, path: Path = CONFIG_FILE) -> None:

@@ -24,18 +24,22 @@ function makeProps(overrides = {}) {
       pttSerialLine: 'RTS', monitorPassthrough: false, attendanceEnabled: false, savedPhrases: [],
       meshcoreEnabled: false, meshcoreSerialPort: '', meshcoreBaud: 115200,
       meshcoreMaxPacketLength: 180, meshcorePrefixSeparator: ': ', meshcoreChannelIdx: 0,
+      meshtasticEnabled: false, meshtasticSerialPort: '', meshtasticMaxPacketLength: 200,
+      meshtasticPrefixSeparator: ': ', meshtasticChannelIdx: 0, ncsEnabled: true,
     },
     onServerConfigSave: vi.fn(), onRescanVocabulary: vi.fn(),
+    plugins: [], onPluginsSave: vi.fn(),
     ...overrides,
   }
 }
 
 describe('SettingsDialog', () => {
-  it('shows all three tabs for an admin', () => {
+  it('shows all admin tabs', () => {
     render(<SettingsDialog {...makeProps()} />)
     expect(screen.getByRole('tab', { name: 'Preferences' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Station' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'System' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Plugins' })).toBeInTheDocument()
   })
 
   it('shows only Preferences for a non-admin (no tab bar)', () => {

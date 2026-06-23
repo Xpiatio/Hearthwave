@@ -550,38 +550,62 @@ class TestVoxPrimerWordOverrides:
 # MeshCore plugin
 # ---------------------------------------------------------------------------
 
-class TestMeshCoreDefaults:
-    def test_enabled_default_false(self):
-        assert ServerConfig().meshcore_enabled is False
+class TestPluginNamespace:
+    def test_plugin_config_empty_by_default(self):
+        assert ServerConfig().plugin_config("meshcore") == {}
 
-    def test_serial_port_default(self):
-        assert ServerConfig().meshcore_serial_port == "/dev/ttyUSB0"
+    def test_plugin_enabled_default(self):
+        assert ServerConfig().plugin_enabled("ncs", default=True) is True
+        assert ServerConfig().plugin_enabled("meshcore") is False
 
-    def test_baud_default(self):
-        assert ServerConfig().meshcore_baud == 115200
+    def test_set_plugin_config_merges(self):
+        cfg = ServerConfig()
+        cfg.set_plugin_config("meshcore", {"serial_port": "/dev/ttyACM0"})
+        cfg.set_plugin_config("meshcore", {"baud": 9600})
+        assert cfg["plugins"]["meshcore"] == {"serial_port": "/dev/ttyACM0", "baud": 9600}
 
-    def test_max_packet_length_default(self):
-        assert ServerConfig().meshcore_max_packet_length == 140
-
-    def test_prefix_separator_default(self):
-        assert ServerConfig().meshcore_prefix_separator == ": "
-
-    def test_channel_idx_default(self):
-        assert ServerConfig().meshcore_channel_idx == 0
+    def test_set_plugin_enabled(self):
+        cfg = ServerConfig()
+        cfg.set_plugin_enabled("meshcore", True)
+        assert cfg.plugin_enabled("meshcore") is True
 
 
-class TestMeshCoreOverrides:
-    def test_enabled_override(self):
-        assert make_config(meshcore_enabled=True).meshcore_enabled is True
+class TestLegacyPluginKeyMigration:
+    def _load(self, tmp_path, data: dict) -> ServerConfig:
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps(data), encoding="utf-8")
+        return ServerConfig.load(path)
 
-    def test_serial_port_override(self):
-        assert make_config(meshcore_serial_port="/dev/ttyACM0").meshcore_serial_port == "/dev/ttyACM0"
+    def test_migrates_flat_meshcore_keys(self, tmp_path):
+        cfg = self._load(tmp_path, {
+            "meshcore_enabled": True,
+            "meshcore_serial_port": "/dev/ttyACM0",
+            "meshcore_baud": 9600,
+            "meshcore_max_packet_length": 200,
+            "meshcore_prefix_separator": " > ",
+            "meshcore_channel_idx": 2,
+        })
+        section = cfg.plugin_config("meshcore")
+        assert section == {
+            "enabled": True, "serial_port": "/dev/ttyACM0", "baud": 9600,
+            "max_packet_length": 200, "prefix_separator": " > ", "channel_idx": 2,
+        }
+        # Legacy flat keys are removed so they don't linger on next save.
+        assert "meshcore_enabled" not in cfg
+        assert "meshcore_serial_port" not in cfg
 
-    def test_max_packet_length_override(self):
-        assert make_config(meshcore_max_packet_length=200).meshcore_max_packet_length == 200
+    def test_migrates_ncs_enabled(self, tmp_path):
+        cfg = self._load(tmp_path, {"ncs_enabled": False})
+        assert cfg.plugin_enabled("ncs", default=True) is False
+        assert "ncs_enabled" not in cfg
 
-    def test_max_packet_length_coerces_to_int(self):
-        assert make_config(meshcore_max_packet_length="180").meshcore_max_packet_length == 180
+    def test_existing_namespace_value_wins(self, tmp_path):
+        cfg = self._load(tmp_path, {
+            "meshcore_serial_port": "/dev/legacy",
+            "plugins": {"meshcore": {"serial_port": "/dev/new"}},
+        })
+        assert cfg.plugin_config("meshcore")["serial_port"] == "/dev/new"
 
-    def test_channel_idx_override(self):
-        assert make_config(meshcore_channel_idx=3).meshcore_channel_idx == 3
+    def test_no_legacy_keys_is_a_noop(self, tmp_path):
+        cfg = self._load(tmp_path, {"callsign": "W1AW"})
+        assert "plugins" not in cfg or cfg.get("plugins") == {}

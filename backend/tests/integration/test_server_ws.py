@@ -525,69 +525,85 @@ class TestSetServerConfigSavedPhrases:
 # set_server_config — MeshCore settings sanitization
 # ---------------------------------------------------------------------------
 
-class TestSetServerConfigMeshCore:
-    """Validate the MeshCore input sanitization in set_server_config.
+@pytest.fixture
+def demo_plugin():
+    """Register a fake plugin with a config schema, then clean it up. Lets the
+    generic plugin-config save path (coercion/clamping/namespace) be exercised."""
+    from backend.plugins.base import BasePlugin, ConfigField, PluginManifest
+    from backend.plugins.registry import plugin_registry
 
-    Left meshcore_enabled false except where toggling is the point, so no serial
-    connection is attempted. _config.save() is patched (read-only /data in tests).
+    plugin = BasePlugin()
+    plugin.manifest = PluginManifest(
+        id="demo", name="Demo", description="x",
+        config_schema=(
+            ConfigField("serial_port", "Port", "text", "/dev/ttyUSB0"),
+            ConfigField("baud", "Baud", "number", 115200, minimum=1),
+            ConfigField("max_packet_length", "Max", "number", 140, minimum=1),
+            ConfigField("channel_idx", "Channel", "number", 0, minimum=0),
+            ConfigField("prefix_separator", "Sep", "text", ": "),
+        ),
+    )
+    plugin_registry.register(plugin)
+    try:
+        yield "demo"
+    finally:
+        plugin_registry._plugins = tuple(p for p in plugin_registry._plugins if p is not plugin)
+
+
+class TestSetServerConfigPlugins:
+    """The generic, namespaced plugin-config save path in set_server_config.
+
+    The frontend sends data["plugins"][id] = {enabled, ...fields}; the backend
+    coerces each value against the plugin's declared schema, clamps numbers,
+    ignores unknown keys, and reflects the result in the status broadcast.
     """
 
-    def _send(self, ws, payload):
+    def _send(self, ws, plugins):
         with patch("backend.config.ServerConfig.save"):
-            ws.send_json({"type": "set_server_config", **payload})
+            ws.send_json({"type": "set_server_config", "plugins": plugins})
             return ws.receive_json()
 
-    def test_valid_values_reflected_in_status(self, client):
-        with client.websocket_connect(WS_URL) as ws:
-            _drain_initial(ws)
-            msg = self._send(ws, {
-                "meshcore_serial_port": "  /dev/ttyACM0  ",
-                "meshcore_baud": 9600,
-                "meshcore_max_packet_length": 200,
-                "meshcore_channel_idx": 3,
-                "meshcore_prefix_separator": " > ",
-            })
-            assert msg["type"] == "status"
-            assert msg["meshcore_serial_port"] == "/dev/ttyACM0"  # trimmed
-            assert msg["meshcore_baud"] == 9600
-            assert msg["meshcore_max_packet_length"] == 200
-            assert msg["meshcore_channel_idx"] == 3
-            assert msg["meshcore_prefix_separator"] == " > "
+    def _entry(self, msg, plugin_id="demo"):
+        return next(p for p in msg["plugins"] if p["id"] == plugin_id)
 
-    def test_non_numeric_baud_ignored(self, client):
+    def test_values_stored_and_reflected(self, client, demo_plugin):
         with client.websocket_connect(WS_URL) as ws:
             _drain_initial(ws)
-            self._send(ws, {"meshcore_baud": 9600})
-            msg = self._send(ws, {"meshcore_baud": "not-a-number"})
-            assert msg["meshcore_baud"] == 9600  # unchanged
+            msg = self._send(ws, {"demo": {
+                "serial_port": "/dev/ttyACM0", "baud": 9600,
+                "max_packet_length": 200, "channel_idx": 3, "prefix_separator": " > ",
+            }})
+            cfg = self._entry(msg)["config"]
+            assert cfg["serial_port"] == "/dev/ttyACM0"
+            assert cfg["baud"] == 9600
+            assert cfg["max_packet_length"] == 200
+            assert cfg["channel_idx"] == 3
+            assert cfg["prefix_separator"] == " > "
 
-    def test_max_packet_length_clamped_to_minimum_one(self, client):
+    def test_non_numeric_number_ignored(self, client, demo_plugin):
         with client.websocket_connect(WS_URL) as ws:
             _drain_initial(ws)
-            msg = self._send(ws, {"meshcore_max_packet_length": 0})
-            assert msg["meshcore_max_packet_length"] == 1
-            msg = self._send(ws, {"meshcore_max_packet_length": -50})
-            assert msg["meshcore_max_packet_length"] == 1
+            self._send(ws, {"demo": {"baud": 9600}})
+            msg = self._send(ws, {"demo": {"baud": "not-a-number"}})
+            assert self._entry(msg)["config"]["baud"] == 9600  # unchanged
 
-    def test_negative_channel_clamped_to_zero(self, client):
+    def test_number_clamped_to_minimum(self, client, demo_plugin):
         with client.websocket_connect(WS_URL) as ws:
             _drain_initial(ws)
-            msg = self._send(ws, {"meshcore_channel_idx": -2})
-            assert msg["meshcore_channel_idx"] == 0
+            assert self._entry(self._send(ws, {"demo": {"max_packet_length": 0}}))["config"]["max_packet_length"] == 1
+            assert self._entry(self._send(ws, {"demo": {"channel_idx": -2}}))["config"]["channel_idx"] == 0
 
-    def test_separator_truncated_to_16_chars(self, client):
+    def test_unknown_key_ignored(self, client, demo_plugin):
         with client.websocket_connect(WS_URL) as ws:
             _drain_initial(ws)
-            msg = self._send(ws, {"meshcore_prefix_separator": "x" * 40})
-            assert msg["meshcore_prefix_separator"] == "x" * 16
+            msg = self._send(ws, {"demo": {"evil": "haxx"}})
+            assert "evil" not in self._entry(msg)["config"]
 
-    def test_enabled_flag_reflected_in_status(self, client):
+    def test_enabled_flag_reflected(self, client, demo_plugin):
         with client.websocket_connect(WS_URL) as ws:
             _drain_initial(ws)
-            msg = self._send(ws, {"meshcore_enabled": True})
-            assert msg["meshcore_enabled"] is True
-            msg = self._send(ws, {"meshcore_enabled": False})
-            assert msg["meshcore_enabled"] is False
+            assert self._entry(self._send(ws, {"demo": {"enabled": True}}))["enabled"] is True
+            assert self._entry(self._send(ws, {"demo": {"enabled": False}}))["enabled"] is False
 
 
 # ---------------------------------------------------------------------------

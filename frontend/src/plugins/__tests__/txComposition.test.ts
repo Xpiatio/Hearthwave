@@ -1,30 +1,29 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
   foldCompositions,
-  registerTxComposition,
-  resetTxComposition,
   resolveTxComposition,
+  isPluginEnabled,
   type TxComposition,
 } from '../index';
-import { meshTxContributor } from '../mesh';
+import type { PluginManifest } from '../../types/ws';
 
-// Minimal ServerConfig-shaped object; the contributor only reads via accessors.
-function cfg(overrides: Record<string, unknown> = {}) {
+function meshPlugin(overrides: Partial<PluginManifest> = {}): PluginManifest {
   return {
-    meshcoreEnabled: true,
-    meshcoreMaxPacketLength: 140,
-    meshcorePrefixSeparator: ': ',
+    id: 'meshcore',
+    name: 'MeshCore',
+    description: '',
+    version: '1.0.0',
+    enabled: true,
+    conflicts_with: [],
+    config_schema: [],
+    config: { max_packet_length: 140, prefix_separator: ': ' },
+    tx_composition: { max_len_key: 'max_packet_length', separator_key: 'prefix_separator', hint: 'MeshCore' },
     ...overrides,
-  } as never;
+  };
 }
 
 function profile(overrides: Record<string, unknown> = {}) {
-  return {
-    display_name: 'Ben',
-    operator_name: 'Benjamin',
-    callsign: 'WX1ABC',
-    ...overrides,
-  } as never;
+  return { display_name: 'Ben', operator_name: 'Benjamin', callsign: 'WX1ABC', ...overrides } as never;
 }
 
 describe('foldCompositions', () => {
@@ -43,55 +42,49 @@ describe('foldCompositions', () => {
   });
 });
 
-describe('meshTxContributor', () => {
-  const contributor = meshTxContributor({
-    enabled: (c) => (c as { meshcoreEnabled: boolean }).meshcoreEnabled,
-    maxLen: (c) => (c as { meshcoreMaxPacketLength: number }).meshcoreMaxPacketLength,
-    separator: (c) => (c as { meshcorePrefixSeparator: string }).meshcorePrefixSeparator,
-    hint: 'MeshCore',
+describe('resolveTxComposition (declarative)', () => {
+  it('returns null when no plugin declares tx_composition', () => {
+    const plain = meshPlugin({ tx_composition: null });
+    expect(resolveTxComposition([plain], profile())).toBeNull();
   });
 
-  it('returns null when disabled', () => {
-    expect(contributor({ profile: profile(), serverConfig: cfg({ meshcoreEnabled: false }) })).toBeNull();
+  it('returns null when the plugin is disabled', () => {
+    expect(resolveTxComposition([meshPlugin({ enabled: false })], profile())).toBeNull();
   });
 
   it('budgets max length minus the "Name: " prefix', () => {
     // "Ben" (3) + ": " (2) = 5 → 140 - 5 = 135
-    const result = contributor({ profile: profile(), serverConfig: cfg() });
-    expect(result).toEqual({ maxLength: 135, hint: 'MeshCore' });
+    expect(resolveTxComposition([meshPlugin()], profile())).toEqual({ maxLength: 135, hint: 'MeshCore' });
   });
 
   it('falls back operator_name → callsign when no display_name', () => {
-    const r = contributor({
-      profile: profile({ display_name: '' }),
-      serverConfig: cfg({ meshcoreMaxPacketLength: 100 }),
-    });
-    // "Benjamin" (8) + ": " (2) = 10 → 90
-    expect(r?.maxLength).toBe(90);
+    const r = resolveTxComposition([meshPlugin({ config: { max_packet_length: 100, prefix_separator: ': ' } })],
+      profile({ display_name: '' }));
+    expect(r?.maxLength).toBe(90); // "Benjamin"(8)+": "(2)=10 → 90
   });
 
-  it('uses full budget when there is no sender name', () => {
-    const r = contributor({ profile: null, serverConfig: cfg({ meshcoreMaxPacketLength: 50 }) });
+  it('uses the full budget when there is no sender name', () => {
+    const r = resolveTxComposition([meshPlugin({ config: { max_packet_length: 50, prefix_separator: ': ' } })], null);
     expect(r?.maxLength).toBe(50);
   });
 
   it('never returns a non-positive budget', () => {
-    const r = contributor({ profile: profile(), serverConfig: cfg({ meshcoreMaxPacketLength: 2 }) });
+    const r = resolveTxComposition([meshPlugin({ config: { max_packet_length: 2, prefix_separator: ': ' } })], profile());
     expect(r?.maxLength).toBe(1);
+  });
+
+  it('folds multiple enabled mesh plugins to the most restrictive', () => {
+    const wide = meshPlugin({ id: 'a', config: { max_packet_length: 200, prefix_separator: ': ' } });
+    const tight = meshPlugin({ id: 'b', config: { max_packet_length: 50, prefix_separator: ': ' } });
+    expect(resolveTxComposition([wide, tight], null)).toEqual({ maxLength: 50, hint: 'MeshCore' });
   });
 });
 
-describe('resolveTxComposition (registry)', () => {
-  beforeEach(() => resetTxComposition());
-
-  it('returns null when nothing is registered', () => {
-    expect(resolveTxComposition({ profile: profile(), serverConfig: cfg() })).toBeNull();
-  });
-
-  it('folds registered contributors to the most restrictive', () => {
-    registerTxComposition(() => ({ maxLength: 120, hint: 'wide' }));
-    registerTxComposition(() => ({ maxLength: 40, hint: 'tight' }));
-    const r = resolveTxComposition({ profile: profile(), serverConfig: cfg() });
-    expect(r).toEqual({ maxLength: 40, hint: 'tight' });
+describe('isPluginEnabled', () => {
+  it('is true only when the plugin is present and enabled', () => {
+    const plugins = [meshPlugin({ id: 'ncs', enabled: true }), meshPlugin({ id: 'x', enabled: false })];
+    expect(isPluginEnabled(plugins, 'ncs')).toBe(true);
+    expect(isPluginEnabled(plugins, 'x')).toBe(false);
+    expect(isPluginEnabled(plugins, 'missing')).toBe(false);
   });
 });

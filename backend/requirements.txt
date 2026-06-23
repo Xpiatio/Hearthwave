@@ -1,6 +1,8 @@
 fastapi
 uvicorn[standard]
 websockets
+# Required by the plugin-install endpoint (multipart .zip upload).
+python-multipart
 sounddevice==0.5.5
 soundfile==0.13.1
 piper-tts
@@ -21,3 +23,6 @@ huggingface_hub
 # imports it lazily and degrades gracefully when absent, so it is safe to omit
 # on installs that don't use MeshCore.
 meshcore
+# Optional: enables the Meshtastic plugin (outbound LoRa mesh bridge). Imported
+# lazily and degrades gracefully when absent; mutually exclusive with MeshCore.
+meshtastic

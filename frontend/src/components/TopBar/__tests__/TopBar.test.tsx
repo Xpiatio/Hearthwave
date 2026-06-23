@@ -64,6 +64,7 @@ function makeProps(overrides: Partial<Parameters<typeof TopBar>[0]> = {}) {
     showSettings: false,
     onToggleSettings: vi.fn(),
     showNcs: false,
+    ncsEnabled: true,
     onToggleNcs: vi.fn(),
     showWaterfall: false,
     onToggleWaterfall: vi.fn(),

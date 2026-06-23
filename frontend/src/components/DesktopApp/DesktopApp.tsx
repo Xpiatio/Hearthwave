@@ -121,6 +121,8 @@ export interface DesktopAppProps {
   showJournal: boolean;
   showContacts: boolean;
   showNcs: boolean;
+  /** Master enable state of the NCS plugin; when false its button + panel hide. */
+  ncsEnabled: boolean;
   showSettings: boolean;
   onToggleAttendance: () => void;
   onToggleJournal: () => void;
@@ -222,6 +224,7 @@ export function DesktopApp({
   showJournal,
   showContacts,
   showNcs,
+  ncsEnabled,
   showSettings,
   onToggleAttendance,
   onToggleJournal,
@@ -277,6 +280,7 @@ export function DesktopApp({
         showSettings={showSettings}
         onToggleSettings={onToggleSettings}
         showNcs={showNcs}
+        ncsEnabled={ncsEnabled}
         onToggleNcs={onToggleNcs}
         showWaterfall={showWaterfall}
         onToggleWaterfall={onToggleWaterfall}
@@ -316,7 +320,7 @@ export function DesktopApp({
             onDismissResult={onDismissJournalResult}
           />
         )}
-        {showNcs && (
+        {showNcs && ncsEnabled && (
           <NCSPanel send={send} lastMessage={lastMessage} contacts={contacts}
                     channelClear={channelClear} transmitting={transmitting} />
         )}

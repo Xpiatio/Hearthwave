@@ -98,7 +98,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
+from fastapi import (
+    FastAPI, File, Header, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect,
+)
 from fastapi.responses import FileResponse, Response
 
 from backend.ai.gemini_client import GeminiError
@@ -121,6 +123,7 @@ from backend.net.online import is_online, is_online_cached
 from backend import __version__
 from backend import auth_routes
 from backend.auth_routes import router as _auth_router
+from backend.plugins import loader as plugin_loader
 from backend.plugins import plugin_registry
 from backend.persistence.attendance import AttendanceTracker, build_attendance_rows
 from backend.persistence.contacts import (
@@ -160,6 +163,10 @@ _log = logging.getLogger(__name__)
 
 _event_loop: asyncio.AbstractEventLoop | None = None  # set in _lifespan; used for thread→asyncio bridge
 _config: ServerConfig | None = None
+# Directory scanned for installable plugins (each subdir with a plugin.py).
+_PLUGINS_DIR = Path(os.environ.get("RADIO_TTY_PLUGINS_DIR", "/data/plugins"))
+# PluginContext bound at startup; reused by the install/reload/uninstall endpoints.
+_plugin_ctx = None
 _contacts_store: ContactsStore | None = None
 _users_store: UsersStore | None = None
 _token_store: TokenStore | None = None
@@ -1215,13 +1222,10 @@ def _build_status() -> dict:
         "monitor_passthrough": bool(_config.monitor_passthrough) if _config else False,
         "attendance_enabled": bool(_config.attendance_enabled) if _config else False,
         "saved_phrases": _config.saved_phrases if _config else [],
-        # MeshCore plugin
-        "meshcore_enabled": bool(_config.meshcore_enabled) if _config else False,
-        "meshcore_serial_port": (_config.meshcore_serial_port if _config else "/dev/ttyUSB0"),
-        "meshcore_baud": int(_config.meshcore_baud) if _config else 115200,
-        "meshcore_max_packet_length": int(_config.meshcore_max_packet_length) if _config else 140,
-        "meshcore_prefix_separator": (_config.meshcore_prefix_separator if _config else ": "),
-        "meshcore_channel_idx": int(_config.meshcore_channel_idx) if _config else 0,
+        # Installed-plugin manifests — id, name, version, enabled, conflicts_with,
+        # config_schema + current config values, tx_composition, and any load error.
+        # Drives the admin Plugins manager (list, enable/disable, settings form).
+        "plugins": plugin_registry.manifests(_config) if _config else [],
     }
 
 
@@ -1355,7 +1359,7 @@ async def _voices_watcher_pump() -> None:
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     """Startup / shutdown wiring."""
-    global _config, _contacts_store, _users_store, _token_store, _stt_worker, _synthesizer, _monitor
+    global _config, _contacts_store, _users_store, _token_store, _stt_worker, _synthesizer, _monitor, _plugin_ctx
     global _stt_out_queue, _tx_queue, _tts_event_queue, _background_tasks, _tx_abort_event
     global _audio_level, _radio_error, _channel_clear, _last_id_time, _has_transmitted, _last_beacon_time, _ncs_plugin
     global _level_window, _attendance, _spectro, _monitor_chunk_cb
@@ -1492,11 +1496,27 @@ async def _lifespan(app: FastAPI):
     )
     plugin_registry.register(_ncs_plugin)
 
-    # MeshCore must register AFTER NCS: the TX gate chain stops on the first
-    # plugin that blocks (e.g. NCS BREAK-BREAK), so a blocked TX is never
-    # forwarded to the mesh.
-    from backend.plugins.meshcore import MeshCorePlugin
-    plugin_registry.register(MeshCorePlugin(config_getter=lambda: _config))
+    # External / 3rd-party plugins (incl. the MeshCore + Meshtastic examples) load
+    # from the plugins directory AFTER built-in NCS, so the TX gate chain still
+    # stops on NCS BREAK-BREAK before any mesh forward. Each plugin loads in
+    # isolation; a bad one is recorded as a load error, never crashing startup.
+    from backend.plugins.context import PluginContext
+
+    async def _enqueue_tx(payload: dict) -> None:
+        await _tx_queue.put(payload)
+
+    _plugin_ctx = PluginContext(
+        broadcast=_manager.broadcast,
+        enqueue_tx=_enqueue_tx,
+        get_config=lambda: _config,
+        channel_clear=lambda: _channel_clear,
+        data_dir=_PLUGINS_DIR.parent,
+        logger=logging.getLogger("hearthwave.plugin"),
+    )
+    await plugin_loader.discover_and_load(_PLUGINS_DIR, _plugin_ctx, plugin_registry)
+
+    # Gate active hooks on each plugin's enabled state (read live from config).
+    plugin_registry.set_config_getter(lambda: _config)
 
     # Let plugins open connections / start pollers from the loaded config.
     await plugin_registry.dispatch_config_changed(_config)
@@ -1558,6 +1578,116 @@ async def health() -> dict:
     return {"ok": True, "version": __version__}
 
 
+# ---------------------------------------------------------------------------
+# Plugin install / reload / uninstall (admin only).
+#
+# Plugins run with full server privileges — these endpoints are admin-gated and a
+# trust warning is shown in the UI. Newly installed plugins load live (hot-reload);
+# a server restart is always a safe fallback.
+# ---------------------------------------------------------------------------
+
+def _safe_plugin_id(raw: str) -> str:
+    """Sanitise a plugin id to a single safe path segment, or 400."""
+    import re
+    pid = re.sub(r"[^A-Za-z0-9_-]", "", raw or "")
+    if not pid:
+        raise HTTPException(status_code=400, detail="Invalid plugin id")
+    return pid
+
+
+def _plugin_load_error(plugin_id: str) -> str | None:
+    for m in plugin_registry.manifests(_config):
+        if m["id"] == plugin_id:
+            return m.get("error")
+    return None
+
+
+@app.post("/plugins/install")
+async def install_plugin(
+    file: UploadFile = File(...),
+    authorization: str | None = Header(default=None),
+) -> dict:
+    auth_routes._require_admin(authorization)
+    if _plugin_ctx is None or _config is None:
+        raise HTTPException(status_code=503, detail="Plugins not initialised")
+
+    import io
+    import shutil
+    import tempfile
+    import zipfile
+
+    data = await file.read()
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile:
+        raise HTTPException(status_code=400, detail="Not a valid .zip archive")
+
+    # Zip-slip guard: reject absolute paths or parent-directory escapes.
+    for name in archive.namelist():
+        if name.startswith("/") or ".." in Path(name).parts:
+            raise HTTPException(status_code=400, detail="Unsafe path in archive")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        archive.extractall(tmp_path)
+        plugin_files = list(tmp_path.rglob("plugin.py"))
+        if not plugin_files:
+            raise HTTPException(status_code=400, detail="Archive contains no plugin.py")
+        # Shallowest plugin.py wins; its directory is the plugin package root.
+        src = min(plugin_files, key=lambda p: len(p.relative_to(tmp_path).parts)).parent
+        raw_id = (Path(file.filename or "plugin").stem if src == tmp_path else src.name)
+        plugin_id = _safe_plugin_id(raw_id)
+        target = _PLUGINS_DIR / plugin_id
+        # Replace any existing install of the same id (unload first if loaded).
+        await plugin_loader.unload_plugin(plugin_id, plugin_registry)
+        if target.exists():
+            shutil.rmtree(target, ignore_errors=True)
+        _PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(src, target)
+
+    await plugin_loader.reload_plugin(target, _plugin_ctx, plugin_registry)
+    await plugin_registry.dispatch_config_changed(_config)
+    await _manager.broadcast(_build_status())
+    error = _plugin_load_error(plugin_id)
+    if error:
+        raise HTTPException(status_code=400, detail=f"Plugin installed but failed to load: {error}")
+    return {"ok": True, "id": plugin_id}
+
+
+@app.post("/plugins/{plugin_id}/reload")
+async def reload_plugin_endpoint(
+    plugin_id: str, authorization: str | None = Header(default=None)
+) -> dict:
+    auth_routes._require_admin(authorization)
+    if _plugin_ctx is None or _config is None:
+        raise HTTPException(status_code=503, detail="Plugins not initialised")
+    pid = _safe_plugin_id(plugin_id)
+    plugin_dir = _PLUGINS_DIR / pid
+    if not (plugin_dir / "plugin.py").is_file():
+        raise HTTPException(status_code=404, detail="Plugin not found")
+    await plugin_loader.reload_plugin(plugin_dir, _plugin_ctx, plugin_registry)
+    await plugin_registry.dispatch_config_changed(_config)
+    await _manager.broadcast(_build_status())
+    error = _plugin_load_error(pid)
+    return {"ok": error is None, "id": pid, "error": error}
+
+
+@app.delete("/plugins/{plugin_id}")
+async def uninstall_plugin_endpoint(
+    plugin_id: str, authorization: str | None = Header(default=None)
+) -> dict:
+    auth_routes._require_admin(authorization)
+    pid = _safe_plugin_id(plugin_id)
+    await plugin_loader.unload_plugin(pid, plugin_registry)
+    import shutil
+    plugin_dir = _PLUGINS_DIR / pid
+    if plugin_dir.is_dir():
+        shutil.rmtree(plugin_dir, ignore_errors=True)
+    if _config is not None:
+        await _manager.broadcast(_build_status())
+    return {"ok": True, "id": pid}
+
+
 @app.get("/journal")
 async def public_journal() -> Response:
     if _config is None:
@@ -1617,6 +1747,33 @@ async def _ws_handle_set_admin_config(ws: WebSocket, data: dict, state: "Connect
         _stt_worker.start()
 
 
+def _coerce_plugin_value(spec: dict, val):
+    """Coerce a plugin config value to its declared schema type, clamping numbers
+    and validating selects. Returns None to skip an invalid value."""
+    field_type = spec.get("type")
+    if field_type == "bool":
+        return bool(val)
+    if field_type == "number":
+        try:
+            num = float(val)
+        except (TypeError, ValueError):
+            return None
+        if spec.get("minimum") is not None:
+            num = max(float(spec["minimum"]), num)
+        if spec.get("maximum") is not None:
+            num = min(float(spec["maximum"]), num)
+        default = spec.get("default")
+        # Keep integers integral (baud, channel idx) per the field's default type.
+        if isinstance(default, int) and not isinstance(default, bool):
+            return int(num)
+        return num
+    if field_type == "select":
+        text = str(val)
+        allowed = {opt[0] for opt in spec.get("options", []) if opt}
+        return text if (not allowed or text in allowed) else None
+    return str(val)[:512]
+
+
 async def _ws_handle_set_server_config(ws: WebSocket, data: dict, state: "ConnectionState") -> None:
     """Handle technical server settings that require STT worker restart on change."""
     global _stt_worker
@@ -1625,6 +1782,10 @@ async def _ws_handle_set_server_config(ws: WebSocket, data: dict, state: "Connec
         return
 
     stt_restart_needed = False
+
+    # Snapshot plugin enabled-state so we can detect which plugins were just
+    # turned on and enforce mutual exclusion (resolve_conflicts) after merging.
+    _plugins_enabled_before = {m["id"]: m["enabled"] for m in plugin_registry.manifests(_config)}
 
     if "vad_threshold" in data:
         try:
@@ -1713,32 +1874,44 @@ async def _ws_handle_set_server_config(ws: WebSocket, data: dict, state: "Connec
             if _stt_worker is not None:
                 _rebuild_stt_vocabulary()
 
-    # MeshCore plugin settings
-    if "meshcore_enabled" in data:
-        _config["meshcore_enabled"] = bool(data["meshcore_enabled"])
-    if "meshcore_serial_port" in data:
-        _config["meshcore_serial_port"] = str(data["meshcore_serial_port"]).strip()
-    if "meshcore_baud" in data:
-        try:
-            _config["meshcore_baud"] = int(data["meshcore_baud"])
-        except (TypeError, ValueError):
-            pass
-    if "meshcore_max_packet_length" in data:
-        try:
-            _config["meshcore_max_packet_length"] = max(1, int(data["meshcore_max_packet_length"]))
-        except (TypeError, ValueError):
-            pass
-    if "meshcore_prefix_separator" in data and isinstance(data["meshcore_prefix_separator"], str):
-        _config["meshcore_prefix_separator"] = data["meshcore_prefix_separator"][:16]
-    if "meshcore_channel_idx" in data:
-        try:
-            _config["meshcore_channel_idx"] = max(0, int(data["meshcore_channel_idx"]))
-        except (TypeError, ValueError):
-            pass
+    # Plugin settings — generic, namespaced. The frontend sends
+    #   data["plugins"] = {plugin_id: {"enabled": bool, "<field>": value, ...}}
+    # Each value is coerced/clamped against that plugin's declared config_schema;
+    # unknown keys are ignored so clients can't write arbitrary config.
+    incoming_plugins = data.get("plugins")
+    if isinstance(incoming_plugins, dict):
+        schema_by_id = {
+            m["id"]: {f["key"]: f for f in m["config_schema"]}
+            for m in plugin_registry.manifests(_config)
+        }
+        for pid, values in incoming_plugins.items():
+            if not isinstance(values, dict) or pid not in schema_by_id:
+                continue
+            fields = schema_by_id[pid]
+            clean: dict = {}
+            for key, val in values.items():
+                if key == "enabled":
+                    clean["enabled"] = bool(val)
+                    continue
+                spec = fields.get(key)
+                if spec is None:
+                    continue
+                clean[key] = _coerce_plugin_value(spec, val)
+            clean = {k: v for k, v in clean.items() if v is not None}
+            if clean:
+                _config.set_plugin_config(pid, clean)
+
+    # Enforce mutual exclusion: any plugin just turned on disables its conflicts.
+    _enabled_after = {m["id"]: m["enabled"] for m in plugin_registry.manifests(_config)}
+    _newly_enabled = [
+        pid for pid, on in _enabled_after.items()
+        if on and not _plugins_enabled_before.get(pid)
+    ]
+    plugin_registry.resolve_conflicts(_config, _newly_enabled)
 
     _config.save()
     await _manager.broadcast(_build_status())
-    # Let plugins react to the new config (MeshCore connects/disconnects here).
+    # Let plugins react to the new config (mesh bridges connect/disconnect here).
     await plugin_registry.dispatch_config_changed(_config)
 
     if stt_restart_needed and _stt_worker is not None and _stt_listening:
