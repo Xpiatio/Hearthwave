@@ -18,6 +18,7 @@ function makeConfig(overrides: Partial<ServerConfig> = {}): ServerConfig {
     vadThreshold: 0.5,
     whisperModel: 'small.en',
     whisperModelFinal: '',
+    gainMode: 'agc',
     squelchAdaptive: false,
     sttDebugCapture: false,
     txConditioning: false,
@@ -201,6 +202,7 @@ describe('ServerConfigPanel', () => {
       vad_threshold: 0.3,
       whisper_model: 'base.en',
       whisper_model_final: '',
+      stt_gain_mode: 'agc',
       squelch_adaptive: false,
       stt_debug_capture: false,
       tx_conditioning: false,
@@ -440,6 +442,29 @@ describe('ServerConfigPanel', () => {
       })
     )
   })
+
+  // -------------------------------------------------------------------------
+  // Gain control select
+  // -------------------------------------------------------------------------
+
+  it('saves the selected gain mode', async () => {
+    const onSave = vi.fn();
+    render(
+      <ServerConfigPanel
+        {...makeDefaultProps({ gainMode: 'agc' })}
+        onSave={onSave}
+      />
+    );
+
+    // open the "Gain control" select and choose "Simple RMS"
+    fireEvent.mouseDown(screen.getByLabelText('Gain control'));
+    fireEvent.click(await screen.findByText(/Simple RMS/));
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ stt_gain_mode: 'rms' }),
+    );
+  });
 
   // -------------------------------------------------------------------------
   // Rescan vocabulary button

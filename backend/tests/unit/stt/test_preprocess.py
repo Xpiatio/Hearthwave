@@ -36,13 +36,31 @@ def test_denoise_disabled_skips_denoise(sos, monkeypatch):
     assert calls == []
 
 
-def test_agc_disabled_skips_agc(sos, monkeypatch):
-    calls = []
+def test_gain_mode_off_skips_gain(sos, monkeypatch):
+    agc_calls, rms_calls = [], []
     import backend.stt.preprocess as mod
-    monkeypatch.setattr(mod, "dynamic_agc", lambda *a, **k: calls.append(a) or a[0])
-    audio = _tone_with_noise()
-    preprocess_segment(audio, SAMPLE_RATE, sos, agc_enabled=False)
-    assert calls == []
+    monkeypatch.setattr(mod, "dynamic_agc", lambda *a, **k: agc_calls.append(a) or a[0])
+    monkeypatch.setattr(mod, "normalize_rms", lambda *a, **k: rms_calls.append(a) or a[0])
+    preprocess_segment(_tone_with_noise(), SAMPLE_RATE, sos, gain_mode="off")
+    assert agc_calls == [] and rms_calls == []
+
+
+def test_gain_mode_agc_uses_dynamic_agc(sos, monkeypatch):
+    agc_calls, rms_calls = [], []
+    import backend.stt.preprocess as mod
+    monkeypatch.setattr(mod, "dynamic_agc", lambda *a, **k: agc_calls.append(a) or a[0])
+    monkeypatch.setattr(mod, "normalize_rms", lambda *a, **k: rms_calls.append(a) or a[0])
+    preprocess_segment(_tone_with_noise(), SAMPLE_RATE, sos, gain_mode="agc")
+    assert len(agc_calls) == 1 and rms_calls == []
+
+
+def test_gain_mode_rms_uses_normalize_rms(sos, monkeypatch):
+    agc_calls, rms_calls = [], []
+    import backend.stt.preprocess as mod
+    monkeypatch.setattr(mod, "dynamic_agc", lambda *a, **k: agc_calls.append(a) or a[0])
+    monkeypatch.setattr(mod, "normalize_rms", lambda *a, **k: rms_calls.append(a) or a[0])
+    preprocess_segment(_tone_with_noise(), SAMPLE_RATE, sos, gain_mode="rms")
+    assert len(rms_calls) == 1 and agc_calls == []
 
 
 def test_prop_decrease_forwarded_to_denoise(sos, monkeypatch):
@@ -62,13 +80,13 @@ def test_bandpass_attenuates_out_of_band_tone(sos):
     # AGC active the in-band energy must collapse relative to a 1 kHz tone.
     low = _tone_with_noise(freq=100.0, noise=0.0)
     mid = _tone_with_noise(freq=1000.0, noise=0.0)
-    out_low = preprocess_segment(low, SAMPLE_RATE, sos, denoise_enabled=False, agc_enabled=False)
-    out_mid = preprocess_segment(mid, SAMPLE_RATE, sos, denoise_enabled=False, agc_enabled=False)
+    out_low = preprocess_segment(low, SAMPLE_RATE, sos, denoise_enabled=False, gain_mode="off")
+    out_mid = preprocess_segment(mid, SAMPLE_RATE, sos, denoise_enabled=False, gain_mode="off")
     assert np.sqrt(np.mean(out_low**2)) < 0.05 * np.sqrt(np.mean(out_mid**2))
 
 
 def test_all_stages_disabled_still_bandpasses(sos):
     audio = _tone_with_noise()
-    out = preprocess_segment(audio, SAMPLE_RATE, sos, denoise_enabled=False, agc_enabled=False)
+    out = preprocess_segment(audio, SAMPLE_RATE, sos, denoise_enabled=False, gain_mode="off")
     assert out.dtype == np.float32
     assert not np.array_equal(out, audio)

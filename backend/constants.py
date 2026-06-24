@@ -29,6 +29,8 @@ UNSET_FIELD = "N/A"
 def validate_voice_path(voice_path: str) -> bool:
     return bool(voice_path) and os.path.isfile(voice_path)
 
+GAIN_MODES: tuple[str, ...] = ("agc", "rms", "off")
+
 HALLUCINATIONS: frozenset[str] = frozenset({
     # Common single-word/phrase Whisper hallucinations on silence
     "you", "thank you", "thanks", "thanks for watching",
