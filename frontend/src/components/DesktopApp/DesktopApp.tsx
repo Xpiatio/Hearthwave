@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Box, Snackbar, Alert } from '@mui/material';
+import { Box, Snackbar, Alert, Dialog } from '@mui/material';
 import { TopBar } from '../TopBar/TopBar';
 import { ChatDisplay } from '../ChatDisplay/ChatDisplay';
 import type { ChatEntry } from '../ChatDisplay/ChatDisplay';
@@ -307,24 +307,10 @@ export function DesktopApp({
         onTxAbort={onTxAbort}
       />
 
-      <>
-        {showAttendance && (
-          <AttendancePanel stations={attendanceStations} onClear={onClearAttendance} />
-        )}
-        {showJournal && (
-          <JournalPanel
-            journals={journals} pendingResult={journalResult} generating={journalGenerating}
-            journalError={journalError} rxTexts={rxTexts} rxCallsigns={rxCallsigns}
-            onListJournals={onListJournals} onGenerate={onGenerate} onSave={onSaveJournal}
-            onDelete={onDeleteJournal} onPublish={onPublishJournal} onUnpublish={onUnpublishJournal}
-            onDismissResult={onDismissJournalResult}
-          />
-        )}
-        {showNcs && ncsEnabled && (
-          <NCSPanel send={send} lastMessage={lastMessage} contacts={contacts}
-                    channelClear={channelClear} transmitting={transmitting} />
-        )}
-      </>
+      {showNcs && ncsEnabled && (
+        <NCSPanel send={send} lastMessage={lastMessage} contacts={contacts}
+                  channelClear={channelClear} transmitting={transmitting} />
+      )}
 
       <PendingStationsBar
         stations={pendingStations}
@@ -369,6 +355,35 @@ export function DesktopApp({
           composeHint={txComposition?.hint}
         />
       )}
+
+      <Dialog
+        open={showAttendance}
+        onClose={onToggleAttendance}
+        maxWidth="lg"
+        fullWidth
+        slotProps={{ paper: { sx: { height: '80vh' } } }}
+        aria-label="Stations heard this session"
+      >
+        <AttendancePanel stations={attendanceStations} onClear={onClearAttendance} fillHeight />
+      </Dialog>
+
+      <Dialog
+        open={showJournal}
+        onClose={onToggleJournal}
+        maxWidth="lg"
+        fullWidth
+        slotProps={{ paper: { sx: { height: '80vh' } } }}
+        aria-label="Session journal"
+      >
+        <JournalPanel
+          journals={journals} pendingResult={journalResult} generating={journalGenerating}
+          journalError={journalError} rxTexts={rxTexts} rxCallsigns={rxCallsigns}
+          onListJournals={onListJournals} onGenerate={onGenerate} onSave={onSaveJournal}
+          onDelete={onDeleteJournal} onPublish={onPublishJournal} onUnpublish={onUnpublishJournal}
+          onDismissResult={onDismissJournalResult}
+          fillHeight
+        />
+      </Dialog>
 
       <ContactsDialog
         open={showContacts}
