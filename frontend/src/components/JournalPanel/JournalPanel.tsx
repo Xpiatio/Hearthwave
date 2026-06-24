@@ -47,6 +47,8 @@ interface Props {
   onPublish: (file_path: string) => void;
   onUnpublish: (file_path: string) => void;
   onDismissResult: () => void;
+  /** When true the panel fills its container's height (e.g. inside a Dialog) instead of capping at 360px. */
+  fillHeight?: boolean;
 }
 
 function CallsignsTable({ rows }: { rows: Array<{ callsign: string; location: string }> }) {
@@ -86,6 +88,7 @@ export function JournalPanel({
   onPublish,
   onUnpublish,
   onDismissResult,
+  fillHeight = false,
 }: Props) {
   const [selected, setSelected] = useState<JournalEntry | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -168,7 +171,7 @@ export function JournalPanel({
         display: 'flex',
         borderBottom: 1,
         borderColor: 'divider',
-        maxHeight: 360,
+        ...(fillHeight ? { height: '100%' } : { maxHeight: 360 }),
         overflow: 'hidden',
       }}
     >
