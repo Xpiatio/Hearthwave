@@ -20,7 +20,7 @@ show how it's done.
 Hearthwave is a fork of GMRS-TTY that replaces the desktop PySide6 UI with a
 browser-based React frontend communicating over WebSocket.
 
-> **Latest release:** v2.10.1
+> **Latest release:** v2.11.0
 
 ## Who uses it
 
@@ -34,6 +34,10 @@ browser-based React frontend communicating over WebSocket.
 
 ## Features
 
+- **Stations & Journal open full-size** — on tablets and desktop, the Stations
+  and Journal views now open as centered modal dialogs (the same treatment as
+  Contacts), filling the window instead of a cramped inline strip. Phones keep
+  their bottom-navigation tabs
 - **Selectable audio gain stage** — choose how receive audio is leveled before
   transcription, right from admin Settings: dynamic AGC (default), a gentler
   one-shot RMS normalize, or off. The offline STT eval harness can A/B all three
@@ -129,7 +133,7 @@ The interface uses a navy/blue design language that matches the
 ┌──────────────────────────── TopBar ─────────────────────────────┐
 │ Callsign · Status · PTT · ABORT TX · Waterfall · Account        │
 ├─────────────────────────────────────────────────────────────────┤
-│  Panels (when opened): NCS · Journals · Attendance — fixed order  │
+│  NCS panel (when opened) · Stations/Journal open as modal dialogs │
 ├─────────────────────────────────────────────────────────────────┤
 │  Pending Stations bar                                             │
 ├──────────────────────────┬──────────────────────────────────────┤
