@@ -1,6 +1,6 @@
 # Hearthwave User Manual
 
-> **Version:** v2.10.0
+> **Version:** v2.10.1
 
 This manual covers day-to-day operation of Hearthwave as a GMRS family hub or neighborhood watch base station — a shared radio operating station where every household member or watch volunteer connects from their own device. For installation and server setup, see [README.md](README.md).
 
@@ -86,7 +86,7 @@ The **login screen** appears automatically. Select your name from the profile li
 
 **New to the station?** Your administrator creates your account and gives you your initial password. You can change it any time via the account menu (see [Your account](#14-your-account)).
 
-The login screen shows the **Hearthwave logo** and an **About** link beneath the sign-in form. The About link displays the running version (e.g. *v2.10.0*) and opens the **About Hearthwave** dialog with project links and FCC information. Once signed in, you can reopen this dialog any time from the **logo in the top bar** or the **About Hearthwave** entry in the account menu.
+The login screen shows the **Hearthwave logo** and an **About** link beneath the sign-in form. The About link displays the running version (e.g. *v2.10.1*) and opens the **About Hearthwave** dialog with project links and FCC information. Once signed in, you can reopen this dialog any time from the **logo in the top bar** or the **About Hearthwave** entry in the account menu.
 
 If the server is unreachable, the status bar shows **OFFLINE** in amber. Refresh the page or contact your administrator.
 
@@ -738,6 +738,7 @@ These settings live in the **Settings** dialog, opened from the **Settings** ent
 | Final-pass model | Optional larger model that re-transcribes each completed transmission in full once the other station unkeys, replacing the live partial text with a more accurate final. The final pass never truncates a long transmission or drops a callsign the live pass already heard — if it returns a short or empty result, the complete live text is kept. Choose **Off** for single-pass, or a larger model such as `distil-large-v3` (recommended). The model must be staged first (see below) and adds ~1.5 GB RAM only while active. Changing this restarts the STT worker. |
 | Final-pass device | Where the whole-utterance final pass runs: `auto` (GPU if a ROCm GPU is present, else CPU), `gpu`, or `cpu`. Requires the ROCm deployment profile to use GPU. See [section 25](#25-deployment-profiles-and-gpu-acceleration-admin). |
 | Adaptive squelch | Tracks the channel noise floor and opens at 3× it, so weak carriers pre-trigger audio capture instead of clipping the first word. Leave off on consistently strong signals; enable on noisy or distant channels. Restarts the STT worker. |
+| Gain control | How received audio is leveled before transcription. **Dynamic AGC** (default) rides the level continuously with a fast attack and slow release; **Simple RMS** applies one steady gain to hit a target loudness (gentler, no pumping); **Off** disables leveling entirely. If transcription seems to mishear during loud/quiet swings or "breathy" passages, try Simple RMS. Tune objectively with the STT eval harness's `--gain-mode {agc,rms,off}` flag against captured audio. Changing this restarts the STT worker. |
 | TX conditioning | Band-limits, compresses, and levels synthesized speech before it drives the radio's microphone input — clearer over narrowband FM. Browser read-aloud is unaffected. Takes effect immediately. |
 | STT debug capture | Saves raw / segmented / processed audio plus transcripts for each utterance, for offline word-error-rate evaluation. For tuning only — leave off in normal operation. Restarts the STT worker. |
 | Saved Phrases | A list of phrases Whisper is pre-loaded with as vocabulary hints to improve recognition accuracy. Common radio phrases ("break break", "QSL", "copy that") are included by default. Add any group-specific phrases — net names, operator handles, local shorthand — to help Whisper recognise them consistently. Changes take effect immediately without an STT restart. |
@@ -749,7 +750,7 @@ These settings live in the **Settings** dialog, opened from the **Settings** ent
 
 > Plugin settings — including the MeshCore and Meshtastic mesh-bridge example plugins — are no longer on the System tab. They now live on the **Plugins** tab (see [section 22](#22-plugins)).
 
-> Changes to VAD threshold, Whisper model, Final-pass model, Adaptive squelch, or STT debug capture trigger a live STT worker restart and will briefly interrupt transcription. TX conditioning and Saved Phrases changes take effect immediately.
+> Changes to VAD threshold, Whisper model, Final-pass model, Adaptive squelch, Gain control, or STT debug capture trigger a live STT worker restart and will briefly interrupt transcription. TX conditioning and Saved Phrases changes take effect immediately.
 
 ### Staging the final-pass model
 
