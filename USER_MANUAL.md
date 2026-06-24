@@ -1,6 +1,6 @@
 # Hearthwave User Manual
 
-> **Version:** v2.10.1
+> **Version:** v2.11.0
 
 This manual covers day-to-day operation of Hearthwave as a GMRS family hub or neighborhood watch base station — a shared radio operating station where every household member or watch volunteer connects from their own device. For installation and server setup, see [README.md](README.md).
 
@@ -86,7 +86,7 @@ The **login screen** appears automatically. Select your name from the profile li
 
 **New to the station?** Your administrator creates your account and gives you your initial password. You can change it any time via the account menu (see [Your account](#14-your-account)).
 
-The login screen shows the **Hearthwave logo** and an **About** link beneath the sign-in form. The About link displays the running version (e.g. *v2.10.1*) and opens the **About Hearthwave** dialog with project links and FCC information. Once signed in, you can reopen this dialog any time from the **logo in the top bar** or the **About Hearthwave** entry in the account menu.
+The login screen shows the **Hearthwave logo** and an **About** link beneath the sign-in form. The About link displays the running version (e.g. *v2.11.0*) and opens the **About Hearthwave** dialog with project links and FCC information. Once signed in, you can reopen this dialog any time from the **logo in the top bar** or the **About Hearthwave** entry in the account menu.
 
 If the server is unreachable, the status bar shows **OFFLINE** in amber. Refresh the page or contact your administrator.
 
@@ -105,7 +105,7 @@ The desktop shows all panels simultaneously:
 ┌──────────────────────────── TopBar ─────────────────────────────┐
 │ Callsign ●  [PTT]  [ABORT TX]  [Spectrogram]  [👤]              │
 ├──────────────────────────────────────────────────────────────────┤
-│ Panels (when opened): NCS · Journals · Attendance — fixed order   │
+│ NCS panel (when opened) · Stations/Journal open as dialogs        │
 ├──────────────────────────────────────────────────────────────────┤
 │ Pending Stations                                                   │
 ├──────────────────────────┬───────────────────────────────────────┤
@@ -123,9 +123,12 @@ The desktop shows all panels simultaneously:
   appear with a green `[RX]` label; sent messages with a blue `[TX]` label;
   operator chat with a `[CHAT]` label. See
   [Shared, persisted message log](#shared-persisted-message-log).
-- **Panels** — NCS, Journals, Attendance, and any installed plugins appear in a
-  fixed order when opened. Each panel has a coloured gradient header: NCS uses a
-  blue gradient; Journals and Attendance use a darker navy gradient.
+- **Panels & dialogs** — on tablets and desktop, **Stations** and **Journals**
+  open as centered modal dialogs that fill most of the window (the same as
+  **Contacts**); close them with the toolbar button, the Escape key, or by
+  clicking outside. The NCS panel and any installed plugin panels still appear
+  inline above the chat. Each has a coloured gradient header: NCS uses a blue
+  gradient; Journals and Stations use a darker navy gradient.
 - **StatusRow** — bottom bar showing radio status (READY / OFFLINE /
   TRANSMITTING), audio device, and connection count.
 
