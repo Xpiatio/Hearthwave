@@ -15,11 +15,22 @@ import type { AttendanceStation } from '../../types/ws';
 interface Props {
   stations: AttendanceStation[];
   onClear: () => void;
+  /** When true the panel fills its container's height (e.g. inside a Dialog) instead of sizing to content. */
+  fillHeight?: boolean;
 }
 
-export function AttendancePanel({ stations, onClear }: Props) {
+export function AttendancePanel({ stations, onClear, fillHeight = false }: Props) {
   return (
-    <Paper square elevation={0} sx={{ borderBottom: 1, borderColor: 'divider', overflow: 'hidden' }}>
+    <Paper
+      square
+      elevation={0}
+      sx={{
+        borderBottom: 1,
+        borderColor: 'divider',
+        overflow: 'hidden',
+        ...(fillHeight && { height: '100%', display: 'flex', flexDirection: 'column' }),
+      }}
+    >
       <Box
         sx={{
           background: 'linear-gradient(135deg, #1A3A5C 0%, #1E4976 100%)',
@@ -28,6 +39,7 @@ export function AttendancePanel({ stations, onClear }: Props) {
           alignItems: 'center',
           px: 2,
           py: 1,
+          flexShrink: 0,
         }}
       >
         <Typography variant="h6" sx={{ fontWeight: 700, color: '#F9FAFB' }}>
@@ -44,7 +56,7 @@ export function AttendancePanel({ stations, onClear }: Props) {
         </Button>
       </Box>
 
-      <Box sx={{ px: 2, py: 1 }}>
+      <Box sx={{ px: 2, py: 1, ...(fillHeight && { flex: 1, overflowY: 'auto' }) }}>
         {stations.length === 0 ? (
           <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
             No stations heard yet.
