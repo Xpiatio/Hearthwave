@@ -16,6 +16,8 @@ import os
 import tempfile
 from pathlib import Path
 
+from backend.constants import GAIN_MODES
+
 _log = logging.getLogger(__name__)
 
 CONFIG_FILE = Path(os.environ.get("RADIO_TTY_CONFIG", "/data/config.json"))
@@ -85,6 +87,14 @@ class ServerConfig(dict):
         'auto' (GPU if a ROCm GPU is present, else CPU), 'gpu', or 'cpu'."""
         val = str(self.get("stt_final_device", "auto")).strip().lower()
         return val if val in ("auto", "gpu", "cpu") else "auto"
+
+    @property
+    def stt_gain_mode(self) -> str:
+        """Gain stage applied after bandpass/denoise, before transcription:
+        'agc' (dynamic attack/release AGC), 'rms' (one-shot RMS normalize),
+        or 'off' (no gain)."""
+        val = str(self.get("stt_gain_mode", "agc")).strip().lower()
+        return val if val in GAIN_MODES else "agc"
 
     @property
     def squelch_open_threshold(self) -> float:

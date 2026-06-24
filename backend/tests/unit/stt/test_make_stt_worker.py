@@ -31,6 +31,7 @@ def test_passes_stt_accuracy_config_keys():
         "stt_final_max_s": 45.0,
         "stt_debug_capture": True,
         "stt_debug_dir": "/tmp/dbg",
+        "stt_gain_mode": "rms",
     })
     kw = _capture_worker_kwargs(cfg)
 
@@ -42,6 +43,7 @@ def test_passes_stt_accuracy_config_keys():
     assert kw["final_max_s"] == 45.0
     assert kw["debug_capture"] is True
     assert kw["debug_dir"] == "/tmp/dbg"
+    assert kw["gain_mode"] == "rms"
 
 
 def test_defaults_when_keys_absent():
@@ -53,6 +55,7 @@ def test_defaults_when_keys_absent():
     assert kw["min_speech_s"] == 0.4
     assert kw["whisper_model_final"] == ""
     assert kw["debug_capture"] is False
+    assert kw["gain_mode"] == "agc"
 
 
 def test_sentinel_input_device_normalized_to_none():

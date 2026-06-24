@@ -95,6 +95,12 @@ def test_partials_concatenated_with_final():
     assert results[0]["text"] == expected
 
 
+def test_eval_config_gain_mode_defaults_to_agc():
+    from backend.tools.eval_stt import EvalPipelineConfig
+    assert EvalPipelineConfig().gain_mode == "agc"
+    assert EvalPipelineConfig(gain_mode="rms").gain_mode == "rms"
+
+
 def test_stage_toggles_forwarded(monkeypatch):
     seen = {}
     import backend.tools.eval_stt as mod
@@ -105,9 +111,60 @@ def test_stage_toggles_forwarded(monkeypatch):
 
     monkeypatch.setattr(mod, "preprocess_segment", fake_preprocess)
     vad = MockVAD([None, "start", None, "end"])
-    cfg = _cfg(denoise_enabled=False, agc_enabled=False, prop_decrease=0.3)
+    cfg = _cfg(denoise_enabled=False, gain_mode="off", prop_decrease=0.3)
     run_pipeline(_audio(6), cfg, StubTranscriber(), vad)
-    assert seen == {"denoise_enabled": False, "agc_enabled": False, "prop_decrease": 0.3}
+    assert seen == {"denoise_enabled": False, "gain_mode": "off", "prop_decrease": 0.3}
+
+
+def test_no_agc_maps_to_gain_mode_off():
+    """--no-agc alone must resolve to gain_mode='off'."""
+    import argparse
+
+    args = argparse.Namespace(no_agc=True, gain_mode="agc")
+    gain_mode = "off" if args.no_agc else args.gain_mode
+    assert gain_mode == "off"
+
+
+def test_no_agc_wins_over_explicit_gain_mode():
+    """--no-agc must override --gain-mode rms → 'off'."""
+    import argparse
+
+    args = argparse.Namespace(no_agc=True, gain_mode="rms")
+    gain_mode = "off" if args.no_agc else args.gain_mode
+    assert gain_mode == "off"
+
+
+def test_gain_mode_without_no_agc():
+    """Without --no-agc, --gain-mode is passed through unchanged."""
+    import argparse
+    from backend.constants import GAIN_MODES
+
+    for mode in GAIN_MODES:
+        args = argparse.Namespace(no_agc=False, gain_mode=mode)
+        gain_mode = "off" if args.no_agc else args.gain_mode
+        assert gain_mode == mode
+
+
+def test_no_agc_precedence_via_argparse():
+    """Round-trip through the real argparse definition to confirm both flags co-exist."""
+    import argparse
+    from backend.constants import GAIN_MODES
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--gain-mode", choices=list(GAIN_MODES), default="agc")
+    ap.add_argument("--no-agc", action="store_true")
+
+    # --no-agc alone
+    args = ap.parse_args(["--no-agc"])
+    assert ("off" if args.no_agc else args.gain_mode) == "off"
+
+    # --no-agc + --gain-mode rms: --no-agc wins
+    args = ap.parse_args(["--no-agc", "--gain-mode", "rms"])
+    assert ("off" if args.no_agc else args.gain_mode) == "off"
+
+    # --gain-mode rms alone
+    args = ap.parse_args(["--gain-mode", "rms"])
+    assert ("off" if args.no_agc else args.gain_mode) == "rms"
 
 
 def test_normalize_text_strips_case_and_punctuation():

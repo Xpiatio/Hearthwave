@@ -108,7 +108,7 @@ from backend.ai.gemini_client import generate_journal as _gemini_generate
 from backend.audio.capture import enumerate_monitor_sources
 from backend.audio.spectro_task import SpectroTask
 from backend.config import ServerConfig
-from backend.constants import normalize_service, utc_now_iso
+from backend.constants import GAIN_MODES, normalize_service, utc_now_iso
 from backend.fcc.auto_add import CallsignLookupWorker
 from backend.fcc.crossref import apply_verification, verify_callsign
 from backend.fcc.id_rule import (
@@ -502,6 +502,7 @@ def _make_stt_worker() -> STTWorker:
         whisper_model_final=_config.whisper_model_final,
         final_max_s=_config.stt_final_max_s,
         stt_final_device=_config.stt_final_device,
+        gain_mode=_config.stt_gain_mode,
         on_audio_level=_on_stt_audio_level,
         on_audio_chunk=_audio_chunk_fanout,
         on_capture_event=_on_stt_capture_event,
@@ -1209,6 +1210,7 @@ def _build_status() -> dict:
         "vad_threshold": float(_config.vad_threshold) if _config else 0.5,
         "whisper_model": (_config.whisper_model if _config else "small.en"),
         "whisper_model_final": (_config.whisper_model_final if _config else ""),
+        "stt_gain_mode": (_config.stt_gain_mode if _config else "agc"),
         "squelch_adaptive": bool(_config.squelch_adaptive) if _config else False,
         "stt_debug_capture": bool(_config.stt_debug_capture) if _config else False,
         "tx_conditioning": bool(_config.tx_conditioning) if _config else False,
@@ -1807,6 +1809,12 @@ async def _ws_handle_set_server_config(ws: WebSocket, data: dict, state: "Connec
         # Empty string disables the second pass.
         if (model == "" or model in VALID_WHISPER_MODELS) and model != _config.whisper_model_final:
             _config["whisper_model_final"] = model
+            stt_restart_needed = True
+
+    if "stt_gain_mode" in data:
+        mode = str(data["stt_gain_mode"]).strip().lower()
+        if mode in GAIN_MODES and mode != _config.stt_gain_mode:
+            _config["stt_gain_mode"] = mode
             stt_restart_needed = True
 
     if "tx_conditioning" in data:

@@ -43,12 +43,22 @@ Useful experiments:
 
 ```
 --no-denoise              # is noisereduce helping or hurting on FM static?
---no-agc --no-lowpass     # isolate individual DSP stages
+--gain-mode {agc,rms,off} # gain stage after bandpass/denoise (default: agc)
+--no-lowpass              # isolate individual DSP stages
 --model medium.en         # bigger model on identical audio
 --vad-threshold 0.35      # earlier VAD onset in noise
 --squelch-threshold 0.03  # weaker-carrier pre-trigger
 --min-speech-s 0.25       # do short replies ("copy") survive?
 --json                    # machine-readable output for tracking over time
+```
+
+Note: `--no-agc` is a deprecated alias for `--gain-mode off`.
+
+A/B comparison with different gain modes:
+
+```bash
+python -m backend.tools.eval_stt --audio /data/debug/stt --gain-mode rms --json > rms.json
+python -m backend.tools.eval_stt --audio /data/debug/stt --gain-mode off --json > nogain.json
 ```
 
 Unlabelled captures are skipped and counted in the summary. Compare corpus

@@ -49,10 +49,17 @@ const FINAL_WHISPER_MODELS = [
   { value: 'distil-large-v3', label: 'distil-large-v3 — recommended' },
 ];
 
+const GAIN_MODES = [
+  { value: 'agc', label: 'Dynamic AGC — attack/release (default)' },
+  { value: 'rms', label: 'Simple RMS normalize' },
+  { value: 'off', label: 'Off — no gain' },
+];
+
 export interface ServerConfig {
   vadThreshold: number;
   whisperModel: string;
   whisperModelFinal: string;
+  gainMode: string;
   squelchAdaptive: boolean;
   sttDebugCapture: boolean;
   txConditioning: boolean;
@@ -72,6 +79,7 @@ export interface ServerConfigSaveValues {
   vad_threshold: number;
   whisper_model: string;
   whisper_model_final: string;
+  stt_gain_mode: string;
   squelch_adaptive: boolean;
   stt_debug_capture: boolean;
   tx_conditioning: boolean;
@@ -113,6 +121,7 @@ function valuesFromConfig(c: ServerConfig): ServerConfigSaveValues {
     vad_threshold: c.vadThreshold,
     whisper_model: c.whisperModel,
     whisper_model_final: c.whisperModelFinal,
+    stt_gain_mode: c.gainMode,
     squelch_adaptive: c.squelchAdaptive,
     stt_debug_capture: c.sttDebugCapture,
     tx_conditioning: c.txConditioning,
@@ -137,6 +146,7 @@ export const ServerConfigPanel = forwardRef<ServerConfigPanelHandle, Props>(func
   const [vadThreshold, setVadThreshold] = useState(0.5);
   const [whisperModel, setWhisperModel] = useState('small.en');
   const [whisperModelFinal, setWhisperModelFinal] = useState('');
+  const [gainMode, setGainMode] = useState('agc');
   const [squelchAdaptive, setSquelchAdaptive] = useState(false);
   const [sttDebugCapture, setSttDebugCapture] = useState(false);
   const [txConditioning, setTxConditioning] = useState(false);
@@ -161,6 +171,7 @@ export const ServerConfigPanel = forwardRef<ServerConfigPanelHandle, Props>(func
     setVadThreshold(config.vadThreshold);
     setWhisperModel(config.whisperModel);
     setWhisperModelFinal(config.whisperModelFinal);
+    setGainMode(config.gainMode);
     setSquelchAdaptive(config.squelchAdaptive);
     setSttDebugCapture(config.sttDebugCapture);
     setTxConditioning(config.txConditioning);
@@ -205,6 +216,7 @@ export const ServerConfigPanel = forwardRef<ServerConfigPanelHandle, Props>(func
       vad_threshold: vadThreshold,
       whisper_model: whisperModel,
       whisper_model_final: whisperModelFinal,
+      stt_gain_mode: gainMode,
       squelch_adaptive: squelchAdaptive,
       stt_debug_capture: sttDebugCapture,
       tx_conditioning: txConditioning,
@@ -280,6 +292,20 @@ export const ServerConfigPanel = forwardRef<ServerConfigPanelHandle, Props>(func
             (e.g. <code>setup.sh --final-model distil-large-v3</code>) and adds ~1.5&nbsp;GB
             RAM while active.
           </Typography>
+
+          <FormControl fullWidth size="small" sx={{ mt: 2 }}>
+            <InputLabel id="gain-mode-label">Gain control</InputLabel>
+            <Select
+              labelId="gain-mode-label"
+              label="Gain control"
+              value={gainMode}
+              onChange={(e) => setGainMode(e.target.value)}
+            >
+              {GAIN_MODES.map((m) => (
+                <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
 
           <Box>
             <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
