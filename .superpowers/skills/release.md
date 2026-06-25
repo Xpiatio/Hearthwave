@@ -1,6 +1,6 @@
 ---
 name: release
-description: Use when cutting a release — guides updating README, USER_MANUAL, and docs/index.html with the new version and feature additions before tagging.
+description: Use when cutting a release — guides updating README and USER_MANUAL with new features, and bumping the version stamp in docs/index.html, before tagging. The landing-page feature grid is curated, not a changelog.
 ---
 
 # Release Docs Update
@@ -85,24 +85,26 @@ Step-by-step or prose explanation. Include any keyboard shortcuts, UI element na
 
 ## Step 6 — Update docs/index.html
 
-The version badge appears in **two places** — update both:
+### 6a — Bump the version stamp
 
-1. Around line 102 — in the hero/nav area:
-   ```
-   <span ...>vOLD_VERSION</span>  →  <span ...>vNEW_VERSION</span>
-   ```
-
-2. Around line 559 — in the footer badges:
-   ```
-   <li ...>vOLD_VERSION</li>  →  <li ...>vNEW_VERSION</li>
-   ```
-
-Find both with:
+There is **one** version stamp, in the footer release line. Find it with:
 ```bash
 grep -n "v[0-9]\+\.[0-9]\+\.[0-9]\+" docs/index.html
 ```
+Update `vOLD_VERSION` → `vNEW_VERSION` there. (If a future redesign adds a second stamp, this grep will surface it — update every match.)
 
-Also locate the features/highlights section on the page (search for the section that lists feature cards or bullet features) and add cards/entries for significant new capabilities, matching the existing style.
+### 6b — Curate the feature grid — do NOT append a changelog
+
+**The landing page is a marketing page, not a changelog.** The feature cards in the `#features` bento grid highlight the product's *key, durable capabilities* — they are not a per-release log.
+
+Rules:
+- **Never add a version tag to a card.** Card labels (`<span class="k">`) are topical — `RX`, `TX`, `PLUGINS`, `AUDIO` — never `· v2.x`.
+- **Default to changing nothing.** Most releases (fixes, polish, incremental UI tweaks) need no new card. A release earns a card only if it adds a *headline capability a new visitor would care about*.
+- When a release does warrant a card, prefer **folding it into an existing thematic card** (e.g. a new audio option belongs in the existing `AUDIO` card) over adding a new one.
+- Add a genuinely new card only for a major new capability with no existing home. If the grid is getting long (>~12 cards), **retire or merge** a weaker card rather than letting it grow.
+- Keep copy benefit-led and short — no benchmark figures or implementation detail (that belongs in USER_MANUAL.md, Step 5).
+
+If in doubt, leave the grid alone. The version stamp in 6a is the only mandatory edit in this file.
 
 ## Step 7 — Commit the doc updates
 
@@ -120,7 +122,7 @@ Tell the user:
 > "Docs updated for vNEW_VERSION. Here is a summary of what changed:
 > - README.md: added N feature bullets
 > - USER_MANUAL.md: added/updated N sections
-> - docs/index.html: bumped version badges, added N feature entries
+> - docs/index.html: bumped the version stamp (and curated the feature grid only if a headline capability warranted it)
 >
 > Review with: `git show HEAD`
 >
