@@ -267,8 +267,10 @@ section{ padding:92px 0; }
 .pill p{ color:var(--text-soft); font-size:14.5px; margin:0; }
 
 /* printable reference cards */
-.tmpls{ display:grid; grid-template-columns:repeat(auto-fit,minmax(214px,1fr)); gap:18px; }
-.pill.tmpl{ display:flex; flex-direction:column; color:inherit; }
+.tmpls{ display:flex; flex-wrap:wrap; justify-content:center; gap:18px; }
+.pill.tmpl{ display:flex; flex-direction:column; color:inherit; flex:0 1 calc(33.333% - 12px); }
+@media(max-width:780px){ .pill.tmpl{ flex-basis:calc(50% - 9px); } }
+@media(max-width:520px){ .pill.tmpl{ flex-basis:100%; } }
 .pill.tmpl:hover h3{ color:var(--cyan); }
 .pill.tmpl p{ flex:1; }
 .pill .meta{ display:inline-flex; align-items:center; gap:8px; margin-top:16px; font-family:'Space Mono',monospace; font-size:10.5px; font-weight:700; letter-spacing:.15em; color:var(--text-dim); }
