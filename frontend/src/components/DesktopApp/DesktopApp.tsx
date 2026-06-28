@@ -11,6 +11,8 @@ import { JournalPanel } from '../JournalPanel/JournalPanel';
 import { NCSPanel } from '../NCSPanel/NCSPanel';
 import { Spectrogram } from '../Spectrogram/Spectrogram';
 import type { SpectrogramHandle } from '../Spectrogram/Spectrogram';
+import { AudioLevelMeter } from '../AudioLevelMeter/AudioLevelMeter';
+import type { AudioLevelMeterHandle } from '../AudioLevelMeter/AudioLevelMeter';
 import { QuickMessages } from '../QuickMessages/QuickMessages';
 import { ContactsDialog } from '../ContactsDialog/ContactsDialog';
 import { PendingStationsBar } from '../PendingStationsBar/PendingStationsBar';
@@ -107,6 +109,7 @@ export interface DesktopAppProps {
   sttListening: boolean;
   darkMode: boolean;
   showWaterfall: boolean;
+  showLevelMeter: boolean;
   onToggleServiceMode: () => void;
   onToggleListenOnly: () => void;
   onToggleReadAloud: () => void;
@@ -114,6 +117,7 @@ export interface DesktopAppProps {
   onToggleSttListening: () => void;
   onToggleDark: () => void;
   onToggleWaterfall: () => void;
+  onToggleLevelMeter: () => void;
   onClearChat: () => void;
 
   // Panel visibility
@@ -147,6 +151,8 @@ export interface DesktopAppProps {
   onDismissAllPending: () => void;
   // Spectrogram ref (owned by App.tsx because the WS handler pushes rows to it)
   spectroRef: React.RefObject<SpectrogramHandle>;
+  // RX level meter ref (owned by App.tsx; fed from the same spectrogram_row stream)
+  levelMeterRef: React.RefObject<AudioLevelMeterHandle>;
 
   // Snackbars
   publishSnack: string | null;
@@ -212,6 +218,7 @@ export function DesktopApp({
   sttListening,
   darkMode,
   showWaterfall,
+  showLevelMeter,
   onToggleServiceMode,
   onToggleListenOnly,
   onToggleReadAloud,
@@ -219,6 +226,7 @@ export function DesktopApp({
   onToggleSttListening,
   onToggleDark,
   onToggleWaterfall,
+  onToggleLevelMeter,
   onClearChat,
   showAttendance,
   showJournal,
@@ -244,6 +252,7 @@ export function DesktopApp({
   onDismissPending,
   onDismissAllPending,
   spectroRef,
+  levelMeterRef,
   publishSnack,
   errorSnack,
   journalSavedSnack,
@@ -284,6 +293,8 @@ export function DesktopApp({
         onToggleNcs={onToggleNcs}
         showWaterfall={showWaterfall}
         onToggleWaterfall={onToggleWaterfall}
+        showLevelMeter={showLevelMeter}
+        onToggleLevelMeter={onToggleLevelMeter}
         darkMode={darkMode}
         onToggleDark={onToggleDark}
         onToggleServiceMode={onToggleServiceMode}
@@ -318,6 +329,8 @@ export function DesktopApp({
         onDismiss={onDismissPending}
         onDismissAll={onDismissAllPending}
       />
+
+      {showLevelMeter && <AudioLevelMeter ref={levelMeterRef} />}
 
       <Box sx={{ display: 'flex', flexDirection: 'row', flex: '1 1 auto', overflow: 'hidden' }}>
         {showWaterfall && (

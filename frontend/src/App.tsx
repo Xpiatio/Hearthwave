@@ -27,6 +27,7 @@ import type {
 } from './types/ws';
 import type { ChatEntry } from './components/ChatDisplay/ChatDisplay';
 import type { SpectrogramHandle } from './components/Spectrogram/Spectrogram';
+import type { AudioLevelMeterHandle } from './components/AudioLevelMeter/AudioLevelMeter';
 import type { ServerConfig, ServerConfigSaveValues } from './components/ServerConfigPanel/ServerConfigPanel';
 import { resolveTxComposition, isPluginEnabled } from './plugins';
 import { LoginScreen } from './components/LoginScreen/LoginScreen';
@@ -135,6 +136,7 @@ export default function App() {
   const recentFinalIdsRef = useRef<Map<string, string>>(new Map());
   const sendRef = useRef<(p: unknown) => void>(() => {});
   const spectroRef = useRef<SpectrogramHandle>(null);
+  const levelMeterRef = useRef<AudioLevelMeterHandle>(null);
   const profileRef = useRef(profile);
   profileRef.current = profile;
   const pendingTranscriptRef = useRef<string>('');
@@ -174,6 +176,11 @@ export default function App() {
   // Waterfall visibility — persisted locally; defaults to visible
   const [showWaterfall, setShowWaterfall] = useState(
     () => localStorage.getItem('radio_tty_show_waterfall') !== 'false'
+  );
+
+  // RX audio level meter visibility — persisted locally; defaults to visible
+  const [showLevelMeter, setShowLevelMeter] = useState(
+    () => localStorage.getItem('radio_tty_show_level_meter') !== 'false'
   );
 
   const deviceClass = useDeviceClass();
@@ -545,6 +552,7 @@ export default function App() {
 
       case 'spectrogram_row':
         spectroRef.current?.pushRow(msg.row, msg.vad, msg.squelch);
+        levelMeterRef.current?.pushRow(msg.row);
         break;
 
       case 'pending_stations':
@@ -875,6 +883,12 @@ export default function App() {
     localStorage.setItem('radio_tty_show_waterfall', String(next));
   }
 
+  function handleToggleLevelMeter() {
+    const next = !showLevelMeter;
+    setShowLevelMeter(next);
+    localStorage.setItem('radio_tty_show_level_meter', String(next));
+  }
+
   function handleClearChat() {
     // Admin-only and global: the server wipes the shared stream and broadcasts
     // `chat_cleared`, which clears every client's log (including ours).
@@ -1153,6 +1167,8 @@ export default function App() {
           spectroTimeWindowS={spectroTimeWindowS}
           showWaterfall={showWaterfall}
           onToggleWaterfall={handleToggleWaterfall}
+          showLevelMeter={showLevelMeter}
+          onToggleLevelMeter={handleToggleLevelMeter}
           showAttendance={showAttendance}
           showJournal={showJournal}
           showNcs={showNcs}
@@ -1163,6 +1179,7 @@ export default function App() {
           onToggleNcs={handleToggleNcs}
           onClearChat={handleClearChat}
           spectroRef={spectroRef}
+          levelMeterRef={levelMeterRef}
         />
       )}
       {/* isAdmin is UX-only gating (hides Station/System tabs). Server enforces

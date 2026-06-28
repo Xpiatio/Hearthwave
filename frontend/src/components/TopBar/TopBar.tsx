@@ -48,6 +48,8 @@ interface Props {
   onToggleNcs: () => void;
   showWaterfall: boolean;
   onToggleWaterfall: () => void;
+  showLevelMeter: boolean;
+  onToggleLevelMeter: () => void;
   darkMode: boolean;
   onToggleDark: () => void;
   onToggleServiceMode: () => void;
@@ -100,6 +102,8 @@ export function TopBar({
   onToggleNcs,
   showWaterfall,
   onToggleWaterfall,
+  showLevelMeter,
+  onToggleLevelMeter,
   darkMode,
   onToggleDark,
   onToggleServiceMode,
@@ -203,6 +207,17 @@ export function TopBar({
           aria-label={showWaterfall ? 'Hide waterfall' : 'Show waterfall'}
         >
           WATERFALL
+        </ToggleButton>
+
+        <ToggleButton
+          value="levelmeter"
+          selected={showLevelMeter}
+          onClick={onToggleLevelMeter}
+          size="small"
+          color="primary"
+          aria-label={showLevelMeter ? 'Hide audio level meter' : 'Show audio level meter'}
+        >
+          LEVEL
         </ToggleButton>
 
         {profile.is_admin && ncsEnabled && (
