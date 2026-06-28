@@ -599,6 +599,27 @@ If a NWS county zone is configured in the Admin panel and internet is available,
 - A browser notification fires (if **NOTIFY** is enabled and the tab is hidden).
 - An auto-TX announcement is sent over the air (listen-before-talk checked first).
 
+### SKYWARN spot reports
+
+Click the **storm icon** in the NCS panel header to file a SKYWARN spot report. This is available whether or not a net is active — severe weather does not wait for a net. The composer asks for the hazard type and a few fields keyed to the official SKYWARN reporting criteria:
+
+| Hazard | Reporting threshold |
+|---|---|
+| Tornado / funnel cloud / rotating wall cloud | Always reportable |
+| Hail | Largest stone ≥ 1.00 inch |
+| Wind / damage | ≥ 40 mph (estimated or measured); describe damage |
+| Flooding / rainfall | ≥ 1 inch in an hour, or describe the flooding |
+| Snow / Other | Snowfall amount or a description |
+
+You also enter the **location** (required) and the **time observed** (defaults to now). The **TRANSMIT REPORT** button stays disabled until the report meets criteria. When you submit, Hearthwave:
+
+- Builds a standardized report — e.g. *"SKYWARN SPOT REPORT. HAIL, LARGEST STONE 1.75 INCHES (GOLF BALL). LOCATION DOWNTOWN GRAND RAPIDS. TIME 14:05 LOCAL. W8ABC."*
+- Transmits it over the air immediately (it keys even over a busy channel; BREAK BREAK still suppresses it).
+- Posts it to the shared message log, tagged **SKYWARN**.
+- Records it in the active net's session journal (if a net is running).
+
+If a report is below threshold, the server rejects it and the reason is shown in the composer.
+
 ### Net announcements
 
 While NCS mode is active, the system periodically transmits a net ID announcement at the configured interval (default 10 minutes). The listen-before-talk check prevents it from interrupting an active transmission.

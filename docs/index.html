@@ -523,7 +523,7 @@ footer{ border-top:1px solid var(--line); padding:54px 0 40px; color:var(--text-
       <div class="card reveal"><span class="k">RX</span><h3>Live transcription</h3><p>Speech-to-text on every transmission, the moment it lands.</p></div>
       <div class="card reveal"><span class="k">PROFILES</span><h3>Multi-user</h3><p>Per-operator logins, voices, and preferences — one shared station.</p></div>
       <div class="card reveal"><span class="k">TX</span><h3>Voice &amp; keyboard PTT</h3><p>Push to talk from a key, a button, or speak — your choice.</p></div>
-      <div class="card reveal"><span class="k">SKYWARN</span><h3>Weather alerts</h3><p>Built-in SKYWARN net control and severe-weather scripts.</p></div>
+      <div class="card reveal"><span class="k">SKYWARN</span><h3>Weather alerts &amp; reports</h3><p>Built-in SKYWARN net control, live NWS alerts, and criteria-gated spot reporting.</p></div>
       <div class="card wide reveal"><span class="k">PLUGINS</span><h3>Installable plugins</h3><p>Extend the radio without touching core code — drop a plugin into the plugins folder or upload a <code>.zip</code> from Settings, and it hot-loads with its own config form. MeshCore and Meshtastic ship as examples. <a href="#modules">See the plugin system →</a></p></div>
       <div class="card reveal"><span class="k">STT</span><h3>Radio vocabulary biasing</h3><p>Whisper is primed with NATO phonetics, Q-codes, and your contacts' callsigns — so the words it hears most often are the ones it recognizes best.</p></div>
       <div class="card reveal"><span class="k">GPU</span><h3>Optional GPU acceleration</h3><p>With an AMD GPU, the whole-utterance final pass runs on ROCm — freeing the CPU for live streaming. Falls back to CPU automatically when no GPU is present.</p></div>
@@ -664,6 +664,7 @@ footer{ border-top:1px solid var(--line); padding:54px 0 40px; color:var(--text-
           <li><span class="s">✦</span><span><b>Browser notifications</b> — opt-in push notifications reach family members on background tabs or locked screens.</span></li>
           <li><span class="s">✦</span><span><b>Auto-announce over the air</b> — when the channel is clear, alerts are automatically read aloud over GMRS via TTS.</span></li>
           <li><span class="s">✦</span><span><b>Per-county targeting</b> — set your NWS zone code once in config — only alerts relevant to your area come through.</span></li>
+          <li><span class="s">✦</span><span><b>Spot reports</b> — trained spotters file a criteria-gated report (hail ≥1″, wind ≥40&nbsp;mph, tornado, flooding) that builds a standardized on-air report and transmits, logs, and journals it.</span></li>
         </ul>
       </div>
       <div class="mod reveal">

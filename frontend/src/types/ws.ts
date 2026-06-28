@@ -426,6 +426,43 @@ export interface NCSJournalSavedMsg {
   path: string;
 }
 
+// SKYWARN spot report
+export type SpotHazard =
+  | 'tornado'
+  | 'funnel_cloud'
+  | 'wall_cloud'
+  | 'hail'
+  | 'wind'
+  | 'flooding'
+  | 'snow'
+  | 'other';
+
+export interface NCSSpotReportPayload {
+  type: 'ncs_spot_report';
+  hazard: SpotHazard;
+  hail_size_in?: number;
+  wind_mph?: number;
+  wind_method?: 'estimated' | 'measured';
+  wind_damage?: string;
+  rain_amount_in?: number;
+  rain_duration_min?: number;
+  snow_amount_in?: number;
+  detail?: string;
+  location: string;
+  observed_at?: string; // ISO; server defaults to now
+}
+
+export interface NCSSpotReportSentMsg {
+  type: 'ncs_spot_report_sent';
+  text: string;
+  ts: string;
+}
+
+export interface NCSSpotReportErrorMsg {
+  type: 'ncs_spot_report_error';
+  detail: string;
+}
+
 export type WsMessage =
   | RxMessageMsg
   | RxMessagePatchMsg
@@ -466,6 +503,8 @@ export type WsMessage =
   | NCSReplayAudioMsg
   | NCSBreakBreakAckMsg
   | NCSJournalSavedMsg
+  | NCSSpotReportSentMsg
+  | NCSSpotReportErrorMsg
   | VoiceTxAckMsg
   | VoiceTxErrorMsg
   | { type: 'voice_preview_done' }

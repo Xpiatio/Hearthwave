@@ -23,9 +23,11 @@ import CampaignIcon from '@mui/icons-material/Campaign';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ReplayIcon from '@mui/icons-material/Replay';
+import ThunderstormIcon from '@mui/icons-material/Thunderstorm';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import type { PluginProps } from '../../plugins';
-import type { NCSEntry, NCSAlert } from '../../types/ws';
+import type { NCSEntry, NCSAlert, NCSSpotReportPayload } from '../../types/ws';
+import { SpotReportDialog } from './SpotReportDialog';
 
 type TrafficLevel = 'Routine' | 'Priority' | 'Emergency' | 'General' | 'Short Term' | 'IN-n-Out';
 type StationStatus = 'CheckedIn' | 'Standby' | 'LoggedOut';
@@ -81,6 +83,9 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
   const [trafficInput, setTrafficInput] = useState<TrafficLevel>('Routine');
   const [breakBreakFlash, setBreakBreakFlash] = useState(false);
   const [journalSavedMsg, setJournalSavedMsg] = useState<string | null>(null);
+  const [spotOpen, setSpotOpen] = useState(false);
+  const [spotError, setSpotError] = useState<string | null>(null);
+  const [spotSentMsg, setSpotSentMsg] = useState<string | null>(null);
 
   // Request current NCS state on mount
   useEffect(() => {
@@ -115,8 +120,25 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
         setJournalSavedMsg(`Session journal saved.`);
         setTimeout(() => setJournalSavedMsg(null), 5000);
         break;
+      case 'ncs_spot_report_sent':
+        setSpotOpen(false);
+        setSpotError(null);
+        setSpotSentMsg('Spot report transmitted.');
+        setTimeout(() => setSpotSentMsg(null), 6000);
+        break;
+      case 'ncs_spot_report_error':
+        setSpotError(lastMessage.detail);
+        break;
     }
   }, [lastMessage]);
+
+  const handleSpotSubmit = useCallback(
+    (payload: Omit<NCSSpotReportPayload, 'type'>) => {
+      setSpotError(null);
+      send({ type: 'ncs_spot_report', ...payload });
+    },
+    [send],
+  );
 
   const handleStartNet = useCallback(() => send({ type: 'ncs_start' }), [send]);
   const handleEndNet = useCallback(() => send({ type: 'ncs_end' }), [send]);
@@ -166,6 +188,16 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
           color={active ? 'error' : 'default'}
           sx={{ fontWeight: 700, letterSpacing: '0.05em' }}
         />
+        <Tooltip title="File a SKYWARN spot report">
+          <IconButton
+            size="small"
+            onClick={() => { setSpotError(null); setSpotOpen(true); }}
+            aria-label="File SKYWARN spot report"
+            sx={{ color: '#F9FAFB' }}
+          >
+            <ThunderstormIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
         <Tooltip title="Instant replay — last 15 seconds">
           <span>
             <IconButton size="small" onClick={handleReplay} disabled={!active} aria-label="Instant replay">
@@ -205,6 +237,13 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
       {journalSavedMsg && (
         <Box sx={{ bgcolor: 'success.dark', color: 'success.contrastText', px: 2, py: 0.5 }}>
           <Typography variant="caption">{journalSavedMsg}</Typography>
+        </Box>
+      )}
+
+      {/* Spot report transmitted notice */}
+      {spotSentMsg && (
+        <Box sx={{ bgcolor: 'success.dark', color: 'success.contrastText', px: 2, py: 0.5 }}>
+          <Typography variant="caption">{spotSentMsg}</Typography>
         </Box>
       )}
 
@@ -372,6 +411,13 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
           ■ BREAK BREAK ■
         </Button>
       </Box>
+
+      <SpotReportDialog
+        open={spotOpen}
+        error={spotError}
+        onClose={() => setSpotOpen(false)}
+        onSubmit={handleSpotSubmit}
+      />
     </Paper>
   );
 }

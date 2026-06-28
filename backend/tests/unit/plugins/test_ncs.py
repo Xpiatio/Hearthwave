@@ -1059,3 +1059,126 @@ class TestNCSOnConfigChanged:
         await ncs.on_config_changed(make_config(ncs_zone="MIZ071"))
         assert ncs._nws_task is sentinel  # unchanged
         sentinel.cancel()
+
+
+# ---------------------------------------------------------------------------
+# SKYWARN spot reports
+# ---------------------------------------------------------------------------
+
+class TestSpotReportValidation:
+    def test_location_required(self):
+        from backend.plugins.ncs import _validate_spot_report
+        assert _validate_spot_report({"hazard": "tornado"}) is not None
+
+    def test_tornado_valid_with_location(self):
+        from backend.plugins.ncs import _validate_spot_report
+        assert _validate_spot_report({"hazard": "tornado", "location": "x"}) is None
+
+    def test_hail_below_threshold_rejected(self):
+        from backend.plugins.ncs import _validate_spot_report
+        assert _validate_spot_report({"hazard": "hail", "location": "x", "hail_size_in": 0.75}) is not None
+
+    def test_hail_at_threshold_ok(self):
+        from backend.plugins.ncs import _validate_spot_report
+        assert _validate_spot_report({"hazard": "hail", "location": "x", "hail_size_in": 1.0}) is None
+
+    def test_hail_missing_size_rejected(self):
+        from backend.plugins.ncs import _validate_spot_report
+        assert _validate_spot_report({"hazard": "hail", "location": "x"}) is not None
+
+    def test_wind_below_threshold_rejected(self):
+        from backend.plugins.ncs import _validate_spot_report
+        assert _validate_spot_report({"hazard": "wind", "location": "x", "wind_mph": 30}) is not None
+
+    def test_wind_at_threshold_ok(self):
+        from backend.plugins.ncs import _validate_spot_report
+        assert _validate_spot_report({"hazard": "wind", "location": "x", "wind_mph": 40}) is None
+
+    def test_flooding_requires_rain_or_detail(self):
+        from backend.plugins.ncs import _validate_spot_report
+        assert _validate_spot_report({"hazard": "flooding", "location": "x"}) is not None
+        assert _validate_spot_report({"hazard": "flooding", "location": "x", "rain_amount_in": 1.5}) is None
+        assert _validate_spot_report({"hazard": "flooding", "location": "x", "detail": "street flooding"}) is None
+
+    def test_other_requires_detail(self):
+        from backend.plugins.ncs import _validate_spot_report
+        assert _validate_spot_report({"hazard": "other", "location": "x"}) is not None
+        assert _validate_spot_report({"hazard": "other", "location": "x", "detail": "lightning"}) is None
+
+    def test_unknown_hazard_rejected(self):
+        from backend.plugins.ncs import _validate_spot_report
+        assert _validate_spot_report({"hazard": "earthquake", "location": "x"}) is not None
+
+
+class TestSpotReportFormatting:
+    def test_hail_format_includes_reference(self):
+        ncs = make_ncs()
+        text = ncs._format_spot_report({
+            "hazard": "hail", "location": "Grand Rapids",
+            "hail_size_in": 1.75, "observed_at": "2026-06-28T14:05:00",
+        })
+        assert text.startswith("SKYWARN SPOT REPORT.")
+        assert "1.75 INCHES" in text
+        assert "GOLF BALL" in text
+        assert "LOCATION GRAND RAPIDS" in text
+        assert "W8TST" in text  # station callsign from make_config
+
+    def test_wind_format_measured_and_damage(self):
+        ncs = make_ncs()
+        text = ncs._format_spot_report({
+            "hazard": "wind", "location": "Caledonia",
+            "wind_mph": 58, "wind_method": "measured", "wind_damage": "large branches down",
+        })
+        assert "MEASURED WIND 58 MPH" in text
+        assert "LARGE BRANCHES DOWN" in text
+
+    def test_tornado_format(self):
+        ncs = make_ncs()
+        text = ncs._format_spot_report({"hazard": "tornado", "location": "Hastings"})
+        assert "TORNADO ON THE GROUND" in text
+
+    def test_callsign_override_uppercased(self):
+        ncs = make_ncs()
+        text = ncs._format_spot_report({"hazard": "tornado", "location": "x", "callsign": "k8abc"})
+        assert "K8ABC" in text
+
+
+class TestSpotReportHandler:
+    async def test_valid_report_enqueues_tx_acks_and_broadcasts(self):
+        ncs = make_ncs()
+        reply = AsyncMock()
+        await ncs._handle_spot_report(
+            {"hazard": "hail", "location": "GR", "hail_size_in": 1.75}, reply
+        )
+        item = ncs._tx_queue.get_nowait()
+        assert item["_pre_formatted"] is True
+        assert item["_operator_initiated"] is True
+        assert "SKYWARN SPOT REPORT" in item["text"]
+
+        sent = [c.args[0] for c in reply.await_args_list]
+        assert any(m["type"] == "ncs_spot_report_sent" for m in sent)
+
+        broadcasts = [c.args[0] for c in ncs._broadcast.await_args_list]
+        assert any(m["type"] == "tx_echo" and m["display_name"] == "SKYWARN" for m in broadcasts)
+
+    async def test_invalid_report_replies_error_and_skips_tx(self):
+        ncs = make_ncs()
+        reply = AsyncMock()
+        await ncs._handle_spot_report(
+            {"hazard": "hail", "location": "GR", "hail_size_in": 0.5}, reply
+        )
+        assert ncs._tx_queue.empty()
+        sent = [c.args[0] for c in reply.await_args_list]
+        assert sent and sent[0]["type"] == "ncs_spot_report_error"
+        assert not ncs._broadcast.await_args_list
+
+    async def test_active_net_records_report_in_session_rx(self):
+        ncs = make_ncs()
+        ncs._active = True
+        await ncs._handle_spot_report({"hazard": "tornado", "location": "x"}, AsyncMock())
+        assert any("SPOT REPORT:" in line for line in ncs._session_rx)
+
+    async def test_inactive_net_does_not_record(self):
+        ncs = make_ncs()
+        await ncs._handle_spot_report({"hazard": "tornado", "location": "x"}, AsyncMock())
+        assert ncs._session_rx == []
