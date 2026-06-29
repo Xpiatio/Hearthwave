@@ -28,6 +28,8 @@ function makeConfig(overrides: Partial<{
   geminiApiKeySet: boolean;
   journalsDir: string;
   ncsZone: string;
+  ncsPreambleText: string;
+  ncsClosingText: string;
   rxMode: string;
 }> = {}) {
   return {
@@ -39,6 +41,8 @@ function makeConfig(overrides: Partial<{
     geminiApiKeySet: false,
     journalsDir: '/data/journals',
     ncsZone: 'MIZ025',
+    ncsPreambleText: '',
+    ncsClosingText: '',
     rxMode: 'voice',
     ...overrides,
   }
@@ -276,6 +280,8 @@ describe('AdminPanel', () => {
       gemini_api_key: '',
       journals_dir: '/data/journals',
       ncs_zone: 'MIZ025',
+      ncs_preamble_text: '',
+      ncs_closing_text: '',
       rx_mode: 'voice',
     })
     expect(props.onClose).toHaveBeenCalledTimes(1)

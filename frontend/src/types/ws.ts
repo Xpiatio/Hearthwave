@@ -57,6 +57,8 @@ export interface StatusMsg {
   gemini_api_key_set?: boolean;
   journals_dir?: string;
   ncs_zone?: string;
+  ncs_preamble_text?: string;
+  ncs_closing_text?: string;
   rx_mode?: string;
   vad_threshold?: number;
   whisper_model?: string;
@@ -385,6 +387,7 @@ export interface NCSEntry {
   location: string;
   checkin_time: number; // Unix timestamp
   verified?: boolean;
+  called?: boolean; // round-table: already called this round
 }
 
 export interface NCSAlert {
@@ -400,11 +403,13 @@ export interface NCSStateMsg {
   active: boolean;
   roster: NCSEntry[];
   zone: string;
+  current_call?: string; // round-table: callsign currently being called
 }
 
 export interface NCSRosterUpdateMsg {
   type: 'ncs_roster_update';
   roster: NCSEntry[];
+  current_call?: string;
 }
 
 export interface NCSAlertMsg extends NCSAlert {
@@ -463,6 +468,23 @@ export interface NCSSpotReportErrorMsg {
   detail: string;
 }
 
+// Net scripts (preamble / closing)
+export interface NCSScriptSentMsg {
+  type: 'ncs_script_sent';
+  which: 'preamble' | 'closing';
+  text: string;
+}
+
+export interface NCSScriptErrorMsg {
+  type: 'ncs_script_error';
+  detail: string;
+}
+
+// Round-table caller
+export interface NCSRoundCompleteMsg {
+  type: 'ncs_round_complete';
+}
+
 export type WsMessage =
   | RxMessageMsg
   | RxMessagePatchMsg
@@ -505,6 +527,9 @@ export type WsMessage =
   | NCSJournalSavedMsg
   | NCSSpotReportSentMsg
   | NCSSpotReportErrorMsg
+  | NCSScriptSentMsg
+  | NCSScriptErrorMsg
+  | NCSRoundCompleteMsg
   | VoiceTxAckMsg
   | VoiceTxErrorMsg
   | { type: 'voice_preview_done' }

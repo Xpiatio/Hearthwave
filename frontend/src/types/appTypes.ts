@@ -7,6 +7,8 @@ export interface AdminConfig {
   geminiApiKeySet: boolean;
   journalsDir: string;
   ncsZone: string;
+  ncsPreambleText: string;
+  ncsClosingText: string;
   rxMode: string;
 }
 

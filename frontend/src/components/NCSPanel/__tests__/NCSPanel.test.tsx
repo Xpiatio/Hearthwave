@@ -455,4 +455,63 @@ describe('NCSPanel', () => {
       expect(screen.getByText(/below SKYWARN reporting criteria/i)).toBeInTheDocument()
     })
   })
+
+  describe('net scripts and round-table', () => {
+    const ACTIVE: WsMessage = { type: 'ncs_state', active: true, roster: [], zone: '' }
+
+    it('script and round-table buttons are disabled when inactive', () => {
+      render(<NCSPanel {...makeProps()} />)
+      expect(screen.getByRole('button', { name: /read preamble/i })).toBeDisabled()
+      expect(screen.getByRole('button', { name: /read closing/i })).toBeDisabled()
+      expect(screen.getByRole('button', { name: /call next station/i })).toBeDisabled()
+      expect(screen.getByRole('button', { name: /new round/i })).toBeDisabled()
+    })
+
+    it('sends ncs_read_preamble / ncs_read_closing when active', () => {
+      const send = vi.fn()
+      render(<NCSPanel {...makeProps({ send, lastMessage: ACTIVE })} />)
+      fireEvent.click(screen.getByRole('button', { name: /read preamble/i }))
+      expect(send).toHaveBeenCalledWith({ type: 'ncs_read_preamble' })
+      fireEvent.click(screen.getByRole('button', { name: /read closing/i }))
+      expect(send).toHaveBeenCalledWith({ type: 'ncs_read_closing' })
+    })
+
+    it('sends ncs_call_next and ncs_call_reset when active', () => {
+      const send = vi.fn()
+      render(<NCSPanel {...makeProps({ send, lastMessage: ACTIVE })} />)
+      fireEvent.click(screen.getByRole('button', { name: /call next station/i }))
+      expect(send).toHaveBeenCalledWith({ type: 'ncs_call_next' })
+      fireEvent.click(screen.getByRole('button', { name: /new round/i }))
+      expect(send).toHaveBeenCalledWith({ type: 'ncs_call_reset' })
+    })
+
+    it('per-row call button sends ncs_call_station', () => {
+      const send = vi.fn()
+      const msg: WsMessage = {
+        type: 'ncs_state', active: true, zone: '',
+        roster: [{ callsign: 'W1AAA', status: 'CheckedIn', traffic: 'Routine', name: 'Alice', location: 'GR', checkin_time: 1700000000 }],
+      }
+      render(<NCSPanel {...makeProps({ send, lastMessage: msg })} />)
+      fireEvent.click(screen.getByRole('button', { name: /call W1AAA/i }))
+      expect(send).toHaveBeenCalledWith({ type: 'ncs_call_station', callsign: 'W1AAA', name: 'Alice' })
+    })
+
+    it('shows a notice on ncs_script_sent', () => {
+      const msg: WsMessage = { type: 'ncs_script_sent', which: 'preamble', text: '...' }
+      render(<NCSPanel {...makeProps({ lastMessage: msg })} />)
+      expect(screen.getByText('Preamble transmitted.')).toBeInTheDocument()
+    })
+
+    it('shows the error on ncs_script_error', () => {
+      const msg: WsMessage = { type: 'ncs_script_error', detail: 'No preamble script configured.' }
+      render(<NCSPanel {...makeProps({ lastMessage: msg })} />)
+      expect(screen.getByText('No preamble script configured.')).toBeInTheDocument()
+    })
+
+    it('shows a notice on ncs_round_complete', () => {
+      const msg: WsMessage = { type: 'ncs_round_complete' }
+      render(<NCSPanel {...makeProps({ lastMessage: msg })} />)
+      expect(screen.getByText(/round complete/i)).toBeInTheDocument()
+    })
+  })
 })

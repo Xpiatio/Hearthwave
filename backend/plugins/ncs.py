@@ -18,8 +18,26 @@ import urllib.request
 from typing import Callable, Optional
 
 from backend.plugins.base import BasePlugin, PluginManifest
+from backend.text.callsigns import spell_digits_in_callsigns
 
 _log = logging.getLogger(__name__)
+
+
+def _format_net_script(template: str, *, callsign: str, name: str, location: str) -> str:
+    """Substitute net-script placeholders, then digit-spell for radio clarity.
+
+    Supports {callsign} {name} {location} {date} {time}. Uses str.replace (not
+    str.format) so stray braces in an operator's template never raise.
+    """
+    now = datetime.datetime.now()
+    phrase = (
+        template.replace("{callsign}", callsign or "")
+        .replace("{name}", name or "")
+        .replace("{location}", location or "")
+        .replace("{date}", now.strftime("%A, %B %d"))
+        .replace("{time}", now.strftime("%H:%M"))
+    )
+    return spell_digits_in_callsigns(phrase)
 
 _VALID_TRAFFIC = {"Routine", "Priority", "Emergency", "General", "Short Term", "IN-n-Out"}
 
@@ -234,9 +252,12 @@ class NCSPlugin(BasePlugin):
         self._broadcast_contacts_fn = broadcast_contacts_fn
 
         self._active = False
-        # Roster: callsign → {callsign, status, traffic, name, location, checkin_time}
+        # Roster: callsign → {callsign, status, traffic, name, location, checkin_time, called}
         self._roster: dict[str, dict] = {}
         self._session_rx: list[str] = []
+
+        # Round-table caller: roster key of the station currently being called.
+        self._current_call_key: str | None = None
 
         self._break_break_pending = False
 
@@ -310,6 +331,30 @@ class NCSPlugin(BasePlugin):
                 self._handle_spot_report(payload, reply), name="ncs-spot-report"
             )
 
+        elif msg_type == "ncs_read_preamble":
+            asyncio.create_task(
+                self._handle_read_script("preamble", reply), name="ncs-preamble"
+            )
+
+        elif msg_type == "ncs_read_closing":
+            asyncio.create_task(
+                self._handle_read_script("closing", reply), name="ncs-closing"
+            )
+
+        elif msg_type == "ncs_call_next":
+            asyncio.create_task(self._handle_call_next(reply), name="ncs-call-next")
+
+        elif msg_type == "ncs_call_station":
+            cs = (payload.get("callsign") or "").strip().upper()
+            entry_name = (payload.get("name") or "").strip()
+            if cs:
+                asyncio.create_task(
+                    self._handle_call_station(cs, entry_name), name="ncs-call-station"
+                )
+
+        elif msg_type == "ncs_call_reset":
+            asyncio.create_task(self._handle_call_reset(), name="ncs-call-reset")
+
     def on_audio_rx_chunk(self, chunk) -> None:
         """Accumulate PCM chunks into the rolling replay buffer (sync, hot path)."""
         try:
@@ -352,6 +397,7 @@ class NCSPlugin(BasePlugin):
         self._roster.clear()
         self._session_rx.clear()
         self._seen_alerts.clear()
+        self._current_call_key = None
         config = self._get_config()
         if config.ncs_zone:
             self._nws_task = asyncio.create_task(self._nws_poll_loop(), name="ncs-nws-poll")
@@ -366,6 +412,7 @@ class NCSPlugin(BasePlugin):
         if not self._active:
             return
         self._active = False
+        self._current_call_key = None
         for task in (self._nws_task, self._announce_task):
             if task:
                 task.cancel()
@@ -421,6 +468,7 @@ class NCSPlugin(BasePlugin):
             "location": location or existing.get("location", ""),
             "checkin_time": existing.get("checkin_time", now),
             "verified": verified,
+            "called": existing.get("called", False),
         }
         await self._broadcast_roster()
 
@@ -531,6 +579,98 @@ class NCSPlugin(BasePlugin):
             await reply({"type": "ncs_spot_report_sent", "text": text, "ts": ts})
         _log.info("NCS spot report transmitted: %s", text[:80])
 
+    # ------------------------------------------------------------------
+    # Net scripts (preamble / closing)
+    # ------------------------------------------------------------------
+
+    async def _chat_echo(self, text: str, display_name: str, callsign: str) -> None:
+        """Render NCS-originated text in every client's message log (not persisted
+        to stream history)."""
+        await self._broadcast({
+            "type": "tx_echo",
+            "ts": datetime.datetime.now(tz=datetime.timezone.utc).isoformat(),
+            "callsign": callsign,
+            "operator": "",
+            "display_name": display_name,
+            "text": text,
+            "target_call": "ALL",
+            "target_name": "",
+        })
+
+    async def _handle_read_script(self, which: str, reply=None) -> None:
+        config = self._get_config()
+        template = config.ncs_preamble_text if which == "preamble" else config.ncs_closing_text
+        if not template.strip():
+            if reply:
+                await reply({"type": "ncs_script_error", "detail": f"No {which} script configured."})
+            return
+        callsign = (config.callsign or "").strip()
+        text = _format_net_script(
+            template, callsign=callsign, name=config.name, location=config.location
+        )
+        await self._tx_queue.put(
+            {"text": text, "_pre_formatted": True, "_operator_initiated": True}
+        )
+        await self._chat_echo(text, "NET CONTROL", callsign.upper())
+        if self._active:
+            self._session_rx.append(f"{which.upper()}: {text}")
+        if reply:
+            await reply({"type": "ncs_script_sent", "which": which, "text": text})
+        _log.info("NCS %s script transmitted: %s", which, text[:80])
+
+    # ------------------------------------------------------------------
+    # Round-table caller
+    # ------------------------------------------------------------------
+
+    async def _announce_call(self, key: str) -> None:
+        """Mark a roster station as called, set it current, and announce it."""
+        entry = self._roster[key]
+        entry["called"] = True
+        self._current_call_key = key
+        config = self._get_config()
+        name = (entry.get("name") or "").strip()
+        who = f"{entry['callsign']}, {name}" if name else entry["callsign"]
+        text = f"Station {who}, do you have any traffic or comments? {config.callsign}."
+        await self._tx_queue.put(
+            {"text": text, "_pre_formatted": True, "_operator_initiated": True}
+        )
+        await self._broadcast_roster()
+
+    async def _handle_call_next(self, reply=None) -> None:
+        if not self._active:
+            return
+        next_key = next(
+            (k for k, e in self._roster.items()
+             if e.get("status") == "CheckedIn" and not e.get("called")),
+            None,
+        )
+        if next_key is None:
+            self._current_call_key = None
+            await self._broadcast_roster()
+            if reply:
+                await reply({"type": "ncs_round_complete"})
+            return
+        await self._announce_call(next_key)
+
+    async def _handle_call_station(self, callsign: str, name: str) -> None:
+        if not self._active:
+            return
+        key = _roster_key(callsign, name)
+        if key not in self._roster:
+            # Fall back to first roster entry sharing the callsign (anonymous check-in).
+            key = next(
+                (k for k, e in self._roster.items() if e["callsign"] == callsign),
+                None,
+            )
+        if key is not None:
+            await self._announce_call(key)
+
+    async def _handle_call_reset(self) -> None:
+        for entry in self._roster.values():
+            entry["called"] = False
+        self._current_call_key = None
+        await self._broadcast_roster()
+
     async def _save_ncs_journal(self) -> None:
         from backend.persistence.journal import save_journal
         config = self._get_config()
@@ -631,6 +771,11 @@ class NCSPlugin(BasePlugin):
     # Helpers
     # ------------------------------------------------------------------
 
+    def _current_call_sign(self) -> str:
+        """Callsign of the station currently being called (round-table), or ''."""
+        entry = self._roster.get(self._current_call_key) if self._current_call_key else None
+        return entry["callsign"] if entry else ""
+
     def _build_state_msg(self) -> dict:
         config = self._get_config()
         return {
@@ -638,10 +783,12 @@ class NCSPlugin(BasePlugin):
             "active": self._active,
             "roster": list(self._roster.values()),
             "zone": config.ncs_zone if config else "",
+            "current_call": self._current_call_sign(),
         }
 
     async def _broadcast_roster(self) -> None:
         await self._broadcast({
             "type": "ncs_roster_update",
             "roster": list(self._roster.values()),
+            "current_call": self._current_call_sign(),
         })

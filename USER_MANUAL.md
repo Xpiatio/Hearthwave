@@ -514,6 +514,8 @@ The **NCS / SKYWARN** section at the bottom of the Admin panel configures the Ne
 | Field | Description |
 |-------|-------------|
 | NWS County Zone | NWS zone code for SKYWARN alert polling (e.g. `MIZ025`). Empty = disabled. Find your zone at weather.gov. |
+| Net Opening Preamble | Script read on the air (via the NCS panel) to open a net. Placeholders: `{callsign} {name} {location} {date} {time}`. Empty = none. |
+| Net Closing Script | Script read on the air to sign off a net. Same placeholders. Empty = none. |
 
 The announcement interval (how often net ID is broadcast during an active NCS session) defaults to 10 minutes and is set in `config.json` (`ncs_announcement_interval`).
 
@@ -619,6 +621,20 @@ You also enter the **location** (required) and the **time observed** (defaults t
 - Records it in the active net's session journal (if a net is running).
 
 If a report is below threshold, the server rejects it and the reason is shown in the composer.
+
+### Net scripts (preamble & closing)
+
+Set an opening **preamble** and a **closing** script in **Admin → Station → NCS / SKYWARN**. While a net is active, the NCS panel shows **READ PREAMBLE** and **READ CLOSING** buttons — clicking one transmits that script over the air and posts it to the message log (and into the session journal). Use the preamble to open the net (state its purpose and instructions) and the closing to sign off.
+
+Scripts support placeholders that are filled in when read: `{callsign}`, `{name}`, `{location}`, `{date}`, `{time}`. If a script is blank, the button reports that none is configured.
+
+### Round-table caller
+
+To run a directed net, use the round-table controls below the roster:
+
+- **CALL NEXT STATION** — picks the next checked-in station that hasn't been called yet this round, transmits *"Station <callsign>, do you have any traffic or comments?"*, highlights that row, and marks it called. After the last station it reports **Round complete**.
+- Each roster row also has a **call** button to call that specific station out of order.
+- **NEW ROUND** clears the "called" marks so you can go around again.
 
 ### Net announcements
 
