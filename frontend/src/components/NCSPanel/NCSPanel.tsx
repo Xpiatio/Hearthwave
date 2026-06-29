@@ -22,10 +22,13 @@ import {
 import CampaignIcon from '@mui/icons-material/Campaign';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
+import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
 import ReplayIcon from '@mui/icons-material/Replay';
+import ThunderstormIcon from '@mui/icons-material/Thunderstorm';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import type { PluginProps } from '../../plugins';
-import type { NCSEntry, NCSAlert } from '../../types/ws';
+import type { NCSEntry, NCSAlert, NCSSpotReportPayload } from '../../types/ws';
+import { SpotReportDialog } from './SpotReportDialog';
 
 type TrafficLevel = 'Routine' | 'Priority' | 'Emergency' | 'General' | 'Short Term' | 'IN-n-Out';
 type StationStatus = 'CheckedIn' | 'Standby' | 'LoggedOut';
@@ -81,6 +84,11 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
   const [trafficInput, setTrafficInput] = useState<TrafficLevel>('Routine');
   const [breakBreakFlash, setBreakBreakFlash] = useState(false);
   const [journalSavedMsg, setJournalSavedMsg] = useState<string | null>(null);
+  const [spotOpen, setSpotOpen] = useState(false);
+  const [spotError, setSpotError] = useState<string | null>(null);
+  const [spotSentMsg, setSpotSentMsg] = useState<string | null>(null);
+  const [currentCall, setCurrentCall] = useState('');
+  const [ncsNotice, setNcsNotice] = useState<string | null>(null);
 
   // Request current NCS state on mount
   useEffect(() => {
@@ -94,9 +102,11 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
       case 'ncs_state':
         setActive(lastMessage.active);
         setRoster(lastMessage.roster);
+        setCurrentCall(lastMessage.current_call ?? '');
         break;
       case 'ncs_roster_update':
         setRoster(lastMessage.roster);
+        setCurrentCall(lastMessage.current_call ?? '');
         break;
       case 'ncs_alert':
         setAlerts((prev) => {
@@ -115,13 +125,50 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
         setJournalSavedMsg(`Session journal saved.`);
         setTimeout(() => setJournalSavedMsg(null), 5000);
         break;
+      case 'ncs_spot_report_sent':
+        setSpotOpen(false);
+        setSpotError(null);
+        setSpotSentMsg('Spot report transmitted.');
+        setTimeout(() => setSpotSentMsg(null), 6000);
+        break;
+      case 'ncs_spot_report_error':
+        setSpotError(lastMessage.detail);
+        break;
+      case 'ncs_script_sent':
+        setNcsNotice(`${lastMessage.which === 'preamble' ? 'Preamble' : 'Closing'} transmitted.`);
+        setTimeout(() => setNcsNotice(null), 6000);
+        break;
+      case 'ncs_script_error':
+        setNcsNotice(lastMessage.detail);
+        setTimeout(() => setNcsNotice(null), 6000);
+        break;
+      case 'ncs_round_complete':
+        setNcsNotice('Round complete — all stations called.');
+        setTimeout(() => setNcsNotice(null), 6000);
+        break;
     }
   }, [lastMessage]);
+
+  const handleSpotSubmit = useCallback(
+    (payload: Omit<NCSSpotReportPayload, 'type'>) => {
+      setSpotError(null);
+      send({ type: 'ncs_spot_report', ...payload });
+    },
+    [send],
+  );
 
   const handleStartNet = useCallback(() => send({ type: 'ncs_start' }), [send]);
   const handleEndNet = useCallback(() => send({ type: 'ncs_end' }), [send]);
   const handleBreakBreak = useCallback(() => send({ type: 'ncs_break_break' }), [send]);
   const handleReplay = useCallback(() => send({ type: 'ncs_get_replay' }), [send]);
+  const handleReadPreamble = useCallback(() => send({ type: 'ncs_read_preamble' }), [send]);
+  const handleReadClosing = useCallback(() => send({ type: 'ncs_read_closing' }), [send]);
+  const handleCallNext = useCallback(() => send({ type: 'ncs_call_next' }), [send]);
+  const handleCallReset = useCallback(() => send({ type: 'ncs_call_reset' }), [send]);
+  const handleCallStation = useCallback(
+    (entry: NCSEntry) => send({ type: 'ncs_call_station', callsign: entry.callsign, name: entry.name ?? '' }),
+    [send],
+  );
 
   const handleCheckIn = useCallback(() => {
     const cs = callsignInput.trim().toUpperCase();
@@ -166,6 +213,16 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
           color={active ? 'error' : 'default'}
           sx={{ fontWeight: 700, letterSpacing: '0.05em' }}
         />
+        <Tooltip title="File a SKYWARN spot report">
+          <IconButton
+            size="small"
+            onClick={() => { setSpotError(null); setSpotOpen(true); }}
+            aria-label="File SKYWARN spot report"
+            sx={{ color: '#F9FAFB' }}
+          >
+            <ThunderstormIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
         <Tooltip title="Instant replay — last 15 seconds">
           <span>
             <IconButton size="small" onClick={handleReplay} disabled={!active} aria-label="Instant replay">
@@ -205,6 +262,20 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
       {journalSavedMsg && (
         <Box sx={{ bgcolor: 'success.dark', color: 'success.contrastText', px: 2, py: 0.5 }}>
           <Typography variant="caption">{journalSavedMsg}</Typography>
+        </Box>
+      )}
+
+      {/* Spot report transmitted notice */}
+      {spotSentMsg && (
+        <Box sx={{ bgcolor: 'success.dark', color: 'success.contrastText', px: 2, py: 0.5 }}>
+          <Typography variant="caption">{spotSentMsg}</Typography>
+        </Box>
+      )}
+
+      {/* Net script / round-table notice */}
+      {ncsNotice && (
+        <Box sx={{ bgcolor: 'info.dark', color: 'info.contrastText', px: 2, py: 0.5 }}>
+          <Typography variant="caption">{ncsNotice}</Typography>
         </Box>
       )}
 
@@ -285,13 +356,23 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
             </TableHead>
             <TableBody>
               {roster.map((entry) => (
-                <TableRow key={`${entry.callsign}|${entry.name ?? ''}`} hover>
+                <TableRow
+                  key={`${entry.callsign}|${entry.name ?? ''}`}
+                  hover
+                  selected={entry.callsign === currentCall && currentCall !== ''}
+                  sx={{ opacity: entry.called && entry.callsign !== currentCall ? 0.55 : 1 }}
+                >
                   <TableCell sx={{ fontFamily: 'monospace', fontWeight: 700, py: 0.5 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                       {entry.callsign}
                       {entry.verified && (
                         <Tooltip title="Verified contact">
                           <CheckCircleIcon fontSize="inherit" color="success" sx={{ fontSize: '0.9rem' }} />
+                        </Tooltip>
+                      )}
+                      {entry.called && (
+                        <Tooltip title="Called this round">
+                          <CheckCircleIcon fontSize="inherit" sx={{ fontSize: '0.9rem', color: 'text.disabled' }} />
                         </Tooltip>
                       )}
                     </Box>
@@ -321,7 +402,19 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
                   <TableCell sx={{ py: 0.5, fontSize: '0.75rem', color: 'text.secondary' }}>
                     {formatCheckinTime(entry.checkin_time)}
                   </TableCell>
-                  <TableCell sx={{ py: 0.5 }}>
+                  <TableCell sx={{ py: 0.5, whiteSpace: 'nowrap' }}>
+                    <Tooltip title={`Call ${entry.callsign}`}>
+                      <span>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleCallStation(entry)}
+                          disabled={!active || entry.status !== 'CheckedIn'}
+                          aria-label={`Call ${entry.callsign}`}
+                        >
+                          <RecordVoiceOverIcon fontSize="small" />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
                     <IconButton
                       size="small"
                       onClick={() => handleRemove(entry)}
@@ -344,6 +437,33 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
       )}
 
       <Divider />
+
+      {/* Net scripts + round-table caller */}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, px: 1, pt: 1 }}>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button size="small" variant="outlined" fullWidth onClick={handleReadPreamble} disabled={!active}>
+            READ PREAMBLE
+          </Button>
+          <Button size="small" variant="outlined" fullWidth onClick={handleReadClosing} disabled={!active}>
+            READ CLOSING
+          </Button>
+        </Box>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            size="small"
+            variant="contained"
+            fullWidth
+            startIcon={<RecordVoiceOverIcon />}
+            onClick={handleCallNext}
+            disabled={!active}
+          >
+            CALL NEXT STATION
+          </Button>
+          <Button size="small" variant="outlined" onClick={handleCallReset} disabled={!active}>
+            NEW ROUND
+          </Button>
+        </Box>
+      </Box>
 
       {/* BREAK BREAK */}
       <Box sx={{ p: 1 }}>
@@ -372,6 +492,13 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
           ■ BREAK BREAK ■
         </Button>
       </Box>
+
+      <SpotReportDialog
+        open={spotOpen}
+        error={spotError}
+        onClose={() => setSpotOpen(false)}
+        onSubmit={handleSpotSubmit}
+      />
     </Paper>
   );
 }

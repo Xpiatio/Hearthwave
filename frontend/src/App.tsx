@@ -255,6 +255,8 @@ export default function App() {
     geminiApiKeySet: false,
     journalsDir: '/data/journals',
     ncsZone: '',
+    ncsPreambleText: '',
+    ncsClosingText: '',
     rxMode: 'voice',
   });
 
@@ -385,6 +387,8 @@ export default function App() {
           geminiApiKeySet: msg.gemini_api_key_set ?? prev.geminiApiKeySet,
           journalsDir: msg.journals_dir ?? prev.journalsDir,
           ncsZone: msg.ncs_zone ?? prev.ncsZone,
+          ncsPreambleText: msg.ncs_preamble_text ?? prev.ncsPreambleText,
+          ncsClosingText: msg.ncs_closing_text ?? prev.ncsClosingText,
           rxMode: msg.rx_mode ?? prev.rxMode,
         }));
         setServerConfig((prev) => ({

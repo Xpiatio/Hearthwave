@@ -1,4 +1,4 @@
-import { render as rtlRender, screen, fireEvent, act, waitFor } from '@testing-library/react'
+import { render as rtlRender, screen, fireEvent, act, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ThemeProvider } from '@mui/material/styles'
 import { makeTheme } from '../../../theme'
@@ -367,6 +367,151 @@ describe('NCSPanel', () => {
     it('does not show empty message when inactive', () => {
       render(<NCSPanel {...makeProps()} />)
       expect(screen.queryByText(/no stations checked in/i)).not.toBeInTheDocument()
+    })
+  })
+
+  describe('SKYWARN spot report', () => {
+    // MUI Dialog/Select FocusTrap installs a repeating interval, so runAllTimers
+    // would loop forever. The portal content mounts synchronously on open, so we
+    // can query without flushing the transition timers.
+    function openComposer() {
+      fireEvent.click(screen.getByRole('button', { name: /spot report/i }))
+    }
+
+    function selectHazard(label: string) {
+      fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Hazard' }))
+      fireEvent.click(screen.getByRole('option', { name: label }))
+    }
+
+    it('spot report button is available even when net is inactive', () => {
+      render(<NCSPanel {...makeProps()} />)
+      expect(screen.getByRole('button', { name: /spot report/i })).toBeEnabled()
+    })
+
+    it('opens the composer dialog', () => {
+      render(<NCSPanel {...makeProps()} />)
+      openComposer()
+      expect(screen.getByText('SKYWARN Spot Report')).toBeInTheDocument()
+    })
+
+    it('disables transmit until a location is entered', () => {
+      render(<NCSPanel {...makeProps()} />)
+      openComposer()
+      const dialog = screen.getByRole('dialog')
+      const transmit = within(dialog).getByRole('button', { name: /transmit report/i })
+      expect(transmit).toBeDisabled()
+      fireEvent.change(within(dialog).getByLabelText(/location/i), { target: { value: 'Hastings, MI' } })
+      expect(transmit).toBeEnabled()
+    })
+
+    it('sends ncs_spot_report with the structured payload on submit', () => {
+      const send = vi.fn()
+      render(<NCSPanel {...makeProps({ send })} />)
+      openComposer()
+      const dialog = screen.getByRole('dialog')
+      fireEvent.change(within(dialog).getByLabelText(/location/i), { target: { value: 'Hastings, MI' } })
+      fireEvent.click(within(dialog).getByRole('button', { name: /transmit report/i }))
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'ncs_spot_report',
+          hazard: 'tornado',
+          location: 'Hastings, MI',
+          observed_at: expect.any(String),
+        }),
+      )
+    })
+
+    it('keeps transmit disabled for sub-threshold hail and enables at 1 inch', () => {
+      render(<NCSPanel {...makeProps()} />)
+      openComposer()
+      selectHazard('Hail')
+      const dialog = screen.getByRole('dialog')
+      fireEvent.change(within(dialog).getByLabelText(/location/i), { target: { value: 'Grand Rapids' } })
+      const transmit = within(dialog).getByRole('button', { name: /transmit report/i })
+      fireEvent.change(within(dialog).getByLabelText(/largest hailstone/i), { target: { value: '0.5' } })
+      expect(transmit).toBeDisabled()
+      fireEvent.change(within(dialog).getByLabelText(/largest hailstone/i), { target: { value: '1.75' } })
+      expect(transmit).toBeEnabled()
+    })
+
+    it('shows a confirmation notice on ncs_spot_report_sent', () => {
+      const msg: WsMessage = { type: 'ncs_spot_report_sent', text: 'SKYWARN SPOT REPORT. ...', ts: 't' }
+      render(<NCSPanel {...makeProps({ lastMessage: msg })} />)
+      expect(screen.getByText('Spot report transmitted.')).toBeInTheDocument()
+    })
+
+    it('surfaces the server error in the open composer on ncs_spot_report_error', () => {
+      const { rerender } = render(<NCSPanel {...makeProps()} />)
+      openComposer()
+      const errMsg: WsMessage = {
+        type: 'ncs_spot_report_error',
+        detail: 'Hail under 1.00 inch is below SKYWARN reporting criteria.',
+      }
+      rerender(
+        <ThemeProvider theme={makeTheme(false)}>
+          <NCSPanel {...makeProps({ lastMessage: errMsg })} />
+        </ThemeProvider>,
+      )
+      expect(screen.getByText(/below SKYWARN reporting criteria/i)).toBeInTheDocument()
+    })
+  })
+
+  describe('net scripts and round-table', () => {
+    const ACTIVE: WsMessage = { type: 'ncs_state', active: true, roster: [], zone: '' }
+
+    it('script and round-table buttons are disabled when inactive', () => {
+      render(<NCSPanel {...makeProps()} />)
+      expect(screen.getByRole('button', { name: /read preamble/i })).toBeDisabled()
+      expect(screen.getByRole('button', { name: /read closing/i })).toBeDisabled()
+      expect(screen.getByRole('button', { name: /call next station/i })).toBeDisabled()
+      expect(screen.getByRole('button', { name: /new round/i })).toBeDisabled()
+    })
+
+    it('sends ncs_read_preamble / ncs_read_closing when active', () => {
+      const send = vi.fn()
+      render(<NCSPanel {...makeProps({ send, lastMessage: ACTIVE })} />)
+      fireEvent.click(screen.getByRole('button', { name: /read preamble/i }))
+      expect(send).toHaveBeenCalledWith({ type: 'ncs_read_preamble' })
+      fireEvent.click(screen.getByRole('button', { name: /read closing/i }))
+      expect(send).toHaveBeenCalledWith({ type: 'ncs_read_closing' })
+    })
+
+    it('sends ncs_call_next and ncs_call_reset when active', () => {
+      const send = vi.fn()
+      render(<NCSPanel {...makeProps({ send, lastMessage: ACTIVE })} />)
+      fireEvent.click(screen.getByRole('button', { name: /call next station/i }))
+      expect(send).toHaveBeenCalledWith({ type: 'ncs_call_next' })
+      fireEvent.click(screen.getByRole('button', { name: /new round/i }))
+      expect(send).toHaveBeenCalledWith({ type: 'ncs_call_reset' })
+    })
+
+    it('per-row call button sends ncs_call_station', () => {
+      const send = vi.fn()
+      const msg: WsMessage = {
+        type: 'ncs_state', active: true, zone: '',
+        roster: [{ callsign: 'W1AAA', status: 'CheckedIn', traffic: 'Routine', name: 'Alice', location: 'GR', checkin_time: 1700000000 }],
+      }
+      render(<NCSPanel {...makeProps({ send, lastMessage: msg })} />)
+      fireEvent.click(screen.getByRole('button', { name: /call W1AAA/i }))
+      expect(send).toHaveBeenCalledWith({ type: 'ncs_call_station', callsign: 'W1AAA', name: 'Alice' })
+    })
+
+    it('shows a notice on ncs_script_sent', () => {
+      const msg: WsMessage = { type: 'ncs_script_sent', which: 'preamble', text: '...' }
+      render(<NCSPanel {...makeProps({ lastMessage: msg })} />)
+      expect(screen.getByText('Preamble transmitted.')).toBeInTheDocument()
+    })
+
+    it('shows the error on ncs_script_error', () => {
+      const msg: WsMessage = { type: 'ncs_script_error', detail: 'No preamble script configured.' }
+      render(<NCSPanel {...makeProps({ lastMessage: msg })} />)
+      expect(screen.getByText('No preamble script configured.')).toBeInTheDocument()
+    })
+
+    it('shows a notice on ncs_round_complete', () => {
+      const msg: WsMessage = { type: 'ncs_round_complete' }
+      render(<NCSPanel {...makeProps({ lastMessage: msg })} />)
+      expect(screen.getByText(/round complete/i)).toBeInTheDocument()
     })
   })
 })

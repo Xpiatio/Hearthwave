@@ -514,6 +514,8 @@ The **NCS / SKYWARN** section at the bottom of the Admin panel configures the Ne
 | Field | Description |
 |-------|-------------|
 | NWS County Zone | NWS zone code for SKYWARN alert polling (e.g. `MIZ025`). Empty = disabled. Find your zone at weather.gov. |
+| Net Opening Preamble | Script read on the air (via the NCS panel) to open a net. Placeholders: `{callsign} {name} {location} {date} {time}`. Empty = none. |
+| Net Closing Script | Script read on the air to sign off a net. Same placeholders. Empty = none. |
 
 The announcement interval (how often net ID is broadcast during an active NCS session) defaults to 10 minutes and is set in `config.json` (`ncs_announcement_interval`).
 
@@ -598,6 +600,41 @@ If a NWS county zone is configured in the Admin panel and internet is available,
 - A red alert banner appears at the top of the NCS panel showing the event name and headline.
 - A browser notification fires (if **NOTIFY** is enabled and the tab is hidden).
 - An auto-TX announcement is sent over the air (listen-before-talk checked first).
+
+### SKYWARN spot reports
+
+Click the **storm icon** in the NCS panel header to file a SKYWARN spot report. This is available whether or not a net is active — severe weather does not wait for a net. The composer asks for the hazard type and a few fields keyed to the official SKYWARN reporting criteria:
+
+| Hazard | Reporting threshold |
+|---|---|
+| Tornado / funnel cloud / rotating wall cloud | Always reportable |
+| Hail | Largest stone ≥ 1.00 inch |
+| Wind / damage | ≥ 40 mph (estimated or measured); describe damage |
+| Flooding / rainfall | ≥ 1 inch in an hour, or describe the flooding |
+| Snow / Other | Snowfall amount or a description |
+
+You also enter the **location** (required) and the **time observed** (defaults to now). The **TRANSMIT REPORT** button stays disabled until the report meets criteria. When you submit, Hearthwave:
+
+- Builds a standardized report — e.g. *"SKYWARN SPOT REPORT. HAIL, LARGEST STONE 1.75 INCHES (GOLF BALL). LOCATION DOWNTOWN GRAND RAPIDS. TIME 14:05 LOCAL. W8ABC."*
+- Transmits it over the air immediately (it keys even over a busy channel; BREAK BREAK still suppresses it).
+- Posts it to the shared message log, tagged **SKYWARN**.
+- Records it in the active net's session journal (if a net is running).
+
+If a report is below threshold, the server rejects it and the reason is shown in the composer.
+
+### Net scripts (preamble & closing)
+
+Set an opening **preamble** and a **closing** script in **Admin → Station → NCS / SKYWARN**. While a net is active, the NCS panel shows **READ PREAMBLE** and **READ CLOSING** buttons — clicking one transmits that script over the air and posts it to the message log (and into the session journal). Use the preamble to open the net (state its purpose and instructions) and the closing to sign off.
+
+Scripts support placeholders that are filled in when read: `{callsign}`, `{name}`, `{location}`, `{date}`, `{time}`. If a script is blank, the button reports that none is configured.
+
+### Round-table caller
+
+To run a directed net, use the round-table controls below the roster:
+
+- **CALL NEXT STATION** — picks the next checked-in station that hasn't been called yet this round, transmits *"Station <callsign>, do you have any traffic or comments?"*, highlights that row, and marks it called. After the last station it reports **Round complete**.
+- Each roster row also has a **call** button to call that specific station out of order.
+- **NEW ROUND** clears the "called" marks so you can go around again.
 
 ### Net announcements
 

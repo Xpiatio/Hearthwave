@@ -18,10 +18,176 @@ import urllib.request
 from typing import Callable, Optional
 
 from backend.plugins.base import BasePlugin, PluginManifest
+from backend.text.callsigns import spell_digits_in_callsigns
 
 _log = logging.getLogger(__name__)
 
+
+def _format_net_script(template: str, *, callsign: str, name: str, location: str) -> str:
+    """Substitute net-script placeholders, then digit-spell for radio clarity.
+
+    Supports {callsign} {name} {location} {date} {time}. Uses str.replace (not
+    str.format) so stray braces in an operator's template never raise.
+    """
+    now = datetime.datetime.now()
+    phrase = (
+        template.replace("{callsign}", callsign or "")
+        .replace("{name}", name or "")
+        .replace("{location}", location or "")
+        .replace("{date}", now.strftime("%A, %B %d"))
+        .replace("{time}", now.strftime("%H:%M"))
+    )
+    return spell_digits_in_callsigns(phrase)
+
 _VALID_TRAFFIC = {"Routine", "Priority", "Emergency", "General", "Short Term", "IN-n-Out"}
+
+# SKYWARN spot-report hazard types whose WHAT clause is a fixed label.
+_HAZARD_LABELS = {
+    "tornado": "TORNADO ON THE GROUND",
+    "funnel_cloud": "FUNNEL CLOUD",
+    "wall_cloud": "ROTATING WALL CLOUD",
+}
+_SPOT_HAZARDS = set(_HAZARD_LABELS) | {"hail", "wind", "flooding", "snow", "other"}
+
+# Common hail-size reference objects (inches → name), largest at-or-below wins.
+_HAIL_REFERENCES = [
+    (0.25, "pea"),
+    (0.50, "marble"),
+    (0.75, "penny"),
+    (1.00, "quarter"),
+    (1.25, "half dollar"),
+    (1.50, "ping pong ball"),
+    (1.75, "golf ball"),
+    (2.00, "hen egg"),
+    (2.50, "tennis ball"),
+    (2.75, "baseball"),
+    (4.00, "softball"),
+]
+
+# SKYWARN reporting thresholds (severe-criteria minimums).
+_HAIL_MIN_IN = 1.00
+_WIND_MIN_MPH = 40.0
+_RAIN_MIN_IN = 1.00
+
+
+def _hail_reference(size_in: float) -> str:
+    """Nearest common reference object at or below the given hail size."""
+    name = ""
+    for inches, label in _HAIL_REFERENCES:
+        if size_in >= inches:
+            name = label
+    return name
+
+
+def _as_float(value) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _fmt_num(value: float) -> str:
+    """Trim trailing zeros: 1.0 → '1', 1.50 → '1.5', 1.75 → '1.75'."""
+    return f"{value:g}"
+
+
+def _spot_observed_time(observed_at: str | None) -> str:
+    """Local HH:MM for the report's TIME field. Falls back to now."""
+    dt = None
+    if observed_at:
+        try:
+            dt = datetime.datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+            if dt.tzinfo is not None:
+                dt = dt.astimezone()  # convert to server-local time
+        except (ValueError, TypeError):
+            dt = None
+    if dt is None:
+        dt = datetime.datetime.now()
+    return dt.strftime("%H:%M")
+
+
+def _validate_spot_report(payload: dict) -> str | None:
+    """Return an error string if the report fails SKYWARN criteria, else None."""
+    hazard = payload.get("hazard")
+    if hazard not in _SPOT_HAZARDS:
+        return "Unknown hazard type."
+    if not (payload.get("location") or "").strip():
+        return "Location is required."
+    if hazard == "hail":
+        size = _as_float(payload.get("hail_size_in"))
+        if size is None:
+            return "Hail size is required."
+        if size < _HAIL_MIN_IN:
+            return "Hail under 1.00 inch is below SKYWARN reporting criteria."
+    elif hazard == "wind":
+        mph = _as_float(payload.get("wind_mph"))
+        if mph is None:
+            return "Wind speed is required."
+        if mph < _WIND_MIN_MPH:
+            return "Wind under 40 mph is below SKYWARN reporting criteria."
+    elif hazard == "flooding":
+        amt = _as_float(payload.get("rain_amount_in"))
+        has_detail = bool((payload.get("detail") or "").strip())
+        if (amt is None or amt < _RAIN_MIN_IN) and not has_detail:
+            return "Report 1+ inch of rain in an hour, or describe the flooding."
+    elif hazard == "snow":
+        if _as_float(payload.get("snow_amount_in")) is None and not (payload.get("detail") or "").strip():
+            return "Report a snowfall amount or describe the conditions."
+    elif hazard == "other":
+        if not (payload.get("detail") or "").strip():
+            return "Describe what you observed."
+    return None
+
+
+def _spot_what_clause(payload: dict) -> str:
+    """Build the WHAT portion of a spot report from the structured fields."""
+    hazard = payload.get("hazard")
+    detail = (payload.get("detail") or "").strip()
+
+    if hazard in _HAZARD_LABELS:
+        clause = _HAZARD_LABELS[hazard]
+        return f"{clause}, {detail}" if detail else clause
+
+    if hazard == "hail":
+        size = _as_float(payload.get("hail_size_in")) or 0.0
+        clause = f"hail, largest stone {_fmt_num(size)} inches"
+        ref = _hail_reference(size)
+        if ref:
+            clause += f" ({ref})"
+        return f"{clause}, {detail}" if detail else clause
+
+    if hazard == "wind":
+        mph = _as_float(payload.get("wind_mph")) or 0.0
+        method = "measured" if payload.get("wind_method") == "measured" else "estimated"
+        clause = f"{method} wind {_fmt_num(mph)} mph"
+        damage = (payload.get("wind_damage") or "").strip()
+        extra = ", ".join(p for p in (damage, detail) if p)
+        return f"{clause}, {extra}" if extra else clause
+
+    if hazard == "flooding":
+        amt = _as_float(payload.get("rain_amount_in"))
+        dur = _as_float(payload.get("rain_duration_min"))
+        parts = []
+        if amt is not None:
+            rain = f"rainfall {_fmt_num(amt)} inches"
+            if dur is not None:
+                rain += f" in {_fmt_num(dur)} minutes"
+            parts.append(rain)
+        if detail:
+            parts.append(detail)
+        return ", ".join(parts) or "flooding"
+
+    if hazard == "snow":
+        amt = _as_float(payload.get("snow_amount_in"))
+        parts = []
+        if amt is not None:
+            parts.append(f"snowfall {_fmt_num(amt)} inches")
+        if detail:
+            parts.append(detail)
+        return ", ".join(parts) or "snow"
+
+    # other
+    return detail or "observation"
 
 
 def _roster_key(callsign: str, name: str) -> str:
@@ -86,9 +252,12 @@ class NCSPlugin(BasePlugin):
         self._broadcast_contacts_fn = broadcast_contacts_fn
 
         self._active = False
-        # Roster: callsign → {callsign, status, traffic, name, location, checkin_time}
+        # Roster: callsign → {callsign, status, traffic, name, location, checkin_time, called}
         self._roster: dict[str, dict] = {}
         self._session_rx: list[str] = []
+
+        # Round-table caller: roster key of the station currently being called.
+        self._current_call_key: str | None = None
 
         self._break_break_pending = False
 
@@ -157,6 +326,35 @@ class NCSPlugin(BasePlugin):
             if reply:
                 asyncio.create_task(self._handle_get_replay(reply), name="ncs-replay")
 
+        elif msg_type == "ncs_spot_report":
+            asyncio.create_task(
+                self._handle_spot_report(payload, reply), name="ncs-spot-report"
+            )
+
+        elif msg_type == "ncs_read_preamble":
+            asyncio.create_task(
+                self._handle_read_script("preamble", reply), name="ncs-preamble"
+            )
+
+        elif msg_type == "ncs_read_closing":
+            asyncio.create_task(
+                self._handle_read_script("closing", reply), name="ncs-closing"
+            )
+
+        elif msg_type == "ncs_call_next":
+            asyncio.create_task(self._handle_call_next(reply), name="ncs-call-next")
+
+        elif msg_type == "ncs_call_station":
+            cs = (payload.get("callsign") or "").strip().upper()
+            entry_name = (payload.get("name") or "").strip()
+            if cs:
+                asyncio.create_task(
+                    self._handle_call_station(cs, entry_name), name="ncs-call-station"
+                )
+
+        elif msg_type == "ncs_call_reset":
+            asyncio.create_task(self._handle_call_reset(), name="ncs-call-reset")
+
     def on_audio_rx_chunk(self, chunk) -> None:
         """Accumulate PCM chunks into the rolling replay buffer (sync, hot path)."""
         try:
@@ -199,6 +397,7 @@ class NCSPlugin(BasePlugin):
         self._roster.clear()
         self._session_rx.clear()
         self._seen_alerts.clear()
+        self._current_call_key = None
         config = self._get_config()
         if config.ncs_zone:
             self._nws_task = asyncio.create_task(self._nws_poll_loop(), name="ncs-nws-poll")
@@ -213,6 +412,7 @@ class NCSPlugin(BasePlugin):
         if not self._active:
             return
         self._active = False
+        self._current_call_key = None
         for task in (self._nws_task, self._announce_task):
             if task:
                 task.cancel()
@@ -268,6 +468,7 @@ class NCSPlugin(BasePlugin):
             "location": location or existing.get("location", ""),
             "checkin_time": existing.get("checkin_time", now),
             "verified": verified,
+            "called": existing.get("called", False),
         }
         await self._broadcast_roster()
 
@@ -325,6 +526,150 @@ class NCSPlugin(BasePlugin):
             _log.warning("Replay encode error: %s", exc)
             audio_b64 = ""
         await reply({"type": "ncs_replay_audio", "data": audio_b64, "sample_rate": _SAMPLE_RATE})
+
+    # ------------------------------------------------------------------
+    # SKYWARN spot report
+    # ------------------------------------------------------------------
+
+    def _format_spot_report(self, payload: dict) -> str:
+        """Assemble the standardized on-air / chat text for a spot report."""
+        what = _spot_what_clause(payload)
+        location = (payload.get("location") or "").strip()
+        time_str = _spot_observed_time(payload.get("observed_at"))
+        callsign = (payload.get("callsign") or self._get_config().callsign or "").strip()
+        text = (
+            f"SKYWARN SPOT REPORT. {what}. "
+            f"LOCATION {location}. TIME {time_str} LOCAL. {callsign}."
+        )
+        return text.upper()
+
+    async def _handle_spot_report(self, payload: dict, reply=None) -> None:
+        err = _validate_spot_report(payload)
+        if err:
+            if reply:
+                await reply({"type": "ncs_spot_report_error", "detail": err})
+            return
+
+        text = self._format_spot_report(payload)
+        # Operator-initiated so it keys even over a busy channel (like the
+        # Transmit button); BREAK BREAK can still suppress it via on_audio_tx_pre_queue.
+        await self._tx_queue.put(
+            {"text": text, "_pre_formatted": True, "_operator_initiated": True}
+        )
+
+        callsign = (payload.get("callsign") or self._get_config().callsign or "").strip().upper()
+        ts = datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
+        # Show the report in every connected client's message log. (Not recorded in
+        # _stream_history, so it won't backfill to clients that connect later.)
+        await self._broadcast({
+            "type": "tx_echo",
+            "ts": ts,
+            "callsign": callsign,
+            "operator": "",
+            "display_name": "SKYWARN",
+            "text": text,
+            "target_call": "ALL",
+            "target_name": "",
+        })
+
+        if self._active:
+            self._session_rx.append(f"SPOT REPORT: {text}")
+
+        if reply:
+            await reply({"type": "ncs_spot_report_sent", "text": text, "ts": ts})
+        _log.info("NCS spot report transmitted: %s", text[:80])
+
+    # ------------------------------------------------------------------
+    # Net scripts (preamble / closing)
+    # ------------------------------------------------------------------
+
+    async def _chat_echo(self, text: str, display_name: str, callsign: str) -> None:
+        """Render NCS-originated text in every client's message log (not persisted
+        to stream history)."""
+        await self._broadcast({
+            "type": "tx_echo",
+            "ts": datetime.datetime.now(tz=datetime.timezone.utc).isoformat(),
+            "callsign": callsign,
+            "operator": "",
+            "display_name": display_name,
+            "text": text,
+            "target_call": "ALL",
+            "target_name": "",
+        })
+
+    async def _handle_read_script(self, which: str, reply=None) -> None:
+        config = self._get_config()
+        template = config.ncs_preamble_text if which == "preamble" else config.ncs_closing_text
+        if not template.strip():
+            if reply:
+                await reply({"type": "ncs_script_error", "detail": f"No {which} script configured."})
+            return
+        callsign = (config.callsign or "").strip()
+        text = _format_net_script(
+            template, callsign=callsign, name=config.name, location=config.location
+        )
+        await self._tx_queue.put(
+            {"text": text, "_pre_formatted": True, "_operator_initiated": True}
+        )
+        await self._chat_echo(text, "NET CONTROL", callsign.upper())
+        if self._active:
+            self._session_rx.append(f"{which.upper()}: {text}")
+        if reply:
+            await reply({"type": "ncs_script_sent", "which": which, "text": text})
+        _log.info("NCS %s script transmitted: %s", which, text[:80])
+
+    # ------------------------------------------------------------------
+    # Round-table caller
+    # ------------------------------------------------------------------
+
+    async def _announce_call(self, key: str) -> None:
+        """Mark a roster station as called, set it current, and announce it."""
+        entry = self._roster[key]
+        entry["called"] = True
+        self._current_call_key = key
+        config = self._get_config()
+        name = (entry.get("name") or "").strip()
+        who = f"{entry['callsign']}, {name}" if name else entry["callsign"]
+        text = f"Station {who}, do you have any traffic or comments? {config.callsign}."
+        await self._tx_queue.put(
+            {"text": text, "_pre_formatted": True, "_operator_initiated": True}
+        )
+        await self._broadcast_roster()
+
+    async def _handle_call_next(self, reply=None) -> None:
+        if not self._active:
+            return
+        next_key = next(
+            (k for k, e in self._roster.items()
+             if e.get("status") == "CheckedIn" and not e.get("called")),
+            None,
+        )
+        if next_key is None:
+            self._current_call_key = None
+            await self._broadcast_roster()
+            if reply:
+                await reply({"type": "ncs_round_complete"})
+            return
+        await self._announce_call(next_key)
+
+    async def _handle_call_station(self, callsign: str, name: str) -> None:
+        if not self._active:
+            return
+        key = _roster_key(callsign, name)
+        if key not in self._roster:
+            # Fall back to first roster entry sharing the callsign (anonymous check-in).
+            key = next(
+                (k for k, e in self._roster.items() if e["callsign"] == callsign),
+                None,
+            )
+        if key is not None:
+            await self._announce_call(key)
+
+    async def _handle_call_reset(self) -> None:
+        for entry in self._roster.values():
+            entry["called"] = False
+        self._current_call_key = None
+        await self._broadcast_roster()
 
     async def _save_ncs_journal(self) -> None:
         from backend.persistence.journal import save_journal
@@ -426,6 +771,11 @@ class NCSPlugin(BasePlugin):
     # Helpers
     # ------------------------------------------------------------------
 
+    def _current_call_sign(self) -> str:
+        """Callsign of the station currently being called (round-table), or ''."""
+        entry = self._roster.get(self._current_call_key) if self._current_call_key else None
+        return entry["callsign"] if entry else ""
+
     def _build_state_msg(self) -> dict:
         config = self._get_config()
         return {
@@ -433,10 +783,12 @@ class NCSPlugin(BasePlugin):
             "active": self._active,
             "roster": list(self._roster.values()),
             "zone": config.ncs_zone if config else "",
+            "current_call": self._current_call_sign(),
         }
 
     async def _broadcast_roster(self) -> None:
         await self._broadcast({
             "type": "ncs_roster_update",
             "roster": list(self._roster.values()),
+            "current_call": self._current_call_sign(),
         })

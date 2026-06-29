@@ -30,7 +30,8 @@ browser-based React frontend communicating over WebSocket.
 - **Neighborhood watch groups** — deploy Hearthwave as the watch's base station.
   Assign listen-only accounts to patrol volunteers and TX-capable accounts to
   designated net control operators. The NCS roster tracks who is active on each
-  patrol; SKYWARN alerts auto-announce over the air when severe weather approaches.
+  patrol; SKYWARN alerts auto-announce over the air when severe weather approaches,
+  and trained spotters can file standardized SKYWARN spot reports straight from the net.
 
 ## Features
 
@@ -87,8 +88,14 @@ browser-based React frontend communicating over WebSocket.
 - **CW decode** — Morse code receive mode alongside voice
 - **NCS mode** — Net Control Station plugin with roster management, six priority
   levels, and one-click callsign check-in/out
+- **Net scripts & round-table** — configurable opening preamble and closing
+  scripts read over the air, plus a round-table caller that cycles the roster
+  prompting each station for traffic
 - **SKYWARN alerts** — live National Weather Service alerts pushed to all users
   with browser notification support
+- **SKYWARN spot reports** — file a severe-weather report from a criteria-gated
+  form (hail ≥1″, wind ≥40 mph, tornado/funnel/wall cloud, flooding) that builds
+  a standardized on-air report and transmits, logs, and journals it
 - **Installable plugin system** — drop a plugin directory under `/data/plugins`
   or upload it as a `.zip` from the admin **Settings → Plugins** tab; plugins
   hot-load (install/reload/uninstall with no restart) and declare their settings

@@ -1059,3 +1059,243 @@ class TestNCSOnConfigChanged:
         await ncs.on_config_changed(make_config(ncs_zone="MIZ071"))
         assert ncs._nws_task is sentinel  # unchanged
         sentinel.cancel()
+
+
+# ---------------------------------------------------------------------------
+# SKYWARN spot reports
+# ---------------------------------------------------------------------------
+
+class TestSpotReportValidation:
+    def test_location_required(self):
+        from backend.plugins.ncs import _validate_spot_report
+        assert _validate_spot_report({"hazard": "tornado"}) is not None
+
+    def test_tornado_valid_with_location(self):
+        from backend.plugins.ncs import _validate_spot_report
+        assert _validate_spot_report({"hazard": "tornado", "location": "x"}) is None
+
+    def test_hail_below_threshold_rejected(self):
+        from backend.plugins.ncs import _validate_spot_report
+        assert _validate_spot_report({"hazard": "hail", "location": "x", "hail_size_in": 0.75}) is not None
+
+    def test_hail_at_threshold_ok(self):
+        from backend.plugins.ncs import _validate_spot_report
+        assert _validate_spot_report({"hazard": "hail", "location": "x", "hail_size_in": 1.0}) is None
+
+    def test_hail_missing_size_rejected(self):
+        from backend.plugins.ncs import _validate_spot_report
+        assert _validate_spot_report({"hazard": "hail", "location": "x"}) is not None
+
+    def test_wind_below_threshold_rejected(self):
+        from backend.plugins.ncs import _validate_spot_report
+        assert _validate_spot_report({"hazard": "wind", "location": "x", "wind_mph": 30}) is not None
+
+    def test_wind_at_threshold_ok(self):
+        from backend.plugins.ncs import _validate_spot_report
+        assert _validate_spot_report({"hazard": "wind", "location": "x", "wind_mph": 40}) is None
+
+    def test_flooding_requires_rain_or_detail(self):
+        from backend.plugins.ncs import _validate_spot_report
+        assert _validate_spot_report({"hazard": "flooding", "location": "x"}) is not None
+        assert _validate_spot_report({"hazard": "flooding", "location": "x", "rain_amount_in": 1.5}) is None
+        assert _validate_spot_report({"hazard": "flooding", "location": "x", "detail": "street flooding"}) is None
+
+    def test_other_requires_detail(self):
+        from backend.plugins.ncs import _validate_spot_report
+        assert _validate_spot_report({"hazard": "other", "location": "x"}) is not None
+        assert _validate_spot_report({"hazard": "other", "location": "x", "detail": "lightning"}) is None
+
+    def test_unknown_hazard_rejected(self):
+        from backend.plugins.ncs import _validate_spot_report
+        assert _validate_spot_report({"hazard": "earthquake", "location": "x"}) is not None
+
+
+class TestSpotReportFormatting:
+    def test_hail_format_includes_reference(self):
+        ncs = make_ncs()
+        text = ncs._format_spot_report({
+            "hazard": "hail", "location": "Grand Rapids",
+            "hail_size_in": 1.75, "observed_at": "2026-06-28T14:05:00",
+        })
+        assert text.startswith("SKYWARN SPOT REPORT.")
+        assert "1.75 INCHES" in text
+        assert "GOLF BALL" in text
+        assert "LOCATION GRAND RAPIDS" in text
+        assert "W8TST" in text  # station callsign from make_config
+
+    def test_wind_format_measured_and_damage(self):
+        ncs = make_ncs()
+        text = ncs._format_spot_report({
+            "hazard": "wind", "location": "Caledonia",
+            "wind_mph": 58, "wind_method": "measured", "wind_damage": "large branches down",
+        })
+        assert "MEASURED WIND 58 MPH" in text
+        assert "LARGE BRANCHES DOWN" in text
+
+    def test_tornado_format(self):
+        ncs = make_ncs()
+        text = ncs._format_spot_report({"hazard": "tornado", "location": "Hastings"})
+        assert "TORNADO ON THE GROUND" in text
+
+    def test_callsign_override_uppercased(self):
+        ncs = make_ncs()
+        text = ncs._format_spot_report({"hazard": "tornado", "location": "x", "callsign": "k8abc"})
+        assert "K8ABC" in text
+
+
+class TestSpotReportHandler:
+    async def test_valid_report_enqueues_tx_acks_and_broadcasts(self):
+        ncs = make_ncs()
+        reply = AsyncMock()
+        await ncs._handle_spot_report(
+            {"hazard": "hail", "location": "GR", "hail_size_in": 1.75}, reply
+        )
+        item = ncs._tx_queue.get_nowait()
+        assert item["_pre_formatted"] is True
+        assert item["_operator_initiated"] is True
+        assert "SKYWARN SPOT REPORT" in item["text"]
+
+        sent = [c.args[0] for c in reply.await_args_list]
+        assert any(m["type"] == "ncs_spot_report_sent" for m in sent)
+
+        broadcasts = [c.args[0] for c in ncs._broadcast.await_args_list]
+        assert any(m["type"] == "tx_echo" and m["display_name"] == "SKYWARN" for m in broadcasts)
+
+    async def test_invalid_report_replies_error_and_skips_tx(self):
+        ncs = make_ncs()
+        reply = AsyncMock()
+        await ncs._handle_spot_report(
+            {"hazard": "hail", "location": "GR", "hail_size_in": 0.5}, reply
+        )
+        assert ncs._tx_queue.empty()
+        sent = [c.args[0] for c in reply.await_args_list]
+        assert sent and sent[0]["type"] == "ncs_spot_report_error"
+        assert not ncs._broadcast.await_args_list
+
+    async def test_active_net_records_report_in_session_rx(self):
+        ncs = make_ncs()
+        ncs._active = True
+        await ncs._handle_spot_report({"hazard": "tornado", "location": "x"}, AsyncMock())
+        assert any("SPOT REPORT:" in line for line in ncs._session_rx)
+
+    async def test_inactive_net_does_not_record(self):
+        ncs = make_ncs()
+        await ncs._handle_spot_report({"hazard": "tornado", "location": "x"}, AsyncMock())
+        assert ncs._session_rx == []
+
+
+# ---------------------------------------------------------------------------
+# Net scripts (preamble / closing)
+# ---------------------------------------------------------------------------
+
+class TestNetScriptFormatting:
+    def test_substitutes_all_placeholders(self):
+        from backend.plugins.ncs import _format_net_script
+        out = _format_net_script(
+            "{name} at {location}, {callsign}.",
+            callsign="W8ABC", name="Alice", location="Grand Rapids",
+        )
+        assert "Alice" in out
+        assert "Grand Rapids" in out
+
+    def test_stray_braces_do_not_raise(self):
+        from backend.plugins.ncs import _format_net_script
+        out = _format_net_script("literal {unknown} brace", callsign="W8ABC", name="", location="")
+        assert "{unknown}" in out
+
+
+class TestNetScriptHandler:
+    async def test_preamble_transmits_and_acks_when_configured(self):
+        ncs = make_ncs(make_config(ncs_preamble_text="Welcome to the net, {callsign}."))
+        ncs._active = True
+        reply = AsyncMock()
+        await ncs._handle_read_script("preamble", reply)
+        item = ncs._tx_queue.get_nowait()
+        assert item["_pre_formatted"] is True and item["_operator_initiated"] is True
+        sent = [c.args[0] for c in reply.await_args_list]
+        assert any(m["type"] == "ncs_script_sent" and m["which"] == "preamble" for m in sent)
+        assert any("PREAMBLE:" in line for line in ncs._session_rx)
+
+    async def test_blank_script_errors_and_skips_tx(self):
+        ncs = make_ncs(make_config(ncs_preamble_text=""))
+        reply = AsyncMock()
+        await ncs._handle_read_script("preamble", reply)
+        assert ncs._tx_queue.empty()
+        sent = [c.args[0] for c in reply.await_args_list]
+        assert sent and sent[0]["type"] == "ncs_script_error"
+
+    async def test_closing_uses_closing_template(self):
+        ncs = make_ncs(make_config(ncs_closing_text="Net closed. {callsign}."))
+        await ncs._handle_read_script("closing", AsyncMock())
+        item = ncs._tx_queue.get_nowait()
+        assert "NET CLOSED" in item["text"].upper()
+
+
+# ---------------------------------------------------------------------------
+# Round-table caller
+# ---------------------------------------------------------------------------
+
+def _checkin_sync(ncs, callsign, name=""):
+    """Add a roster entry directly (bypasses async checkin/contacts lookup)."""
+    key = f"{callsign}|{name}"
+    ncs._roster[key] = {
+        "callsign": callsign, "status": "CheckedIn", "traffic": "Routine",
+        "name": name, "location": "", "checkin_time": 0.0, "verified": False, "called": False,
+    }
+    return key
+
+
+class TestRoundTableCaller:
+    async def test_call_next_marks_and_announces(self):
+        ncs = make_ncs()
+        ncs._active = True
+        _checkin_sync(ncs, "W1AAA")
+        await ncs._handle_call_next(AsyncMock())
+        item = ncs._tx_queue.get_nowait()
+        assert "Station W1AAA" in item["text"]
+        assert ncs._roster["W1AAA|"]["called"] is True
+        assert ncs._current_call_sign() == "W1AAA"
+
+    async def test_call_next_advances_then_completes(self):
+        ncs = make_ncs()
+        ncs._active = True
+        _checkin_sync(ncs, "W1AAA")
+        _checkin_sync(ncs, "W2BBB")
+        reply = AsyncMock()
+        await ncs._handle_call_next(reply)
+        await ncs._handle_call_next(reply)
+        await ncs._handle_call_next(reply)
+        sent = [c.args[0] for c in reply.await_args_list]
+        assert any(m["type"] == "ncs_round_complete" for m in sent)
+        assert ncs._current_call_sign() == ""
+
+    async def test_call_reset_clears_flags(self):
+        ncs = make_ncs()
+        ncs._active = True
+        _checkin_sync(ncs, "W1AAA")
+        await ncs._handle_call_next(AsyncMock())
+        await ncs._handle_call_reset()
+        assert ncs._roster["W1AAA|"]["called"] is False
+        assert ncs._current_call_sign() == ""
+
+    async def test_call_station_targets_specific_entry(self):
+        ncs = make_ncs()
+        ncs._active = True
+        _checkin_sync(ncs, "W1AAA")
+        _checkin_sync(ncs, "W2BBB")
+        await ncs._handle_call_station("W2BBB", "")
+        item = ncs._tx_queue.get_nowait()
+        assert "Station W2BBB" in item["text"]
+        assert ncs._roster["W2BBB|"]["called"] is True
+        assert ncs._roster["W1AAA|"]["called"] is False
+
+    async def test_call_next_ignored_when_inactive(self):
+        ncs = make_ncs()
+        _checkin_sync(ncs, "W1AAA")
+        await ncs._handle_call_next(AsyncMock())
+        assert ncs._tx_queue.empty()
+
+    def test_state_msg_includes_current_call(self):
+        ncs = make_ncs()
+        msg = ncs._build_state_msg()
+        assert "current_call" in msg
