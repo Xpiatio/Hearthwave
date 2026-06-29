@@ -1203,6 +1203,8 @@ def _build_status() -> dict:
         "gemini_api_key_set": bool(_config and _config.gemini_api_key),
         "journals_dir": str(_config.journals_dir) if _config else "/data/journals",
         "ncs_zone": (_config.ncs_zone if _config else ""),
+        "ncs_preamble_text": (_config.ncs_preamble_text if _config else ""),
+        "ncs_closing_text": (_config.ncs_closing_text if _config else ""),
         "input_device": (_config.input_device if _config else -1),
         "output_device": (_config.output_device if _config else -1),
         "system_monitor_sink": (_config.system_monitor_sink if _config else ""),
@@ -1734,6 +1736,10 @@ async def _ws_handle_set_admin_config(ws: WebSocket, data: dict, state: "Connect
             pass
     if "ncs_zone" in data:
         _config["ncs_zone"] = str(data["ncs_zone"]).strip().upper()
+    if "ncs_preamble_text" in data:
+        _config["ncs_preamble_text"] = str(data["ncs_preamble_text"])
+    if "ncs_closing_text" in data:
+        _config["ncs_closing_text"] = str(data["ncs_closing_text"])
     rx_mode_changed = False
     if "rx_mode" in data:
         new_mode = str(data["rx_mode"]).strip().lower()

@@ -317,6 +317,18 @@ class ServerConfig(dict):
         """Seconds between automated net announcements while NCS is active (default 600)."""
         return int(self.get("ncs_announcement_interval", 600))
 
+    @property
+    def ncs_preamble_text(self) -> str:
+        """Opening net preamble template; placeholders substituted before TTS.
+        Supports {callsign} {name} {location} {date} {time}. Empty = none."""
+        return self.get("ncs_preamble_text", "") or ""
+
+    @property
+    def ncs_closing_text(self) -> str:
+        """Closing net sign-off template; placeholders substituted before TTS.
+        Supports {callsign} {name} {location} {date} {time}. Empty = none."""
+        return self.get("ncs_closing_text", "") or ""
+
     # ---- plugins (namespaced config for installed plugins) --------------
     # Each plugin's state lives under config["plugins"][id]: the master toggle at
     # "enabled" plus one key per ConfigField. Built-in and 3rd-party plugins alike

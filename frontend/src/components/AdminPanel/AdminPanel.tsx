@@ -40,6 +40,8 @@ interface AdminConfig {
   geminiApiKeySet: boolean;
   journalsDir: string;
   ncsZone: string;
+  ncsPreambleText: string;
+  ncsClosingText: string;
   rxMode: string;
 }
 
@@ -58,6 +60,8 @@ interface Props {
     gemini_api_key: string;
     journals_dir: string;
     ncs_zone: string;
+    ncs_preamble_text: string;
+    ncs_closing_text: string;
     rx_mode: string;
   }) => void;
   onPreviewVoice: (voiceId: string) => void;
@@ -88,6 +92,8 @@ function seedFromConfig(config: AdminConfig): string {
     gemini_api_key: '', // key is write-only (geminiApiKeySet)
     journals_dir: config.journalsDir,
     ncs_zone: (config.ncsZone || '').toUpperCase(),
+    ncs_preamble_text: config.ncsPreambleText || '',
+    ncs_closing_text: config.ncsClosingText || '',
     rx_mode: config.rxMode || 'voice',
   });
 }
@@ -105,6 +111,8 @@ export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPane
   const [geminiKey, setGeminiKey] = useState('');
   const [journalsDir, setJournalsDir] = useState('');
   const [ncsZone, setNcsZone] = useState('');
+  const [ncsPreambleText, setNcsPreambleText] = useState('');
+  const [ncsClosingText, setNcsClosingText] = useState('');
   const [rxMode, setRxMode] = useState('voice');
   const [showKey, setShowKey] = useState(false);
 
@@ -122,6 +130,8 @@ export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPane
     setGeminiKey('');
     setJournalsDir(config.journalsDir);
     setNcsZone(config.ncsZone);
+    setNcsPreambleText(config.ncsPreambleText || '');
+    setNcsClosingText(config.ncsClosingText || '');
     setRxMode(config.rxMode || 'voice');
     setShowKey(false);
     // Compute seed from config directly (state setters are async), mirroring
@@ -148,6 +158,8 @@ export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPane
       gemini_api_key: geminiKey.trim(),
       journals_dir: journalsDir.trim(),
       ncs_zone: ncsZone.trim().toUpperCase(),
+      ncs_preamble_text: ncsPreambleText,
+      ncs_closing_text: ncsClosingText,
       rx_mode: rxMode,
     };
   }
@@ -306,6 +318,30 @@ export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPane
             placeholder="e.g. MIZ025"
             helperText="NWS county zone code for SKYWARN alerts. Leave blank to disable."
             slotProps={{ htmlInput: { style: { fontFamily: 'monospace', fontWeight: 700 } } }}
+            fullWidth
+          />
+
+          <TextField
+            label="Net Opening Preamble"
+            size="small"
+            value={ncsPreambleText}
+            onChange={(e) => setNcsPreambleText(e.target.value)}
+            placeholder="This is the weekly net. All stations welcome…"
+            helperText="Read on the air via the NCS panel. Placeholders: {callsign} {name} {location} {date} {time}"
+            multiline
+            minRows={2}
+            fullWidth
+          />
+
+          <TextField
+            label="Net Closing Script"
+            size="small"
+            value={ncsClosingText}
+            onChange={(e) => setNcsClosingText(e.target.value)}
+            placeholder="Thanks to all who checked in. This net is now closed…"
+            helperText="Read on the air via the NCS panel. Same placeholders as the preamble."
+            multiline
+            minRows={2}
             fullWidth
           />
 

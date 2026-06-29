@@ -1182,3 +1182,120 @@ class TestSpotReportHandler:
         ncs = make_ncs()
         await ncs._handle_spot_report({"hazard": "tornado", "location": "x"}, AsyncMock())
         assert ncs._session_rx == []
+
+
+# ---------------------------------------------------------------------------
+# Net scripts (preamble / closing)
+# ---------------------------------------------------------------------------
+
+class TestNetScriptFormatting:
+    def test_substitutes_all_placeholders(self):
+        from backend.plugins.ncs import _format_net_script
+        out = _format_net_script(
+            "{name} at {location}, {callsign}.",
+            callsign="W8ABC", name="Alice", location="Grand Rapids",
+        )
+        assert "Alice" in out
+        assert "Grand Rapids" in out
+
+    def test_stray_braces_do_not_raise(self):
+        from backend.plugins.ncs import _format_net_script
+        out = _format_net_script("literal {unknown} brace", callsign="W8ABC", name="", location="")
+        assert "{unknown}" in out
+
+
+class TestNetScriptHandler:
+    async def test_preamble_transmits_and_acks_when_configured(self):
+        ncs = make_ncs(make_config(ncs_preamble_text="Welcome to the net, {callsign}."))
+        ncs._active = True
+        reply = AsyncMock()
+        await ncs._handle_read_script("preamble", reply)
+        item = ncs._tx_queue.get_nowait()
+        assert item["_pre_formatted"] is True and item["_operator_initiated"] is True
+        sent = [c.args[0] for c in reply.await_args_list]
+        assert any(m["type"] == "ncs_script_sent" and m["which"] == "preamble" for m in sent)
+        assert any("PREAMBLE:" in line for line in ncs._session_rx)
+
+    async def test_blank_script_errors_and_skips_tx(self):
+        ncs = make_ncs(make_config(ncs_preamble_text=""))
+        reply = AsyncMock()
+        await ncs._handle_read_script("preamble", reply)
+        assert ncs._tx_queue.empty()
+        sent = [c.args[0] for c in reply.await_args_list]
+        assert sent and sent[0]["type"] == "ncs_script_error"
+
+    async def test_closing_uses_closing_template(self):
+        ncs = make_ncs(make_config(ncs_closing_text="Net closed. {callsign}."))
+        await ncs._handle_read_script("closing", AsyncMock())
+        item = ncs._tx_queue.get_nowait()
+        assert "NET CLOSED" in item["text"].upper()
+
+
+# ---------------------------------------------------------------------------
+# Round-table caller
+# ---------------------------------------------------------------------------
+
+def _checkin_sync(ncs, callsign, name=""):
+    """Add a roster entry directly (bypasses async checkin/contacts lookup)."""
+    key = f"{callsign}|{name}"
+    ncs._roster[key] = {
+        "callsign": callsign, "status": "CheckedIn", "traffic": "Routine",
+        "name": name, "location": "", "checkin_time": 0.0, "verified": False, "called": False,
+    }
+    return key
+
+
+class TestRoundTableCaller:
+    async def test_call_next_marks_and_announces(self):
+        ncs = make_ncs()
+        ncs._active = True
+        _checkin_sync(ncs, "W1AAA")
+        await ncs._handle_call_next(AsyncMock())
+        item = ncs._tx_queue.get_nowait()
+        assert "Station W1AAA" in item["text"]
+        assert ncs._roster["W1AAA|"]["called"] is True
+        assert ncs._current_call_sign() == "W1AAA"
+
+    async def test_call_next_advances_then_completes(self):
+        ncs = make_ncs()
+        ncs._active = True
+        _checkin_sync(ncs, "W1AAA")
+        _checkin_sync(ncs, "W2BBB")
+        reply = AsyncMock()
+        await ncs._handle_call_next(reply)
+        await ncs._handle_call_next(reply)
+        await ncs._handle_call_next(reply)
+        sent = [c.args[0] for c in reply.await_args_list]
+        assert any(m["type"] == "ncs_round_complete" for m in sent)
+        assert ncs._current_call_sign() == ""
+
+    async def test_call_reset_clears_flags(self):
+        ncs = make_ncs()
+        ncs._active = True
+        _checkin_sync(ncs, "W1AAA")
+        await ncs._handle_call_next(AsyncMock())
+        await ncs._handle_call_reset()
+        assert ncs._roster["W1AAA|"]["called"] is False
+        assert ncs._current_call_sign() == ""
+
+    async def test_call_station_targets_specific_entry(self):
+        ncs = make_ncs()
+        ncs._active = True
+        _checkin_sync(ncs, "W1AAA")
+        _checkin_sync(ncs, "W2BBB")
+        await ncs._handle_call_station("W2BBB", "")
+        item = ncs._tx_queue.get_nowait()
+        assert "Station W2BBB" in item["text"]
+        assert ncs._roster["W2BBB|"]["called"] is True
+        assert ncs._roster["W1AAA|"]["called"] is False
+
+    async def test_call_next_ignored_when_inactive(self):
+        ncs = make_ncs()
+        _checkin_sync(ncs, "W1AAA")
+        await ncs._handle_call_next(AsyncMock())
+        assert ncs._tx_queue.empty()
+
+    def test_state_msg_includes_current_call(self):
+        ncs = make_ncs()
+        msg = ncs._build_state_msg()
+        assert "current_call" in msg

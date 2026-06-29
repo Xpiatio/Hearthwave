@@ -88,6 +88,9 @@ browser-based React frontend communicating over WebSocket.
 - **CW decode** — Morse code receive mode alongside voice
 - **NCS mode** — Net Control Station plugin with roster management, six priority
   levels, and one-click callsign check-in/out
+- **Net scripts & round-table** — configurable opening preamble and closing
+  scripts read over the air, plus a round-table caller that cycles the roster
+  prompting each station for traffic
 - **SKYWARN alerts** — live National Weather Service alerts pushed to all users
   with browser notification support
 - **SKYWARN spot reports** — file a severe-weather report from a criteria-gated
