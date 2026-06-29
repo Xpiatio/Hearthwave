@@ -20,7 +20,7 @@ show how it's done.
 Hearthwave is a fork of GMRS-TTY that replaces the desktop PySide6 UI with a
 browser-based React frontend communicating over WebSocket.
 
-> **Latest release:** v2.11.0
+> **Latest release:** v2.12.0
 
 ## Who uses it
 
@@ -35,6 +35,9 @@ browser-based React frontend communicating over WebSocket.
 
 ## Features
 
+- **RX audio level meter** — a live receive-audio level meter sits above the
+  chat, so you can see signal strength and confirm the radio is feeding audio at
+  a glance
 - **Stations & Journal open full-size** — on tablets and desktop, the Stations
   and Journal views now open as centered modal dialogs (the same treatment as
   Contacts), filling the window instead of a cramped inline strip. Phones keep
