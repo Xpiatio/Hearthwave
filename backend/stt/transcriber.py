@@ -12,10 +12,23 @@ class WhisperTranscriber:
     lines between transmissions.
     """
 
-    def __init__(self, model, saved_phrases=(), *, decode_options=None, word_confidence_min=None):
+    def __init__(
+        self,
+        model,
+        saved_phrases=(),
+        *,
+        decode_options=None,
+        word_confidence_min=None,
+        prompt_style="list",
+    ):
         self.model = model
         self._count_tokens = self._make_token_counter(model)
-        self.initial_prompt = self._build_prompt(saved_phrases, count_tokens=self._count_tokens)
+        # Selects the initial_prompt rendering: "list" (production default) or
+        # "transcript" (eval-only A/B variant). See backend/stt/_prompt.py.
+        self.prompt_style = prompt_style
+        self.initial_prompt = self._build_prompt(
+            saved_phrases, count_tokens=self._count_tokens, style=self.prompt_style
+        )
         # Extra/override kwargs merged into the transcribe() call below, for
         # A/B-testing decode parameters (beam size, repetition penalty, ...)
         # from the offline eval CLI without touching production call sites.
@@ -34,6 +47,7 @@ class WhisperTranscriber:
         cpu_threads=None,
         decode_options=None,
         word_confidence_min=None,
+        prompt_style="list",
     ):
         from faster_whisper import WhisperModel
 
@@ -54,6 +68,7 @@ class WhisperTranscriber:
             saved_phrases=saved_phrases,
             decode_options=decode_options,
             word_confidence_min=word_confidence_min,
+            prompt_style=prompt_style,
         )
 
     # Segments where Whisper's own confidence that speech is present falls
@@ -80,12 +95,14 @@ class WhisperTranscriber:
         return lambda s: max(1, len(s) // 4)
 
     @staticmethod
-    def _build_prompt(phrases, *, count_tokens) -> str:
-        return build_prompt(phrases, count_tokens=count_tokens)
+    def _build_prompt(phrases, *, count_tokens, style="list") -> str:
+        return build_prompt(phrases, count_tokens=count_tokens, style=style)
 
     def update_prompt(self, saved_phrases=()) -> None:
         """Rebuild the initial_prompt from a new phrase list (thread-safe via GIL)."""
-        self.initial_prompt = self._build_prompt(saved_phrases, count_tokens=self._count_tokens)
+        self.initial_prompt = self._build_prompt(
+            saved_phrases, count_tokens=self._count_tokens, style=self.prompt_style
+        )
 
     def transcribe(self, audio, *, vad_filter=True, drop_low_confidence=True):
         """Return transcribed text, or None when the output is empty or

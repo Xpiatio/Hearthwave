@@ -28,11 +28,25 @@ class GpuWhisperTranscriber:
         "beam_size": "num_beams",
     }
 
-    def __init__(self, model, processor, saved_phrases=(), *, decode_options=None, word_confidence_min=None):
+    def __init__(
+        self,
+        model,
+        processor,
+        saved_phrases=(),
+        *,
+        decode_options=None,
+        word_confidence_min=None,
+        prompt_style="list",
+    ):
         self.model = model
         self.processor = processor
         self._count_tokens = self._make_token_counter(processor)
-        self.initial_prompt = build_prompt(saved_phrases, count_tokens=self._count_tokens)
+        # Selects the initial_prompt rendering: "list" (production default) or
+        # "transcript" (eval-only A/B variant). See backend/stt/_prompt.py.
+        self.prompt_style = prompt_style
+        self.initial_prompt = build_prompt(
+            saved_phrases, count_tokens=self._count_tokens, style=self.prompt_style
+        )
         self._prompt_ids = self._encode_prompt(self.initial_prompt)
         # Extra/override kwargs merged into generate()'s kwargs below, mapped
         # via _DECODE_OPTION_MAP (see transcribe()). Mirrors WhisperTranscriber's
@@ -60,7 +74,16 @@ class GpuWhisperTranscriber:
             return None
 
     @classmethod
-    def load(cls, model, saved_phrases=(), *, cpu_threads=None, decode_options=None, word_confidence_min=None):
+    def load(
+        cls,
+        model,
+        saved_phrases=(),
+        *,
+        cpu_threads=None,
+        decode_options=None,
+        word_confidence_min=None,
+        prompt_style="list",
+    ):
         """Load an HF Whisper model onto the GPU in fp16 and pre-warm it.
         cpu_threads is accepted for interface parity and ignored."""
         import torch
@@ -76,6 +99,7 @@ class GpuWhisperTranscriber:
             saved_phrases=saved_phrases,
             decode_options=decode_options,
             word_confidence_min=word_confidence_min,
+            prompt_style=prompt_style,
         )
         inst._prewarm()
         return inst
@@ -89,7 +113,9 @@ class GpuWhisperTranscriber:
             logger.info("GPU pre-warm skipped: %s", exc)
 
     def update_prompt(self, saved_phrases=()) -> None:
-        self.initial_prompt = build_prompt(saved_phrases, count_tokens=self._count_tokens)
+        self.initial_prompt = build_prompt(
+            saved_phrases, count_tokens=self._count_tokens, style=self.prompt_style
+        )
         self._prompt_ids = self._encode_prompt(self.initial_prompt)
 
     def transcribe(self, audio, *, vad_filter=False, drop_low_confidence=False):

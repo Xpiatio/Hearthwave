@@ -12,14 +12,29 @@ MAX_PROMPT_TOKENS = 220
 _BASE = "GMRS radio."
 
 
-def build_prompt(phrases, *, count_tokens) -> str:
+def _render_list(phrases: list) -> str:
+    return f"{_BASE} Phrases: {', '.join(phrases)}."
+
+
+def _render_transcript(phrases: list) -> str:
+    return f"{_BASE} " + " ".join(p.rstrip(".") + "." for p in phrases) + " Over."
+
+
+# "list" is today's labeled-word-list framing (production default).
+# "transcript" renders phrases as terse on-air log lines, for eval A/B testing.
+_RENDERERS = {"list": _render_list, "transcript": _render_transcript}
+
+
+def build_prompt(phrases, *, count_tokens, style="list") -> str:
     """Frame saved phrases into a Whisper initial_prompt within the token budget.
-    Trims from the front (lowest priority) until it fits."""
+    Trims from the front (lowest priority) until it fits. Unknown styles fall
+    back to "list" (mirrors how config.py normalizes unknown enums)."""
     phrases = [p for p in (phrases or []) if p]
     if not phrases:
         return _BASE
+    render = _RENDERERS.get(style, _render_list)
     while phrases:
-        prompt = f"{_BASE} Phrases: {', '.join(phrases)}."
+        prompt = render(phrases)
         if count_tokens(prompt) <= MAX_PROMPT_TOKENS:
             return prompt
         phrases.pop(0)

@@ -135,3 +135,34 @@ class TestLoad:
         )
         assert t.decode_options == {"beam_size": 8}
         assert t.word_confidence_min == 0.4
+
+
+# ---------------------------------------------------------------------------
+# prompt_style — threaded into build_prompt for eval-harness A/B testing
+# ---------------------------------------------------------------------------
+
+class TestPromptStyle:
+    def test_default_style_gives_todays_list_output(self):
+        t, _ = _make(phrases=["over"])
+        assert t.prompt_style == "list"
+        assert t.initial_prompt == "GMRS radio. Phrases: over."
+
+    def test_transcript_style_at_init(self):
+        proc = _FakeProcessor()
+        t = GpuWhisperTranscriber(
+            model=_FakeModel(), processor=proc, saved_phrases=["QSL"], prompt_style="transcript"
+        )
+        assert t.initial_prompt == "GMRS radio. QSL. Over."
+
+    def test_update_prompt_respects_stored_style(self):
+        proc = _FakeProcessor()
+        t = GpuWhisperTranscriber(model=_FakeModel(), processor=proc, prompt_style="transcript")
+        t.update_prompt(["over"])
+        assert t.initial_prompt == "GMRS radio. over. Over."
+
+    def test_load_forwards_prompt_style(self):
+        t = GpuWhisperTranscriber.load(
+            "some/model/path", saved_phrases=["QSL"], prompt_style="transcript"
+        )
+        assert t.prompt_style == "transcript"
+        assert t.initial_prompt == "GMRS radio. QSL. Over."
