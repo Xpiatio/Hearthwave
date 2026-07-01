@@ -49,10 +49,21 @@ Useful experiments:
 --vad-threshold 0.35      # earlier VAD onset in noise
 --squelch-threshold 0.03  # weaker-carrier pre-trigger
 --min-speech-s 0.25       # do short replies ("copy") survive?
+--beam-size 8             # wider beam search (faster-whisper default: 5)
+--repetition-penalty 1.2  # penalize repeated tokens
+--no-repeat-ngram-size 3  # block repeated n-grams of this size
+--hotwords "kdq alpha"    # bias decoding toward specific words/callsigns
+--word-confidence-min 0.4 # drop words below this per-word confidence
+--prompt-style transcript # initial_prompt rendering: list (default) or transcript
+--vad-min-silence-ms 800  # Silero VAD min_silence_duration_ms (default: 500)
+--vad-speech-pad-ms 300   # Silero VAD speech_pad_ms (default: 200)
 --json                    # machine-readable output for tracking over time
 ```
 
-Note: `--no-agc` is a deprecated alias for `--gain-mode off`.
+Note: `--no-agc` is a deprecated alias for `--gain-mode off`. The decode/VAD/
+prompt knobs above ride on the transcriber instance built for the run — pass
+`--json` to record which ones were set (echoed under a top-level `"config"`
+key) so an A/B run is self-describing.
 
 A/B comparison with different gain modes:
 

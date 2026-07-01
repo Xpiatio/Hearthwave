@@ -4,11 +4,16 @@ Uses the MockVAD pattern from test_segmenter.py and a stub transcriber so no
 ML models load. The pipeline under test drives the real SpeechSegmenter,
 SquelchDetector, and preprocess_segment.
 """
+import argparse
+import json
+from pathlib import Path
+
 import numpy as np
 import pytest
 
 from backend.tools.eval_stt import (
     EvalPipelineConfig,
+    build_decode_options,
     find_reference,
     normalize_text,
     run_pipeline,
@@ -201,3 +206,150 @@ def test_find_reference_missing_returns_none(tmp_path):
     wav = tmp_path / "nolabel.wav"
     wav.touch()
     assert find_reference(wav) is None
+
+
+# ---------------------------------------------------------------------------
+# build_decode_options — only explicitly-passed flags end up in the dict
+# ---------------------------------------------------------------------------
+
+def _decode_args(**overrides):
+    base = dict(repetition_penalty=None, no_repeat_ngram_size=None, beam_size=None, hotwords=None)
+    base.update(overrides)
+    return argparse.Namespace(**base)
+
+
+def test_build_decode_options_none_when_nothing_passed():
+    assert build_decode_options(_decode_args()) is None
+
+
+def test_build_decode_options_only_includes_passed_flag():
+    assert build_decode_options(_decode_args(repetition_penalty=1.2)) == {"repetition_penalty": 1.2}
+
+
+def test_build_decode_options_all_flags():
+    args = _decode_args(repetition_penalty=1.1, no_repeat_ngram_size=3, beam_size=8, hotwords="alpha bravo")
+    assert build_decode_options(args) == {
+        "repetition_penalty": 1.1,
+        "no_repeat_ngram_size": 3,
+        "beam_size": 8,
+        "hotwords": "alpha bravo",
+    }
+
+
+# ---------------------------------------------------------------------------
+# main() arg plumbing — decode/VAD/prompt knobs reach construction seams
+# ---------------------------------------------------------------------------
+
+def _patch_main_deps(monkeypatch, mod, *, decode_calls=None, vad_calls=None, hypothesis="hello world"):
+    """Stub out every heavy/side-effecting seam main() touches so it can be
+    exercised end-to-end against a fake single-file corpus."""
+    from backend.stt.transcriber import WhisperTranscriber
+
+    def fake_load(model_path, saved_phrases=(), *, decode_options=None, word_confidence_min=None, prompt_style="list"):
+        if decode_calls is not None:
+            decode_calls.append({
+                "decode_options": decode_options,
+                "word_confidence_min": word_confidence_min,
+                "prompt_style": prompt_style,
+            })
+        return object()
+
+    def fake_make_vad_iterator(vad_model, sample_rate, threshold, **kw):
+        if vad_calls is not None:
+            vad_calls.append(kw)
+        return object()
+
+    monkeypatch.setattr(WhisperTranscriber, "load", fake_load)
+    monkeypatch.setattr("backend.audio.vad.load_vad_model", lambda: object())
+    monkeypatch.setattr("backend.audio.vad.make_vad_iterator", fake_make_vad_iterator)
+    monkeypatch.setattr(mod, "_discover_wavs", lambda root: [Path("dummy.wav")])
+    monkeypatch.setattr(mod, "find_reference", lambda wav: "hello world")
+    monkeypatch.setattr(mod, "_read_wav", lambda wav, sr: np.zeros(10, dtype=np.float32))
+    monkeypatch.setattr(
+        mod, "run_pipeline",
+        lambda audio, cfg, transcriber, vad_iter: [{"utterance_id": 0, "text": hypothesis}],
+    )
+
+
+def test_main_forwards_decode_prompt_and_confidence_to_transcriber(monkeypatch, tmp_path):
+    import backend.tools.eval_stt as mod
+
+    decode_calls = []
+    _patch_main_deps(monkeypatch, mod, decode_calls=decode_calls)
+
+    rc = mod.main([
+        "--audio", str(tmp_path),
+        "--beam-size", "8",
+        "--word-confidence-min", "0.4",
+        "--prompt-style", "transcript",
+    ])
+    assert rc == 0
+    assert decode_calls == [{
+        "decode_options": {"beam_size": 8},
+        "word_confidence_min": 0.4,
+        "prompt_style": "transcript",
+    }]
+
+
+def test_main_decode_options_none_when_no_decode_flags_passed(monkeypatch, tmp_path):
+    import backend.tools.eval_stt as mod
+
+    decode_calls = []
+    _patch_main_deps(monkeypatch, mod, decode_calls=decode_calls)
+
+    rc = mod.main(["--audio", str(tmp_path)])
+    assert rc == 0
+    assert decode_calls == [{
+        "decode_options": None,
+        "word_confidence_min": None,
+        "prompt_style": "list",
+    }]
+
+
+def test_main_forwards_vad_params_to_make_vad_iterator(monkeypatch, tmp_path):
+    import backend.tools.eval_stt as mod
+
+    vad_calls = []
+    _patch_main_deps(monkeypatch, mod, vad_calls=vad_calls)
+
+    rc = mod.main(["--audio", str(tmp_path), "--vad-min-silence-ms", "800", "--vad-speech-pad-ms", "300"])
+    assert rc == 0
+    assert vad_calls == [{"min_silence_duration_ms": 800, "speech_pad_ms": 300}]
+
+
+def test_main_vad_defaults_forwarded_when_not_set(monkeypatch, tmp_path):
+    import backend.tools.eval_stt as mod
+
+    vad_calls = []
+    _patch_main_deps(monkeypatch, mod, vad_calls=vad_calls)
+
+    rc = mod.main(["--audio", str(tmp_path)])
+    assert rc == 0
+    assert vad_calls == [{"min_silence_duration_ms": 500, "speech_pad_ms": 200}]
+
+
+# ---------------------------------------------------------------------------
+# --json output — echoes non-default knobs, leaves the baseline shape alone
+# ---------------------------------------------------------------------------
+
+def test_json_output_includes_config_when_knobs_set(monkeypatch, tmp_path, capsys):
+    import backend.tools.eval_stt as mod
+
+    _patch_main_deps(monkeypatch, mod)
+
+    rc = mod.main(["--audio", str(tmp_path), "--beam-size", "8", "--vad-min-silence-ms", "800", "--json"])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["config"] == {"decode_options": {"beam_size": 8}, "vad_min_silence_ms": 800}
+    assert set(out.keys()) == {"corpus", "skipped_unlabelled", "files", "config"}
+
+
+def test_json_output_baseline_shape_unchanged_without_knobs(monkeypatch, tmp_path, capsys):
+    import backend.tools.eval_stt as mod
+
+    _patch_main_deps(monkeypatch, mod)
+
+    rc = mod.main(["--audio", str(tmp_path), "--json"])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert set(out.keys()) == {"corpus", "skipped_unlabelled", "files"}
