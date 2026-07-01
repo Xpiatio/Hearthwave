@@ -173,6 +173,23 @@ def _read_wav(path: Path, target_sr: int) -> np.ndarray:
     return audio
 
 
+def build_decode_options(args) -> dict | None:
+    """Collect only the decode-tuning flags the user actually passed into a
+    dict for WhisperTranscriber's ``decode_options`` kwarg. Flags left at
+    their argparse default of None must not appear, so an eval run with none
+    of these flags set reproduces production decode kwargs byte-for-byte."""
+    opts = {}
+    if args.repetition_penalty is not None:
+        opts["repetition_penalty"] = args.repetition_penalty
+    if args.no_repeat_ngram_size is not None:
+        opts["no_repeat_ngram_size"] = args.no_repeat_ngram_size
+    if args.beam_size is not None:
+        opts["beam_size"] = args.beam_size
+    if args.hotwords is not None:
+        opts["hotwords"] = args.hotwords
+    return opts or None
+
+
 def _discover_wavs(root: Path) -> list[Path]:
     if root.is_file():
         return [root]
@@ -198,6 +215,22 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--squelch-threshold", type=float, default=STTWorker.SQUELCH_OPEN_THRESHOLD)
     ap.add_argument("--adaptive-squelch", action="store_true")
     ap.add_argument("--min-speech-s", type=float, default=STTWorker.MIN_SPEECH_DURATION_S)
+    ap.add_argument("--repetition-penalty", type=float, default=None,
+                    help="faster-whisper decode option; penalizes repeated tokens")
+    ap.add_argument("--no-repeat-ngram-size", type=int, default=None,
+                    help="faster-whisper decode option; blocks repeated n-grams of this size")
+    ap.add_argument("--beam-size", type=int, default=None,
+                    help="faster-whisper decode option; overrides the default beam width (5)")
+    ap.add_argument("--hotwords", type=str, default=None,
+                    help="faster-whisper decode option; biases decoding toward these words")
+    ap.add_argument("--word-confidence-min", type=float, default=None,
+                    help="drop words below this per-word confidence instead of trusting segment text")
+    ap.add_argument("--prompt-style", choices=["list", "transcript"], default="list",
+                    help="initial_prompt rendering: 'list' (production default) or 'transcript'")
+    ap.add_argument("--vad-min-silence-ms", type=int, default=500,
+                    help="Silero VAD min_silence_duration_ms (default: 500)")
+    ap.add_argument("--vad-speech-pad-ms", type=int, default=200,
+                    help="Silero VAD speech_pad_ms (default: 200)")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     args = ap.parse_args(argv)
 
@@ -211,10 +244,17 @@ def main(argv: list[str] | None = None) -> int:
         min_speech_s=args.min_speech_s,
     )
 
+    decode_options = build_decode_options(args)
+
     from backend.audio.vad import load_vad_model, make_vad_iterator
     from backend.stt.transcriber import WhisperTranscriber
 
-    transcriber = WhisperTranscriber.load(str(STTWorker._MODELS_DIR / args.model))
+    transcriber = WhisperTranscriber.load(
+        str(STTWorker._MODELS_DIR / args.model),
+        decode_options=decode_options,
+        word_confidence_min=args.word_confidence_min,
+        prompt_style=args.prompt_style,
+    )
     vad_model = load_vad_model()
 
     wavs = _discover_wavs(Path(args.audio))
@@ -232,7 +272,13 @@ def main(argv: list[str] | None = None) -> int:
             continue
         audio = _read_wav(wav, cfg.sample_rate)
         # Fresh VAD state per file so utterances don't bleed across files.
-        vad_iter = make_vad_iterator(vad_model, sample_rate=cfg.sample_rate, threshold=args.vad_threshold)
+        vad_iter = make_vad_iterator(
+            vad_model,
+            sample_rate=cfg.sample_rate,
+            threshold=args.vad_threshold,
+            min_silence_duration_ms=args.vad_min_silence_ms,
+            speech_pad_ms=args.vad_speech_pad_ms,
+        )
         results = run_pipeline(audio, cfg, transcriber, vad_iter)
         hypothesis = " ".join(r["text"] for r in results).strip()
         file_score = score([reference], [hypothesis]) if reference else None
@@ -251,7 +297,24 @@ def main(argv: list[str] | None = None) -> int:
 
     corpus = score(refs, hyps)
     if args.json:
-        print(json.dumps({"corpus": corpus, "skipped_unlabelled": skipped, "files": per_file}, indent=2))
+        # Echo any non-default decode/VAD/prompt knobs so a saved run is
+        # self-describing for later A/B comparison; omitted entirely when
+        # every knob is at its default, keeping the baseline JSON unchanged.
+        config = {}
+        if decode_options:
+            config["decode_options"] = decode_options
+        if args.word_confidence_min is not None:
+            config["word_confidence_min"] = args.word_confidence_min
+        if args.prompt_style != "list":
+            config["prompt_style"] = args.prompt_style
+        if args.vad_min_silence_ms != 500:
+            config["vad_min_silence_ms"] = args.vad_min_silence_ms
+        if args.vad_speech_pad_ms != 200:
+            config["vad_speech_pad_ms"] = args.vad_speech_pad_ms
+        output = {"corpus": corpus, "skipped_unlabelled": skipped, "files": per_file}
+        if config:
+            output["config"] = config
+        print(json.dumps(output, indent=2))
     else:
         for f in per_file:
             print(f"{f['wer']:6.1%}  {f['file']}")

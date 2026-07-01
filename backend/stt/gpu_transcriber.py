@@ -19,12 +19,45 @@ _SR = 16000
 
 
 class GpuWhisperTranscriber:
-    def __init__(self, model, processor, saved_phrases=()):
+    # decode_options keys that map onto HF generate() kwargs (transcribe()
+    # below). Any other key (e.g. faster-whisper-only ones like "hotwords" or
+    # "temperature") is silently ignored, since it has no HF equivalent here.
+    _DECODE_OPTION_MAP = {
+        "repetition_penalty": "repetition_penalty",
+        "no_repeat_ngram_size": "no_repeat_ngram_size",
+        "beam_size": "num_beams",
+    }
+
+    def __init__(
+        self,
+        model,
+        processor,
+        saved_phrases=(),
+        *,
+        decode_options=None,
+        word_confidence_min=None,
+        prompt_style="list",
+    ):
         self.model = model
         self.processor = processor
         self._count_tokens = self._make_token_counter(processor)
-        self.initial_prompt = build_prompt(saved_phrases, count_tokens=self._count_tokens)
+        # Selects the initial_prompt rendering: "list" (production default) or
+        # "transcript" (eval-only A/B variant). See backend/stt/_prompt.py.
+        self.prompt_style = prompt_style
+        self.initial_prompt = build_prompt(
+            saved_phrases, count_tokens=self._count_tokens, style=self.prompt_style
+        )
         self._prompt_ids = self._encode_prompt(self.initial_prompt)
+        # Extra/override kwargs merged into generate()'s kwargs below, mapped
+        # via _DECODE_OPTION_MAP (see transcribe()). Mirrors WhisperTranscriber's
+        # decode_options for the eval-harness seam; keys with no HF equivalent
+        # are dropped rather than raising, so the same decode_options dict can
+        # be reused across both backends.
+        self.decode_options = decode_options
+        # Accepted for interface parity with WhisperTranscriber but not
+        # implemented here: the GPU path's generate() call has no per-word
+        # probability output in the current flow, so this is a no-op.
+        self.word_confidence_min = word_confidence_min
 
     @staticmethod
     def _make_token_counter(processor):
@@ -41,7 +74,16 @@ class GpuWhisperTranscriber:
             return None
 
     @classmethod
-    def load(cls, model, saved_phrases=(), *, cpu_threads=None):
+    def load(
+        cls,
+        model,
+        saved_phrases=(),
+        *,
+        cpu_threads=None,
+        decode_options=None,
+        word_confidence_min=None,
+        prompt_style="list",
+    ):
         """Load an HF Whisper model onto the GPU in fp16 and pre-warm it.
         cpu_threads is accepted for interface parity and ignored."""
         import torch
@@ -51,7 +93,14 @@ class GpuWhisperTranscriber:
         m = AutoModelForSpeechSeq2Seq.from_pretrained(
             model, torch_dtype=torch.float16, low_cpu_mem_usage=True
         ).to("cuda")
-        inst = cls(m, processor, saved_phrases=saved_phrases)
+        inst = cls(
+            m,
+            processor,
+            saved_phrases=saved_phrases,
+            decode_options=decode_options,
+            word_confidence_min=word_confidence_min,
+            prompt_style=prompt_style,
+        )
         inst._prewarm()
         return inst
 
@@ -64,7 +113,9 @@ class GpuWhisperTranscriber:
             logger.info("GPU pre-warm skipped: %s", exc)
 
     def update_prompt(self, saved_phrases=()) -> None:
-        self.initial_prompt = build_prompt(saved_phrases, count_tokens=self._count_tokens)
+        self.initial_prompt = build_prompt(
+            saved_phrases, count_tokens=self._count_tokens, style=self.prompt_style
+        )
         self._prompt_ids = self._encode_prompt(self.initial_prompt)
 
     def transcribe(self, audio, *, vad_filter=False, drop_low_confidence=False):
@@ -83,6 +134,12 @@ class GpuWhisperTranscriber:
         gen_kw = dict(
             language="en", task="transcribe", num_beams=5, return_timestamps=True,
         )
+        if self.decode_options:
+            gen_kw.update(
+                (self._DECODE_OPTION_MAP[k], v)
+                for k, v in self.decode_options.items()
+                if k in self._DECODE_OPTION_MAP
+            )
         if attn is not None:
             gen_kw["attention_mask"] = attn.to("cuda")
         if self._prompt_ids is not None:

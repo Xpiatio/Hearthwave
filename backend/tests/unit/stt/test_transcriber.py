@@ -15,8 +15,14 @@ def _make(phrases=()):
     return WhisperTranscriber(model=MagicMock(), saved_phrases=phrases)
 
 
-def _seg(text, no_speech_prob=0.0, avg_logprob=0.0):
-    return SimpleNamespace(text=text, no_speech_prob=no_speech_prob, avg_logprob=avg_logprob)
+def _seg(text, no_speech_prob=0.0, avg_logprob=0.0, words=None):
+    return SimpleNamespace(
+        text=text, no_speech_prob=no_speech_prob, avg_logprob=avg_logprob, words=words
+    )
+
+
+def _word(word, probability):
+    return SimpleNamespace(word=word, probability=probability)
 
 
 class _FakeModel:
@@ -70,6 +76,92 @@ class TestTranscribeFiltering:
         t = WhisperTranscriber(model=model)
         t.transcribe(np.zeros(16000, dtype=np.float32))
         assert model.call_kwargs["vad_filter"] is True
+
+
+# ---------------------------------------------------------------------------
+# decode_options — extra/override kwargs merged into model.transcribe()
+# ---------------------------------------------------------------------------
+
+class TestDecodeOptions:
+    def test_none_gives_todays_exact_kwargs(self):
+        # Pin the exact kwarg set/values so a later change can't silently grow
+        # or shrink the default decode call (mirrors TestFinalPassLoop's pin
+        # on the worker side).
+        model = _FakeModel([_seg("hi")])
+        t = WhisperTranscriber(model=model)
+        t.transcribe(np.zeros(16000, dtype=np.float32))
+        assert model.call_kwargs == {
+            "language": "en",
+            "beam_size": 5,
+            "vad_filter": True,
+            "condition_on_previous_text": False,
+            "initial_prompt": "GMRS radio.",
+        }
+
+    def test_new_key_is_forwarded(self):
+        model = _FakeModel([_seg("hi")])
+        t = WhisperTranscriber(model=model, decode_options={"repetition_penalty": 1.2})
+        t.transcribe(np.zeros(16000, dtype=np.float32))
+        assert model.call_kwargs["repetition_penalty"] == 1.2
+
+    def test_overrides_beam_size(self):
+        model = _FakeModel([_seg("hi")])
+        t = WhisperTranscriber(model=model, decode_options={"beam_size": 8})
+        t.transcribe(np.zeros(16000, dtype=np.float32))
+        assert model.call_kwargs["beam_size"] == 8
+
+    def test_cannot_override_vad_filter(self):
+        model = _FakeModel([_seg("hi")])
+        t = WhisperTranscriber(model=model, decode_options={"vad_filter": False})
+        t.transcribe(np.zeros(16000, dtype=np.float32))  # call-site default: vad_filter=True
+        assert model.call_kwargs["vad_filter"] is True
+
+    def test_cannot_override_initial_prompt(self):
+        model = _FakeModel([_seg("hi")])
+        t = WhisperTranscriber(
+            model=model, saved_phrases=["over"], decode_options={"initial_prompt": "hijacked"}
+        )
+        t.transcribe(np.zeros(16000, dtype=np.float32))
+        assert model.call_kwargs["initial_prompt"] == "GMRS radio. Phrases: over."
+
+
+# ---------------------------------------------------------------------------
+# word_confidence_min — rebuild segment text from word-level confidences
+# ---------------------------------------------------------------------------
+
+class TestWordConfidenceGate:
+    def test_none_omits_word_timestamps_kwarg(self):
+        model = _FakeModel([_seg("hi")])
+        t = WhisperTranscriber(model=model)
+        t.transcribe(np.zeros(16000, dtype=np.float32))
+        assert "word_timestamps" not in model.call_kwargs
+
+    def test_set_passes_word_timestamps_true(self):
+        model = _FakeModel([_seg("hi", words=[_word("hi", 0.9)])])
+        t = WhisperTranscriber(model=model, word_confidence_min=0.5)
+        t.transcribe(np.zeros(16000, dtype=np.float32))
+        assert model.call_kwargs["word_timestamps"] is True
+
+    def test_drops_low_confidence_words(self):
+        words = [_word(" clear", 0.95), _word(" mumble", 0.2)]
+        model = _FakeModel([_seg(" clear mumble", words=words)])
+        t = WhisperTranscriber(model=model, word_confidence_min=0.5)
+        assert t.transcribe(np.zeros(16000, dtype=np.float32)) == "clear"
+
+    def test_segment_with_all_words_below_threshold_contributes_nothing(self):
+        words = [_word(" clear", 0.95), _word(" mumble", 0.2)]
+        low_words = [_word(" garbled", 0.1)]
+        model = _FakeModel(
+            [_seg(" clear mumble", words=words), _seg(" garbled", words=low_words)]
+        )
+        t = WhisperTranscriber(model=model, word_confidence_min=0.5)
+        assert t.transcribe(np.zeros(16000, dtype=np.float32)) == "clear"
+
+    def test_all_words_filtered_returns_none(self):
+        words = [_word(" um", 0.1), _word(" uh", 0.2)]
+        model = _FakeModel([_seg(" um uh", words=words)])
+        t = WhisperTranscriber(model=model, word_confidence_min=0.5)
+        assert t.transcribe(np.zeros(16000, dtype=np.float32)) is None
 
 
 # ---------------------------------------------------------------------------
@@ -174,3 +266,39 @@ class TestLoadCpuThreads:
     def test_explicit_cpu_threads_forwarded(self):
         WhisperTranscriber.load("/tmp/model", cpu_threads=2)
         assert self._last_call_kwargs()["cpu_threads"] == 2
+
+    def test_decode_options_and_word_confidence_min_forwarded(self):
+        t = WhisperTranscriber.load(
+            "/tmp/model",
+            decode_options={"beam_size": 8},
+            word_confidence_min=0.4,
+        )
+        assert t.decode_options == {"beam_size": 8}
+        assert t.word_confidence_min == 0.4
+
+
+# ---------------------------------------------------------------------------
+# prompt_style — threaded into build_prompt for eval-harness A/B testing
+# ---------------------------------------------------------------------------
+
+class TestPromptStyle:
+    def test_default_style_gives_todays_list_output(self):
+        t = _make(["over"])
+        assert t.prompt_style == "list"
+        assert t.initial_prompt == "GMRS radio. Phrases: over."
+
+    def test_transcript_style_at_init(self):
+        t = WhisperTranscriber(model=MagicMock(), saved_phrases=["QSL"], prompt_style="transcript")
+        assert t.initial_prompt == "GMRS radio. QSL. Over."
+
+    def test_update_prompt_respects_stored_style(self):
+        t = WhisperTranscriber(model=MagicMock(), prompt_style="transcript")
+        t.update_prompt(["over"])
+        assert t.initial_prompt == "GMRS radio. over. Over."
+
+    def test_load_forwards_prompt_style(self):
+        t = WhisperTranscriber.load(
+            "/tmp/model", saved_phrases=["QSL"], prompt_style="transcript"
+        )
+        assert t.prompt_style == "transcript"
+        assert t.initial_prompt == "GMRS radio. QSL. Over."
