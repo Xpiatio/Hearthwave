@@ -102,6 +102,12 @@ class STTWorker:
     # never transcribe our own outgoing audio. The cap guarantees release so a
     # steady above-threshold noise floor can't starve RX forever (~1.5s).
     TX_TAIL_GUARD_MAX_CHUNKS = int(1.5 * SAMPLE_RATE / CHUNK_SAMPLES)
+    # Squelch-derived noise profile: while the squelch is closed the channel
+    # is pure noise floor. Quiet chunks are buffered and snapshotted at each
+    # utterance start as the denoise stage's stationary noise estimate. The
+    # buffer/minimum sizes give >= ~31 STFT frames for a stable threshold.
+    NOISE_BUFFER_S = 2.0
+    NOISE_MIN_S = 0.5
 
     _MODELS_DIR = Path(__file__).resolve().parent.parent / "Models" / "STT"
 
@@ -125,6 +131,7 @@ class STTWorker:
         final_max_s: float = 60.0,
         stt_final_device: str = "auto",
         gain_mode: str = "agc",
+        noise_profile: bool = False,
         # Optional event callbacks — all called from the worker thread;
         # implementations must be thread-safe (e.g. loop.call_soon_threadsafe).
         on_audio_level: "Callable[[int], None] | None" = None,
@@ -168,11 +175,14 @@ class STTWorker:
         self.final_max_s = float(final_max_s)
         self.stt_final_device = stt_final_device
         self.gain_mode = gain_mode if gain_mode in GAIN_MODES else "agc"
+        self.noise_profile = bool(noise_profile)
         self._final_q: "queue.Queue | None" = (
             queue.Queue(maxsize=8) if self.whisper_model_final else None
         )
         # uid → accumulated segment audio; None marks "too long, pass abandoned"
         self._pending_final: dict = {}
+        # uid → the utterance's noise clip, held until the final pass is queued
+        self._pending_noise: dict = {}
         self._model_cache: ModelCache | None = model_cache
 
         self._on_audio_level = on_audio_level
@@ -431,6 +441,11 @@ class STTWorker:
             squelch_buffer_max_chunks=self.SQUELCH_BUFFER_MAX_CHUNKS,
             min_speech_duration_s=self.min_speech_duration_s,
             silence_reset_chunks=int(self.SILENCE_RESET_S * self.SAMPLE_RATE / self.CHUNK_SAMPLES),
+            noise_profile_chunks=(
+                int(self.NOISE_BUFFER_S * self.SAMPLE_RATE / self.CHUNK_SAMPLES)
+                if self.noise_profile else 0
+            ),
+            noise_min_samples=int(self.NOISE_MIN_S * self.SAMPLE_RATE),
         )
         was_paused = False
         tail_guard_count = -1  # >=0 while discarding our own TTS tail after TX
@@ -520,9 +535,12 @@ class STTWorker:
                     if recorder is not None:
                         recorder.on_capture_event(event)
                 for uid, audio, is_final in segments:
+                    noise_clip = segmenter.utterance_noise_clip if self.noise_profile else None
                     if recorder is not None:
                         recorder.on_segment(uid, audio, is_final)
-                    transcribe_queue.put((uid, audio, is_final))
+                        if noise_clip is not None:
+                            recorder.on_noise_clip(uid, noise_clip)
+                    transcribe_queue.put((uid, audio, is_final, noise_clip))
         finally:
             try:
                 source.close()
@@ -642,22 +660,23 @@ class STTWorker:
         bandpass_sos,
     ) -> None:
         """Drain the segmentation queue on a background thread so the capture
-        loop never blocks on Whisper. Items are (utterance_id, audio, is_final);
-        a None sentinel signals shutdown. Single-threaded by design so
-        partials emit in capture order.
+        loop never blocks on Whisper. Items are (utterance_id, audio,
+        is_final, noise_clip); a None sentinel signals shutdown.
+        Single-threaded by design so partials emit in capture order.
         """
         final_enabled = self._final_q is not None
         while True:
             job = transcribe_queue.get()
             if job is None:
                 break
-            uid, audio, is_final = job
+            uid, audio, is_final, noise_clip = job
             recorder = self._debug_recorder
             try:
                 if final_enabled:
-                    self._accumulate_for_final(uid, audio)
+                    self._accumulate_for_final(uid, audio, noise_clip)
                 processed = preprocess_segment(
-                    audio, self.SAMPLE_RATE, bandpass_sos, gain_mode=self.gain_mode
+                    audio, self.SAMPLE_RATE, bandpass_sos, gain_mode=self.gain_mode,
+                    noise_clip=noise_clip,
                 )
                 if recorder is not None:
                     recorder.on_processed(uid, processed)
@@ -666,12 +685,13 @@ class STTWorker:
                     recorder.on_transcript(uid, text, partial=not is_final)
                 if final_enabled and is_final:
                     full = self._take_final_audio(uid)
+                    clip = self._pending_noise.pop(uid, None)
                     if full is not None:
                         # Demote the fast-path tail to a partial; the final
                         # pass replaces the whole utterance shortly.
                         if text:
                             self._emit_result(uid, text, True)
-                        self._enqueue_final(uid, full)
+                        self._enqueue_final(uid, full, clip)
                     else:
                         # Too long for the final pass — flush as a plain
                         # final (empty text still releases the partials).
@@ -688,11 +708,13 @@ class STTWorker:
     # Two-tier final pass — full-utterance re-transcription
     # ------------------------------------------------------------------
 
-    def _accumulate_for_final(self, uid, audio) -> None:
+    def _accumulate_for_final(self, uid, audio, noise_clip=None) -> None:
         """Collect raw segment audio per utterance for the final pass.
         Past the final_max_s cap the pass is abandoned (marked None) so the
         partial texts — which cover the whole utterance — are kept instead of
         being replaced by a truncated re-transcription."""
+        if noise_clip is not None and uid not in self._pending_noise:
+            self._pending_noise[uid] = noise_clip
         entry = self._pending_final.get(uid, [])
         if entry is None:
             return
@@ -710,21 +732,21 @@ class STTWorker:
             return None
         return np.concatenate(entry)
 
-    def _enqueue_final(self, uid, audio) -> None:
+    def _enqueue_final(self, uid, audio, noise_clip=None) -> None:
         """Queue a final-pass job; under backlog, drop the oldest job and
         flush its partials with an empty plain final so nothing is lost."""
         try:
-            self._final_q.put_nowait((uid, audio))
+            self._final_q.put_nowait((uid, audio, noise_clip))
             return
         except queue.Full:
             pass
         try:
-            old_uid, _ = self._final_q.get_nowait()
+            old_uid, _, _ = self._final_q.get_nowait()
             self._emit_result(old_uid, "", False)
         except queue.Empty:
             pass
         try:
-            self._final_q.put_nowait((uid, audio))
+            self._final_q.put_nowait((uid, audio, noise_clip))
         except queue.Full:
             self._emit_result(uid, "", False)
 
@@ -815,7 +837,7 @@ class STTWorker:
             job = final_q.get()
             if job is None:
                 break
-            uid, audio = job
+            uid, audio, noise_clip = job
             if transcriber is None and not load_failed:
                 transcriber = self._load_final_transcriber()
                 load_failed = transcriber is None
@@ -823,7 +845,8 @@ class STTWorker:
             if transcriber is not None:
                 try:
                     processed = preprocess_segment(
-                        audio, self.SAMPLE_RATE, bandpass_sos, gain_mode=self.gain_mode
+                        audio, self.SAMPLE_RATE, bandpass_sos, gain_mode=self.gain_mode,
+                        noise_clip=noise_clip,
                     )
                     # Whole utterance, already squelch-bounded: don't let VAD
                     # re-gating or a low-confidence drop truncate long messages.

@@ -133,3 +133,53 @@ def test_segmented_wav_concatenates_segments(tmp_path):
     out = _run_utterance(rec, n_active=5)
     seg = _read_wav(out / "segmented.wav")
     assert seg.size == 6 * CHUNK  # 5-chunk partial + 1-chunk final
+
+
+# ---------------------------------------------------------------------------
+# Noise clip — squelch-derived noise profile capture
+# ---------------------------------------------------------------------------
+
+def _run_utterance_with_clip(rec, uid=1, clip=None):
+    rec.on_capture_event("vad_start")
+    rec.on_segment(uid, _chunk(0.5), is_final=False)
+    if clip is not None:
+        rec.on_noise_clip(uid, clip)
+    rec.on_capture_event("vad_end")
+    rec.on_segment(uid, _chunk(0.5), is_final=True)
+    rec.on_transcript(uid, "hello", partial=False)
+    return rec.finalize(uid)
+
+
+def test_noise_clip_written_as_wav(tmp_path):
+    rec = _make(tmp_path)
+    clip = np.full(4 * CHUNK, 0.01, dtype=np.float32)
+    out = _run_utterance_with_clip(rec, clip=clip)
+    assert (out / "noise.wav").exists()
+    audio = _read_wav(out / "noise.wav")
+    assert audio.size == clip.size
+    assert audio == pytest.approx(clip, abs=1e-3)
+
+
+def test_noise_clip_metadata_in_transcript_json(tmp_path):
+    rec = _make(tmp_path)
+    clip = np.full(2 * SR, 0.01, dtype=np.float32)  # 2.0 s
+    out = _run_utterance_with_clip(rec, clip=clip)
+    payload = json.loads((out / "transcript.json").read_text())
+    assert payload["noise_profile"] is True
+    assert payload["noise_clip_s"] == pytest.approx(2.0)
+
+
+def test_no_noise_clip_omits_wav_and_flags_metadata(tmp_path):
+    rec = _make(tmp_path)
+    out = _run_utterance_with_clip(rec, clip=None)
+    assert not (out / "noise.wav").exists()
+    payload = json.loads((out / "transcript.json").read_text())
+    assert payload["noise_profile"] is False
+    assert payload["noise_clip_s"] is None
+
+
+def test_on_noise_clip_for_unknown_uid_is_ignored(tmp_path):
+    rec = _make(tmp_path)
+    rec.on_noise_clip(99, np.zeros(CHUNK, dtype=np.float32))  # no record bound
+    out = _run_utterance_with_clip(rec, uid=1, clip=None)
+    assert not (out / "noise.wav").exists()

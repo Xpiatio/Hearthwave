@@ -53,6 +53,8 @@ class SpeechSegmenter:
         squelch_buffer_max_chunks: int,
         min_speech_duration_s: float,
         silence_reset_chunks: int,
+        noise_profile_chunks: int = 0,
+        noise_min_samples: int = 0,
     ) -> None:
         self._vad_iter = vad_iter
         self._squelch = squelch
@@ -74,6 +76,19 @@ class SpeechSegmenter:
         # gate uses this rather than the emitted audio length so pre-roll /
         # squelch-buffer seeding can grow without letting kerchunks through.
         self._speech_samples = 0
+        # Squelch-closed noise-floor capture (0 chunks = disabled). Only
+        # quiet chunks — squelch closed, not in speech, peak at or below the
+        # open threshold — enter the buffer, so sub-hold spikes and borderline
+        # carrier stay out. Snapshotted once per utterance at vad_start into
+        # `utterance_noise_clip` (None below the minimum length), which the
+        # denoise stage uses as its stationary noise estimate.
+        self._noise_buffer: "collections.deque | None" = (
+            collections.deque(maxlen=noise_profile_chunks)
+            if noise_profile_chunks > 0
+            else None
+        )
+        self._noise_min_samples = int(noise_min_samples)
+        self.utterance_noise_clip: "np.ndarray | None" = None
 
     def reset(self) -> None:
         """Clear all buffered audio and reset collaborator state."""
@@ -83,6 +98,9 @@ class SpeechSegmenter:
         self._speech_samples = 0
         self._rolling.clear()
         self._squelch_buffer.clear()
+        if self._noise_buffer is not None:
+            self._noise_buffer.clear()
+        self.utterance_noise_clip = None
         self._squelch.reset()
         reset_vad_state(self._vad_iter)
         self._silence_watchdog.reset()
@@ -148,6 +166,7 @@ class SpeechSegmenter:
             self._collected_peaks.append(peak)
             self._speech_samples = chunk.size
             self._squelch_buffer.clear()
+            self._snapshot_noise_clip()
             self._silence_watchdog.note_speech()
             events.append("vad_start")
 
@@ -185,8 +204,29 @@ class SpeechSegmenter:
         self._rolling.append(chunk)
         if self._squelch.is_open and not self._in_speech:
             self._squelch_buffer.append(chunk)
+        if (
+            self._noise_buffer is not None
+            and not self._squelch.is_open
+            and not self._in_speech
+            and peak <= self._squelch.effective_open_threshold
+        ):
+            self._noise_buffer.append(chunk)
 
         return segments, events
+
+    def _snapshot_noise_clip(self) -> None:
+        """Freeze the noise buffer for the utterance that just started.
+
+        One snapshot serves every segment of the utterance (the buffer cannot
+        grow mid-speech), keeping partials, the final pass, and debug capture
+        deterministic and replayable.
+        """
+        if self._noise_buffer is None:
+            return
+        if sum(c.size for c in self._noise_buffer) >= max(1, self._noise_min_samples):
+            self.utterance_noise_clip = np.concatenate(list(self._noise_buffer))
+        else:
+            self.utterance_noise_clip = None
 
     def _finalize_utterance(self, segments, events, *, trim_chunks: int = 0) -> None:
         """End the current utterance: optionally trim the tail, apply the
