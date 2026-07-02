@@ -419,3 +419,61 @@ describe('ChatDisplay — accessibility', () => {
     expect(await axe(container)).toHaveNoViolations()
   })
 })
+
+// ---------------------------------------------------------------------------
+// Corrected callsign chips (fuzzy_callsign_rewrite)
+// ---------------------------------------------------------------------------
+
+describe('ChatDisplay — corrected callsign chips', () => {
+  it('marks a corrected chip and shows the heard text on hover', async () => {
+    render(
+      <ChatDisplay
+        entries={[makeEntry({
+          kind: 'rx',
+          text: 'WSLZ233 radio check',
+          callsign_spans: [[0, 7, 'WSLZ233', 'WSLZ235']],
+        })]}
+        contacts={NO_CONTACTS}
+        showCallsignChips={true}
+      />
+    )
+    const chipLabel = screen.getByText('WSLZ233')
+    const chip = chipLabel.closest('[data-corrected="true"]')
+    expect(chip).not.toBeNull()
+    fireEvent.mouseOver(chip!)
+    expect(await screen.findByText(/heard: WSLZ235/i)).toBeInTheDocument()
+  })
+
+  it('renders an uncorrected 4-element span without the corrected mark', () => {
+    render(
+      <ChatDisplay
+        entries={[makeEntry({
+          kind: 'rx',
+          text: 'WSLZ233 radio check',
+          callsign_spans: [[0, 7, 'WSLZ233', null]],
+        })]}
+        contacts={NO_CONTACTS}
+        showCallsignChips={true}
+      />
+    )
+    const chipLabel = screen.getByText('WSLZ233')
+    expect(chipLabel.closest('[data-corrected="true"]')).toBeNull()
+  })
+
+  it('legacy 3-element spans still render as plain chips', () => {
+    render(
+      <ChatDisplay
+        entries={[makeEntry({
+          kind: 'rx',
+          text: 'WSLZ233 radio check',
+          callsign_spans: [[0, 7, 'WSLZ233']],
+        })]}
+        contacts={NO_CONTACTS}
+        showCallsignChips={true}
+      />
+    )
+    const chipLabel = screen.getByText('WSLZ233')
+    expect(chipLabel).toBeInTheDocument()
+    expect(chipLabel.closest('[data-corrected="true"]')).toBeNull()
+  })
+})

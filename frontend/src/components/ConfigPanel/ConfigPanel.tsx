@@ -8,6 +8,7 @@ import type { InputDeviceOption, MonitorSinkOption, OutputDeviceOption } from '.
 interface Props {
   filterProfanity: boolean;
   fuzzyCallsign: boolean;
+  fuzzyCallsignRewrite: boolean;
   inputDevice: string | number;
   systemMonitorSink: string;
   inputDevices: InputDeviceOption[];
@@ -19,6 +20,7 @@ interface Props {
   spectroTimeWindowS: number;
   onToggleProfanity: () => void;
   onToggleFuzzy: () => void;
+  onToggleFuzzyRewrite: () => void;
   onInputDeviceChange: (device: string | number, sink: string) => void;
   onOutputDeviceChange: (device: number) => void;
   onSpectroColormapChange: (cm: 'viridis' | 'grayscale') => void;
@@ -30,6 +32,7 @@ interface Props {
 export function ConfigPanel({
   filterProfanity,
   fuzzyCallsign,
+  fuzzyCallsignRewrite,
   inputDevice,
   systemMonitorSink,
   inputDevices,
@@ -41,6 +44,7 @@ export function ConfigPanel({
   spectroTimeWindowS,
   onToggleProfanity,
   onToggleFuzzy,
+  onToggleFuzzyRewrite,
   onInputDeviceChange,
   onOutputDeviceChange,
   onSpectroColormapChange,
@@ -79,6 +83,20 @@ export function ConfigPanel({
             <Switch checked={fuzzyCallsign} onChange={onToggleFuzzy} size="small" />
           }
           label="Fuzzy Callsign Match"
+        />
+
+        {/* Rewrites misheard callsigns in final transcripts to the roster's
+            canonical call (marked in chat); requires fuzzy matching. */}
+        <FormControlLabel
+          control={
+            <Switch
+              checked={fuzzyCallsignRewrite}
+              onChange={onToggleFuzzyRewrite}
+              disabled={!fuzzyCallsign}
+              size="small"
+            />
+          }
+          label="Callsign Auto-Correct"
         />
 
         <Divider orientation="vertical" flexItem />

@@ -32,6 +32,7 @@ function makeDefaultProps() {
   return {
     filterProfanity: false,
     fuzzyCallsign: false,
+    fuzzyCallsignRewrite: false,
     inputDevice: 0 as string | number,
     systemMonitorSink: '',
     inputDevices: DEVICE_OPTIONS,
@@ -43,6 +44,7 @@ function makeDefaultProps() {
     spectroTimeWindowS: 30,
     onToggleProfanity: vi.fn(),
     onToggleFuzzy: vi.fn(),
+    onToggleFuzzyRewrite: vi.fn(),
     onInputDeviceChange: vi.fn(),
     onOutputDeviceChange: vi.fn(),
     onSpectroColormapChange: vi.fn(),
@@ -333,5 +335,26 @@ describe('ConfigPanel', () => {
     expect(screen.queryByText('Configuration')).not.toBeInTheDocument()
     // controls still present
     expect(screen.getByLabelText('Profanity Filter')).toBeInTheDocument()
+  })
+})
+
+describe('ConfigPanel — callsign auto-correct toggle', () => {
+  it('calls onToggleFuzzyRewrite when the auto-correct switch is clicked', () => {
+    const props = { ...makeDefaultProps(), fuzzyCallsign: true }
+    render(<ConfigPanel {...props} />)
+    fireEvent.click(screen.getByLabelText(/callsign auto-correct/i))
+    expect(props.onToggleFuzzyRewrite).toHaveBeenCalledTimes(1)
+  })
+
+  it('disables the auto-correct switch when fuzzy matching is off', () => {
+    const props = { ...makeDefaultProps(), fuzzyCallsign: false }
+    render(<ConfigPanel {...props} />)
+    expect(screen.getByLabelText(/callsign auto-correct/i)).toBeDisabled()
+  })
+
+  it('reflects fuzzyCallsignRewrite=true on the switch', () => {
+    const props = { ...makeDefaultProps(), fuzzyCallsign: true, fuzzyCallsignRewrite: true }
+    render(<ConfigPanel {...props} />)
+    expect(screen.getByLabelText(/callsign auto-correct/i)).toBeChecked()
   })
 })

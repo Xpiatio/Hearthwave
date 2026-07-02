@@ -238,6 +238,7 @@ export default function App() {
   const [sttListening, setSttListening] = useState(true);
   const [serviceMode, setServiceMode] = useState('GMRS');
   const [fuzzyCallsign, setFuzzyCallsign] = useState(false);
+  const [fuzzyCallsignRewrite, setFuzzyCallsignRewrite] = useState(false);
   const [inputDevice, setInputDevice] = useState<string | number>(-1);
   const [systemMonitorSink, setSystemMonitorSink] = useState('');
   const [inputDevices, setInputDevices] = useState<InputDeviceOption[]>([]);
@@ -374,6 +375,7 @@ export default function App() {
         if (msg.stt_listening !== undefined) setSttListening(msg.stt_listening);
         if (msg.service_mode !== undefined) setServiceMode(msg.service_mode);
         if (msg.fuzzy_callsign !== undefined) setFuzzyCallsign(msg.fuzzy_callsign);
+        if (msg.fuzzy_callsign_rewrite !== undefined) setFuzzyCallsignRewrite(msg.fuzzy_callsign_rewrite);
         if (msg.input_device !== undefined) setInputDevice(msg.input_device);
         if (msg.output_device !== undefined) setOutputDevice(msg.output_device);
         if (msg.system_monitor_sink !== undefined) setSystemMonitorSink(msg.system_monitor_sink);
@@ -769,6 +771,10 @@ export default function App() {
 
   function handleToggleFuzzy() {
     send({ type: 'set_config', fuzzy_callsign: !fuzzyCallsign });
+  }
+
+  function handleToggleFuzzyRewrite() {
+    send({ type: 'set_config', fuzzy_callsign_rewrite: !fuzzyCallsignRewrite });
   }
 
   function handleInputDeviceChange(device: string | number, sink: string) {
@@ -1196,6 +1202,7 @@ export default function App() {
         isAdmin={!!profile?.is_admin}
         filterProfanity={filterProfanity}
         fuzzyCallsign={fuzzyCallsign}
+        fuzzyCallsignRewrite={fuzzyCallsignRewrite}
         inputDevice={inputDevice}
         systemMonitorSink={systemMonitorSink}
         inputDevices={inputDevices}
@@ -1207,6 +1214,7 @@ export default function App() {
         spectroTimeWindowS={spectroTimeWindowS}
         onToggleProfanity={handleToggleProfanity}
         onToggleFuzzy={handleToggleFuzzy}
+        onToggleFuzzyRewrite={handleToggleFuzzyRewrite}
         onInputDeviceChange={handleInputDeviceChange}
         onOutputDeviceChange={handleOutputDeviceChange}
         onSpectroColormapChange={handleSpectroColormapChange}

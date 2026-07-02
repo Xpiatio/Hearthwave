@@ -1,3 +1,9 @@
+// [start, end, canonical_callsign, original_heard_text?] — the 4th element is
+// present (non-null) only when fuzzy_callsign_rewrite corrected the transcript.
+export type CallsignSpan =
+  | [number, number, string]
+  | [number, number, string, string | null];
+
 export interface Contact {
   callsign: string;
   name?: string;
@@ -21,14 +27,14 @@ export interface RxMessageMsg {
   // [start, end, canonical_callsign] tuples computed by the backend.
   // Spans reference original character positions in `text`, handling NATO-phonetic,
   // spaced, hyphenated, and compact callsign forms.
-  callsign_spans?: Array<[number, number, string]>;
+  callsign_spans?: CallsignSpan[];
   source?: 'voice' | 'cw';
 }
 
 export interface RxMessagePatchMsg {
   type: 'rx_message_patch';
   utterance_id: string;
-  callsign_spans: Array<[number, number, string]>;
+  callsign_spans: CallsignSpan[];
 }
 
 export interface StatusMsg {
@@ -42,6 +48,7 @@ export interface StatusMsg {
   service_mode?: string;
   filter_profanity?: boolean;
   fuzzy_callsign?: boolean;
+  fuzzy_callsign_rewrite?: boolean;
   spectro_colormap?: 'viridis' | 'grayscale';
   spectro_freq_range?: 'voice' | 'full';
   spectro_time_window_s?: number;

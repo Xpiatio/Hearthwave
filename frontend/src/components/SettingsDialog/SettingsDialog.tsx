@@ -17,6 +17,7 @@ interface Props {
   // Preferences tab (per-user, applied on Save)
   filterProfanity: boolean;
   fuzzyCallsign: boolean;
+  fuzzyCallsignRewrite: boolean;
   inputDevice: string | number;
   systemMonitorSink: string;
   inputDevices: InputDeviceOption[];
@@ -28,6 +29,7 @@ interface Props {
   spectroTimeWindowS: number;
   onToggleProfanity: () => void;
   onToggleFuzzy: () => void;
+  onToggleFuzzyRewrite: () => void;
   onInputDeviceChange: (device: string | number, sink: string) => void;
   onOutputDeviceChange: (device: number) => void;
   onSpectroColormapChange: (cm: 'viridis' | 'grayscale') => void;
@@ -62,7 +64,7 @@ interface Props {
 }
 
 interface PrefsDraft {
-  filterProfanity: boolean; fuzzyCallsign: boolean; inputDevice: string | number;
+  filterProfanity: boolean; fuzzyCallsign: boolean; fuzzyCallsignRewrite: boolean; inputDevice: string | number;
   systemMonitorSink: string; outputDevice: number;
   spectroColormap: 'viridis' | 'grayscale'; spectroFreqRange: 'voice' | 'full'; spectroTimeWindowS: number;
 }
@@ -93,6 +95,7 @@ export function SettingsDialog(props: Props) {
   // Preferences draft, (re)seeded each time the dialog opens.
   const seedPrefs = (): PrefsDraft => ({
     filterProfanity: props.filterProfanity, fuzzyCallsign: props.fuzzyCallsign,
+    fuzzyCallsignRewrite: props.fuzzyCallsignRewrite,
     inputDevice: props.inputDevice, systemMonitorSink: props.systemMonitorSink,
     outputDevice: props.outputDevice, spectroColormap: props.spectroColormap,
     spectroFreqRange: props.spectroFreqRange, spectroTimeWindowS: props.spectroTimeWindowS,
@@ -120,6 +123,7 @@ export function SettingsDialog(props: Props) {
   function applyPrefs() {
     if (draft.filterProfanity !== prefsSeed.filterProfanity) props.onToggleProfanity();
     if (draft.fuzzyCallsign !== prefsSeed.fuzzyCallsign) props.onToggleFuzzy();
+    if (draft.fuzzyCallsignRewrite !== prefsSeed.fuzzyCallsignRewrite) props.onToggleFuzzyRewrite();
     if (draft.inputDevice !== prefsSeed.inputDevice || draft.systemMonitorSink !== prefsSeed.systemMonitorSink)
       props.onInputDeviceChange(draft.inputDevice, draft.systemMonitorSink);
     if (draft.outputDevice !== prefsSeed.outputDevice) props.onOutputDeviceChange(draft.outputDevice);
@@ -161,6 +165,7 @@ export function SettingsDialog(props: Props) {
             hideHeader
             filterProfanity={draft.filterProfanity}
             fuzzyCallsign={draft.fuzzyCallsign}
+            fuzzyCallsignRewrite={draft.fuzzyCallsignRewrite}
             inputDevice={draft.inputDevice}
             systemMonitorSink={draft.systemMonitorSink}
             inputDevices={props.inputDevices}
@@ -172,6 +177,7 @@ export function SettingsDialog(props: Props) {
             spectroTimeWindowS={draft.spectroTimeWindowS}
             onToggleProfanity={() => setDraft((d) => ({ ...d, filterProfanity: !d.filterProfanity }))}
             onToggleFuzzy={() => setDraft((d) => ({ ...d, fuzzyCallsign: !d.fuzzyCallsign }))}
+            onToggleFuzzyRewrite={() => setDraft((d) => ({ ...d, fuzzyCallsignRewrite: !d.fuzzyCallsignRewrite }))}
             onInputDeviceChange={(device, sink) => setDraft((d) => ({ ...d, inputDevice: device, systemMonitorSink: sink }))}
             onOutputDeviceChange={(device) => setDraft((d) => ({ ...d, outputDevice: device }))}
             onSpectroColormapChange={(cm) => setDraft((d) => ({ ...d, spectroColormap: cm }))}
