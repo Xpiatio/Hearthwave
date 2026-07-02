@@ -20,7 +20,7 @@ show how it's done.
 Hearthwave is a fork of GMRS-TTY that replaces the desktop PySide6 UI with a
 browser-based React frontend communicating over WebSocket.
 
-> **Latest release:** v2.12.0
+> **Latest release:** v2.13.0
 
 ## Who uses it
 
@@ -42,6 +42,19 @@ browser-based React frontend communicating over WebSocket.
   and Journal views now open as centered modal dialogs (the same treatment as
   Contacts), filling the window instead of a cramped inline strip. Phones keep
   their bottom-navigation tabs
+- **Noise-profile denoise** — samples the channel's own noise floor while the
+  squelch is closed and hands it to the denoiser as a stationary noise estimate,
+  instead of letting it guess from the speech-bearing audio. Off by default
+  pending word-error-rate proof on real recordings; A/B it offline with the
+  eval harness's `--noise-profile auto`
+- **Callsign auto-correct** — optionally rewrites a misheard callsign in the
+  final transcript to your roster's canonical call (single-character corrections
+  only; if two known calls are equally close, nothing changes). Corrected chips
+  get a dotted underline and a tooltip showing what was actually heard, and the
+  journal, read-aloud, and plugins all see the corrected text
+- **Deeper eval harness** — the offline word-error-rate harness can now A/B
+  decode tuning (beam size, repetition penalty, hotwords, per-word confidence),
+  VAD timing, prompt phrasing, and the noise profile against labelled recordings
 - **Selectable audio gain stage** — choose how receive audio is leveled before
   transcription, right from admin Settings: dynamic AGC (default), a gentler
   one-shot RMS normalize, or off. The offline STT eval harness can A/B all three
@@ -118,7 +131,7 @@ browser-based React frontend communicating over WebSocket.
   labelling throughout the interface
 - **Chat vs Transmit split** — a CHAT action broadcasts a message to all operators' displays without keying the radio; TRANSMIT is the over-the-air action; chat lines are marked `[CHAT]` and are profanity-filtered per recipient
 - **Shared message stream** — the message log (RX, TX, and CHAT entries) is held server-side and shared across the base station and every web/mobile login, so a client that signs in or refreshes later sees the history accumulated since the last clear. The stream is kept in memory (a backend restart starts fresh) and capped to the most recent messages. Clearing the log is **admin-only and global** — an admin clear wipes the chat for everyone at once, after a confirmation prompt
-- **Unified Settings** — one **Settings** dialog for everyone: a **Preferences** tab available to all users (audio input/output devices, profanity filter, fuzzy callsign match, spectrogram options) plus admin-only **Station** and **System** tabs. A single **Save** in the footer commits changes across every tab at once; non-admins see only the Preferences tab
+- **Unified Settings** — one **Settings** dialog for everyone: a **Preferences** tab available to all users (audio input/output devices, profanity filter, fuzzy callsign match, callsign auto-correct, spectrogram options) plus admin-only **Station** and **System** tabs. A single **Save** in the footer commits changes across every tab at once; non-admins see only the Preferences tab
 - **VOX primer tone** — an optional short tone prepended to each transmission so a VOX-keyed radio is fully keyed before the message starts; configurable on/off and tone duration in milliseconds (System tab, off by default)
 - **Logo, About & version** — a Hearthwave logo on the login screen and in the top bar, plus an About dialog (opened from the account menu, the login-screen footer, or the top-bar logo) showing the running version, project links, and FCC information. The version is sourced from the backend `/health` endpoint
 - **Docker install** — single `docker compose up -d` gets you running

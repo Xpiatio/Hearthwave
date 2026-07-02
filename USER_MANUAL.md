@@ -1,6 +1,6 @@
 # Hearthwave User Manual
 
-> **Version:** v2.12.0
+> **Version:** v2.13.0
 
 This manual covers day-to-day operation of Hearthwave as a GMRS family hub or neighborhood watch base station — a shared radio operating station where every household member or watch volunteer connects from their own device. For installation and server setup, see [README.md](README.md).
 
@@ -780,9 +780,10 @@ These settings live in the **Settings** dialog, opened from the **Settings** ent
 | Final-pass model | Optional larger model that re-transcribes each completed transmission in full once the other station unkeys, replacing the live partial text with a more accurate final. The final pass never truncates a long transmission or drops a callsign the live pass already heard — if it returns a short or empty result, the complete live text is kept. Choose **Auto** (default on new installs) to use the best staged model — `large-v3-turbo` > `distil-large-v3` > `large-v3` — or silently run single-pass when none is staged; the panel shows what Auto resolved to. Choose **Off** for single-pass, or name a model explicitly. The model must be staged first (see below) and adds ~1.5 GB RAM only while active. Changing this restarts the STT worker. |
 | Final-pass device | Where the whole-utterance final pass runs: `auto` (GPU if a ROCm GPU is present, else CPU), `gpu`, or `cpu`. Requires the ROCm deployment profile to use GPU. See [section 25](#25-deployment-profiles-and-gpu-acceleration-admin). |
 | Adaptive squelch | Tracks the channel noise floor and opens at 3× it, so weak carriers pre-trigger audio capture instead of clipping the first word. Leave off on consistently strong signals; enable on noisy or distant channels. Restarts the STT worker. |
+| Noise profile denoise | Samples the channel's noise floor while the squelch is closed and uses it as the denoiser's noise estimate (stationary spectral gating), instead of letting the denoiser guess from the speech itself. Utterances with no usable quiet span beforehand (fresh start, first over after transmitting) automatically fall back to the standard denoise. Off by default — an experimental setting; compare with the eval harness's `--noise-profile auto` before leaving it on. Restarts the STT worker. |
 | Gain control | How received audio is leveled before transcription. **Dynamic AGC** (default) rides the level continuously with a fast attack and slow release; **Simple RMS** applies one steady gain to hit a target loudness (gentler, no pumping); **Off** disables leveling entirely. If transcription seems to mishear during loud/quiet swings or "breathy" passages, try Simple RMS. Tune objectively with the STT eval harness's `--gain-mode {agc,rms,off}` flag against captured audio. Changing this restarts the STT worker. |
 | TX conditioning | Band-limits, compresses, and levels synthesized speech before it drives the radio's microphone input — clearer over narrowband FM. Browser read-aloud is unaffected. Takes effect immediately. |
-| STT debug capture | Saves raw / segmented / processed audio plus transcripts for each utterance, for offline word-error-rate evaluation. For tuning only — leave off in normal operation. Restarts the STT worker. |
+| STT debug capture | Saves raw / segmented / processed audio plus transcripts for each utterance (and the squelch-closed noise clip as `noise.wav` when Noise profile denoise is on), for offline word-error-rate evaluation. For tuning only — leave off in normal operation. Restarts the STT worker. |
 | Saved Phrases | A list of phrases Whisper is pre-loaded with as vocabulary hints to improve recognition accuracy. Common radio phrases ("break break", "QSL", "copy that") are included by default. Add any group-specific phrases — net names, operator handles, local shorthand — to help Whisper recognise them consistently. Changes take effect immediately without an STT restart. |
 | PTT mode | How PTT is keyed: `manual`, `serial`, or `vox` (voice-operated transmit — keys automatically based on audio level). |
 | PTT port / line | Serial port and control line used when PTT mode is `serial`. |
@@ -792,7 +793,7 @@ These settings live in the **Settings** dialog, opened from the **Settings** ent
 
 > Plugin settings — including the MeshCore and Meshtastic mesh-bridge example plugins — are no longer on the System tab. They now live on the **Plugins** tab (see [section 22](#22-plugins)).
 
-> Changes to VAD threshold, Whisper model, Final-pass model, Adaptive squelch, Gain control, or STT debug capture trigger a live STT worker restart and will briefly interrupt transcription. TX conditioning and Saved Phrases changes take effect immediately.
+> Changes to VAD threshold, Whisper model, Final-pass model, Adaptive squelch, Noise profile denoise, Gain control, or STT debug capture trigger a live STT worker restart and will briefly interrupt transcription. TX conditioning and Saved Phrases changes take effect immediately.
 
 ### Staging the final-pass model
 
