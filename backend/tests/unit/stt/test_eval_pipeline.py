@@ -118,7 +118,7 @@ def test_stage_toggles_forwarded(monkeypatch):
     vad = MockVAD([None, "start", None, "end"])
     cfg = _cfg(denoise_enabled=False, gain_mode="off", prop_decrease=0.3)
     run_pipeline(_audio(6), cfg, StubTranscriber(), vad)
-    assert seen == {"denoise_enabled": False, "gain_mode": "off", "prop_decrease": 0.3}
+    assert seen == {"denoise_enabled": False, "gain_mode": "off", "prop_decrease": 0.3, "noise_clip": None}
 
 
 def test_no_agc_maps_to_gain_mode_off():
@@ -267,7 +267,7 @@ def _patch_main_deps(monkeypatch, mod, *, decode_calls=None, vad_calls=None, hyp
     monkeypatch.setattr(mod, "_read_wav", lambda wav, sr: np.zeros(10, dtype=np.float32))
     monkeypatch.setattr(
         mod, "run_pipeline",
-        lambda audio, cfg, transcriber, vad_iter: [{"utterance_id": 0, "text": hypothesis}],
+        lambda audio, cfg, transcriber, vad_iter, **kw: [{"utterance_id": 0, "text": hypothesis}],
     )
 
 
@@ -353,3 +353,150 @@ def test_json_output_baseline_shape_unchanged_without_knobs(monkeypatch, tmp_pat
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
     assert set(out.keys()) == {"corpus", "skipped_unlabelled", "files"}
+
+
+# ---------------------------------------------------------------------------
+# --noise-profile — squelch-derived stationary denoise in eval replay
+# ---------------------------------------------------------------------------
+
+def test_eval_config_noise_profile_defaults_off():
+    assert EvalPipelineConfig().noise_profile is False
+
+
+def _capture_preprocess(monkeypatch):
+    seen = []
+    import backend.tools.eval_stt as mod
+
+    def fake_preprocess(audio, sr, sos, **kw):
+        seen.append(kw)
+        return audio
+
+    monkeypatch.setattr(mod, "preprocess_segment", fake_preprocess)
+    return seen
+
+
+def test_run_pipeline_forwards_override_clip(monkeypatch):
+    seen = _capture_preprocess(monkeypatch)
+    vad = MockVAD([None, "start", None, "end"])
+    clip = np.full(10 * CHUNK, 0.01, dtype=np.float32)
+    cfg = _cfg(noise_profile=True)
+    run_pipeline(_audio(6), cfg, StubTranscriber(), vad, noise_clip=clip)
+    assert seen and all(kw["noise_clip"] is clip for kw in seen)
+
+
+def test_run_pipeline_derives_clip_live_from_quiet_span(monkeypatch):
+    # A long closed-squelch quiet span before the speech must become the
+    # stationary noise estimate, exactly as the live segmenter derives it.
+    seen = _capture_preprocess(monkeypatch)
+    quiet_chunks = 20  # 0.64 s >= NOISE_MIN_S (0.5 s)
+    vad = MockVAD([None] * quiet_chunks + ["start", "end"])
+    quiet = np.zeros(quiet_chunks * CHUNK, dtype=np.float32)
+    speech = np.full(2 * CHUNK, 0.5, dtype=np.float32)
+    cfg = _cfg(noise_profile=True)
+    run_pipeline(np.concatenate([quiet, speech]), cfg, StubTranscriber(), vad)
+    assert seen
+    assert seen[0]["noise_clip"] is not None
+    assert seen[0]["noise_clip"].size == quiet_chunks * CHUNK
+
+
+def test_run_pipeline_off_passes_none_clip(monkeypatch):
+    seen = _capture_preprocess(monkeypatch)
+    vad = MockVAD([None, "start", None, "end"])
+    run_pipeline(_audio(6), _cfg(), StubTranscriber(), vad)
+    assert seen and all(kw["noise_clip"] is None for kw in seen)
+
+
+def test_run_pipeline_marks_noise_clip_used_when_enabled(monkeypatch):
+    _capture_preprocess(monkeypatch)
+    vad = MockVAD([None, "start", None, "end"])
+    clip = np.full(10 * CHUNK, 0.01, dtype=np.float32)
+    results = run_pipeline(_audio(6), _cfg(noise_profile=True), StubTranscriber(), vad, noise_clip=clip)
+    assert results[0]["noise_clip_used"] is True
+    results = run_pipeline(_audio(6), _cfg(noise_profile=True), StubTranscriber(),
+                           MockVAD([None, "start", None, "end"]))
+    assert results[0]["noise_clip_used"] is False
+
+
+def test_run_pipeline_result_shape_unchanged_when_off():
+    vad = MockVAD([None, "start", None, "end"])
+    results = run_pipeline(_audio(6), _cfg(), StubTranscriber(), vad)
+    assert set(results[0].keys()) == {"utterance_id", "text"}
+
+
+def test_load_noise_override_reads_sibling_noise_wav(tmp_path):
+    import wave as wave_mod
+    from backend.tools.eval_stt import _load_noise_override
+
+    utt = tmp_path / "utt_1_0001"
+    utt.mkdir()
+    wav = utt / "raw.wav"
+    wav.touch()
+    pcm = (np.full(4 * CHUNK, 0.01) * 32767).astype(np.int16)
+    with wave_mod.open(str(utt / "noise.wav"), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(SR)
+        w.writeframes(pcm.tobytes())
+    clip = _load_noise_override(wav, SR)
+    assert clip is not None
+    assert clip.size == 4 * CHUNK
+
+
+def test_load_noise_override_missing_returns_none(tmp_path):
+    from backend.tools.eval_stt import _load_noise_override
+    wav = tmp_path / "sample.wav"
+    wav.touch()
+    assert _load_noise_override(wav, SR) is None
+
+
+def test_main_noise_profile_auto_passes_override_to_pipeline(monkeypatch, tmp_path):
+    import backend.tools.eval_stt as mod
+
+    _patch_main_deps(monkeypatch, mod)
+    sentinel = np.full(8 * CHUNK, 0.01, dtype=np.float32)
+    monkeypatch.setattr(mod, "_load_noise_override", lambda wav, sr: sentinel)
+    pipeline_calls = []
+    monkeypatch.setattr(
+        mod, "run_pipeline",
+        lambda audio, cfg, transcriber, vad_iter, **kw: pipeline_calls.append(
+            {"noise_profile": cfg.noise_profile, **kw}
+        ) or [{"utterance_id": 0, "text": "hello world", "noise_clip_used": True}],
+    )
+    rc = mod.main(["--audio", str(tmp_path), "--noise-profile", "auto"])
+    assert rc == 0
+    assert pipeline_calls == [{"noise_profile": True, "noise_clip": sentinel}]
+
+
+def test_main_noise_profile_off_by_default(monkeypatch, tmp_path):
+    import backend.tools.eval_stt as mod
+
+    _patch_main_deps(monkeypatch, mod)
+    pipeline_calls = []
+    monkeypatch.setattr(
+        mod, "run_pipeline",
+        lambda audio, cfg, transcriber, vad_iter, **kw: pipeline_calls.append(
+            {"noise_profile": cfg.noise_profile, **kw}
+        ) or [{"utterance_id": 0, "text": "hello world"}],
+    )
+    rc = mod.main(["--audio", str(tmp_path)])
+    assert rc == 0
+    assert pipeline_calls == [{"noise_profile": False, "noise_clip": None}]
+
+
+def test_json_reports_noise_profile_and_fallbacks_when_auto(monkeypatch, tmp_path, capsys):
+    import backend.tools.eval_stt as mod
+
+    _patch_main_deps(monkeypatch, mod)
+    monkeypatch.setattr(mod, "_load_noise_override", lambda wav, sr: None)
+    monkeypatch.setattr(
+        mod, "run_pipeline",
+        lambda audio, cfg, transcriber, vad_iter, **kw: [
+            {"utterance_id": 0, "text": "hello", "noise_clip_used": False},
+            {"utterance_id": 1, "text": "world", "noise_clip_used": True},
+        ],
+    )
+    rc = mod.main(["--audio", str(tmp_path), "--noise-profile", "auto", "--json"])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["config"]["noise_profile"] == "auto"
+    assert out["noise_profile_fallbacks"] == 1

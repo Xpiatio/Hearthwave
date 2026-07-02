@@ -57,6 +57,7 @@ Useful experiments:
 --prompt-style transcript # initial_prompt rendering: list (default) or transcript
 --vad-min-silence-ms 800  # Silero VAD min_silence_duration_ms (default: 500)
 --vad-speech-pad-ms 300   # Silero VAD speech_pad_ms (default: 200)
+--noise-profile auto      # stationary denoise from the squelch-closed noise floor
 --json                    # machine-readable output for tracking over time
 ```
 
@@ -64,6 +65,15 @@ Note: `--no-agc` is a deprecated alias for `--gain-mode off`. The decode/VAD/
 prompt knobs above ride on the transcriber instance built for the run — pass
 `--json` to record which ones were set (echoed under a top-level `"config"`
 key) so an A/B run is self-describing.
+
+`--noise-profile auto` mirrors the server's `stt_noise_profile` toggle: per
+file it replays a captured `noise.wav` beside the WAV when present (written
+by debug capture when the toggle is on), otherwise derives a clip live from
+closed-squelch spans in the recording, otherwise runs without a clip —
+exactly today's self-estimating denoise. Utterances without a clip are
+counted (`noise_profile_fallbacks` in `--json`) so a run shows its real
+coverage. Pre-roll audio is never used as a profile: it is carrier-open
+audio and a wrong stationary estimate over-subtracts speech.
 
 A/B comparison with different gain modes:
 

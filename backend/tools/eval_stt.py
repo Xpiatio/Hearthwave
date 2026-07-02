@@ -48,6 +48,8 @@ class EvalPipelineConfig:
     squelch_open_threshold: float = STTWorker.SQUELCH_OPEN_THRESHOLD
     squelch_adaptive: bool = False
     min_speech_s: float = STTWorker.MIN_SPEECH_DURATION_S
+    # Squelch-derived stationary noise profile for the denoise stage.
+    noise_profile: bool = False
     pre_roll_s: float = STTWorker.PRE_BUFFER_CHUNKS * STTWorker.CHUNK_SAMPLES / STTWorker.SAMPLE_RATE
     rolling_segment_s: float = STTWorker.ROLLING_SEGMENT_S
     cut_window_s: float = STTWorker.CUT_WINDOW_S
@@ -55,12 +57,17 @@ class EvalPipelineConfig:
     flush_silence_s: float = 2.0
 
 
-def run_pipeline(audio: np.ndarray, cfg: EvalPipelineConfig, transcriber, vad_iter) -> list[dict]:
+def run_pipeline(
+    audio: np.ndarray, cfg: EvalPipelineConfig, transcriber, vad_iter,
+    noise_clip: "np.ndarray | None" = None,
+) -> list[dict]:
     """Feed one audio buffer through segmentation + DSP + transcription.
 
     Returns one dict per finalized utterance: {"utterance_id", "text"} where
     text follows the server's accumulation rule (partials joined by spaces,
-    final appended).
+    final appended). With ``cfg.noise_profile`` on, each dict also carries
+    ``noise_clip_used`` and ``noise_clip`` (an explicit captured clip, e.g. a
+    debug-capture ``noise.wav``) overrides live derivation for exact replay.
     """
     sr = cfg.sample_rate
     chunk_n = cfg.chunk_samples
@@ -81,6 +88,10 @@ def run_pipeline(audio: np.ndarray, cfg: EvalPipelineConfig, transcriber, vad_it
         squelch_buffer_max_chunks=STTWorker.SQUELCH_BUFFER_MAX_CHUNKS,
         min_speech_duration_s=cfg.min_speech_s,
         silence_reset_chunks=to_chunks(STTWorker.SILENCE_RESET_S),
+        noise_profile_chunks=(
+            to_chunks(STTWorker.NOISE_BUFFER_S) if cfg.noise_profile else 0
+        ),
+        noise_min_samples=int(STTWorker.NOISE_MIN_S * sr),
     )
     bandpass_sos = make_bandpass_sos(sr, STTWorker.BANDPASS_LOW_HZ, STTWorker.BANDPASS_HIGH_HZ)
     lowpass_sos = make_lowpass_sos(sr, cutoff_hz=2700) if cfg.lowpass_enabled else None
@@ -93,18 +104,32 @@ def run_pipeline(audio: np.ndarray, cfg: EvalPipelineConfig, transcriber, vad_it
         stream = np.concatenate([stream, np.zeros(pad, dtype=np.float32)])
 
     partial_texts: dict[int, list[str]] = {}
+    clip_used: dict[int, bool] = {}
     results: list[dict] = []
+
+    def _result(uid: int, text: str) -> dict:
+        out = {"utterance_id": uid, "text": text}
+        if cfg.noise_profile:
+            out["noise_clip_used"] = clip_used.get(uid, False)
+        return out
+
     for start in range(0, len(stream), chunk_n):
         chunk = stream[start:start + chunk_n]
         chunk_for_vad = lowpass(chunk, lowpass_sos) if lowpass_sos is not None else chunk
         peak = float(np.max(np.abs(chunk_for_vad))) if chunk_for_vad.size else 0.0
         segments, _events = segmenter.feed(chunk_for_vad, peak)
         for uid, seg_audio, is_final in segments:
+            if cfg.noise_profile:
+                clip = noise_clip if noise_clip is not None else segmenter.utterance_noise_clip
+            else:
+                clip = None
+            clip_used.setdefault(uid, clip is not None)
             processed = preprocess_segment(
                 seg_audio, sr, bandpass_sos,
                 denoise_enabled=cfg.denoise_enabled,
                 prop_decrease=cfg.prop_decrease,
                 gain_mode=cfg.gain_mode,
+                noise_clip=clip,
             )
             text = transcriber.transcribe(processed)
             if not text:
@@ -112,13 +137,13 @@ def run_pipeline(audio: np.ndarray, cfg: EvalPipelineConfig, transcriber, vad_it
             if is_final:
                 pieces = partial_texts.pop(uid, [])
                 pieces.append(text)
-                results.append({"utterance_id": uid, "text": " ".join(pieces).strip()})
+                results.append(_result(uid, " ".join(pieces).strip()))
             else:
                 partial_texts.setdefault(uid, []).append(text)
     # Utterances whose final transcribed empty still count: surface partials.
     for uid, pieces in partial_texts.items():
         if pieces:
-            results.append({"utterance_id": uid, "text": " ".join(pieces).strip()})
+            results.append(_result(uid, " ".join(pieces).strip()))
     return results
 
 
@@ -171,6 +196,20 @@ def _read_wav(path: Path, target_sr: int) -> np.ndarray:
         g = gcd(sr, target_sr)
         audio = resample_poly(audio, target_sr // g, sr // g).astype(np.float32)
     return audio
+
+
+def _load_noise_override(wav_path: Path, target_sr: int) -> "np.ndarray | None":
+    """Load a debug-capture ``noise.wav`` beside the WAV, if present.
+
+    An explicit captured clip replays the live worker's exact denoise input.
+    Missing file → None (the pipeline then derives a clip live from closed-
+    squelch spans, or runs without one — never from pre-roll, which is
+    carrier-open audio and would over-subtract speech).
+    """
+    sibling = wav_path.parent / "noise.wav"
+    if sibling.exists():
+        return _read_wav(sibling, target_sr)
+    return None
 
 
 def build_decode_options(args) -> dict | None:
@@ -231,6 +270,10 @@ def main(argv: list[str] | None = None) -> int:
                     help="Silero VAD min_silence_duration_ms (default: 500)")
     ap.add_argument("--vad-speech-pad-ms", type=int, default=200,
                     help="Silero VAD speech_pad_ms (default: 200)")
+    ap.add_argument("--noise-profile", choices=["off", "auto"], default="off",
+                    help="stationary denoise from squelch-closed noise floor: "
+                         "'auto' replays a captured noise.wav beside each file, "
+                         "else derives one live from closed-squelch spans")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     args = ap.parse_args(argv)
 
@@ -242,6 +285,7 @@ def main(argv: list[str] | None = None) -> int:
         squelch_open_threshold=args.squelch_threshold,
         squelch_adaptive=args.adaptive_squelch,
         min_speech_s=args.min_speech_s,
+        noise_profile=args.noise_profile == "auto",
     )
 
     decode_options = build_decode_options(args)
@@ -265,12 +309,16 @@ def main(argv: list[str] | None = None) -> int:
     per_file = []
     refs, hyps = [], []
     skipped = 0
+    noise_fallbacks = 0
     for wav in wavs:
         reference = find_reference(wav)
         if reference is None:
             skipped += 1
             continue
         audio = _read_wav(wav, cfg.sample_rate)
+        noise_override = (
+            _load_noise_override(wav, cfg.sample_rate) if cfg.noise_profile else None
+        )
         # Fresh VAD state per file so utterances don't bleed across files.
         vad_iter = make_vad_iterator(
             vad_model,
@@ -279,7 +327,9 @@ def main(argv: list[str] | None = None) -> int:
             min_silence_duration_ms=args.vad_min_silence_ms,
             speech_pad_ms=args.vad_speech_pad_ms,
         )
-        results = run_pipeline(audio, cfg, transcriber, vad_iter)
+        results = run_pipeline(audio, cfg, transcriber, vad_iter, noise_clip=noise_override)
+        if cfg.noise_profile:
+            noise_fallbacks += sum(1 for r in results if not r.get("noise_clip_used"))
         hypothesis = " ".join(r["text"] for r in results).strip()
         file_score = score([reference], [hypothesis]) if reference else None
         per_file.append({
@@ -311,7 +361,13 @@ def main(argv: list[str] | None = None) -> int:
             config["vad_min_silence_ms"] = args.vad_min_silence_ms
         if args.vad_speech_pad_ms != 200:
             config["vad_speech_pad_ms"] = args.vad_speech_pad_ms
+        if args.noise_profile != "off":
+            config["noise_profile"] = args.noise_profile
         output = {"corpus": corpus, "skipped_unlabelled": skipped, "files": per_file}
+        if args.noise_profile != "off":
+            # Utterances transcribed WITHOUT a clip (no noise.wav, no usable
+            # closed-squelch span) — shows an A/B run's real coverage.
+            output["noise_profile_fallbacks"] = noise_fallbacks
         if config:
             output["config"] = config
         print(json.dumps(output, indent=2))
@@ -321,6 +377,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"        ref: {f['reference']}")
             print(f"        hyp: {f['hypothesis']}")
         print(f"\nCorpus WER: {corpus['wer']:.1%} over {corpus['count']} file(s); {skipped} unlabelled skipped")
+        if args.noise_profile != "off":
+            print(f"Noise profile: {noise_fallbacks} utterance(s) fell back to no-clip denoise")
     return 0
 
 
