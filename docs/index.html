@@ -372,7 +372,85 @@ footer .brand .word b{ color:var(--lamp); }
 .tag{ font-family:'Space Mono',monospace; font-size:12.5px; color:var(--accent); }
 footer .tag{ color:var(--glow); }
 @media(prefers-reduced-motion:reduce){ *{ animation:none !important; } .reveal{ transition:none; opacity:1; transform:none; } .paper{ transition:none; } }
+
+/* ══ Day / Dusk themes ═══════════════════════════════════
+   day  = morning scene + the warm cream body (light mode)
+   dusk = night scene + a night body (dark mode)
+   Set on <html data-theme> before paint; toggled from the nav. */
+html[data-theme="dusk"]{
+  --bg:#141B30; --bg-2:#1B2440; --panel:#232E4E;
+  --line:rgba(248,241,227,.14); --line-2:rgba(248,241,227,.30);
+  --text:#F8F1E3; --text-soft:#C9C3B4; --text-dim:#AFA692;
+  --accent:#F5B04C; --navy:#F8F1E3;
+  --shadow:0 18px 40px -30px rgba(0,0,0,.85);
+}
+html[data-theme="dusk"] ::-webkit-scrollbar-thumb{ background:#5B6478; border-color:var(--bg); }
+/* the fridge stays a real object: light door, paper stays paper */
+html[data-theme="dusk"] .fridge{ border-color:rgba(74,56,34,.26); }
+html[data-theme="dusk"] .paper{ background:#FFFBF2; border-color:rgba(74,56,34,.14); }
+html[data-theme="dusk"] .paper h3{ color:#2B2417; }
+html[data-theme="dusk"] .paper p{ color:#5A4E3C; }
+html[data-theme="dusk"] .paper .meta{ color:#6F6147; }
+html[data-theme="dusk"] .paper:hover h3{ color:#96520E; }
+
+/* day hero: the same block at mid-morning */
+html[data-theme="day"] .hero{
+  background:linear-gradient(180deg,#7FAFD4 0%,#A9CBE2 45%,#DDE7E3 78%,#F2E3C2 100%);
+  color:#1F2733;
+}
+html[data-theme="day"] .hero h1 .l2{ color:#6B2D08; }
+html[data-theme="day"] .hero p.lead{ color:#2C3542; }
+html[data-theme="day"] .hero p.lead b{ color:#1F2733; }
+html[data-theme="day"] .hero .eyebrow{ color:#5E3000; font-weight:700; }
+html[data-theme="day"] .hero .btn-primary{
+  background:#1B2440; color:#F8F1E3;
+  box-shadow:0 3px 12px rgba(27,36,64,.35);
+}
+html[data-theme="day"] .hero .btn-primary:hover{ background:#111A30; }
+html[data-theme="day"] .hero .btn-ghost{
+  color:#1F2733; border:2px solid #1F2733; background:rgba(255,255,255,.55);
+  box-shadow:0 2px 8px rgba(27,36,64,.18);
+}
+html[data-theme="day"] .hero .btn-ghost:hover{ background:#1F2733; color:#F8F1E3; border-color:#1F2733; }
+html[data-theme="day"] .hero .trust{ color:#26313D; font-weight:600; }
+html[data-theme="day"] .hero .trust b{ color:#5E3000; }
+html[data-theme="day"] .hero .dot{ background:#8C4A10; box-shadow:none; }
+html[data-theme="day"] .hero :focus-visible{ outline-color:#1F2733; }
+
+/* day scene: sun out, stars and fireflies in, summer hills */
+.sun{ display:none; }
+html[data-theme="day"] .sun{ display:block; }
+html[data-theme="day"] .stars,
+html[data-theme="day"] .moon,
+html[data-theme="day"] .fly{ display:none; }
+html[data-theme="day"] .hill{ fill:#8FAC85; }
+html[data-theme="day"] .ground{ fill:#5F7F5B; }
+html[data-theme="day"] .sig{ stroke:#8C4A10; opacity:.5; }
+html[data-theme="day"] .s1{ stop-color:#FFF6D8; stop-opacity:.75; }
+html[data-theme="day"] .s2{ stop-color:#F4DFA8; stop-opacity:.3; }
+html[data-theme="day"] .s3{ stop-color:#A9CBE2; stop-opacity:0; }
+
+/* the toggle itself */
+.theme-toggle{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:42px; height:42px; border-radius:50%; flex:none;
+  border:1px solid var(--line-2); background:transparent; color:var(--text);
+  cursor:pointer; transition:border-color .2s ease,color .2s ease;
+}
+.theme-toggle:hover{ border-color:var(--accent); color:var(--accent); }
+.theme-toggle svg{ display:block; }
+.theme-toggle .i-sun{ display:none; }
+html[data-theme="dusk"] .theme-toggle .i-sun{ display:block; }
+html[data-theme="dusk"] .theme-toggle .i-moon{ display:none; }
 </style>
+<script>
+(function(){
+  var t=null;
+  try{ t=localStorage.getItem('hw_theme'); }catch(e){}
+  if(t!=='day'&&t!=='dusk') t=matchMedia('(prefers-color-scheme: dark)').matches?'dusk':'day';
+  document.documentElement.dataset.theme=t;
+})();
+</script>
 </head>
 <body>
 
@@ -410,6 +488,10 @@ footer .tag{ color:var(--glow); }
       <a href="#cards">Cards</a>
     </div>
     <div class="nav-cta">
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch theme">
+        <svg class="i-sun" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5 5l2.1 2.1M16.9 16.9L19 19M19 5l-2.1 2.1M7.1 16.9L5 19"/></svg>
+        <svg class="i-moon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"/></svg>
+      </button>
       <a class="btn btn-ghost" href="https://github.com/Xpiatio/Hearthwave" target="_blank" rel="noopener">GitHub</a>
       <a class="btn btn-primary" href="#install">Get started</a>
     </div>
@@ -450,9 +532,9 @@ footer .tag{ color:var(--glow); }
   <svg class="scene" viewBox="0 0 1440 420" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
     <defs>
       <radialGradient id="duskGlow" cx=".5" cy=".6" r=".7">
-        <stop offset="0" stop-color="#E8A87C" stop-opacity=".55"/>
-        <stop offset=".55" stop-color="#A66A6E" stop-opacity=".22"/>
-        <stop offset="1" stop-color="#1B2440" stop-opacity="0"/>
+        <stop class="s1" offset="0" stop-color="#E8A87C" stop-opacity=".55"/>
+        <stop class="s2" offset=".55" stop-color="#A66A6E" stop-opacity=".22"/>
+        <stop class="s3" offset="1" stop-color="#1B2440" stop-opacity="0"/>
       </radialGradient>
       <mask id="moonMask">
         <rect width="100%" height="100%" fill="#fff"/>
@@ -461,7 +543,7 @@ footer .tag{ color:var(--glow); }
     </defs>
 
     <!-- stars -->
-    <g fill="#F8F1E3">
+    <g class="stars" fill="#F8F1E3">
       <circle cx="90" cy="60" r="1.6" opacity=".8"/>
       <circle cx="220" cy="120" r="1.2" opacity=".5"/>
       <circle cx="340" cy="40" r="1.4" opacity=".7" class="tw"/>
@@ -480,13 +562,14 @@ footer .tag{ color:var(--glow); }
     </g>
 
     <!-- crescent moon -->
-    <circle cx="1150" cy="70" r="26" fill="#F3E9CF" mask="url(#moonMask)" opacity=".9"/>
+    <circle class="moon" cx="1150" cy="70" r="26" fill="#F3E9CF" mask="url(#moonMask)" opacity=".9"/>
+    <g class="sun"><circle cx="1150" cy="70" r="46" fill="#F7D468" opacity=".35"/><circle cx="1150" cy="70" r="28" fill="#F7CE4F"/></g>
 
     <!-- horizon glow behind the neighborhood -->
     <ellipse cx="720" cy="400" rx="920" ry="180" fill="url(#duskGlow)"/>
 
     <!-- back hills -->
-    <path d="M0 340 Q240 302 480 330 T960 326 T1440 336 V420 H0 Z" fill="#222C4A"/>
+    <path class="hill" d="M0 340 Q240 302 480 330 T960 326 T1440 336 V420 H0 Z" fill="#222C4A"/>
 
     <!-- radio tower on the hill -->
     <g class="tower">
@@ -498,7 +581,7 @@ footer .tag{ color:var(--glow); }
     </g>
 
     <!-- signal arcs: tower to every house -->
-    <g stroke="var(--lamp)" fill="none" stroke-width="2" stroke-dasharray="1 9" stroke-linecap="round" opacity=".38">
+    <g class="sig" stroke="var(--lamp)" fill="none" stroke-width="2" stroke-dasharray="1 9" stroke-linecap="round" opacity=".38">
       <path d="M172 96 Q330 60 495 250"/>
       <path d="M172 96 Q440 20 715 232"/>
       <path d="M172 96 Q550 -10 935 264"/>
@@ -506,7 +589,7 @@ footer .tag{ color:var(--glow); }
     </g>
 
     <!-- front ground -->
-    <path d="M0 372 Q360 344 720 362 T1440 356 V420 H0 Z" fill="#141B30"/>
+    <path class="ground" d="M0 372 Q360 344 720 362 T1440 356 V420 H0 Z" fill="#141B30"/>
 
     <!-- the neighborhood — three audience vignettes, crossfading -->
     <!-- v1: family & neighborhood watch -->
@@ -615,9 +698,9 @@ footer .tag{ color:var(--glow); }
   <svg class="scene-m" viewBox="0 0 720 520" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
     <defs>
       <radialGradient id="duskGlowM" cx=".5" cy=".65" r=".75">
-        <stop offset="0" stop-color="#E8A87C" stop-opacity=".5"/>
-        <stop offset=".55" stop-color="#A66A6E" stop-opacity=".2"/>
-        <stop offset="1" stop-color="#1B2440" stop-opacity="0"/>
+        <stop class="s1" offset="0" stop-color="#E8A87C" stop-opacity=".5"/>
+        <stop class="s2" offset=".55" stop-color="#A66A6E" stop-opacity=".2"/>
+        <stop class="s3" offset="1" stop-color="#1B2440" stop-opacity="0"/>
       </radialGradient>
       <mask id="moonMaskM">
         <rect width="100%" height="100%" fill="#fff"/>
@@ -625,7 +708,7 @@ footer .tag{ color:var(--glow); }
       </mask>
     </defs>
 
-    <g fill="#F8F1E3">
+    <g class="stars" fill="#F8F1E3">
       <circle cx="60" cy="60" r="1.5" opacity=".8"/>
       <circle cx="170" cy="110" r="1.2" opacity=".5" class="tw"/>
       <circle cx="270" cy="46" r="1.4" opacity=".7"/>
@@ -637,12 +720,13 @@ footer .tag{ color:var(--glow); }
       <circle cx="40" cy="180" r="1.1" opacity=".4"/>
       <circle cx="700" cy="30" r="1.4" opacity=".7"/>
     </g>
-    <circle cx="600" cy="74" r="23" fill="#F3E9CF" mask="url(#moonMaskM)" opacity=".9"/>
+    <circle class="moon" cx="600" cy="74" r="23" fill="#F3E9CF" mask="url(#moonMaskM)" opacity=".9"/>
+    <g class="sun"><circle cx="600" cy="74" r="40" fill="#F7D468" opacity=".35"/><circle cx="600" cy="74" r="25" fill="#F7CE4F"/></g>
 
     <ellipse cx="360" cy="500" rx="520" ry="200" fill="url(#duskGlowM)"/>
 
     <!-- back hill with a small chapel on the ridge -->
-    <path d="M0 420 Q180 388 360 408 T720 402 V520 H0 Z" fill="#222C4A"/>
+    <path class="hill" d="M0 420 Q180 388 360 408 T720 402 V520 H0 Z" fill="#222C4A"/>
     <g>
       <path d="M560 414 V386 L588 366 L616 386 V414 Z" fill="#1D2746"/>
       <rect x="582" y="352" width="12" height="20" fill="#1D2746"/>
@@ -660,13 +744,13 @@ footer .tag{ color:var(--glow); }
     </g>
 
     <!-- arcs -->
-    <g stroke="var(--lamp)" fill="none" stroke-width="2.2" stroke-dasharray="1 10" stroke-linecap="round" opacity=".65">
+    <g class="sig" stroke="var(--lamp)" fill="none" stroke-width="2.2" stroke-dasharray="1 10" stroke-linecap="round" opacity=".65">
       <path d="M108 128 Q260 60 420 300"/>
       <path d="M108 128 Q380 20 655 350"/>
     </g>
 
     <!-- front ground -->
-    <path d="M0 462 Q180 440 360 452 T720 448 V520 H0 Z" fill="#141B30"/>
+    <path class="ground" d="M0 462 Q180 440 360 452 T720 448 V520 H0 Z" fill="#141B30"/>
 
     <!-- the hearth home, close up -->
     <g>
@@ -1115,6 +1199,23 @@ const io=new IntersectionObserver((es)=>{
   es.forEach((e)=>{ if(e.isIntersecting){ e.target.style.transitionDelay=(e.target.dataset.d||0)+'ms'; e.target.classList.add('in'); io.unobserve(e.target);} });
 },{threshold:.14});
 document.querySelectorAll('.reveal:not(.in)').forEach((el,idx)=>{ el.dataset.d=(idx%4)*70; io.observe(el); });
+</script>
+<script>
+(function(){
+  var btn=document.getElementById('theme-toggle');
+  if(!btn) return;
+  function label(){
+    btn.setAttribute('aria-label',
+      document.documentElement.dataset.theme==='dusk' ? 'Switch to day theme' : 'Switch to dusk theme');
+  }
+  btn.addEventListener('click', function(){
+    var next=document.documentElement.dataset.theme==='dusk'?'day':'dusk';
+    document.documentElement.dataset.theme=next;
+    try{ localStorage.setItem('hw_theme', next); }catch(e){}
+    label();
+  });
+  label();
+})();
 </script>
 </body>
 </html>
