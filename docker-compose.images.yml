@@ -10,10 +10,10 @@
 services:
   backend:
     build: !reset null
-    image: ghcr.io/xpiatio/hearthwave-backend:v2.13.0
+    image: ghcr.io/xpiatio/hearthwave-backend:v2.14.0
     pull_policy: always
 
   frontend:
     build: !reset null
-    image: ghcr.io/xpiatio/hearthwave-frontend:v2.13.0
+    image: ghcr.io/xpiatio/hearthwave-frontend:v2.14.0
     pull_policy: always
