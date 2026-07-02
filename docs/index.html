@@ -129,7 +129,7 @@ nav{
 }
 .hero .scene{
   display:block; width:100%; height:auto;
-  margin:56px 0 -2px; pointer-events:none;
+  margin:clamp(-190px,-13vw,-90px) 0 -2px; pointer-events:none;
 }
 .scene-m{ display:none; }
 @media(max-width:700px){
@@ -139,7 +139,7 @@ nav{
 .hero-grid{ display:grid; grid-template-columns:1.05fr .95fr; gap:54px; align-items:start; position:relative; z-index:1; }
 @media(max-width:940px){
   .hero-grid{ grid-template-columns:1fr; gap:38px; }
-  .hero .scene{ margin-top:40px; }
+  .hero .scene{ margin-top:-70px; }
 }
 .hero h1{ font-size:clamp(40px,6vw,68px); margin:20px 0 0; }
 .hero h1 .l2{ display:block; color:var(--glow); }
