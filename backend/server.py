@@ -23,7 +23,7 @@ WebSocket message types (client → server):
     list_output_devices — {"type": "list_output_devices"}
     set_output_device — {"type": "set_output_device", "output_device": int|-1}
     set_config        — {"type": "set_config", "filter_profanity"?: bool,
-                          "fuzzy_callsign"?: bool}
+                          "fuzzy_callsign"?: bool, "fuzzy_callsign_rewrite"?: bool}
     set_spectro_config — {"type": "set_spectro_config", "colormap"?: str,
                           "freq_range"?: "voice" | "full",
                           "time_window_s"?: int}
@@ -140,6 +140,7 @@ from backend.persistence.users import DEFAULT_PREFS, SENSITIVE_PROFILE_FIELDS, U
 from backend.ptt.factory import make_ptt
 from backend.stt.worker import STTWorker
 from backend.text.callsigns import (
+    correct_callsigns,
     detect_callsigns,
     find_callsign_spans,
     fuzzy_match_callsign,
@@ -648,17 +649,34 @@ async def _rx_pump() -> None:
                 prior = _utterance_partial_texts.pop(utterance_id, "")
                 raw_text = _resolve_final_text(prior, chunk_text, result.get("replace", False))
 
+            # Roster-based callsign rewrite (finals only, both toggles on):
+            # splice the corrected canonical over misheard callsigns BEFORE
+            # profanity masking, so broadcast, stream history, TTS read-aloud,
+            # plugins, and attendance all see the corrected text. Corrected
+            # spans carry the original heard text as a 4th element.
+            corrected_spans: "list | None" = None
+            if (
+                not partial
+                and _config is not None
+                and _config.fuzzy_callsign
+                and _config.fuzzy_callsign_rewrite
+                and _contacts_store is not None
+            ):
+                known = known_callsigns(_contacts_store.get_all())
+                raw_text, rewritten = correct_callsigns(raw_text, known)
+                corrected_spans = [list(span) for span in rewritten]
+
             filtered_text = mask_profanity(raw_text)
 
             # Compute callsign spans from original text (handles NATO phonetic, spaced,
             # hyphenated, and compact forms). For final messages apply fuzzy correction
             # so the span carries the canonical callsign the contacts index knows about.
-            raw_spans = find_callsign_spans(raw_text)
-
-            if not partial and _contacts_store is not None and _config is not None:
+            if corrected_spans is not None:
+                callsign_spans = corrected_spans
+            elif not partial and _contacts_store is not None and _config is not None:
                 known = known_callsigns(_contacts_store.get_all())
                 callsign_spans = []
-                for start, end, cs in raw_spans:
+                for start, end, cs in find_callsign_spans(raw_text):
                     effective = cs
                     if _config.fuzzy_callsign:
                         matched = fuzzy_match_callsign(cs, known)
@@ -667,7 +685,7 @@ async def _rx_pump() -> None:
                     callsign_spans.append([start, end, effective])
             else:
                 known = set()
-                callsign_spans = [[s, e, cs] for s, e, cs in raw_spans]
+                callsign_spans = [[s, e, cs] for s, e, cs in find_callsign_spans(raw_text)]
 
             # Cross-boundary callsign detection: join with the previous final to catch
             # callsigns spoken across two separate transmissions (e.g. NATO phonetics
@@ -1194,6 +1212,7 @@ def _build_status() -> dict:
         "stt_listening": _stt_listening,
         "service_mode": (_config.radio_service if _config else "GMRS") or "GMRS",
         "fuzzy_callsign": bool(_config and _config.fuzzy_callsign),
+        "fuzzy_callsign_rewrite": bool(_config and _config.fuzzy_callsign_rewrite),
         "spectro_freq_range": (_config.spectro_freq_range if _config else "full"),
         # Admin-editable identity fields
         "station_callsign": (_config.callsign if _config else "N0CALL"),
@@ -2542,6 +2561,9 @@ async def websocket_endpoint(
                             pass
                 if "fuzzy_callsign" in data:
                     _config["fuzzy_callsign"] = bool(data["fuzzy_callsign"])
+                if "fuzzy_callsign_rewrite" in data:
+                    _config["fuzzy_callsign_rewrite"] = bool(data["fuzzy_callsign_rewrite"])
+                if "fuzzy_callsign" in data or "fuzzy_callsign_rewrite" in data:
                     _config.save()
                     await _manager.broadcast(_build_status())
 

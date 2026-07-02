@@ -197,6 +197,13 @@ class ServerConfig(dict):
         return bool(self.get("fuzzy_callsign", False))
 
     @property
+    def fuzzy_callsign_rewrite(self) -> bool:
+        """Rewrite misheard callsigns in final transcripts to the roster's
+        canonical call (visibly marked). Only active when fuzzy_callsign is
+        also on — this extends the span labeling into the text itself."""
+        return bool(self.get("fuzzy_callsign_rewrite", False))
+
+    @property
     def saved_phrases(self) -> list:
         # Default empty: curated radio vocabulary now lives in backend/stt/vocab.py
         # and is assembled server-side. saved_phrases holds only the operator's
