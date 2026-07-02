@@ -55,7 +55,9 @@ def test_defaults_when_keys_absent():
     assert kw["squelch_adaptive"] is False
     assert kw["pre_roll_s"] == 1.0
     assert kw["min_speech_s"] == 0.4
-    assert kw["whisper_model_final"] == ""
+    # New installs default to auto-resolving the final-pass model;
+    # persisted "" (explicit off) is deliberately not migrated.
+    assert kw["whisper_model_final"] == "auto"
     assert kw["debug_capture"] is False
     assert kw["gain_mode"] == "agc"
     assert kw["noise_profile"] is False

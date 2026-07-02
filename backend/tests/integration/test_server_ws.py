@@ -1196,6 +1196,75 @@ class TestSetServerConfigSttGainMode:
 
 
 # ---------------------------------------------------------------------------
+# set_server_config — whisper_model_final "auto" / large-v3-turbo
+# ---------------------------------------------------------------------------
+
+class TestSetServerConfigFinalModelAuto:
+    """"auto" and "large-v3-turbo" are valid FINAL model values; turbo must
+    NOT be accepted as the fast (streaming) model. Status carries the
+    configured value plus a read-only whisper_model_final_resolved."""
+
+    def _set_and_status(self, ws, data):
+        with (
+            patch("backend.server._stt_listening", False),
+            patch("backend.config.ServerConfig.save"),
+        ):
+            ws.send_json({"type": "set_server_config", **data})
+            return ws.receive_json()
+
+    def test_auto_accepted_as_final_model(self, tmp_path):
+        with _ws_server(tmp_path) as (tc, cfg):
+            cfg["whisper_model_final"] = ""
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                msg = self._set_and_status(ws, {"whisper_model_final": "auto"})
+                assert cfg["whisper_model_final"] == "auto"
+                assert msg["whisper_model_final"] == "auto"
+
+    def test_turbo_accepted_as_final_model(self, tmp_path):
+        with _ws_server(tmp_path) as (tc, cfg):
+            cfg["whisper_model_final"] = ""
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                self._set_and_status(ws, {"whisper_model_final": "large-v3-turbo"})
+                assert cfg["whisper_model_final"] == "large-v3-turbo"
+
+    def test_invalid_final_model_rejected(self, tmp_path):
+        with _ws_server(tmp_path) as (tc, cfg):
+            cfg["whisper_model_final"] = ""
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                self._set_and_status(ws, {"whisper_model_final": "bogus-model"})
+                assert cfg["whisper_model_final"] == ""
+
+    def test_turbo_rejected_as_fast_model(self, tmp_path):
+        with _ws_server(tmp_path) as (tc, cfg):
+            cfg["whisper_model"] = "small.en"
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                self._set_and_status(ws, {"whisper_model": "large-v3-turbo"})
+                assert cfg["whisper_model"] == "small.en"
+
+    def test_status_includes_resolved_final_model(self, tmp_path):
+        with _ws_server(tmp_path) as (tc, cfg):
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                worker = MagicMock()
+                worker.whisper_model_final = "distil-large-v3"
+                with patch("backend.server._stt_worker", worker):
+                    msg = self._set_and_status(ws, {})
+                assert msg["whisper_model_final_resolved"] == "distil-large-v3"
+
+    def test_resolved_empty_without_worker(self, tmp_path):
+        with _ws_server(tmp_path) as (tc, cfg):
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                with patch("backend.server._stt_worker", None):
+                    msg = self._set_and_status(ws, {})
+                assert msg["whisper_model_final_resolved"] == ""
+
+
+# ---------------------------------------------------------------------------
 # set_config — fuzzy_callsign_rewrite
 # ---------------------------------------------------------------------------
 

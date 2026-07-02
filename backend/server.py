@@ -196,6 +196,10 @@ _background_tasks: set[asyncio.Task] = set()
 VALID_WHISPER_MODELS = {
     "tiny.en", "base.en", "small.en", "medium.en", "large-v3", "distil-large-v3",
 }
+# Final-pass-only additions: turbo is too slow for the 2 s streaming slices,
+# so it must never be selectable as the fast model; "auto" resolves to the
+# best staged model at worker construction.
+VALID_FINAL_MODELS = VALID_WHISPER_MODELS | {"large-v3-turbo", "auto"}
 
 # Signal-quality state — written by STT worker callbacks (GIL-safe int/bool assignments)
 _audio_level: int = 0
@@ -1232,6 +1236,16 @@ def _build_status() -> dict:
         "vad_threshold": float(_config.vad_threshold) if _config else 0.5,
         "whisper_model": (_config.whisper_model if _config else "small.en"),
         "whisper_model_final": (_config.whisper_model_final if _config else ""),
+        # Read-only: what "auto" resolved to on the live worker ("" when off,
+        # no model staged, or listening hasn't started). The settings select
+        # round-trips the configured value above, never this. The isinstance
+        # guard keeps the payload JSON-safe when the worker is a test double.
+        "whisper_model_final_resolved": (
+            _stt_worker.whisper_model_final
+            if _stt_worker is not None
+            and isinstance(getattr(_stt_worker, "whisper_model_final", None), str)
+            else ""
+        ),
         "stt_gain_mode": (_config.stt_gain_mode if _config else "agc"),
         "stt_noise_profile": bool(_config.stt_noise_profile) if _config else False,
         "squelch_adaptive": bool(_config.squelch_adaptive) if _config else False,
@@ -1834,7 +1848,7 @@ async def _ws_handle_set_server_config(ws: WebSocket, data: dict, state: "Connec
     if "whisper_model_final" in data:
         model = str(data["whisper_model_final"]).strip()
         # Empty string disables the second pass.
-        if (model == "" or model in VALID_WHISPER_MODELS) and model != _config.whisper_model_final:
+        if (model == "" or model in VALID_FINAL_MODELS) and model != _config.whisper_model_final:
             _config["whisper_model_final"] = model
             stt_restart_needed = True
 
