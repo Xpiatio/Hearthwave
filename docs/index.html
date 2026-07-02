@@ -8,89 +8,41 @@
 <meta name="description" content="Hearthwave turns any home server into a shared GMRS base station. Live transcription, typed messages spoken over the air, multi-user, FCC-compliant, Docker-ready — built so no one is left off the channel.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<!-- apply saved theme before paint to avoid a flash -->
-<script>try{if(localStorage.getItem('hw-theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}</script>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
 /* ══════════════════════════════════════════════════════════════
-   HEARTHWAVE — "Warm Hearth, Bright Signal"
-   Default: warm cream / ember-led light theme.
-   [data-theme="dark"]: deep-slate signal theme. Toggled in the nav.
-   Drawn from the brand logo. No framework.
+   HEARTHWAVE — "Porch at Dusk"
+   Night sky above, warm lamplit rooms below, night again at the
+   footer. Single theme. Drawn from the neighborhood. No framework.
 ══════════════════════════════════════════════════════════════ */
 :root{
-  --bg:        #F6EFE2;
-  --bg-2:      #EFE5D2;
-  --panel:     #FFFCF6;
-  --panel-2:   #F3EAD8;
-  --line:      rgba(74,56,34,.13);
-  --line-2:    rgba(74,56,34,.22);
+  /* night — hero, footer, radio-log panels */
+  --night:      #1B2440;
+  --night-2:    #2E3A5C;
+  --night-panel:#232E4E;
+  --night-line: rgba(248,241,227,.16);
+  --night-text: #F8F1E3;
+  --night-soft: #C9C3B4;
+  --glow:       #FFD98E;   /* lit windows, highlights on navy */
+  --lamp:       #F5B04C;   /* porch-light amber — fills, buttons, large text */
+  --beacon:     #E4572E;   /* tower beacon only */
+  --horizon:    #E8A87C;   /* dusk horizon band */
 
-  --text:      #241C12;
+  /* day — the warm indoors */
+  --bg:        #F8F1E3;
+  --bg-2:      #F1E7D2;
+  --panel:     #FFFBF2;
+  --line:      rgba(74,56,34,.14);
+  --line-2:    rgba(74,56,34,.26);
+  --text:      #2B2417;
   --text-soft: #5A4E3C;
-  --text-dim:  #8A7B64;
-
-  --cyan:      #0E8C95;   /* AA-safe accent for text on cream  */
-  --cyan-br:   #1FC3CC;   /* bright cyan for fills / large     */
-  --blue:      #2E6BD6;
-  --violet:    #6D3FD4;
-  --magenta:   #C32C97;
-  --ember:     #BF5E16;
-  --ember-fill:#E07A2E;
-
-  --signal:    linear-gradient(90deg,var(--cyan-br) 0%,var(--blue) 40%,var(--violet) 70%,var(--magenta) 100%);
-  --signal-v:  linear-gradient(180deg,var(--cyan-br),var(--violet) 60%,var(--magenta));
-  --signal-tx: linear-gradient(90deg,var(--cyan) 0%,var(--blue) 38%,var(--violet) 66%,var(--magenta) 100%);
-
-  /* theme-specific surfaces */
-  --console-grad: linear-gradient(180deg,var(--panel),#fbf4e8);
-  --feat-grad:    linear-gradient(155deg,var(--panel),#fbf3e6);
-  --cta-grad:     linear-gradient(160deg,var(--panel),#fbf2e3);
-  --card-shadow:  0 10px 24px -22px rgba(74,46,18,.5);
-  --pill-shadow:  0 10px 24px -20px rgba(74,46,18,.5);
-  --btn-primary-bg:    linear-gradient(120deg,var(--cyan) 0%,var(--cyan-br) 100%);
-  --btn-primary-color: #fff;
-  --nav-bg:       rgba(246,239,226,.78);
-  --dot-glow:     0 0 8px rgba(14,140,149,.6);
+  --text-dim:  #6F6147;
+  --accent:    #96520E;    /* AA-safe amber for links & small text on cream */
+  --navy:      #2E3A5C;
 
   --wrap: 1140px;
-  --r:    18px;
-  --shadow: 0 26px 50px -26px rgba(74,46,18,.34);
-}
-
-[data-theme="dark"]{
-  --bg:        #15181E;
-  --bg-2:      #1B1F27;
-  --panel:     #20252F;
-  --panel-2:   #262C38;
-  --line:      rgba(180,205,230,.10);
-  --line-2:    rgba(180,205,230,.18);
-
-  --text:      #EAF0F7;
-  --text-soft: #9DA8B8;
-  --text-dim:  #6B7585;
-
-  --cyan:      #36DDE4;
-  --cyan-br:   #36DDE4;
-  --blue:      #4C8DF6;
-  --violet:    #8B5CF6;
-  --magenta:   #EA53C6;
-  --ember:     #FF9A4D;
-  --ember-fill:#FF9A4D;
-
-  --signal-tx: var(--signal);
-
-  --console-grad: linear-gradient(180deg,var(--panel),#191e27);
-  --feat-grad:    linear-gradient(155deg,var(--panel),#191e28);
-  --cta-grad:     linear-gradient(160deg,var(--panel),#171c25);
-  --card-shadow:  none;
-  --pill-shadow:  none;
-  --btn-primary-bg:    var(--cyan);
-  --btn-primary-color: #06121a;
-  --nav-bg:       rgba(21,24,30,.72);
-  --dot-glow:     0 0 10px var(--cyan);
-
-  --shadow: 0 30px 60px -28px rgba(0,0,0,.7);
+  --r:    14px;
+  --shadow: 0 18px 40px -30px rgba(74,46,18,.45);
 }
 
 *{ box-sizing:border-box; }
@@ -103,144 +55,152 @@ body{
   line-height:1.62;
   overflow-x:hidden;
   -webkit-font-smoothing:antialiased;
-  transition:background .35s ease,color .35s ease;
 }
-/* atmospheric base */
-body::before{
-  content:""; position:fixed; inset:0; z-index:0; pointer-events:none;
-  background:
-    radial-gradient(75% 50% at 82% -6%, rgba(109,63,212,.10), transparent 60%),
-    radial-gradient(65% 45% at 10% 2%,  rgba(14,140,149,.10), transparent 60%),
-    radial-gradient(95% 65% at 50% 116%, rgba(224,122,46,.14), transparent 62%);
-}
-[data-theme="dark"] body::before{
-  background:
-    radial-gradient(80% 50% at 78% -8%, rgba(138,92,246,.20), transparent 60%),
-    radial-gradient(70% 45% at 12% 4%,  rgba(54,221,228,.16), transparent 60%),
-    radial-gradient(90% 60% at 50% 118%, rgba(255,154,77,.10), transparent 60%);
-}
-/* grain overlay */
-body::after{
-  content:""; position:fixed; inset:0; z-index:0; pointer-events:none; opacity:.40;
-  mix-blend-mode:multiply;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.45'/%3E%3C/svg%3E");
-}
-[data-theme="dark"] body::after{ mix-blend-mode:overlay; opacity:.45; }
 main,nav,footer{ position:relative; z-index:1; }
 .wrap{ max-width:var(--wrap); margin:0 auto; padding:0 28px; }
 
-::selection{ background:rgba(31,195,204,.30); color:#241C12; }
-[data-theme="dark"] ::selection{ background:rgba(54,221,228,.30); color:#fff; }
+::selection{ background:rgba(245,176,76,.45); color:#2B2417; }
 ::-webkit-scrollbar{ width:11px; }
 ::-webkit-scrollbar-track{ background:var(--bg); }
-::-webkit-scrollbar-thumb{ background:linear-gradient(var(--cyan),var(--violet)); border-radius:9px; border:3px solid var(--bg); }
+::-webkit-scrollbar-thumb{ background:#8A7458; border-radius:9px; border:3px solid var(--bg); }
 
-a{ color:var(--cyan); text-decoration:none; }
+a{ color:var(--accent); text-decoration:none; }
 .mono{ font-family:'Space Mono',ui-monospace,monospace; }
 
 /* ── type scale ─────────────────────────────────────────── */
-h1,h2,h3,h4{ font-family:'Bricolage Grotesque',sans-serif; font-weight:800; line-height:1.04; letter-spacing:-.02em; margin:0; }
+h1,h2,h3,h4{ font-family:'Fraunces',Georgia,serif; font-weight:700; line-height:1.08; letter-spacing:-.01em; margin:0; }
 .eyebrow{
-  font-family:'Space Mono',monospace; font-size:12px; font-weight:700;
-  letter-spacing:.32em; text-transform:uppercase; color:var(--cyan);
-  display:inline-flex; align-items:center; gap:10px;
+  font-size:13.5px; font-weight:700; letter-spacing:.05em;
+  color:var(--accent);
 }
-.eyebrow::before{ content:""; width:26px; height:2px; background:var(--signal); border-radius:2px; }
 .lead{ color:var(--text-soft); font-size:clamp(16px,1.6vw,18.5px); max-width:60ch; }
 
-.grad{ background:var(--signal-tx); -webkit-background-clip:text; background-clip:text; color:transparent; }
-.ember{ color:var(--ember); }
+.ember{ color:var(--accent); }
+
+:focus-visible{ outline:3px solid var(--lamp); outline-offset:2px; border-radius:4px; }
 
 /* ── buttons ────────────────────────────────────────────── */
 .btn{
   display:inline-flex; align-items:center; gap:9px;
-  font-weight:600; font-size:15px; padding:13px 22px; border-radius:13px;
-  border:1px solid transparent; cursor:pointer; transition:.22s ease;
+  font-weight:600; font-size:15px; padding:13px 22px; border-radius:12px;
+  border:1px solid transparent; cursor:pointer; transition:background .2s ease,color .2s ease,border-color .2s ease;
 }
-.btn-primary{ color:var(--btn-primary-color); background:var(--btn-primary-bg); box-shadow:0 8px 20px -10px rgba(14,140,149,.6); }
-.btn-primary:hover{ transform:translateY(-2px); box-shadow:0 16px 32px -12px rgba(14,140,149,.6); }
-[data-theme="dark"] .btn-primary:hover{ background:#5be9ef; }
-.btn-ghost{ color:var(--text); border-color:var(--line-2); background:rgba(127,127,127,.04); }
-.btn-ghost:hover{ border-color:var(--cyan); color:var(--cyan); transform:translateY(-2px); }
+.btn-primary{ color:#2B2417; background:var(--lamp); }
+.btn-primary:hover{ background:#E89B3C; }
+.btn-ghost{ color:var(--text); border-color:var(--line-2); background:transparent; }
+.btn-ghost:hover{ border-color:var(--accent); color:var(--accent); }
 
 /* ── nav ────────────────────────────────────────────────── */
 nav{
   position:sticky; top:0; z-index:50;
-  backdrop-filter:blur(14px) saturate(1.2);
-  background:var(--nav-bg);
+  background:var(--bg);
   border-bottom:1px solid var(--line);
 }
 .nav-in{ display:flex; align-items:center; justify-content:space-between; height:70px; }
 .brand{ display:flex; align-items:center; gap:12px; }
-.brand .word{ font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:20px; letter-spacing:-.02em; color:var(--text); }
-.brand .word b{ color:var(--cyan); font-weight:800; }
+.brand .word{ font-family:'Fraunces',Georgia,serif; font-weight:700; font-size:20px; letter-spacing:-.01em; color:var(--text); }
+.brand .word b{ color:var(--accent); font-weight:700; }
 .nav-links{ display:flex; align-items:center; gap:26px; }
 .nav-links a{ color:var(--text-soft); font-size:14.5px; font-weight:500; transition:color .2s; }
 .nav-links a:hover{ color:var(--text); }
 .nav-cta{ display:flex; align-items:center; gap:12px; }
-.theme-toggle{
-  width:40px; height:40px; border-radius:11px; cursor:pointer; flex:none;
-  display:grid; place-items:center; color:var(--text-soft);
-  background:rgba(127,127,127,.05); border:1px solid var(--line-2); transition:.22s ease;
+@media(max-width:1000px){ .nav-links{ display:none; } }
+@media(max-width:480px){
+  .nav-cta .btn-ghost{ display:none; }
+  .nav-cta .btn{ padding:11px 16px; font-size:14px; }
 }
-.theme-toggle:hover{ color:var(--cyan); border-color:var(--cyan); }
-.theme-toggle .moon{ display:none; }
-.theme-toggle .sun{ display:block; }
-[data-theme="dark"] .theme-toggle .moon{ display:block; }
-[data-theme="dark"] .theme-toggle .sun{ display:none; }
-@media(max-width:860px){ .nav-links{ display:none; } }
 
 /* ── logo mark ──────────────────────────────────────────── */
 .mark{ width:38px; height:38px; display:block; flex:none; }
-.mark .house{ stroke:var(--cyan); }
-.wave-pulse{ transform-origin:right top; animation:pulse 3.4s ease-in-out infinite; }
+.mark .house{ stroke:var(--navy); }
+.mark .win{ stroke:var(--navy); }
+.mark .arcs{ stroke:var(--lamp); }
+.wave-pulse{ animation:pulse 3.4s ease-in-out infinite; }
 .wave-pulse:nth-child(2){ animation-delay:.18s; }
 .wave-pulse:nth-child(3){ animation-delay:.36s; }
 @keyframes pulse{ 0%,100%{ opacity:.55; } 50%{ opacity:1; } }
 
-/* ── hero ───────────────────────────────────────────────── */
-.hero{ padding:84px 0 70px; position:relative; }
-.hero .rings{
-  position:absolute; right:-6%; top:-4%; width:760px; height:760px; pointer-events:none;
-  opacity:.55; mask-image:radial-gradient(closest-side,#000 55%,transparent);
+/* ── hero: the neighborhood at dusk ─────────────────────── */
+.hero{
+  position:relative; overflow:hidden;
+  padding:88px 0 0;
+  background:linear-gradient(180deg,#111830 0%,var(--night) 42%,var(--night-2) 74%,#55496B 90%,var(--horizon) 100%);
+  color:var(--night-text);
 }
-.hero-grid{ display:grid; grid-template-columns:1.05fr .95fr; gap:54px; align-items:center; }
-@media(max-width:940px){ .hero-grid{ grid-template-columns:1fr; gap:38px; } .hero .rings{ display:none; } }
-.hero h1{ font-size:clamp(40px,6.2vw,70px); margin:20px 0 0; }
-.hero h1 .l2{ display:block; }
-.hero p.lead{ margin:22px 0 30px; }
+.hero .scene{
+  display:block; width:100%; height:auto;
+  margin:56px 0 -2px; pointer-events:none;
+}
+.scene-m{ display:none; }
+@media(max-width:700px){
+  .hero .scene{ display:none; }
+  .scene-m{ display:block; width:100%; height:auto; margin:32px 0 -2px; pointer-events:none; }
+}
+.hero-grid{ display:grid; grid-template-columns:1.05fr .95fr; gap:54px; align-items:start; position:relative; z-index:1; }
+@media(max-width:940px){
+  .hero-grid{ grid-template-columns:1fr; gap:38px; }
+  .hero .scene{ margin-top:40px; }
+}
+.hero h1{ font-size:clamp(40px,6vw,68px); margin:20px 0 0; }
+.hero h1 .l2{ display:block; color:var(--glow); }
+.hero p.lead{ margin:22px 0 30px; color:var(--night-soft); }
+.hero p.lead b{ color:var(--night-text); }
+.hero .eyebrow{ color:var(--lamp); }
+.hero .btn-ghost{ color:var(--night-text); border-color:var(--night-line); }
+.hero .btn-ghost:hover{ border-color:var(--lamp); color:var(--glow); }
 .hero-cta{ display:flex; gap:14px; flex-wrap:wrap; }
-.trust{ display:flex; flex-wrap:wrap; gap:8px 22px; margin-top:30px; color:var(--text-dim); font-size:13px; }
+.trust{ display:flex; flex-wrap:wrap; gap:8px 22px; margin-top:30px; color:var(--night-soft); font-size:13px; }
 .trust span{ display:inline-flex; align-items:center; gap:8px; }
-.trust b{ color:var(--cyan); }
-.dot{ width:7px; height:7px; border-radius:50%; background:var(--cyan); box-shadow:var(--dot-glow); }
+.trust b{ color:var(--lamp); }
+.dot{ width:7px; height:7px; border-radius:50%; background:var(--lamp); box-shadow:0 0 8px rgba(245,176,76,.7); }
 
-/* live transcript console */
+/* scene animation */
+/* audience vignettes: one shared keyframe, staggered by negative delays.
+   Under prefers-reduced-motion, animation:none leaves v1 (base opacity 1) visible. */
+.vign{ opacity:0; animation:vign 21s linear infinite; }
+.vign.v1{ opacity:1; }
+.vign.v2{ animation-delay:-14s; }
+.vign.v3{ animation-delay:-7s; }
+@keyframes vign{
+  0%,26%{ opacity:1; }
+  33%,93%{ opacity:0; }
+  100%{ opacity:1; }
+}
+.tw{ animation:tw 3.8s ease-in-out infinite; }
+.tw2{ animation-delay:1.3s; } .tw3{ animation-delay:2.4s; }
+@keyframes tw{ 0%,100%{ opacity:.25; } 50%{ opacity:.95; } }
+.beacon{ animation:beacon 2.6s ease-in-out infinite; }
+@keyframes beacon{ 0%,100%{ opacity:.35; } 50%{ opacity:1; } }
+.fly{ animation:fly 6s ease-in-out infinite; }
+.fly2{ animation-delay:2s; } .fly3{ animation-delay:3.6s; }
+@keyframes fly{
+  0%,100%{ opacity:0; transform:translate(0,0); }
+  30%{ opacity:.9; }
+  55%{ opacity:.6; transform:translate(14px,-10px); }
+  80%{ opacity:.15; transform:translate(6px,-16px); }
+}
+
+/* family radio log */
 .console{
-  background:var(--console-grad);
-  border:1px solid var(--line-2); border-radius:var(--r);
-  box-shadow:var(--shadow); overflow:hidden;
+  background:var(--night-panel);
+  border:1px solid var(--night-line); border-radius:var(--r);
+  box-shadow:0 24px 48px -28px rgba(10,14,28,.6); overflow:hidden;
 }
 .console-top{
-  display:flex; align-items:center; gap:10px; padding:13px 16px;
-  border-bottom:1px solid var(--line); background:rgba(127,127,127,.03);
+  display:flex; align-items:center; gap:10px; padding:12px 16px;
+  border-bottom:1px solid var(--night-line);
+  color:var(--night-soft); font-size:13px;
 }
-.console-top .freq{ margin-left:auto; font-size:12.5px; color:var(--cyan); }
-.tl{ width:11px; height:11px; border-radius:50%; }
-.tl.r{ background:#ff5f57; } .tl.y{ background:#febc2e; } .tl.g{ background:#28c840; }
-.console-body{ padding:18px 18px 8px; min-height:236px; }
+.onair{ width:9px; height:9px; border-radius:50%; background:var(--lamp); box-shadow:0 0 10px var(--lamp); animation:pulse 3.4s ease-in-out infinite; flex:none; }
+.console-top .freq{ margin-left:auto; font-size:12.5px; color:var(--glow); }
+.console-body{ padding:18px 18px 14px; min-height:236px; }
 .msg{ display:flex; gap:11px; align-items:flex-start; margin-bottom:15px; opacity:0; transform:translateY(8px); animation:rise .5s forwards; }
 @keyframes rise{ to{ opacity:1; transform:none; } }
 .msg .who{ font-family:'Space Mono',monospace; font-size:11px; font-weight:700; padding:3px 8px; border-radius:7px; white-space:nowrap; }
-.who.rx{ color:var(--cyan); background:rgba(14,140,149,.12); }
-.who.tx{ color:var(--ember); background:rgba(191,94,22,.12); }
-[data-theme="dark"] .who.rx{ background:rgba(54,221,228,.12); }
-[data-theme="dark"] .who.tx{ background:rgba(255,154,77,.12); }
-.msg .txt{ font-size:14.5px; color:var(--text); }
-.msg .txt small{ display:block; color:var(--text-dim); font-size:11.5px; margin-top:2px; }
-.console-meter{ display:flex; align-items:flex-end; gap:3px; height:34px; padding:0 18px 16px; }
-.console-meter i{ flex:1; background:var(--signal-v); border-radius:2px; height:20%; animation:eq 1.1s ease-in-out infinite; opacity:.9; }
-@keyframes eq{ 0%,100%{ height:18%; } 50%{ height:90%; } }
+.who.rx{ color:var(--glow); background:rgba(255,217,142,.14); }
+.who.tx{ color:#B9CFF7; background:rgba(120,160,235,.16); }
+.msg .txt{ font-size:14.5px; color:var(--night-text); }
+.msg .txt small{ display:block; color:var(--night-soft); font-size:11.5px; margin-top:2px; }
 
 /* ── section frame ──────────────────────────────────────── */
 section{ padding:92px 0; }
@@ -252,62 +212,84 @@ section{ padding:92px 0; }
 
 /* ── access band ────────────────────────────────────────── */
 .band{ background:var(--bg-2); border-top:1px solid var(--line); border-bottom:1px solid var(--line); position:relative; }
-.band::after{ content:""; position:absolute; left:0; right:0; top:0; height:2px; background:var(--signal); opacity:.85; }
 .three{ display:grid; grid-template-columns:repeat(3,1fr); gap:22px; }
 @media(max-width:820px){ .three{ grid-template-columns:1fr; } }
 .pill{
   background:var(--panel); border:1px solid var(--line); border-radius:var(--r);
-  padding:26px 24px; transition:.25s ease; box-shadow:var(--pill-shadow);
+  padding:26px 24px; transition:border-color .25s ease;
 }
-.pill:hover{ border-color:var(--line-2); transform:translateY(-4px); }
-.pill .ic{ width:46px; height:46px; border-radius:12px; display:grid; place-items:center; margin-bottom:16px;
-  background:rgba(14,140,149,.1); color:var(--cyan); }
-[data-theme="dark"] .pill .ic{ background:rgba(54,221,228,.1); }
+.pill:hover{ border-color:var(--line-2); }
+.pill .ic{ width:46px; height:46px; border-radius:50%; display:grid; place-items:center; margin-bottom:16px;
+  background:rgba(245,176,76,.18); color:var(--navy); }
 .pill h3{ font-size:19px; margin-bottom:8px; }
 .pill p{ color:var(--text-soft); font-size:14.5px; margin:0; }
 
-/* printable reference cards */
-.tmpls{ display:flex; flex-wrap:wrap; justify-content:center; gap:18px; }
-.pill.tmpl{ display:flex; flex-direction:column; color:inherit; flex:0 1 calc(33.333% - 12px); }
-@media(max-width:780px){ .pill.tmpl{ flex-basis:calc(50% - 9px); } }
-@media(max-width:520px){ .pill.tmpl{ flex-basis:100%; } }
-.pill.tmpl:hover h3{ color:var(--cyan); }
-.pill.tmpl p{ flex:1; }
-.pill .meta{ display:inline-flex; align-items:center; gap:8px; margin-top:16px; font-family:'Space Mono',monospace; font-size:10.5px; font-weight:700; letter-spacing:.15em; color:var(--text-dim); }
-.pill .meta::after{ content:"PRINT →"; color:var(--cyan); margin-left:auto; opacity:0; transform:translateX(-4px); transition:.25s ease; }
-.pill.tmpl:hover .meta::after{ opacity:1; transform:none; }
-
-/* ── bento feature grid ─────────────────────────────────── */
-.bento{ display:grid; grid-template-columns:repeat(4,1fr); gap:18px; }
-.card{
-  background:var(--panel); border:1px solid var(--line); border-radius:var(--r);
-  padding:24px; position:relative; overflow:hidden; transition:.25s ease;
-  box-shadow:var(--card-shadow);
+/* ── printable cards: pinned to the fridge door ─────────── */
+.fridge{
+  position:relative; border-radius:26px; padding:52px 44px 44px;
+  background:#F4F1EA; border:1px solid var(--line-2);
+  box-shadow:inset 0 2px 10px rgba(74,56,34,.06), var(--shadow);
+  display:flex; flex-wrap:wrap; justify-content:center; gap:34px 26px;
 }
-.card:hover{ transform:translateY(-4px); border-color:var(--line-2); background:var(--panel-2); }
-.card::before{ content:""; position:absolute; left:0; top:0; height:100%; width:3px; background:var(--signal-v); opacity:0; transition:opacity .25s; }
-.card:hover::before{ opacity:1; }
-.card .k{ font-family:'Space Mono',monospace; font-size:11px; color:var(--cyan); letter-spacing:.12em; }
-.card h3{ font-size:18px; margin:9px 0 8px; }
-.card p{ color:var(--text-soft); font-size:14px; margin:0; }
-.card.wide{ grid-column:span 2; }
-.card.feat{ grid-column:span 2; grid-row:span 2; background:var(--feat-grad); }
-.card.feat h3{ font-size:26px; }
-.card.feat .big{ font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:clamp(30px,4vw,52px); line-height:1; margin:20px 0 6px; }
-@media(max-width:1000px){ .bento{ grid-template-columns:repeat(2,1fr); } .card.feat,.card.wide{ grid-column:span 2; grid-row:auto; } }
-@media(max-width:560px){ .bento{ grid-template-columns:1fr; } .card.wide,.card.feat{ grid-column:span 1; } }
+.fridge::after{
+  content:""; position:absolute; top:64px; bottom:64px; right:14px; width:7px; border-radius:6px;
+  background:#E3DED2; box-shadow:inset 0 1px 2px rgba(74,56,34,.25);
+}
+.paper{
+  position:relative; display:flex; flex-direction:column;
+  width:min(300px,100%); padding:26px 22px 20px;
+  background:var(--panel); border:1px solid var(--line); border-radius:4px;
+  color:inherit; box-shadow:0 10px 22px -12px rgba(74,46,18,.35);
+  transition:transform .25s ease, box-shadow .25s ease;
+}
+.paper::before{
+  content:""; position:absolute; top:-11px; left:50%; margin-left:-11px; width:22px; height:22px; border-radius:50%;
+  background:radial-gradient(circle at 35% 30%, #FFD98E, var(--lamp) 55%, #C97F1F);
+  box-shadow:0 3px 6px rgba(74,46,18,.35);
+}
+.paper:nth-child(1){ transform:rotate(-2.2deg); }
+.paper:nth-child(2){ transform:rotate(1.6deg); }
+.paper:nth-child(3){ transform:rotate(-1.2deg); }
+.paper:nth-child(4){ transform:rotate(2.4deg); }
+.paper:nth-child(5){ transform:rotate(-1.8deg); }
+.paper:hover{ transform:rotate(0); box-shadow:0 16px 30px -14px rgba(74,46,18,.4); }
+.paper:hover h3{ color:var(--accent); }
+.paper h3{ font-size:19px; margin-bottom:8px; }
+.paper p{ color:var(--text-soft); font-size:14px; margin:0; flex:1; }
+.paper .meta{ display:inline-flex; align-items:center; gap:8px; margin-top:16px; font-size:11px; font-weight:700; letter-spacing:.08em; color:var(--text-dim); width:100%; }
+.paper .meta::after{ content:"PRINT →"; color:var(--accent); margin-left:auto; opacity:0; transform:translateX(-4px); transition:.25s ease; }
+.paper:hover .meta::after, .paper:focus-visible .meta::after{ opacity:1; transform:none; }
+@media(hover:none){ .paper .meta::after{ opacity:1; transform:none; } }
+@media(max-width:620px){
+  .fridge{ padding:44px 22px 36px; }
+  .fridge::after{ display:none; }
+  .paper:nth-child(odd){ transform:rotate(-1deg); }
+  .paper:nth-child(even){ transform:rotate(1deg); }
+}
 
-.spectro{ display:flex; align-items:flex-end; gap:3px; height:74px; margin-top:18px; }
-.spectro i{ flex:1; border-radius:2px 2px 0 0; background:var(--signal-v); height:30%; animation:eq 1.4s ease-in-out infinite; }
+/* ── features: grouped editorial lists ──────────────────── */
+.fgroups{ display:grid; grid-template-columns:repeat(3,1fr); gap:0 44px; align-items:start; }
+@media(max-width:900px){ .fgroups{ grid-template-columns:1fr; gap:36px; } }
+.fgroup>h3{
+  font-family:'Hanken Grotesk',system-ui,sans-serif; font-size:14px; font-weight:700;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--accent);
+  padding-bottom:12px; border-bottom:2px solid var(--line-2);
+}
+.frow{ padding:16px 0; border-bottom:1px solid var(--line); }
+.frow b{ display:block; color:var(--text); font-size:15.5px; }
+.frow p{ margin:3px 0 0; color:var(--text-soft); font-size:14px; }
+.frow .big{ display:block; font-family:'Fraunces',Georgia,serif; font-weight:700; font-size:34px; line-height:1.1; color:var(--accent); margin-bottom:6px; }
+.frow.lead-row b{ font-size:17px; }
 
 /* ── signal path ────────────────────────────────────────── */
 .path{ display:grid; grid-template-columns:repeat(5,1fr); gap:0; align-items:stretch; }
 .node{ text-align:center; padding:22px 14px; position:relative; }
 .node .ring{ width:62px; height:62px; margin:0 auto 14px; border-radius:50%; display:grid; place-items:center;
-  border:1.5px solid var(--line-2); background:var(--panel); color:var(--cyan); }
+  border:1.5px solid var(--line-2); background:var(--panel); color:var(--accent); }
 .node:not(:last-child)::after{
   content:""; position:absolute; top:52px; right:-50%; width:100%; height:2px;
-  background:var(--signal); opacity:.55; z-index:-1;
+  background:repeating-linear-gradient(90deg,var(--accent) 0 6px,transparent 6px 14px);
+  opacity:.4; z-index:-1;
 }
 .node h3{ font-size:15.5px; }
 .node p{ color:var(--text-dim); font-size:12.5px; margin:5px 0 0; }
@@ -316,73 +298,79 @@ section{ padding:92px 0; }
 /* ── plugins / modules ──────────────────────────────────── */
 .mods{ display:grid; grid-template-columns:1fr 1fr; gap:18px; }
 @media(max-width:820px){ .mods{ grid-template-columns:1fr; } }
-.mod{ background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:28px; box-shadow:var(--card-shadow); }
+.mod{ background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:28px; }
 .mod-top{ display:flex; align-items:center; gap:12px; margin-bottom:6px; }
 .mod-top h3{ font-size:21px; }
-.badge{ font-family:'Space Mono',monospace; font-size:10px; font-weight:700; letter-spacing:.14em; color:var(--cyan);
+.badge{ font-family:'Space Mono',monospace; font-size:10px; font-weight:700; letter-spacing:.14em; color:var(--accent);
   border:1px solid var(--line-2); border-radius:7px; padding:3px 8px; }
 .mod>p{ color:var(--text-soft); font-size:14.5px; margin:0 0 16px; }
 .mod ul{ list-style:none; padding:0; margin:0; display:grid; gap:11px; }
 .mod li{ display:flex; gap:10px; font-size:14px; color:var(--text-soft); }
 .mod li b{ color:var(--text); }
-.mod li .s{ color:var(--cyan); flex:none; }
-.mod-build{ margin-top:18px; background:var(--feat-grad); border:1px solid var(--line); border-radius:var(--r); padding:26px 28px;
-  display:flex; gap:24px; align-items:center; justify-content:space-between; flex-wrap:wrap; box-shadow:var(--card-shadow); }
+.mod li .s{ color:var(--accent); flex:none; }
+.mod-build{ margin-top:18px; background:var(--bg-2); border:1px solid var(--line); border-radius:var(--r); padding:26px 28px;
+  display:flex; gap:24px; align-items:center; justify-content:space-between; flex-wrap:wrap; }
 .mod-build h3{ font-size:20px; margin-bottom:8px; }
 .mod-build p{ color:var(--text-soft); font-size:14px; margin:0; max-width:62ch; }
-.mod-build code{ font-family:'Space Mono',monospace; font-size:12.5px; color:var(--cyan); }
+.mod-build code{ font-family:'Space Mono',monospace; font-size:12.5px; color:var(--accent); }
 
 /* ── two-col split ──────────────────────────────────────── */
 .split{ display:grid; grid-template-columns:1fr 1fr; gap:54px; align-items:center; }
 @media(max-width:880px){ .split{ grid-template-columns:1fr; gap:32px; } }
 .checks{ list-style:none; padding:0; margin:24px 0 0; display:grid; gap:14px; }
 .checks li{ display:flex; gap:13px; align-items:flex-start; }
-.checks .ck{ flex:none; width:24px; height:24px; border-radius:7px; display:grid; place-items:center; margin-top:2px;
-  background:rgba(14,140,149,.12); color:var(--cyan); }
-[data-theme="dark"] .checks .ck{ background:rgba(54,221,228,.12); }
+.checks .ck{ flex:none; width:24px; height:24px; border-radius:50%; display:grid; place-items:center; margin-top:2px;
+  background:rgba(245,176,76,.22); color:var(--accent); }
 .checks b{ display:block; }
 .checks span{ color:var(--text-soft); font-size:14px; }
 
 /* ── install terminal (always dark for code legibility) ── */
-.term{ background:#13161C; border:1px solid rgba(0,0,0,.2); border-radius:var(--r); box-shadow:var(--shadow); overflow:hidden; }
-.term .console-top{ background:rgba(255,255,255,.03); border-bottom:1px solid rgba(255,255,255,.08); }
-.term .console-top .freq{ color:#8A93A3; }
+.term{ background:#131A30; border:1px solid var(--night-line); border-radius:var(--r); box-shadow:0 24px 48px -28px rgba(10,14,28,.5); overflow:hidden; }
+.term .console-top{ background:transparent; border-bottom:1px solid var(--night-line); }
+.term .console-top .freq{ color:var(--night-soft); }
 .term pre{ margin:0; padding:22px 24px; font-family:'Space Mono',monospace; font-size:13.5px; line-height:2; color:#EAF0F7; overflow-x:auto; }
-.term .c{ color:#6B7585; } .term .p{ color:#36DDE4; } .term .u{ color:#FF9A4D; }
+.term .c{ color:#8B93A8; } .term .p{ color:var(--lamp); } .term .u{ color:var(--glow); }
 
 /* requirements grid */
 .reqs{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:18px; margin-top:48px; }
-.req{ background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:22px; box-shadow:var(--card-shadow); }
-.req .ic{ width:40px; height:40px; border-radius:11px; display:grid; place-items:center; margin-bottom:14px; background:rgba(14,140,149,.1); color:var(--cyan); }
-[data-theme="dark"] .req .ic{ background:rgba(54,221,228,.1); }
+.req{ background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:22px; }
+.req .ic{ width:40px; height:40px; border-radius:50%; display:grid; place-items:center; margin-bottom:14px; background:rgba(245,176,76,.18); color:var(--navy); }
 .req h4{ font-size:16px; margin-bottom:7px; }
 .req p{ color:var(--text-soft); font-size:13.5px; margin:0; }
 
-/* ── CTA ────────────────────────────────────────────────── */
+/* ── CTA: one more look at the night sky ────────────────── */
 .cta-wrap{ text-align:center; position:relative; }
 .cta-card{
-  background:var(--cta-grad);
-  border:1px solid var(--line-2); border-radius:26px; padding:60px 32px;
-  position:relative; overflow:hidden; box-shadow:var(--shadow);
+  background:linear-gradient(180deg,#131A30,var(--night-2));
+  border:1px solid var(--night-line); border-radius:22px; padding:60px 32px;
+  position:relative; overflow:hidden; color:var(--night-text);
 }
-.cta-card::before{ content:""; position:absolute; inset:0; background:
-  radial-gradient(60% 80% at 50% -20%, rgba(109,63,212,.12), transparent 60%),
-  radial-gradient(60% 90% at 50% 130%, rgba(224,122,46,.16), transparent 60%);
-}
+.cta-card .cta-stars{ position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
 .cta-card>*{ position:relative; }
 .cta-card h2{ font-size:clamp(30px,4.4vw,50px); }
+.cta-card .eyebrow{ color:var(--lamp); }
+.cta-card .lead{ color:var(--night-soft); }
+.cta-card .btn-ghost{ color:var(--night-text); border-color:var(--night-line); }
+.cta-card .btn-ghost:hover{ border-color:var(--lamp); color:var(--glow); }
 
-/* ── footer ─────────────────────────────────────────────── */
-footer{ border-top:1px solid var(--line); padding:54px 0 40px; color:var(--text-dim); background:var(--bg-2); }
+/* ── footer: back out into the night ────────────────────── */
+.dusk-band{ height:110px; background:linear-gradient(180deg,var(--bg) 0%,#EED9BE 34%,var(--horizon) 60%,#6B5570 82%,var(--night-2) 100%); }
+footer{ background:linear-gradient(180deg,var(--night-2),var(--night) 40%); padding:0 0 40px; color:var(--night-soft); }
+.foot-scene{ display:block; width:100%; height:auto; margin-bottom:30px; }
+footer .mark .house, footer .mark .win{ stroke:var(--night-text); }
+footer .mark .arcs{ stroke:var(--lamp); }
+footer .brand .word{ color:var(--night-text); }
+footer .brand .word b{ color:var(--lamp); }
 .foot-grid{ display:flex; justify-content:space-between; align-items:flex-start; gap:30px; flex-wrap:wrap; }
 .foot-links{ display:flex; gap:40px; flex-wrap:wrap; }
-.foot-links div b{ display:block; color:var(--text); font-size:13px; margin-bottom:12px; font-family:'Space Mono',monospace; letter-spacing:.08em; text-transform:uppercase; }
-.foot-links a{ display:block; color:var(--text-soft); font-size:14px; margin-bottom:9px; }
-.foot-links a:hover{ color:var(--cyan); }
-.foot-bot{ margin-top:40px; padding-top:22px; border-top:1px solid var(--line); display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; font-size:13px; }
+.foot-links div b{ display:block; color:var(--night-text); font-size:13px; margin-bottom:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
+.foot-links a{ display:block; color:var(--night-soft); font-size:14px; margin-bottom:9px; }
+.foot-links a:hover{ color:var(--glow); }
+.foot-bot{ margin-top:40px; padding-top:22px; border-top:1px solid var(--night-line); display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; font-size:13px; }
 
-.tag{ font-family:'Space Mono',monospace; font-size:12.5px; color:var(--cyan); }
-@media(prefers-reduced-motion:reduce){ *{ animation:none !important; } .reveal{ transition:none; opacity:1; transform:none; } }
+.tag{ font-family:'Space Mono',monospace; font-size:12.5px; color:var(--accent); }
+footer .tag{ color:var(--glow); }
+@media(prefers-reduced-motion:reduce){ *{ animation:none !important; } .reveal{ transition:none; opacity:1; transform:none; } .paper{ transition:none; } }
 </style>
 </head>
 <body>
@@ -393,35 +381,28 @@ footer{ border-top:1px solid var(--line); padding:54px 0 40px; color:var(--text-
     <a class="brand" href="#">
       <svg class="mark" viewBox="0 0 100 100" fill="none" aria-hidden="true">
         <path class="house" d="M16 54 L50 26 L84 54 V86 H16 Z" stroke-width="5" stroke-linejoin="round"/>
-        <rect x="38" y="58" width="24" height="20" rx="3" stroke="var(--cyan)" stroke-width="3.5"/>
-        <line x1="43" y1="64" x2="57" y2="64" stroke="var(--cyan)" stroke-width="2.6"/>
-        <line x1="43" y1="70" x2="53" y2="70" stroke="var(--cyan)" stroke-width="2.6"/>
-        <g stroke-linecap="round" fill="none">
-          <path class="wave-pulse" d="M58 30 A14 14 0 0 1 72 44" stroke="url(#g)" stroke-width="5"/>
-          <path class="wave-pulse" d="M62 22 A24 24 0 0 1 86 46" stroke="url(#g)" stroke-width="5"/>
-          <path class="wave-pulse" d="M66 14 A34 34 0 0 1 100 48" stroke="url(#g)" stroke-width="5"/>
+        <g class="win">
+          <rect x="38" y="58" width="24" height="20" rx="3" stroke-width="3.5"/>
+          <line x1="43" y1="64" x2="57" y2="64" stroke-width="2.6"/>
+          <line x1="43" y1="70" x2="53" y2="70" stroke-width="2.6"/>
         </g>
-        <defs>
-          <linearGradient id="g" x1="55" y1="20" x2="95" y2="50" gradientUnits="userSpaceOnUse">
-            <stop stop-color="#1FC3CC"/><stop offset=".5" stop-color="#6D3FD4"/><stop offset="1" stop-color="#C32C97"/>
-          </linearGradient>
-        </defs>
+        <g class="arcs" stroke-linecap="round" fill="none" stroke-width="5">
+          <path class="wave-pulse" d="M58 30 A14 14 0 0 1 72 44"/>
+          <path class="wave-pulse" d="M62 22 A24 24 0 0 1 86 46"/>
+          <path class="wave-pulse" d="M66 14 A34 34 0 0 1 100 48"/>
+        </g>
       </svg>
       <span class="word">HEARTH<b>WAVE</b></span>
     </a>
     <div class="nav-links">
       <a href="#access">Accessibility</a>
-      <a href="#features">Features</a>
       <a href="#path">How it works</a>
-      <a href="#cards">Cards</a>
+      <a href="#features">Features</a>
       <a href="#modules">Plugins</a>
       <a href="#install">Install</a>
+      <a href="#cards">Cards</a>
     </div>
     <div class="nav-cta">
-      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle dark mode" title="Toggle light / dark">
-        <svg class="sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
-        <svg class="moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
-      </button>
       <a class="btn btn-ghost" href="https://github.com/Xpiatio/Hearthwave" target="_blank" rel="noopener">GitHub</a>
       <a class="btn btn-primary" href="#install">Get started</a>
     </div>
@@ -432,20 +413,11 @@ footer{ border-top:1px solid var(--line); padding:54px 0 40px; color:var(--text-
 
 <!-- ═══════════ HERO ═══════════ -->
 <header class="hero">
-  <svg class="rings" viewBox="0 0 600 600" fill="none" aria-hidden="true">
-    <g stroke="url(#rg)" fill="none">
-      <circle cx="300" cy="300" r="90"  stroke-width="1.2"/>
-      <circle cx="300" cy="300" r="160" stroke-width="1.2"/>
-      <circle cx="300" cy="300" r="230" stroke-width="1.2"/>
-      <circle cx="300" cy="300" r="300" stroke-width="1.2"/>
-    </g>
-    <defs><radialGradient id="rg"><stop offset="0" stop-color="#0E8C95" stop-opacity=".5"/><stop offset="1" stop-color="#6D3FD4" stop-opacity="0"/></radialGradient></defs>
-  </svg>
   <div class="wrap hero-grid">
     <div class="reveal in">
       <span class="eyebrow">Self-hosted GMRS base station</span>
-      <h1>The family airwaves,<span class="l2 grad">open to everyone.</span></h1>
-      <p class="lead">Hearthwave turns any home server into a shared radio station you reach from any browser. It <b style="color:var(--text)">transcribes</b> what comes over the air and <b style="color:var(--text)">speaks</b> what you type — so no one is left off the channel.</p>
+      <h1>The family airwaves,<span class="l2">open to everyone.</span></h1>
+      <p class="lead">Hearthwave turns any home server into a shared radio station you reach from any browser. It <b>transcribes</b> what comes over the air and <b>speaks</b> what you type — so no one is left off the channel.</p>
       <div class="hero-cta">
         <a class="btn btn-primary" href="#install">Run it at home →</a>
         <a class="btn btn-ghost" href="#features">See what it does</a>
@@ -460,18 +432,260 @@ footer{ border-top:1px solid var(--line); padding:54px 0 40px; color:var(--text-
 
     <div class="console reveal in" aria-label="Live transcript demo">
       <div class="console-top">
-        <i class="tl r"></i><i class="tl y"></i><i class="tl g"></i>
-        <span class="freq mono">GMRS · CH 18 · 462.6750</span>
+        <i class="onair" aria-hidden="true"></i>
+        <span>Family radio log</span>
+        <span class="freq mono">CH 18 · 462.6750</span>
       </div>
       <div class="console-body" id="feed"></div>
-      <div class="console-meter" aria-hidden="true">
-        <i style="animation-delay:0s"></i><i style="animation-delay:.1s"></i><i style="animation-delay:.22s"></i>
-        <i style="animation-delay:.05s"></i><i style="animation-delay:.3s"></i><i style="animation-delay:.15s"></i>
-        <i style="animation-delay:.26s"></i><i style="animation-delay:.08s"></i><i style="animation-delay:.34s"></i>
-        <i style="animation-delay:.18s"></i><i style="animation-delay:.12s"></i><i style="animation-delay:.28s"></i>
-      </div>
     </div>
   </div>
+
+  <svg class="scene" viewBox="0 0 1440 420" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+    <defs>
+      <radialGradient id="duskGlow" cx=".5" cy=".6" r=".7">
+        <stop offset="0" stop-color="#E8A87C" stop-opacity=".55"/>
+        <stop offset=".55" stop-color="#A66A6E" stop-opacity=".22"/>
+        <stop offset="1" stop-color="#1B2440" stop-opacity="0"/>
+      </radialGradient>
+      <mask id="moonMask">
+        <rect width="100%" height="100%" fill="#fff"/>
+        <circle cx="1160" cy="61" r="23" fill="#000"/>
+      </mask>
+    </defs>
+
+    <!-- stars -->
+    <g fill="#F8F1E3">
+      <circle cx="90" cy="60" r="1.6" opacity=".8"/>
+      <circle cx="220" cy="120" r="1.2" opacity=".5"/>
+      <circle cx="340" cy="40" r="1.4" opacity=".7" class="tw"/>
+      <circle cx="470" cy="92" r="1.1" opacity=".5"/>
+      <circle cx="560" cy="30" r="1.5" opacity=".8"/>
+      <circle cx="660" cy="112" r="1.2" opacity=".45" class="tw tw2"/>
+      <circle cx="760" cy="55" r="1.6" opacity=".8"/>
+      <circle cx="872" cy="96" r="1.1" opacity=".5"/>
+      <circle cx="980" cy="35" r="1.4" opacity=".7"/>
+      <circle cx="1080" cy="82" r="1.2" opacity=".5" class="tw"/>
+      <circle cx="1250" cy="120" r="1.3" opacity=".6"/>
+      <circle cx="1330" cy="42" r="1.5" opacity=".75"/>
+      <circle cx="1400" cy="96" r="1.2" opacity=".5" class="tw tw3"/>
+      <circle cx="42" cy="150" r="1.1" opacity=".4"/>
+      <circle cx="1424" cy="160" r="1.1" opacity=".4"/>
+    </g>
+
+    <!-- crescent moon -->
+    <circle cx="1150" cy="70" r="26" fill="#F3E9CF" mask="url(#moonMask)" opacity=".9"/>
+
+    <!-- horizon glow behind the neighborhood -->
+    <ellipse cx="720" cy="400" rx="920" ry="180" fill="url(#duskGlow)"/>
+
+    <!-- back hills -->
+    <path d="M0 340 Q240 302 480 330 T960 326 T1440 336 V420 H0 Z" fill="#222C4A"/>
+
+    <!-- radio tower on the hill -->
+    <g class="tower">
+      <path d="M150 348 L172 120 L194 348" stroke="#111A30" stroke-width="5" fill="none" stroke-linecap="round"/>
+      <path d="M156 300 H188 M160 260 H184 M163 220 H181 M166 180 H178 M169 148 H175" stroke="#111A30" stroke-width="3.5"/>
+      <path d="M157 300 L183 260 M187 300 L161 260 M161 260 L180 220 M183 260 L164 220" stroke="#111A30" stroke-width="2.2"/>
+      <line x1="172" y1="120" x2="172" y2="96" stroke="#111A30" stroke-width="3.5"/>
+      <circle class="beacon" cx="172" cy="91" r="5" fill="var(--beacon)"/>
+    </g>
+
+    <!-- signal arcs: tower to every house -->
+    <g stroke="var(--lamp)" fill="none" stroke-width="2" stroke-dasharray="1 9" stroke-linecap="round" opacity=".65">
+      <path d="M172 96 Q330 60 495 250"/>
+      <path d="M172 96 Q440 20 715 232"/>
+      <path d="M172 96 Q550 -10 935 264"/>
+      <path d="M172 96 Q650 -40 1190 248"/>
+    </g>
+
+    <!-- front ground -->
+    <path d="M0 372 Q360 344 720 362 T1440 356 V420 H0 Z" fill="#141B30"/>
+
+    <!-- the neighborhood — three audience vignettes, crossfading -->
+    <!-- v1: family & neighborhood watch -->
+    <g class="vign v1">
+      <path d="M430 364 V300 L495 258 L560 300 V364 Z" fill="#1A2340"/>
+      <rect x="452" y="308" width="26" height="22" rx="2" fill="var(--glow)"/>
+      <rect x="484" y="324" width="22" height="40" rx="2" fill="#0F1526"/>
+      <rect x="512" y="308" width="26" height="22" rx="2" fill="var(--glow)" opacity=".85"/>
+      <circle cx="446" cy="322" r="3.2" fill="var(--glow)"/>
+      <circle cx="446" cy="322" r="9" fill="var(--glow)" opacity=".16"/>
+
+      <path d="M640 364 V292 L715 240 L790 292 V364 Z" fill="#1C2646"/>
+      <line x1="715" y1="240" x2="715" y2="204" stroke="#111A30" stroke-width="3"/>
+      <line x1="703" y1="209" x2="727" y2="205" stroke="#111A30" stroke-width="2.2"/>
+      <line x1="706" y1="217" x2="724" y2="214" stroke="#111A30" stroke-width="2.2"/>
+      <rect x="663" y="300" width="28" height="24" rx="2" fill="var(--glow)"/>
+      <rect x="702" y="318" width="26" height="46" rx="2" fill="#0F1526"/>
+      <circle cx="742" cy="330" r="4" fill="var(--glow)"/>
+      <circle cx="742" cy="330" r="11" fill="var(--glow)" opacity=".18"/>
+      <rect x="742" y="300" width="28" height="24" rx="2" fill="var(--glow)" opacity=".9"/>
+
+      <path d="M880 364 V310 L935 272 L990 310 V364 Z" fill="#192240"/>
+      <rect x="922" y="318" width="24" height="20" rx="2" fill="var(--glow)"/>
+
+      <!-- streetlamp: the watch keeps the block lit -->
+      <line x1="1050" y1="360" x2="1050" y2="292" stroke="#111A30" stroke-width="3.4"/>
+      <path d="M1050 292 Q1050 282 1062 282" stroke="#111A30" stroke-width="3" fill="none"/>
+      <circle cx="1064" cy="285" r="4.4" fill="var(--glow)"/>
+      <ellipse cx="1066" cy="330" rx="26" ry="44" fill="var(--glow)" opacity=".08"/>
+      <circle cx="1064" cy="285" r="10" fill="var(--glow)" opacity=".2"/>
+
+      <rect x="1226" y="266" width="16" height="40" fill="#1B2544"/>
+      <path d="M1120 364 V302 L1190 256 L1260 302 V364 Z" fill="#1B2544"/>
+      <rect x="1146" y="312" width="26" height="22" rx="2" fill="var(--glow)"/>
+      <rect x="1206" y="312" width="26" height="22" rx="2" fill="var(--glow)" opacity=".8"/>
+    </g>
+
+    <!-- v2: the house of worship joins the net -->
+    <g class="vign v2">
+      <path d="M430 364 V300 L495 258 L560 300 V364 Z" fill="#1A2340"/>
+      <rect x="452" y="308" width="26" height="22" rx="2" fill="var(--glow)"/>
+      <rect x="484" y="324" width="22" height="40" rx="2" fill="#0F1526"/>
+      <rect x="512" y="308" width="26" height="22" rx="2" fill="var(--glow)" opacity=".85"/>
+
+      <path d="M640 364 V292 L715 240 L790 292 V364 Z" fill="#1C2646"/>
+      <line x1="715" y1="240" x2="715" y2="204" stroke="#111A30" stroke-width="3"/>
+      <line x1="703" y1="209" x2="727" y2="205" stroke="#111A30" stroke-width="2.2"/>
+      <line x1="706" y1="217" x2="724" y2="214" stroke="#111A30" stroke-width="2.2"/>
+      <rect x="663" y="300" width="28" height="24" rx="2" fill="var(--glow)"/>
+      <rect x="702" y="318" width="26" height="46" rx="2" fill="#0F1526"/>
+      <circle cx="742" cy="330" r="4" fill="var(--glow)"/>
+      <circle cx="742" cy="330" r="11" fill="var(--glow)" opacity=".18"/>
+      <rect x="742" y="300" width="28" height="24" rx="2" fill="var(--glow)" opacity=".9"/>
+
+      <!-- modest chapel on house 3's lot -->
+      <path d="M885 364 V300 L935 262 L985 300 V364 Z" fill="#192240"/>
+      <rect x="925" y="234" width="20" height="34" fill="#192240"/>
+      <path d="M921 238 L935 216 L949 238 Z" fill="#192240"/>
+      <circle cx="935" cy="244" r="4.5" fill="var(--glow)" opacity=".9"/>
+      <rect x="899" y="310" width="16" height="26" rx="8" fill="var(--glow)"/>
+      <rect x="955" y="310" width="16" height="26" rx="8" fill="var(--glow)" opacity=".9"/>
+      <rect x="924" y="326" width="22" height="38" rx="10" fill="#0F1526"/>
+
+      <rect x="1226" y="266" width="16" height="40" fill="#1B2544"/>
+      <path d="M1120 364 V302 L1190 256 L1260 302 V364 Z" fill="#1B2544"/>
+      <rect x="1146" y="312" width="26" height="22" rx="2" fill="var(--glow)"/>
+      <rect x="1206" y="312" width="26" height="22" rx="2" fill="var(--glow)" opacity=".8"/>
+    </g>
+
+    <!-- v3: the accessible home — the screen is the window to the channel -->
+    <g class="vign v3">
+      <path d="M430 364 V300 L495 258 L560 300 V364 Z" fill="#1A2340"/>
+      <rect x="452" y="308" width="26" height="22" rx="2" fill="var(--glow)" opacity=".4"/>
+      <rect x="484" y="324" width="22" height="40" rx="2" fill="#0F1526"/>
+      <rect x="512" y="308" width="26" height="22" rx="2" fill="var(--glow)" opacity=".35"/>
+
+      <!-- hearth home, lit by the Hearthwave screen -->
+      <path d="M640 364 V292 L715 240 L790 292 V364 Z" fill="#1C2646"/>
+      <line x1="715" y1="240" x2="715" y2="204" stroke="#111A30" stroke-width="3"/>
+      <line x1="703" y1="209" x2="727" y2="205" stroke="#111A30" stroke-width="2.2"/>
+      <line x1="706" y1="217" x2="724" y2="214" stroke="#111A30" stroke-width="2.2"/>
+      <rect x="660" y="302" width="76" height="34" rx="3" fill="#CFE3FF" opacity=".92"/>
+      <rect x="654" y="296" width="88" height="46" rx="6" fill="#CFE3FF" opacity=".14"/>
+      <line x1="698" y1="302" x2="698" y2="336" stroke="#1C2646" stroke-width="2.4"/>
+      <circle cx="762" cy="348" r="3.4" fill="var(--glow)"/>
+      <circle cx="762" cy="348" r="9" fill="var(--glow)" opacity=".16"/>
+
+      <path d="M880 364 V310 L935 272 L990 310 V364 Z" fill="#192240"/>
+      <rect x="922" y="318" width="24" height="20" rx="2" fill="var(--glow)" opacity=".4"/>
+
+      <rect x="1226" y="266" width="16" height="40" fill="#1B2544"/>
+      <path d="M1120 364 V302 L1190 256 L1260 302 V364 Z" fill="#1B2544"/>
+      <rect x="1146" y="312" width="26" height="22" rx="2" fill="var(--glow)" opacity=".4"/>
+      <rect x="1206" y="312" width="26" height="22" rx="2" fill="var(--glow)" opacity=".35"/>
+    </g>
+
+    <!-- fireflies -->
+    <g fill="var(--lamp)">
+      <circle class="fly" cx="380" cy="330" r="2.4"/>
+      <circle class="fly fly2" cx="840" cy="346" r="2"/>
+      <circle class="fly fly3" cx="1050" cy="326" r="2.2"/>
+    </g>
+  </svg>
+
+  <!-- tighter composition for small screens: tower + the hearth home, close up -->
+  <svg class="scene-m" viewBox="0 0 720 520" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+    <defs>
+      <radialGradient id="duskGlowM" cx=".5" cy=".65" r=".75">
+        <stop offset="0" stop-color="#E8A87C" stop-opacity=".5"/>
+        <stop offset=".55" stop-color="#A66A6E" stop-opacity=".2"/>
+        <stop offset="1" stop-color="#1B2440" stop-opacity="0"/>
+      </radialGradient>
+      <mask id="moonMaskM">
+        <rect width="100%" height="100%" fill="#fff"/>
+        <circle cx="608" cy="66" r="20" fill="#000"/>
+      </mask>
+    </defs>
+
+    <g fill="#F8F1E3">
+      <circle cx="60" cy="60" r="1.5" opacity=".8"/>
+      <circle cx="170" cy="110" r="1.2" opacity=".5" class="tw"/>
+      <circle cx="270" cy="46" r="1.4" opacity=".7"/>
+      <circle cx="380" cy="120" r="1.1" opacity=".5"/>
+      <circle cx="470" cy="40" r="1.5" opacity=".8" class="tw tw2"/>
+      <circle cx="540" cy="140" r="1.2" opacity=".5"/>
+      <circle cx="680" cy="120" r="1.3" opacity=".6" class="tw tw3"/>
+      <circle cx="330" cy="200" r="1.1" opacity=".4"/>
+      <circle cx="40" cy="180" r="1.1" opacity=".4"/>
+      <circle cx="700" cy="30" r="1.4" opacity=".7"/>
+    </g>
+    <circle cx="600" cy="74" r="23" fill="#F3E9CF" mask="url(#moonMaskM)" opacity=".9"/>
+
+    <ellipse cx="360" cy="500" rx="520" ry="200" fill="url(#duskGlowM)"/>
+
+    <!-- back hill with a small chapel on the ridge -->
+    <path d="M0 420 Q180 388 360 408 T720 402 V520 H0 Z" fill="#222C4A"/>
+    <g>
+      <path d="M560 414 V386 L588 366 L616 386 V414 Z" fill="#1D2746"/>
+      <rect x="582" y="352" width="12" height="20" fill="#1D2746"/>
+      <path d="M580 355 L588 342 L596 355 Z" fill="#1D2746"/>
+      <rect x="581" y="390" width="9" height="13" rx="4.5" fill="var(--glow)" opacity=".85"/>
+    </g>
+
+    <!-- radio tower -->
+    <g>
+      <path d="M76 452 L108 160 L140 452" stroke="#111A30" stroke-width="6" fill="none" stroke-linecap="round"/>
+      <path d="M84 390 H132 M90 330 H126 M95 274 H121 M100 222 H116 M104 186 H112" stroke="#111A30" stroke-width="4.4"/>
+      <path d="M85 390 L125 330 M131 390 L91 330 M91 330 L120 274 M125 330 L96 274" stroke="#111A30" stroke-width="2.8"/>
+      <line x1="108" y1="160" x2="108" y2="128" stroke="#111A30" stroke-width="4.4"/>
+      <circle class="beacon" cx="108" cy="122" r="6" fill="var(--beacon)"/>
+    </g>
+
+    <!-- arcs -->
+    <g stroke="var(--lamp)" fill="none" stroke-width="2.2" stroke-dasharray="1 10" stroke-linecap="round" opacity=".65">
+      <path d="M108 128 Q260 60 420 300"/>
+      <path d="M108 128 Q380 20 655 350"/>
+    </g>
+
+    <!-- front ground -->
+    <path d="M0 462 Q180 440 360 452 T720 448 V520 H0 Z" fill="#141B30"/>
+
+    <!-- the hearth home, close up -->
+    <g>
+      <path d="M280 458 V352 L400 272 L520 352 V458 Z" fill="#1C2646"/>
+      <line x1="400" y1="272" x2="400" y2="218" stroke="#111A30" stroke-width="4"/>
+      <line x1="382" y1="226" x2="418" y2="220" stroke="#111A30" stroke-width="3.2"/>
+      <line x1="387" y1="238" x2="413" y2="233" stroke="#111A30" stroke-width="3.2"/>
+      <rect x="312" y="366" width="44" height="38" rx="3" fill="var(--glow)"/>
+      <rect x="376" y="392" width="44" height="66" rx="3" fill="#0F1526"/>
+      <circle cx="442" cy="410" r="5.5" fill="var(--glow)"/>
+      <circle cx="442" cy="410" r="15" fill="var(--glow)" opacity=".18"/>
+      <rect x="440" y="366" width="44" height="38" rx="3" fill="var(--glow)" opacity=".9"/>
+    </g>
+
+    <!-- neighbor at the edge -->
+    <g>
+      <path d="M580 458 V392 L650 344 L720 392 V458 Z" fill="#1A2340"/>
+      <rect x="608" y="402" width="30" height="26" rx="2" fill="var(--glow)" opacity=".9"/>
+      <rect x="668" y="402" width="30" height="26" rx="2" fill="var(--glow)" opacity=".7"/>
+    </g>
+
+    <g fill="var(--lamp)">
+      <circle class="fly" cx="230" cy="430" r="2.6"/>
+      <circle class="fly fly3" cx="548" cy="440" r="2.2"/>
+    </g>
+  </svg>
 </header>
 
 <!-- ═══════════ ACCESS BAND ═══════════ -->
@@ -479,7 +693,7 @@ footer{ border-top:1px solid var(--line); padding:54px 0 40px; color:var(--text-
   <div class="wrap">
     <div class="sec-head reveal">
       <span class="eyebrow">No one left off the channel</span>
-      <h2>Radio you can <span class="grad">read, type, and hear.</span></h2>
+      <h2>Radio you can <span>read, type, and hear.</span></h2>
       <p class="lead">A radio that only works if you can hear it and speak clearly shuts people out. Hearthwave was built the other way around.</p>
     </div>
     <div class="three">
@@ -502,47 +716,12 @@ footer{ border-top:1px solid var(--line); padding:54px 0 40px; color:var(--text-
   </div>
 </section>
 
-<!-- ═══════════ FEATURES (bento) ═══════════ -->
-<section id="features">
-  <div class="wrap">
-    <div class="sec-head reveal">
-      <span class="eyebrow">Everything your household needs</span>
-      <h2>One station. <span class="grad">Many operators.</span></h2>
-      <p class="lead">Family, neighborhood watch, a place of worship, an accessible net — every member connects from their own device on your home Wi-Fi.</p>
-    </div>
-    <div class="bento">
-      <div class="card feat reveal">
-        <span class="k">// SIGNAL ENGINE</span>
-        <div class="big grad">2-pass</div>
-        <h3>Two-tier transcription</h3>
-        <p>A fast local pass shows words as they arrive; a second, more careful pass cleans up longer messages and callsigns. Tuned to handle static and squelch tails — and it configures itself: stage a final-pass model and the station picks it up automatically.</p>
-        <div class="spectro" aria-hidden="true">
-          <i style="animation-delay:0s"></i><i style="animation-delay:.12s"></i><i style="animation-delay:.3s"></i><i style="animation-delay:.07s"></i><i style="animation-delay:.21s"></i><i style="animation-delay:.34s"></i><i style="animation-delay:.04s"></i><i style="animation-delay:.27s"></i><i style="animation-delay:.16s"></i><i style="animation-delay:.31s"></i><i style="animation-delay:.09s"></i><i style="animation-delay:.24s"></i><i style="animation-delay:.18s"></i><i style="animation-delay:.36s"></i><i style="animation-delay:.02s"></i><i style="animation-delay:.29s"></i>
-        </div>
-      </div>
-      <div class="card reveal"><span class="k">RX</span><h3>Live transcription</h3><p>Speech-to-text on every transmission, the moment it lands.</p></div>
-      <div class="card reveal"><span class="k">PROFILES</span><h3>Multi-user</h3><p>Per-operator logins, voices, and preferences — one shared station.</p></div>
-      <div class="card reveal"><span class="k">TX</span><h3>Voice &amp; keyboard PTT</h3><p>Push to talk from a key, a button, or speak — your choice.</p></div>
-      <div class="card reveal"><span class="k">SKYWARN</span><h3>Weather alerts &amp; reports</h3><p>Built-in SKYWARN net control, live NWS alerts, and criteria-gated spot reporting.</p></div>
-      <div class="card wide reveal"><span class="k">PLUGINS</span><h3>Installable plugins</h3><p>Extend the radio without touching core code — drop a plugin into the plugins folder or upload a <code>.zip</code> from Settings, and it hot-loads with its own config form. MeshCore and Meshtastic ship as examples. <a href="#modules">See the plugin system →</a></p></div>
-      <div class="card reveal"><span class="k">STT</span><h3>Radio vocabulary biasing</h3><p>Whisper is primed with NATO phonetics, Q-codes, and your contacts' callsigns — so the words it hears most often are the ones it recognizes best.</p></div>
-      <div class="card reveal"><span class="k">ROSTER</span><h3>Callsign auto-correct</h3><p>A misheard character in a known callsign is corrected right in the transcript — visibly marked, with the original a hover away. Ambiguous? It leaves the text alone.</p></div>
-      <div class="card reveal"><span class="k">DSP</span><h3>Knows your noise floor</h3><p>Adaptive squelch rides the channel, and an optional denoise mode samples the actual static between transmissions to subtract exactly that from the speech.</p></div>
-      <div class="card reveal"><span class="k">GPU</span><h3>Optional GPU acceleration</h3><p>With an AMD GPU, the whole-utterance final pass runs on ROCm — freeing the CPU for live streaming. Falls back to CPU automatically when no GPU is present.</p></div>
-      <div class="card wide reveal"><span class="k">LOGS</span><h3>Session journals &amp; FCC callsign lookup</h3><p>Every contact logged to a session journal; resolve any callsign against an <a href="https://callsigns.ke8rxnwx.net/" target="_blank" rel="noopener">FCC license lookup</a> without leaving the page.</p></div>
-      <div class="card reveal"><span class="k">AUDIO</span><h3>Spectrogram &amp; gain control</h3><p>Real-time frequency display, with selectable receive leveling — dynamic AGC, one-shot RMS, or off — and transmit-audio conditioning.</p></div>
-      <div class="card reveal"><span class="k">SETTINGS</span><h3>One dialog, any screen</h3><p>A single Settings dialog — per-operator preferences plus admin-only station controls — that adapts cleanly from phone to tablet to desktop.</p></div>
-      <div class="card reveal"><span class="k">DISPLAY</span><h3>Senior-friendly</h3><p>Large type, light &amp; dark themes, clear layout — usable by everyone at home.</p></div>
-    </div>
-  </div>
-</section>
-
 <!-- ═══════════ SIGNAL PATH ═══════════ -->
-<section class="band" id="path">
+<section id="path">
   <div class="wrap">
     <div class="sec-head reveal">
       <span class="eyebrow">How it works</span>
-      <h2>From the antenna to every screen — <span class="grad">and back.</span></h2>
+      <h2>From the antenna to every screen — <span>and back.</span></h2>
     </div>
     <div class="path">
       <div class="node reveal">
@@ -569,45 +748,42 @@ footer{ border-top:1px solid var(--line); padding:54px 0 40px; color:var(--text-
   </div>
 </section>
 
-<!-- ═══════════ PRINTABLE CARDS ═══════════ -->
-<section id="cards">
+<!-- ═══════════ FEATURES ═══════════ -->
+<section id="features">
   <div class="wrap">
     <div class="sec-head reveal">
-      <span class="eyebrow">No account needed</span>
-      <h2>Free printable <span class="grad">reference cards.</span></h2>
-      <p class="lead">Type your callsign and channel once — the card fills in live. Print it and you're ready to go.</p>
+      <span class="eyebrow">Everything your household needs</span>
+      <h2>One station. <span>Many operators.</span></h2>
+      <p class="lead">Family, neighborhood watch, a place of worship, an accessible net — every member connects from their own device on your home Wi-Fi.</p>
     </div>
-    <div class="tmpls">
-      <a class="pill tmpl reveal" href="gmrs-home-post-template-family.html" target="_blank" rel="noopener" aria-label="GMRS Station Reference template — opens in new tab">
-        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3h6v3H9z"/><path d="M8 11h8M8 15h5"/></svg></div>
-        <h3>Station Reference</h3>
-        <p>Key channels, calling phrases, and the 15-min ID reminder — one card for your home station.</p>
-        <span class="meta">ADULTS · FILL &amp; PRINT</span>
-      </a>
-      <a class="pill tmpl reveal" href="gmrs-radio-card-template-kid.html" target="_blank" rel="noopener" aria-label="My Radio Card template — opens in new tab">
-        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="3.4"/><path d="M5 21v-1a7 7 0 0 1 14 0v1"/></svg></div>
-        <h3>My Radio Card</h3>
-        <p>Five numbered steps — turn the channel, call, identify, listen, sign off. A card kids can follow on their own.</p>
-        <span class="meta">KIDS · FILL &amp; PRINT</span>
-      </a>
-      <a class="pill tmpl reveal" href="gmrs-radio-social-story-kid.html" target="_blank" rel="noopener" aria-label="My Radio Story template — opens in new tab">
-        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5a2 2 0 0 1 2-2h5v17H5a2 2 0 0 0-2 2zM21 5a2 2 0 0 0-2-2h-5v17h5a2 2 0 0 1 2 2z"/></svg></div>
-        <h3>My Radio Story</h3>
-        <p>A 12-page illustrated social story — how to turn on the radio, what the sounds mean, when to talk and listen.</p>
-        <span class="meta">KIDS · SOCIAL STORY</span>
-      </a>
-      <a class="pill tmpl reveal" href="My-Radio-Business-Card.html" target="_blank" rel="noopener" aria-label="My Radio Business Card template — opens in new tab">
-        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h4M7 14h2M15 10h2M15 14h2"/></svg></div>
-        <h3>Radio Business Card</h3>
-        <p>Wallet-sized front-and-back card. Channel and callsign on the front; what to say on the back. Print and cut.</p>
-        <span class="meta">ALL AGES · WALLET CARD</span>
-      </a>
-      <a class="pill tmpl reveal" href="GMRS-SkyWarn.html" target="_blank" rel="noopener" aria-label="Family SKYWARN Radio Script template — opens in new tab">
-        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 9a4 4 0 0 0-7.6-1.5A3.5 3.5 0 1 0 8 14h8a3 3 0 0 0 1-5.8z"/><path d="M11 17l-2 4M15 17l-2 4"/></svg></div>
-        <h3>SKYWARN Script</h3>
-        <p>Facts-only storm-spotting script — the words for severe weather and exactly what to say when you hail Net Control.</p>
-        <span class="meta">ADULTS · FILL &amp; PRINT</span>
-      </a>
+    <div class="fgroups">
+      <div class="fgroup reveal">
+        <h3>Hear &amp; be heard</h3>
+        <div class="frow lead-row">
+          <span class="big">2-pass</span>
+          <b>Two-tier transcription</b>
+          <p>A fast local pass shows words as they arrive; a second, more careful pass cleans up longer messages and callsigns. Tuned to handle static and squelch tails — and it configures itself: stage a final-pass model and the station picks it up automatically.</p>
+        </div>
+        <div class="frow"><b>Live transcription</b><p>Speech-to-text on every transmission, the moment it lands.</p></div>
+        <div class="frow"><b>Voice &amp; keyboard PTT</b><p>Push to talk from a key, a button, or speak — your choice.</p></div>
+        <div class="frow"><b>Radio vocabulary biasing</b><p>Whisper is primed with NATO phonetics, Q-codes, and your contacts' callsigns — so the words it hears most often are the ones it recognizes best.</p></div>
+        <div class="frow"><b>Callsign auto-correct</b><p>A misheard character in a known callsign is corrected right in the transcript — visibly marked, with the original a hover away. Ambiguous? It leaves the text alone.</p></div>
+        <div class="frow"><b>Senior-friendly</b><p>Large type, light &amp; dark themes, clear layout — usable by everyone at home.</p></div>
+      </div>
+      <div class="fgroup reveal">
+        <h3>Weather &amp; the neighborhood</h3>
+        <div class="frow"><b>Weather alerts &amp; reports</b><p>Built-in SKYWARN net control, live NWS alerts, and criteria-gated spot reporting.</p></div>
+        <div class="frow"><b>Multi-user</b><p>Per-operator logins, voices, and preferences — one shared station.</p></div>
+        <div class="frow"><b>Installable plugins</b><p>Extend the radio without touching core code — drop a plugin into the plugins folder or upload a <code>.zip</code> from Settings, and it hot-loads with its own config form. MeshCore and Meshtastic ship as examples. <a href="#modules">See the plugin system →</a></p></div>
+        <div class="frow"><b>Session journals &amp; FCC callsign lookup</b><p>Every contact logged to a session journal; resolve any callsign against an <a href="https://callsigns.ke8rxnwx.net/" target="_blank" rel="noopener">FCC license lookup</a> without leaving the page.</p></div>
+      </div>
+      <div class="fgroup reveal">
+        <h3>Under the hood</h3>
+        <div class="frow"><b>Knows your noise floor</b><p>Adaptive squelch rides the channel, and an optional denoise mode samples the actual static between transmissions to subtract exactly that from the speech.</p></div>
+        <div class="frow"><b>Optional GPU acceleration</b><p>With an AMD GPU, the whole-utterance final pass runs on ROCm — freeing the CPU for live streaming. Falls back to CPU automatically when no GPU is present.</p></div>
+        <div class="frow"><b>Spectrogram &amp; gain control</b><p>Real-time frequency display, with selectable receive leveling — dynamic AGC, one-shot RMS, or off — and transmit-audio conditioning.</p></div>
+        <div class="frow"><b>One dialog, any screen</b><p>A single Settings dialog — per-operator preferences plus admin-only station controls — that adapts cleanly from phone to tablet to desktop.</p></div>
+      </div>
     </div>
   </div>
 </section>
@@ -628,7 +804,7 @@ footer{ border-top:1px solid var(--line); padding:54px 0 40px; color:var(--text-
     </div>
     <div class="reveal">
       <div class="console">
-        <div class="console-top"><i class="tl r"></i><i class="tl y"></i><i class="tl g"></i><span class="freq mono">STATION ID</span></div>
+        <div class="console-top"><i class="onair" aria-hidden="true"></i><span>Station ID</span><span class="freq mono">WROA123</span></div>
         <div class="console-body" style="min-height:auto;padding:24px">
           <div class="msg" style="opacity:1;transform:none;animation:none"><span class="who tx">BEACON</span><div class="txt">“WROA123 Hearthwave base, monitoring.”<small>Optional beacon · every 15 min when enabled</small></div></div>
           <div class="msg" style="opacity:1;transform:none;animation:none"><span class="who rx">RX</span><div class="txt">Mom: “Heading home, ETA ten minutes.”<small>Transcribed · logged to today's journal</small></div></div>
@@ -644,7 +820,7 @@ footer{ border-top:1px solid var(--line); padding:54px 0 40px; color:var(--text-
   <div class="wrap">
     <div class="sec-head reveal">
       <span class="eyebrow">Modules</span>
-      <h2>Extend it <span class="grad">for your net.</span></h2>
+      <h2>Extend it <span>for your net.</span></h2>
       <p class="lead">Hearthwave has a real, installable plugin system. Net Control is built in; MeshCore and Meshtastic ship as example plugins. Add more by dropping a folder into the plugins directory or uploading a <code>.zip</code> — hot-reloaded, no restart.</p>
     </div>
     <div class="mods">
@@ -708,7 +884,7 @@ footer{ border-top:1px solid var(--line); padding:54px 0 40px; color:var(--text-
     <div class="split">
       <div class="reveal">
         <span class="eyebrow">Up and running in minutes</span>
-        <h2 style="font-size:clamp(28px,3.6vw,42px);margin-top:16px">If it runs Docker, <span class="grad">it runs Hearthwave.</span></h2>
+        <h2 style="font-size:clamp(28px,3.6vw,42px);margin-top:16px">If it runs Docker, <span>it runs Hearthwave.</span></h2>
         <p class="lead" style="margin-top:16px">Any Linux box on your home network — a mini PC or NUC is plenty. No cloud accounts, no monthly fees.</p>
         <div class="hero-cta" style="margin-top:26px">
           <a class="btn btn-primary" href="https://github.com/Xpiatio/Hearthwave#installation" target="_blank" rel="noopener">Full install guide →</a>
@@ -719,7 +895,7 @@ footer{ border-top:1px solid var(--line); padding:54px 0 40px; color:var(--text-
       </div>
       <div class="reveal">
         <div class="term">
-          <div class="console-top"><i class="tl r"></i><i class="tl y"></i><i class="tl g"></i><span class="freq mono">bash — hearthwave</span></div>
+          <div class="console-top"><span class="freq mono">install · 4 steps</span></div>
 <pre><span class="c"># 1. Clone the repo</span>
 <span class="p">$</span> git clone https://github.com/Xpiatio/Hearthwave
 <span class="p">$</span> cd Hearthwave
@@ -766,12 +942,63 @@ footer{ border-top:1px solid var(--line); padding:54px 0 40px; color:var(--text-
   </div>
 </section>
 
+<!-- ═══════════ PRINTABLE CARDS: THE FRIDGE DOOR ═══════════ -->
+<section id="cards">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">No account needed</span>
+      <h2>Free printable <span>reference cards.</span></h2>
+      <p class="lead">Type your callsign and channel once — the card fills in live. Print it, stick it on the fridge, and you're ready to go.</p>
+    </div>
+    <div class="fridge reveal">
+      <a class="paper" href="gmrs-home-post-template-family.html" target="_blank" rel="noopener" aria-label="GMRS Station Reference template — opens in new tab">
+        <h3>Station Reference</h3>
+        <p>Key channels, calling phrases, and the 15-min ID reminder — one card for your home station.</p>
+        <span class="meta">ADULTS · FILL &amp; PRINT</span>
+      </a>
+      <a class="paper" href="gmrs-radio-card-template-kid.html" target="_blank" rel="noopener" aria-label="My Radio Card template — opens in new tab">
+        <h3>My Radio Card</h3>
+        <p>Five numbered steps — turn the channel, call, identify, listen, sign off. A card kids can follow on their own.</p>
+        <span class="meta">KIDS · FILL &amp; PRINT</span>
+      </a>
+      <a class="paper" href="gmrs-radio-social-story-kid.html" target="_blank" rel="noopener" aria-label="My Radio Story template — opens in new tab">
+        <h3>My Radio Story</h3>
+        <p>A 12-page illustrated social story — how to turn on the radio, what the sounds mean, when to talk and listen.</p>
+        <span class="meta">KIDS · SOCIAL STORY</span>
+      </a>
+      <a class="paper" href="My-Radio-Business-Card.html" target="_blank" rel="noopener" aria-label="My Radio Business Card template — opens in new tab">
+        <h3>Radio Business Card</h3>
+        <p>Wallet-sized front-and-back card. Channel and callsign on the front; what to say on the back. Print and cut.</p>
+        <span class="meta">ALL AGES · WALLET CARD</span>
+      </a>
+      <a class="paper" href="GMRS-SkyWarn.html" target="_blank" rel="noopener" aria-label="Family SKYWARN Radio Script template — opens in new tab">
+        <h3>SKYWARN Script</h3>
+        <p>Facts-only storm-spotting script — the words for severe weather and exactly what to say when you hail Net Control.</p>
+        <span class="meta">ADULTS · FILL &amp; PRINT</span>
+      </a>
+    </div>
+  </div>
+</section>
+
 <!-- ═══════════ CTA ═══════════ -->
 <section class="cta-wrap">
   <div class="wrap">
     <div class="cta-card reveal">
-      <span class="eyebrow" style="justify-content:center">Airwaves for everyone</span>
-      <h2 style="margin:18px auto 16px;max-width:18ch">Bring the whole family <span class="grad">onto the channel.</span></h2>
+      <svg class="cta-stars" viewBox="0 0 900 320" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <g fill="#F8F1E3">
+          <circle cx="80" cy="50" r="1.5" opacity=".7"/>
+          <circle cx="200" cy="110" r="1.2" opacity=".5" class="tw"/>
+          <circle cx="330" cy="40" r="1.4" opacity=".7"/>
+          <circle cx="560" cy="70" r="1.5" opacity=".75" class="tw tw2"/>
+          <circle cx="700" cy="40" r="1.3" opacity=".6"/>
+          <circle cx="820" cy="100" r="1.4" opacity=".7" class="tw tw3"/>
+          <circle cx="450" cy="260" r="1.2" opacity=".45"/>
+          <circle cx="130" cy="250" r="1.2" opacity=".45"/>
+          <circle cx="770" cy="240" r="1.2" opacity=".45"/>
+        </g>
+      </svg>
+      <span class="eyebrow">Airwaves for everyone</span>
+      <h2 style="margin:18px auto 16px;max-width:18ch">Bring the whole family <span>onto the channel.</span></h2>
       <p class="lead" style="margin:0 auto 30px">Free, open source, and built so being unable to hear or speak never means being left out.</p>
       <div class="hero-cta" style="justify-content:center">
         <a class="btn btn-primary" href="#install">Get started →</a>
@@ -784,22 +1011,51 @@ footer{ border-top:1px solid var(--line); padding:54px 0 40px; color:var(--text-
 </main>
 
 <!-- ═══════════ FOOTER ═══════════ -->
+<div class="dusk-band" aria-hidden="true"></div>
 <footer>
+  <svg class="foot-scene" viewBox="0 0 1440 110" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+    <g fill="#F8F1E3">
+      <circle cx="150" cy="18" r="1.2" opacity=".5" class="tw"/>
+      <circle cx="480" cy="26" r="1.3" opacity=".6"/>
+      <circle cx="900" cy="14" r="1.2" opacity=".5" class="tw tw2"/>
+      <circle cx="1290" cy="30" r="1.3" opacity=".6"/>
+    </g>
+    <path d="M0 96 Q360 82 720 92 T1440 88 V110 H0 Z" fill="#141B30"/>
+    <g>
+      <path d="M120 96 V70 L155 48 L190 70 V96 Z" fill="#1A2340"/>
+      <rect x="140" y="74" width="14" height="12" rx="1.5" fill="var(--glow)"/>
+      <path d="M420 96 V64 L465 36 L510 64 V96 Z" fill="#1C2646"/>
+      <line x1="465" y1="36" x2="465" y2="16" stroke="#111A30" stroke-width="2.4"/>
+      <rect x="440" y="70" width="15" height="13" rx="1.5" fill="var(--glow)"/>
+      <rect x="478" y="70" width="15" height="13" rx="1.5" fill="var(--glow)" opacity=".8"/>
+      <path d="M760 96 V74 L795 52 L830 74 V96 Z" fill="#192240"/>
+      <rect x="786" y="78" width="14" height="12" rx="1.5" fill="var(--glow)"/>
+      <path d="M1080 96 V68 L1125 40 L1170 68 V96 Z" fill="#1B2544"/>
+      <rect x="1146" y="46" width="10" height="22" fill="#1B2544"/>
+      <rect x="1100" y="74" width="15" height="13" rx="1.5" fill="var(--glow)"/>
+    </g>
+    <g>
+      <path d="M1330 96 L1344 34 L1358 96" stroke="#111A30" stroke-width="3.4" fill="none" stroke-linecap="round"/>
+      <path d="M1334 78 H1354 M1337 62 H1351 M1340 48 H1348" stroke="#111A30" stroke-width="2.2"/>
+      <circle class="beacon" cx="1344" cy="28" r="3.4" fill="var(--beacon)"/>
+    </g>
+  </svg>
   <div class="wrap">
     <div class="foot-grid">
       <div style="max-width:300px">
         <a class="brand" href="#" style="margin-bottom:14px">
           <svg class="mark" viewBox="0 0 100 100" fill="none" aria-hidden="true">
             <path class="house" d="M16 54 L50 26 L84 54 V86 H16 Z" stroke-width="5" stroke-linejoin="round"/>
-            <rect x="38" y="58" width="24" height="20" rx="3" stroke="var(--cyan)" stroke-width="3.5"/>
-            <line x1="43" y1="64" x2="57" y2="64" stroke="var(--cyan)" stroke-width="2.6"/>
-            <line x1="43" y1="70" x2="53" y2="70" stroke="var(--cyan)" stroke-width="2.6"/>
-            <g stroke-linecap="round" fill="none">
-              <path d="M58 30 A14 14 0 0 1 72 44" stroke="url(#g2)" stroke-width="5"/>
-              <path d="M62 22 A24 24 0 0 1 86 46" stroke="url(#g2)" stroke-width="5"/>
-              <path d="M66 14 A34 34 0 0 1 100 48" stroke="url(#g2)" stroke-width="5"/>
+            <g class="win">
+              <rect x="38" y="58" width="24" height="20" rx="3" stroke-width="3.5"/>
+              <line x1="43" y1="64" x2="57" y2="64" stroke-width="2.6"/>
+              <line x1="43" y1="70" x2="53" y2="70" stroke-width="2.6"/>
             </g>
-            <defs><linearGradient id="g2" x1="55" y1="20" x2="95" y2="50" gradientUnits="userSpaceOnUse"><stop stop-color="#1FC3CC"/><stop offset=".5" stop-color="#6D3FD4"/><stop offset="1" stop-color="#C32C97"/></linearGradient></defs>
+            <g class="arcs" stroke-linecap="round" fill="none" stroke-width="5">
+              <path class="wave-pulse" d="M58 30 A14 14 0 0 1 72 44"/>
+              <path class="wave-pulse" d="M62 22 A24 24 0 0 1 86 46"/>
+              <path class="wave-pulse" d="M66 14 A34 34 0 0 1 100 48"/>
+            </g>
           </svg>
           <span class="word">HEARTH<b>WAVE</b></span>
         </a>
@@ -840,17 +1096,6 @@ function push(){
 }
 push();push();push();
 setInterval(push, 2600);
-
-/* theme toggle */
-const tt=document.getElementById('themeToggle');
-function setTheme(dark){
-  if(dark){ document.documentElement.setAttribute('data-theme','dark'); }
-  else { document.documentElement.removeAttribute('data-theme'); }
-  try{ localStorage.setItem('hw-theme', dark?'dark':'light'); }catch(e){}
-}
-tt.addEventListener('click',()=>{
-  setTheme(document.documentElement.getAttribute('data-theme')!=='dark');
-});
 
 /* scroll reveal */
 const io=new IntersectionObserver((es)=>{
