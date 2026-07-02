@@ -61,10 +61,12 @@ browser-based React frontend communicating over WebSocket.
   with signal waves cresting off the roof) across the login screen, top bar,
   About dialog, and favicon, plus a redesigned project website that defaults to
   a warm light theme with a one-click dark-mode toggle
-- **Two-tier transcription** — a fast model streams live partials while an
-  optional larger model (e.g. `distil-large-v3`) re-transcribes each completed
-  transmission in full, replacing the live text with a higher-accuracy final —
-  without truncating long overs or dropping a callsign the live pass already heard
+- **Two-tier transcription** — a fast model streams live partials while a
+  larger model (`large-v3-turbo`, `distil-large-v3`, or `large-v3`) re-transcribes
+  each completed transmission in full, replacing the live text with a
+  higher-accuracy final — without truncating long overs or dropping a callsign
+  the live pass already heard. New installs default to **Auto**: stage a final
+  model and it's picked up on the next Listen toggle, no configuration needed
 - **GPU-accelerated final pass (ROCm)** — the whole-utterance final pass can run
   on an AMD GPU via ROCm while streaming stays on CPU, eliminating the CPU
   contention that otherwise stalls live transcription during a final pass (measured:

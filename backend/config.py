@@ -74,8 +74,11 @@ class ServerConfig(dict):
     @property
     def whisper_model_final(self) -> str:
         """Second-pass model that re-transcribes the full utterance on
-        finalization. Empty string disables the second pass."""
-        return self.get("whisper_model_final", "")
+        finalization. "auto" (fresh-install default) resolves to the best
+        model staged under Models/STT at worker construction, silently
+        single-pass otherwise. Empty string disables the second pass — a
+        persisted "" is deliberate-off and is never migrated to "auto"."""
+        return self.get("whisper_model_final", "auto")
 
     @property
     def stt_final_max_s(self) -> float:

@@ -18,6 +18,7 @@ function makeConfig(overrides: Partial<ServerConfig> = {}): ServerConfig {
     vadThreshold: 0.5,
     whisperModel: 'small.en',
     whisperModelFinal: '',
+    whisperModelFinalResolved: '',
     gainMode: 'agc',
     squelchAdaptive: false,
     noiseProfile: false,
@@ -516,5 +517,45 @@ describe('ServerConfigPanel', () => {
   it('hides the embedded Save button when hideSaveButton is set', () => {
     render(<ServerConfigPanel {...makeDefaultProps()} embedded hideSaveButton />)
     expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument()
+  })
+})
+
+describe('ServerConfigPanel — final-pass model auto/turbo', () => {
+  it('offers Auto and large-v3-turbo as final-model choices', () => {
+    render(<ServerConfigPanel {...makeDefaultProps({ whisperModelFinal: '' })} />)
+    fireEvent.mouseDown(screen.getByLabelText(/final-pass model/i))
+    expect(screen.getByText(/Auto — best staged model/)).toBeInTheDocument()
+    expect(screen.getByText('large-v3-turbo')).toBeInTheDocument()
+  })
+
+  it('saves auto as the final model', async () => {
+    const onSave = vi.fn()
+    render(
+      <ServerConfigPanel {...makeDefaultProps({ whisperModelFinal: '' })} onSave={onSave} />
+    )
+    fireEvent.mouseDown(screen.getByLabelText(/final-pass model/i))
+    fireEvent.click(await screen.findByText(/Auto — best staged model/))
+    fireEvent.click(screen.getByRole('button', { name: /save/i }))
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ whisper_model_final: 'auto' }),
+    )
+  })
+
+  it('shows what auto resolved to when a model is staged', () => {
+    render(
+      <ServerConfigPanel
+        {...makeDefaultProps({ whisperModelFinal: 'auto', whisperModelFinalResolved: 'distil-large-v3' })}
+      />
+    )
+    expect(screen.getByText(/Auto → distil-large-v3/)).toBeInTheDocument()
+  })
+
+  it('explains auto when nothing is resolved yet', () => {
+    render(
+      <ServerConfigPanel
+        {...makeDefaultProps({ whisperModelFinal: 'auto', whisperModelFinalResolved: '' })}
+      />
+    )
+    expect(screen.getByText(/picks the best staged model/i)).toBeInTheDocument()
   })
 })

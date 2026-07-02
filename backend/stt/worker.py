@@ -108,6 +108,10 @@ class STTWorker:
     # buffer/minimum sizes give >= ~31 STFT frames for a stable threshold.
     NOISE_BUFFER_S = 2.0
     NOISE_MIN_S = 0.5
+    # whisper_model_final="auto" resolves to the first of these actually
+    # staged under Models/STT (skipping the fast-path model). Turbo first:
+    # near large-v3 accuracy at a fraction of the decode cost.
+    FINAL_MODEL_PREFERENCE = ("large-v3-turbo", "distil-large-v3", "large-v3")
 
     _MODELS_DIR = Path(__file__).resolve().parent.parent / "Models" / "STT"
 
@@ -170,10 +174,17 @@ class STTWorker:
         )
         # Two-tier transcription: when a final model is configured, every
         # finalized utterance is re-transcribed whole on a low-priority
-        # thread and broadcast as a replacing final.
-        self.whisper_model_final = (whisper_model_final or "").strip()
+        # thread and broadcast as a replacing final. "auto" resolves to the
+        # best model actually staged; since the worker is rebuilt on every
+        # Listen toggle, a model downloaded between toggles is picked up.
+        # Downstream code reads the resolved value; the configured one
+        # round-trips through settings.
         self.final_max_s = float(final_max_s)
         self.stt_final_device = stt_final_device
+        self.whisper_model_final_configured = (whisper_model_final or "").strip()
+        self.whisper_model_final = self._resolve_final_model(
+            self.whisper_model_final_configured
+        )
         self.gain_mode = gain_mode if gain_mode in GAIN_MODES else "agc"
         self.noise_profile = bool(noise_profile)
         self._final_q: "queue.Queue | None" = (
@@ -749,6 +760,37 @@ class STTWorker:
             self._final_q.put_nowait((uid, audio, noise_clip))
         except queue.Full:
             self._emit_result(uid, "", False)
+
+    def _resolve_final_model(self, configured: str) -> str:
+        """Map the configured final-model name to the one the worker uses.
+
+        Explicit names (and "") pass through untouched — a missing explicit
+        model keeps today's loud load-time error. "auto" returns the first
+        FINAL_MODEL_PREFERENCE entry staged under Models/STT, skipping the
+        fast-path model, or "" (silent single-pass) when none qualifies.
+
+        The usability probe is isdir-only: with stt_final_device="auto" a
+        candidate needs its CT2 dir — rocm_available() is deliberately never
+        called here (it imports torch, and __init__ runs on the asyncio
+        thread), so hf-only staging requires explicit stt_final_device="gpu".
+        """
+        if configured != "auto":
+            return configured
+        for name in self.FINAL_MODEL_PREFERENCE:
+            if name == self.whisper_model_name:
+                continue
+            ct2 = os.path.isdir(str(self._MODELS_DIR / name))
+            if self.stt_final_device == "gpu":
+                usable = ct2 or os.path.isdir(str(self._MODELS_DIR / (name + "-hf")))
+            else:
+                usable = ct2
+            if usable:
+                return name
+        _log.info(
+            "whisper_model_final='auto': no final-pass model staged under %s — "
+            "running single-pass", self._MODELS_DIR,
+        )
+        return ""
 
     def _resolve_final_backend(self) -> str:
         """'gpu' or 'cpu' — honoring config and GPU availability."""

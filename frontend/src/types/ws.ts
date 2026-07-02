@@ -70,6 +70,7 @@ export interface StatusMsg {
   vad_threshold?: number;
   whisper_model?: string;
   whisper_model_final?: string;
+  whisper_model_final_resolved?: string;
   stt_gain_mode?: string;
   squelch_adaptive?: boolean;
   stt_noise_profile?: boolean;
