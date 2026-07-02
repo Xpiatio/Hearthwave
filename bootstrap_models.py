@@ -28,6 +28,11 @@ WHISPER_REPOS = {
     # Distilled large: ~large-v2 accuracy at a fraction of the compute —
     # the recommended whisper_model_final for the two-pass RX pipeline.
     "distil-large-v3": "Systran/faster-distil-whisper-large-v3",
+    # Community CT2 conversion of openai/whisper-large-v3-turbo (no official
+    # Systran repo exists). Verified 2026-07-01: downloads, loads in
+    # faster-whisper 1.2.1, transcribes. Final-pass only — too slow for the
+    # 2 s streaming slices.
+    "large-v3-turbo": "deepdml/faster-whisper-large-v3-turbo-ct2",
 }
 
 # HF transformers-format repos for the GPU final pass (distinct from the CT2

@@ -36,6 +36,7 @@ ct2_repo_for() {
     medium.en) echo "Systran/faster-whisper-medium.en" ;;
     large-v3) echo "Systran/faster-whisper-large-v3" ;;
     distil-large-v3) echo "Systran/faster-distil-whisper-large-v3" ;;
+    large-v3-turbo) echo "deepdml/faster-whisper-large-v3-turbo-ct2" ;;
     *) echo "Error: unknown model '$1'." >&2; exit 1 ;;
   esac
 }
@@ -142,7 +143,9 @@ if [[ -n "$FINAL_MODEL" ]]; then
   echo "==> Final-pass models for ${FINAL_MODEL}:"
   fetch_repo "$(ct2_repo_for "$FINAL_MODEL")" "Models/STT/${FINAL_MODEL}"        # CPU fallback (CT2)
   fetch_repo "$(hf_repo_for "$FINAL_MODEL")"  "Models/STT/${FINAL_MODEL}-hf"     # GPU (HF transformers)
-  echo "  Set whisper_model_final=\"${FINAL_MODEL}\" in data/config.json to enable the two-tier pass."
+  echo "  New installs default whisper_model_final=\"auto\" and will pick it up on the next"
+  echo "  Listen toggle. If data/config.json has whisper_model_final=\"\" (explicit off), set it"
+  echo "  to \"auto\" or \"${FINAL_MODEL}\" to enable the two-tier pass."
 fi
 
 # ── 4. Voices ─────────────────────────────────────────────────────────────────
