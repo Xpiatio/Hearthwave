@@ -321,3 +321,67 @@ class TestFuzzyMatchCallsign:
     def test_none_inputs_return_none(self):
         assert fuzzy_match_callsign(None, {"WSLZ233"}) is None
         assert fuzzy_match_callsign("WSLZ233", None) is None
+
+
+class TestCorrectCallsigns:
+    """correct_callsigns(text, known): rewrite misheard callsigns in the
+    final transcript to the roster's canonical call, marked with the original
+    heard text; exact hits and unmatched calls pass through unmarked."""
+
+    def test_single_edit_rewritten_and_marked(self):
+        from backend.text.callsigns import correct_callsigns
+        text, spans = correct_callsigns("WSLZ235 radio check", {"WSLZ233"})
+        assert text == "WSLZ233 radio check"
+        assert spans == [(0, 7, "WSLZ233", "WSLZ235")]
+
+    def test_exact_match_not_marked(self):
+        from backend.text.callsigns import correct_callsigns
+        text, spans = correct_callsigns("WSLZ233 radio check", {"WSLZ233"})
+        assert text == "WSLZ233 radio check"
+        assert spans == [(0, 7, "WSLZ233", None)]
+
+    def test_unknown_call_passes_through(self):
+        from backend.text.callsigns import correct_callsigns
+        text, spans = correct_callsigns("KE8ABC here", {"WSLZ233"})
+        assert text == "KE8ABC here"
+        assert spans == [(0, 6, "KE8ABC", None)]
+
+    def test_ambiguous_candidates_disqualify(self):
+        # Two roster calls one edit away — picking either silently would be
+        # wrong as often as right, so the text must stay untouched.
+        from backend.text.callsigns import correct_callsigns
+        text, spans = correct_callsigns("WSLZ235 here", {"WSLZ233", "WSLZ236"})
+        assert text == "WSLZ235 here"
+        assert spans == [(0, 7, "WSLZ235", None)]
+
+    def test_phonetic_span_rewritten_to_canonical(self):
+        from backend.text.callsigns import correct_callsigns
+        text, spans = correct_callsigns(
+            "this is Whiskey Sierra Lima Zulu two three five, over",
+            {"WSLZ233"},
+        )
+        assert text == "this is WSLZ233, over"
+        start, end, cs, original = spans[0]
+        assert (cs, original) == ("WSLZ233", "Whiskey Sierra Lima Zulu two three five")
+        assert text[start:end] == "WSLZ233"
+
+    def test_multiple_spans_offsets_survive_splice(self):
+        from backend.text.callsigns import correct_callsigns
+        text, spans = correct_callsigns(
+            "WSLZ235 calling Whiskey Sierra Lima Zulu two four five, over",
+            {"WSLZ233", "WSLZ244"},
+        )
+        assert text == "WSLZ233 calling WSLZ244, over"
+        assert [s[2] for s in spans] == ["WSLZ233", "WSLZ244"]
+        for start, end, cs, _orig in spans:
+            assert text[start:end] == cs
+
+    def test_no_known_callsigns_is_noop(self):
+        from backend.text.callsigns import correct_callsigns
+        text, spans = correct_callsigns("WSLZ235 here", set())
+        assert text == "WSLZ235 here"
+        assert spans == [(0, 7, "WSLZ235", None)]
+
+    def test_empty_text(self):
+        from backend.text.callsigns import correct_callsigns
+        assert correct_callsigns("", {"WSLZ233"}) == ("", [])
