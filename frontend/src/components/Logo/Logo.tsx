@@ -1,5 +1,4 @@
-import { useId } from 'react';
-import { Box } from '@mui/material';
+import { Box, useTheme } from '@mui/material';
 
 interface LogoProps {
   /** Pixel size of the square mark. Default 32. */
@@ -9,15 +8,16 @@ interface LogoProps {
 }
 
 /**
- * Hearthwave logo — a home sheltering a radio set, with signal waves
- * cresting off the roof. The house and radio strokes are a fixed cyan and
- * the waves sweep cyan → violet → magenta, matching the brand mark in both
- * light and dark themes.
+ * Hearthwave logo — a signal lantern casting radio waves, the light a
+ * family keeps burning so its own can find the channel. The frame follows
+ * the theme (cream on dark, ink on light); the glass and waves stay
+ * lamp-gold in both.
  */
 export function Logo({ size = 32, withWordmark = false }: LogoProps) {
-  // Unique gradient id so multiple Logo instances don't collide.
-  const gradId = useId();
-  const cyan = '#20C5CE';
+  const theme = useTheme();
+  const frame = theme.palette.mode === 'dark' ? '#F4EDE0' : '#33302A';
+  const lamp = '#F5B04C';
+  const glass = '#FFD98E';
 
   const mark = (
     <svg
@@ -29,25 +29,21 @@ export function Logo({ size = 32, withWordmark = false }: LogoProps) {
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
-      <defs>
-        <linearGradient id={gradId} x1="55" y1="20" x2="95" y2="50" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#36DDE4" />
-          <stop offset="0.5" stopColor="#8B5CF6" />
-          <stop offset="1" stopColor="#EA53C6" />
-        </linearGradient>
-      </defs>
-      {/* house */}
-      <path d="M16 54 L50 26 L84 54 V86 H16 Z" stroke={cyan} strokeWidth={5} strokeLinejoin="round" />
-      {/* radio set inside */}
-      <rect x="38" y="58" width="24" height="20" rx="3" stroke={cyan} strokeWidth={3.5} />
-      <line x1="43" y1="64" x2="57" y2="64" stroke={cyan} strokeWidth={2.6} strokeLinecap="round" />
-      <line x1="43" y1="70" x2="53" y2="70" stroke={cyan} strokeWidth={2.6} strokeLinecap="round" />
-      {/* signal waves cresting off the roof */}
-      <g stroke={`url(#${gradId})`} strokeWidth={5} strokeLinecap="round">
-        <path d="M58 30 A14 14 0 0 1 72 44" />
-        <path d="M62 22 A24 24 0 0 1 86 46" />
-        <path d="M66 14 A34 34 0 0 1 100 48" />
+      {/* radio waves off the glass */}
+      <g stroke={lamp} strokeWidth={5} strokeLinecap="round">
+        <path d="M73 40 A16 16 0 0 1 73 64" />
+        <path d="M81 34 A24 24 0 0 1 81 70" opacity={0.55} />
+        <path d="M27 40 A16 16 0 0 0 27 64" />
+        <path d="M19 34 A24 24 0 0 0 19 70" opacity={0.55} />
       </g>
+      {/* lantern: ring, cap, body, glass, muntins, base */}
+      <circle cx="50" cy="15" r="5.5" stroke={frame} strokeWidth={4} />
+      <path d="M40 36 L50 21 L60 36 Z" fill={frame} />
+      <rect x="37" y="35" width="26" height="38" rx="4" fill={frame} />
+      <rect x="42" y="40" width="16" height="28" rx="2" fill={glass} />
+      <line x1="50" y1="40" x2="50" y2="68" stroke={frame} strokeWidth={2.8} />
+      <line x1="42" y1="54" x2="58" y2="54" stroke={frame} strokeWidth={2.8} />
+      <rect x="33" y="73" width="34" height="5.5" rx="2.75" fill={frame} />
     </svg>
   );
 

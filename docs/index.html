@@ -118,6 +118,7 @@ nav{
 .wave-pulse{ animation:pulse 3.4s ease-in-out infinite; }
 .wave-pulse:nth-child(2){ animation-delay:.18s; }
 .wave-pulse:nth-child(3){ animation-delay:.36s; }
+.wave-pulse:nth-child(4){ animation-delay:.54s; }
 @keyframes pulse{ 0%,100%{ opacity:.55; } 50%{ opacity:1; } }
 
 /* ── hero: the neighborhood at dusk ─────────────────────── */
@@ -380,16 +381,22 @@ footer .tag{ color:var(--glow); }
   <div class="wrap nav-in">
     <a class="brand" href="#">
       <svg class="mark" viewBox="0 0 100 100" fill="none" aria-hidden="true">
-        <path class="house" d="M16 54 L50 26 L84 54 V86 H16 Z" stroke-width="5" stroke-linejoin="round"/>
-        <g class="win">
-          <rect x="38" y="58" width="24" height="20" rx="3" stroke-width="3.5"/>
-          <line x1="43" y1="64" x2="57" y2="64" stroke-width="2.6"/>
-          <line x1="43" y1="70" x2="53" y2="70" stroke-width="2.6"/>
+        <g class="house" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="50" cy="13" r="6" stroke-width="4"/>
+          <path d="M38 34 L50 16 L62 34"/>
+          <rect x="36" y="33" width="28" height="40" rx="5"/>
+          <line x1="32" y1="79" x2="68" y2="79"/>
+        </g>
+        <rect x="42" y="39" width="16" height="28" rx="2" fill="var(--lamp)" opacity=".9"/>
+        <g class="win" stroke-width="2.6">
+          <line x1="50" y1="39" x2="50" y2="67"/>
+          <line x1="42" y1="53" x2="58" y2="53"/>
         </g>
         <g class="arcs" stroke-linecap="round" fill="none" stroke-width="5">
-          <path class="wave-pulse" d="M58 30 A14 14 0 0 1 72 44"/>
-          <path class="wave-pulse" d="M62 22 A24 24 0 0 1 86 46"/>
-          <path class="wave-pulse" d="M66 14 A34 34 0 0 1 100 48"/>
+          <path class="wave-pulse" d="M72 42 A16 16 0 0 1 72 66"/>
+          <path class="wave-pulse" d="M80 36 A24 24 0 0 1 80 72" opacity=".55"/>
+          <path class="wave-pulse" d="M28 42 A16 16 0 0 0 28 66"/>
+          <path class="wave-pulse" d="M20 36 A24 24 0 0 0 20 72" opacity=".55"/>
         </g>
       </svg>
       <span class="word">HEARTH<b>WAVE</b></span>
@@ -1045,16 +1052,22 @@ footer .tag{ color:var(--glow); }
       <div style="max-width:300px">
         <a class="brand" href="#" style="margin-bottom:14px">
           <svg class="mark" viewBox="0 0 100 100" fill="none" aria-hidden="true">
-            <path class="house" d="M16 54 L50 26 L84 54 V86 H16 Z" stroke-width="5" stroke-linejoin="round"/>
-            <g class="win">
-              <rect x="38" y="58" width="24" height="20" rx="3" stroke-width="3.5"/>
-              <line x1="43" y1="64" x2="57" y2="64" stroke-width="2.6"/>
-              <line x1="43" y1="70" x2="53" y2="70" stroke-width="2.6"/>
+            <g class="house" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="50" cy="13" r="6" stroke-width="4"/>
+                  <path d="M38 34 L50 16 L62 34"/>
+                  <rect x="36" y="33" width="28" height="40" rx="5"/>
+                  <line x1="32" y1="79" x2="68" y2="79"/>
+            </g>
+            <rect x="42" y="39" width="16" height="28" rx="2" fill="var(--lamp)" opacity=".9"/>
+            <g class="win" stroke-width="2.6">
+                  <line x1="50" y1="39" x2="50" y2="67"/>
+                  <line x1="42" y1="53" x2="58" y2="53"/>
             </g>
             <g class="arcs" stroke-linecap="round" fill="none" stroke-width="5">
-              <path class="wave-pulse" d="M58 30 A14 14 0 0 1 72 44"/>
-              <path class="wave-pulse" d="M62 22 A24 24 0 0 1 86 46"/>
-              <path class="wave-pulse" d="M66 14 A34 34 0 0 1 100 48"/>
+                  <path class="wave-pulse" d="M72 42 A16 16 0 0 1 72 66"/>
+                  <path class="wave-pulse" d="M80 36 A24 24 0 0 1 80 72" opacity=".55"/>
+                  <path class="wave-pulse" d="M28 42 A16 16 0 0 0 28 66"/>
+                  <path class="wave-pulse" d="M20 36 A24 24 0 0 0 20 72" opacity=".55"/>
             </g>
           </svg>
           <span class="word">HEARTH<b>WAVE</b></span>
