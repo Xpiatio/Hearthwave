@@ -90,3 +90,43 @@ def test_all_stages_disabled_still_bandpasses(sos):
     out = preprocess_segment(audio, SAMPLE_RATE, sos, denoise_enabled=False, gain_mode="off")
     assert out.dtype == np.float32
     assert not np.array_equal(out, audio)
+
+
+def test_noise_clip_bandpassed_and_forwarded_to_denoise(sos, monkeypatch):
+    # The clip must arrive at denoise as y_noise AFTER passing through the
+    # same bandpass as the segment, so both share the spectral domain.
+    from backend.audio.dsp import bandpass
+    seen = {}
+    import backend.stt.preprocess as mod
+    monkeypatch.setattr(
+        mod, "denoise",
+        lambda audio, sr, **kw: seen.update(kw) or audio,
+    )
+    clip = _tone_with_noise(seconds=0.6, seed=7)
+    preprocess_segment(_tone_with_noise(), SAMPLE_RATE, sos, noise_clip=clip)
+    assert "y_noise" in seen
+    np.testing.assert_allclose(seen["y_noise"], bandpass(clip, sos), atol=1e-6)
+
+
+def test_no_noise_clip_omits_y_noise_kwarg(sos, monkeypatch):
+    seen = {}
+    import backend.stt.preprocess as mod
+    monkeypatch.setattr(
+        mod, "denoise",
+        lambda audio, sr, **kw: seen.update(kw) or audio,
+    )
+    preprocess_segment(_tone_with_noise(), SAMPLE_RATE, sos)
+    assert "y_noise" not in seen
+
+
+def test_empty_noise_clip_omits_y_noise_kwarg(sos, monkeypatch):
+    seen = {}
+    import backend.stt.preprocess as mod
+    monkeypatch.setattr(
+        mod, "denoise",
+        lambda audio, sr, **kw: seen.update(kw) or audio,
+    )
+    preprocess_segment(
+        _tone_with_noise(), SAMPLE_RATE, sos, noise_clip=np.zeros(0, dtype=np.float32)
+    )
+    assert "y_noise" not in seen

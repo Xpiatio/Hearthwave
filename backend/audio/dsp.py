@@ -25,10 +25,21 @@ def bandpass(audio, sos):
     return sosfiltfilt(sos, audio).astype(np.float32)
 
 
-def denoise(audio, sample_rate, prop_decrease=0.7):
-    """Spectral-gating noise reduction via `noisereduce`. Run AFTER the bandpass."""
+def denoise(audio, sample_rate, prop_decrease=0.7, *, y_noise=None):
+    """Spectral-gating noise reduction via `noisereduce`. Run AFTER the bandpass.
+
+    ``y_noise`` is a squelch-closed noise-floor clip used as the noise
+    estimate. noisereduce only consumes ``y_noise`` in stationary mode, so the
+    clip and ``stationary=True`` are passed together; without a clip the call
+    stays non-stationary (self-estimating), exactly as before.
+    """
     import noisereduce as nr
 
+    if y_noise is not None and len(y_noise) > 0:
+        return nr.reduce_noise(
+            y=audio, sr=sample_rate, prop_decrease=prop_decrease,
+            y_noise=y_noise, stationary=True,
+        ).astype(np.float32)
     return nr.reduce_noise(
         y=audio, sr=sample_rate, prop_decrease=prop_decrease
     ).astype(np.float32)

@@ -106,3 +106,51 @@ class TestDynamicAgc:
         original = signal.copy()
         dynamic_agc(signal, SAMPLE_RATE)
         np.testing.assert_array_equal(signal, original)
+
+
+class TestDenoise:
+    """denoise() noise-profile branch: a squelch-derived clip switches
+    noisereduce to stationary mode with the clip as the noise estimate;
+    without a clip the call must stay exactly today's non-stationary form
+    (y_noise without stationary=True is a silent no-op in noisereduce 3.x).
+    """
+
+    @staticmethod
+    def _capture_reduce_noise(monkeypatch):
+        import noisereduce
+        seen = {}
+
+        def fake(y, sr, **kw):
+            seen.update(kw)
+            seen["y"] = y
+            seen["sr"] = sr
+            return y
+
+        monkeypatch.setattr(noisereduce, "reduce_noise", fake)
+        return seen
+
+    def test_noise_clip_forwarded_with_stationary_true(self, monkeypatch):
+        from backend.audio.dsp import denoise
+        seen = self._capture_reduce_noise(monkeypatch)
+        audio = np.random.default_rng(0).standard_normal(1600).astype(np.float32)
+        clip = np.random.default_rng(1).standard_normal(8000).astype(np.float32)
+        denoise(audio, 16000, y_noise=clip)
+        assert seen["stationary"] is True
+        assert seen["y_noise"] is clip
+        assert seen["prop_decrease"] == 0.7
+
+    def test_no_clip_keeps_nonstationary_call(self, monkeypatch):
+        from backend.audio.dsp import denoise
+        seen = self._capture_reduce_noise(monkeypatch)
+        audio = np.zeros(1600, dtype=np.float32)
+        denoise(audio, 16000, prop_decrease=0.5)
+        assert "y_noise" not in seen
+        assert "stationary" not in seen
+        assert seen["prop_decrease"] == 0.5
+
+    def test_empty_clip_treated_as_absent(self, monkeypatch):
+        from backend.audio.dsp import denoise
+        seen = self._capture_reduce_noise(monkeypatch)
+        denoise(np.zeros(1600, dtype=np.float32), 16000, y_noise=np.zeros(0, dtype=np.float32))
+        assert "y_noise" not in seen
+        assert "stationary" not in seen
