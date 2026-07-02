@@ -185,6 +185,37 @@ def fuzzy_match_callsign(detected, known_callsigns):
     return best
 
 
+def correct_callsigns(text, known_callsigns):
+    """Rewrite misheard callsigns in ``text`` to the roster's canonical call.
+
+    Runs :func:`find_callsign_spans`, fuzzy-matches each span's canonical
+    against ``known_callsigns`` (same 1-edit like-for-like semantics as
+    :func:`fuzzy_match_callsign`, ambiguity disqualifies), and splices the
+    corrected canonical over the heard text. Exact hits and unmatched calls
+    pass through untouched — only genuine corrections change the transcript.
+
+    Returns ``(rewritten_text, spans)`` where each span is
+    ``(start, end, callsign, original)`` in rewritten-text offsets;
+    ``original`` is the heard text a correction replaced, or ``None``.
+    """
+    if not text:
+        return text, []
+    out_text = text
+    out_spans = []
+    shift = 0  # cumulative length delta from splices before the current span
+    for start, end, cs in find_callsign_spans(text):
+        s, e = start + shift, end + shift
+        matched = fuzzy_match_callsign(cs, known_callsigns) if known_callsigns else None
+        if matched and matched != cs:
+            original = out_text[s:e]
+            out_text = out_text[:s] + matched + out_text[e:]
+            out_spans.append((s, s + len(matched), matched, original))
+            shift += len(matched) - (end - start)
+        else:
+            out_spans.append((s, e, matched or cs, None))
+    return out_text, out_spans
+
+
 def spell_digits_in_callsigns(text):
     """Insert spaces around every digit in any detected callsign so TTS reads
     them one at a time. 'WSLZ233' -> 'WSLZ 2 3 3', 'K1ABC' -> 'K 1 ABC'.

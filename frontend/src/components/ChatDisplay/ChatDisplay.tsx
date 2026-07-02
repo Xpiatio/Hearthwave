@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Typography, Fab, Chip, Tooltip } from '@mui/material';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
-import type { Contact } from '../../types/ws';
+import type { CallsignSpan, Contact } from '../../types/ws';
 
 export interface ChatEntry {
   id: string;
@@ -12,9 +12,11 @@ export interface ChatEntry {
   text: string;
   speaker?: string;
   partial?: boolean;
-  // Server-computed [start, end, canonical_callsign] tuples — handles NATO phonetic,
-  // spaced, hyphenated, and compact forms. Falls back to frontend regex when absent.
-  callsign_spans?: Array<[number, number, string]>;
+  // Server-computed [start, end, canonical_callsign, original_heard?] tuples —
+  // handles NATO phonetic, spaced, hyphenated, and compact forms; the optional
+  // 4th element is the misheard text a roster rewrite replaced. Falls back to
+  // frontend regex when absent.
+  callsign_spans?: CallsignSpan[];
   source?: 'voice' | 'cw';
 }
 
@@ -61,6 +63,8 @@ interface TextSegment {
   text: string;
   isCallsign: boolean;
   contact?: Contact;
+  // Original heard text when the server auto-corrected this callsign.
+  original?: string | null;
 }
 
 // Uses server-provided spans (handles NATO phonetic, spaced, hyphenated, compact forms).
@@ -68,16 +72,18 @@ interface TextSegment {
 // while the original matched text (which may be the long NATO spelling) is elided.
 function segmentTextBySpans(
   text: string,
-  spans: Array<[number, number, string]>,
+  spans: CallsignSpan[],
   callsignIdx: Map<string, Contact>,
 ): TextSegment[] {
   const segments: TextSegment[] = [];
   let lastIndex = 0;
-  for (const [start, end, canonical] of spans) {
+  for (const span of spans) {
+    const [start, end, canonical] = span;
+    const original = span.length > 3 ? span[3] : null;
     if (start > lastIndex) {
       segments.push({ text: text.slice(lastIndex, start), isCallsign: false });
     }
-    segments.push({ text: canonical, isCallsign: true, contact: callsignIdx.get(canonical) });
+    segments.push({ text: canonical, isCallsign: true, contact: callsignIdx.get(canonical), original });
     lastIndex = end;
   }
   if (lastIndex < text.length) {
@@ -107,10 +113,15 @@ function segmentTextByRegex(text: string, callsignIdx: Map<string, Contact>): Te
 }
 
 function CallsignChip({ seg, index }: { seg: TextSegment; index: number }) {
+  const corrected = Boolean(seg.original);
+  const tooltipParts: string[] = [];
+  if (seg.contact) tooltipParts.push(callsignTooltip(seg.contact));
+  if (corrected) tooltipParts.push(`auto-corrected — heard: ${seg.original}`);
   const chip = (
     <Chip
       label={seg.text}
       size="small"
+      data-corrected={corrected ? 'true' : undefined}
       sx={{
         mx: 0.25,
         height: 20,
@@ -120,13 +131,20 @@ function CallsignChip({ seg, index }: { seg: TextSegment; index: number }) {
         bgcolor: seg.contact ? 'warning.light' : 'action.hover',
         color: seg.contact ? 'warning.dark' : 'text.secondary',
         '& .MuiChip-label': { px: 0.75 },
+        ...(corrected && {
+          '& .MuiChip-label': {
+            px: 0.75,
+            textDecoration: 'underline dotted',
+            textUnderlineOffset: '3px',
+          },
+        }),
       }}
     />
   );
   return (
     <span key={index} style={{ display: 'inline-flex', alignItems: 'baseline', gap: 2 }}>
-      {seg.contact ? (
-        <Tooltip title={callsignTooltip(seg.contact)} placement="top">
+      {tooltipParts.length > 0 ? (
+        <Tooltip title={tooltipParts.join(' · ')} placement="top">
           {chip}
         </Tooltip>
       ) : (
@@ -150,7 +168,7 @@ function MessageText({
 }: {
   text: string;
   callsignIdx: Map<string, Contact>;
-  callsignSpans?: Array<[number, number, string]>;
+  callsignSpans?: CallsignSpan[];
   showCallsignChips: boolean;
   color: string;
 }) {

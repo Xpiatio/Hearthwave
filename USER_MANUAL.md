@@ -184,6 +184,7 @@ Each received entry is labelled **[RX]** in the chat (in green). Outgoing entrie
 - **Verified contacts** show a green **✓** badge immediately after the chip, indicating the callsign has been confirmed against the FCC database.
 - **Unknown callsigns** appear as a dimmer chip and are added to the [Pending stations](#8-pending-stations) bar above the chat.
 - **Fuzzy correction:** If fuzzy callsign matching is enabled and Whisper mishears a single character (e.g. `WSLZ235` instead of `WSLZ233`), the chip is shown with the corrected canonical form if a known contact is only one character away.
+- **Callsign auto-correct:** With the additional **Callsign Auto-Correct** toggle on, the correction is written into the transcript itself — the journal, chat history, read-aloud, and plugins all see the corrected callsign. Corrected chips show a dotted underline; hover to see what was actually heard. If two known callsigns are equally close, nothing is changed.
 - **Cross-transmission detection:** If a callsign is phonetically spelled across two separate keying events (e.g. the first half in one transmission, the second half in the next), it is still detected and highlighted in both chat entries.
 
 **Profanity filter:** If your profanity filter is enabled (see [Settings](#13-settings)), profanity is masked in received text with asterisks. Other users with the filter off see the unmasked text. This is a per-account setting.
@@ -430,6 +431,7 @@ Open your personal settings panel by clicking your **account chip** in the top b
 | Profanity filter | Masks profanity in your sent and received text (other users unaffected) |
 | Listen-only mode | Disables TX for your account only |
 | Fuzzy callsign matching | Station-wide; when Whisper mishears a single character in a callsign (e.g. `WSLZ235` → `WSLZ233`), the chip in chat and the pending/attendance entry are corrected to the known canonical form |
+| Callsign auto-correct | Station-wide; requires fuzzy matching. Rewrites the misheard callsign in the final transcript itself (journal, read-aloud, and plugins see the corrected text). Corrected chips are marked with a dotted underline and a tooltip showing the heard text |
 
 ### Voice
 | Setting | Description |

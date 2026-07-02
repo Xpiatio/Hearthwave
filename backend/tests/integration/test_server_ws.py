@@ -1196,6 +1196,35 @@ class TestSetServerConfigSttGainMode:
 
 
 # ---------------------------------------------------------------------------
+# set_config — fuzzy_callsign_rewrite
+# ---------------------------------------------------------------------------
+
+class TestSetConfigFuzzyCallsignRewrite:
+    """fuzzy_callsign_rewrite rides the lighter set_config path (station-wide,
+    no STT restart) beside fuzzy_callsign, and shows up in the status
+    broadcast so the UI toggle round-trips."""
+
+    def test_toggle_persisted_and_broadcast(self, tmp_path):
+        with _ws_server(tmp_path) as (tc, cfg):
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                with patch("backend.config.ServerConfig.save"):
+                    ws.send_json({"type": "set_config", "fuzzy_callsign_rewrite": True})
+                    msg = ws.receive_json()
+                assert cfg["fuzzy_callsign_rewrite"] is True
+                assert msg["fuzzy_callsign_rewrite"] is True
+
+    def test_status_defaults_to_false(self, tmp_path):
+        with _ws_server(tmp_path) as (tc, cfg):
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                with patch("backend.config.ServerConfig.save"):
+                    ws.send_json({"type": "set_config", "fuzzy_callsign": True})
+                    msg = ws.receive_json()
+                assert msg["fuzzy_callsign_rewrite"] is False
+
+
+# ---------------------------------------------------------------------------
 # set_server_config — stt_noise_profile
 # ---------------------------------------------------------------------------
 
