@@ -777,7 +777,7 @@ These settings live in the **Settings** dialog, opened from the **Settings** ent
 |---------|-------------|
 | VAD threshold | Sensitivity of voice activity detection. Lower = more sensitive; higher = requires stronger signal. Changing this restarts the STT worker. |
 | Whisper model | Which Whisper model the server uses for live (streaming) transcription. Changing this restarts the STT worker. |
-| Final-pass model | Optional larger model that re-transcribes each completed transmission in full once the other station unkeys, replacing the live partial text with a more accurate final. The final pass never truncates a long transmission or drops a callsign the live pass already heard — if it returns a short or empty result, the complete live text is kept. Choose **Off** for single-pass, or a larger model such as `distil-large-v3` (recommended). The model must be staged first (see below) and adds ~1.5 GB RAM only while active. Changing this restarts the STT worker. |
+| Final-pass model | Optional larger model that re-transcribes each completed transmission in full once the other station unkeys, replacing the live partial text with a more accurate final. The final pass never truncates a long transmission or drops a callsign the live pass already heard — if it returns a short or empty result, the complete live text is kept. Choose **Auto** (default on new installs) to use the best staged model — `large-v3-turbo` > `distil-large-v3` > `large-v3` — or silently run single-pass when none is staged; the panel shows what Auto resolved to. Choose **Off** for single-pass, or name a model explicitly. The model must be staged first (see below) and adds ~1.5 GB RAM only while active. Changing this restarts the STT worker. |
 | Final-pass device | Where the whole-utterance final pass runs: `auto` (GPU if a ROCm GPU is present, else CPU), `gpu`, or `cpu`. Requires the ROCm deployment profile to use GPU. See [section 25](#25-deployment-profiles-and-gpu-acceleration-admin). |
 | Adaptive squelch | Tracks the channel noise floor and opens at 3× it, so weak carriers pre-trigger audio capture instead of clipping the first word. Leave off on consistently strong signals; enable on noisy or distant channels. Restarts the STT worker. |
 | Gain control | How received audio is leveled before transcription. **Dynamic AGC** (default) rides the level continuously with a fast attack and slow release; **Simple RMS** applies one steady gain to hit a target loudness (gentler, no pumping); **Off** disables leveling entirely. If transcription seems to mishear during loud/quiet swings or "breathy" passages, try Simple RMS. Tune objectively with the STT eval harness's `--gain-mode {agc,rms,off}` flag against captured audio. Changing this restarts the STT worker. |
@@ -807,7 +807,9 @@ bash prereq.sh --final-model distil-large-v3
 python bootstrap_models.py --model small.en distil-large-v3
 ```
 
-Then set **Final-pass model** to `distil-large-v3` in this panel (or `whisper_model_final` in `config.json`). On a CPU-only host a long transmission may take roughly its own duration to produce the improved final; live partials are unaffected.
+With **Final-pass model** set to `auto` (the default on new installs) the staged model is picked up on the next Listen toggle — nothing else to configure. `large-v3-turbo` is also available (`--final-model large-v3-turbo`): near `large-v3` accuracy at a fraction of the decode cost, preferred by Auto when staged. On a CPU-only host a long transmission may take roughly its own duration to produce the improved final; live partials are unaffected.
+
+> **Upgrading from an earlier version?** Installs that ever saved server settings have `whisper_model_final: ""` (explicit **Off**) persisted in `config.json`, and stay off — deliberately, so an operator who turned the second pass off doesn't get it back after an upgrade. Set the panel to **Auto** once to opt in.
 
 ---
 

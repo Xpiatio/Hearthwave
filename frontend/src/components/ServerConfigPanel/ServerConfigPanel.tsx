@@ -43,10 +43,12 @@ const WHISPER_MODELS = [
 // Final-pass model re-transcribes the whole utterance once it ends, replacing
 // the stitched-together streaming partials. "" disables the second pass.
 const FINAL_WHISPER_MODELS = [
+  { value: 'auto',            label: 'Auto — best staged model' },
   { value: '',                label: 'Off — single-pass (streaming only)' },
   { value: 'medium.en',       label: 'medium.en' },
   { value: 'large-v3',        label: 'large-v3' },
   { value: 'distil-large-v3', label: 'distil-large-v3 — recommended' },
+  { value: 'large-v3-turbo',  label: 'large-v3-turbo' },
 ];
 
 const GAIN_MODES = [
@@ -59,6 +61,7 @@ export interface ServerConfig {
   vadThreshold: number;
   whisperModel: string;
   whisperModelFinal: string;
+  whisperModelFinalResolved: string;
   gainMode: string;
   squelchAdaptive: boolean;
   noiseProfile: boolean;
@@ -292,6 +295,13 @@ export const ServerConfigPanel = forwardRef<ServerConfigPanelHandle, Props>(func
               ))}
             </Select>
           </FormControl>
+          {whisperModelFinal === 'auto' && (
+            <Typography variant="caption" sx={{ color: 'text.secondary', mt: -1.5 }}>
+              {config.whisperModelFinalResolved
+                ? `Auto → ${config.whisperModelFinalResolved}`
+                : 'Auto picks the best staged model when listening starts (off until one is staged).'}
+            </Typography>
+          )}
           <Typography variant="caption" sx={{ color: 'text.secondary', mt: -1.5 }}>
             Re-transcribes each finished transmission with a larger model for higher
             accuracy, replacing the live partials. The model must be staged first
