@@ -61,6 +61,7 @@ export interface ServerConfig {
   whisperModelFinal: string;
   gainMode: string;
   squelchAdaptive: boolean;
+  noiseProfile: boolean;
   sttDebugCapture: boolean;
   txConditioning: boolean;
   voxPrimerEnabled: boolean;
@@ -81,6 +82,7 @@ export interface ServerConfigSaveValues {
   whisper_model_final: string;
   stt_gain_mode: string;
   squelch_adaptive: boolean;
+  stt_noise_profile: boolean;
   stt_debug_capture: boolean;
   tx_conditioning: boolean;
   vox_primer_enabled: boolean;
@@ -123,6 +125,7 @@ function valuesFromConfig(c: ServerConfig): ServerConfigSaveValues {
     whisper_model_final: c.whisperModelFinal,
     stt_gain_mode: c.gainMode,
     squelch_adaptive: c.squelchAdaptive,
+    stt_noise_profile: c.noiseProfile,
     stt_debug_capture: c.sttDebugCapture,
     tx_conditioning: c.txConditioning,
     vox_primer_enabled: c.voxPrimerEnabled,
@@ -148,6 +151,7 @@ export const ServerConfigPanel = forwardRef<ServerConfigPanelHandle, Props>(func
   const [whisperModelFinal, setWhisperModelFinal] = useState('');
   const [gainMode, setGainMode] = useState('agc');
   const [squelchAdaptive, setSquelchAdaptive] = useState(false);
+  const [noiseProfile, setNoiseProfile] = useState(false);
   const [sttDebugCapture, setSttDebugCapture] = useState(false);
   const [txConditioning, setTxConditioning] = useState(false);
   const [voxPrimerEnabled, setVoxPrimerEnabled] = useState(false);
@@ -173,6 +177,7 @@ export const ServerConfigPanel = forwardRef<ServerConfigPanelHandle, Props>(func
     setWhisperModelFinal(config.whisperModelFinal);
     setGainMode(config.gainMode);
     setSquelchAdaptive(config.squelchAdaptive);
+    setNoiseProfile(config.noiseProfile);
     setSttDebugCapture(config.sttDebugCapture);
     setTxConditioning(config.txConditioning);
     setVoxPrimerEnabled(config.voxPrimerEnabled);
@@ -218,6 +223,7 @@ export const ServerConfigPanel = forwardRef<ServerConfigPanelHandle, Props>(func
       whisper_model_final: whisperModelFinal,
       stt_gain_mode: gainMode,
       squelch_adaptive: squelchAdaptive,
+      stt_noise_profile: noiseProfile,
       stt_debug_capture: sttDebugCapture,
       tx_conditioning: txConditioning,
       vox_primer_enabled: voxPrimerEnabled,
@@ -340,6 +346,21 @@ export const ServerConfigPanel = forwardRef<ServerConfigPanelHandle, Props>(func
           <Typography variant="caption" sx={{ color: 'text.secondary', mt: -1.5 }}>
             Track the channel noise floor and open at 3× it, so weak carriers pre-trigger
             capture instead of clipping the first word.
+          </Typography>
+
+          <FormControlLabel
+            control={
+              <Switch
+                checked={noiseProfile}
+                onChange={(e) => setNoiseProfile(e.target.checked)}
+                size="small"
+              />
+            }
+            label="Noise profile denoise"
+          />
+          <Typography variant="caption" sx={{ color: 'text.secondary', mt: -1.5 }}>
+            Sample the channel noise floor while the squelch is closed and use it as the
+            denoiser's noise estimate, instead of guessing from the speech itself.
           </Typography>
 
           <FormControlLabel

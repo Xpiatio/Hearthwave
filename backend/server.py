@@ -503,6 +503,7 @@ def _make_stt_worker() -> STTWorker:
         final_max_s=_config.stt_final_max_s,
         stt_final_device=_config.stt_final_device,
         gain_mode=_config.stt_gain_mode,
+        noise_profile=_config.stt_noise_profile,
         on_audio_level=_on_stt_audio_level,
         on_audio_chunk=_audio_chunk_fanout,
         on_capture_event=_on_stt_capture_event,
@@ -1213,6 +1214,7 @@ def _build_status() -> dict:
         "whisper_model": (_config.whisper_model if _config else "small.en"),
         "whisper_model_final": (_config.whisper_model_final if _config else ""),
         "stt_gain_mode": (_config.stt_gain_mode if _config else "agc"),
+        "stt_noise_profile": bool(_config.stt_noise_profile) if _config else False,
         "squelch_adaptive": bool(_config.squelch_adaptive) if _config else False,
         "stt_debug_capture": bool(_config.stt_debug_capture) if _config else False,
         "tx_conditioning": bool(_config.tx_conditioning) if _config else False,
@@ -1821,6 +1823,12 @@ async def _ws_handle_set_server_config(ws: WebSocket, data: dict, state: "Connec
         mode = str(data["stt_gain_mode"]).strip().lower()
         if mode in GAIN_MODES and mode != _config.stt_gain_mode:
             _config["stt_gain_mode"] = mode
+            stt_restart_needed = True
+
+    if "stt_noise_profile" in data:
+        enabled = bool(data["stt_noise_profile"])
+        if enabled != _config.stt_noise_profile:
+            _config["stt_noise_profile"] = enabled
             stt_restart_needed = True
 
     if "tx_conditioning" in data:

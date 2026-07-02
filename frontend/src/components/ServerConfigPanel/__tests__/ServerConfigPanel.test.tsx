@@ -20,6 +20,7 @@ function makeConfig(overrides: Partial<ServerConfig> = {}): ServerConfig {
     whisperModelFinal: '',
     gainMode: 'agc',
     squelchAdaptive: false,
+    noiseProfile: false,
     sttDebugCapture: false,
     txConditioning: false,
     pttMode: 'manual',
@@ -204,6 +205,7 @@ describe('ServerConfigPanel', () => {
       whisper_model_final: '',
       stt_gain_mode: 'agc',
       squelch_adaptive: false,
+      stt_noise_profile: false,
       stt_debug_capture: false,
       tx_conditioning: false,
       ptt_mode: 'manual',
@@ -463,6 +465,27 @@ describe('ServerConfigPanel', () => {
 
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({ stt_gain_mode: 'rms' }),
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // Noise profile toggle
+  // -------------------------------------------------------------------------
+
+  it('saves the noise profile toggle', async () => {
+    const onSave = vi.fn();
+    render(
+      <ServerConfigPanel
+        {...makeDefaultProps({ noiseProfile: false })}
+        onSave={onSave}
+      />
+    );
+
+    fireEvent.click(screen.getByLabelText(/noise profile/i));
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ stt_noise_profile: true }),
     );
   });
 

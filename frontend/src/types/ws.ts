@@ -65,6 +65,7 @@ export interface StatusMsg {
   whisper_model_final?: string;
   stt_gain_mode?: string;
   squelch_adaptive?: boolean;
+  stt_noise_profile?: boolean;
   stt_debug_capture?: boolean;
   tx_conditioning?: boolean;
   vox_primer_enabled?: boolean;
