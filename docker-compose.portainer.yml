@@ -18,8 +18,10 @@
 #
 #    TWO-TIER (higher RX accuracy): stage a second, larger model for the
 #    full-utterance final pass alongside the streaming model:
-#       bash prereq.sh --final-model distil-large-v3
-#    then set whisper_model_final in the Server Config panel (or config.json).
+#       bash prereq.sh --final-model distil-large-v3   # or large-v3-turbo
+#    New installs default whisper_model_final="auto" and pick the staged model
+#    up automatically (turbo > distil > large-v3); a persisted "" (explicit
+#    off) stays off until set to "auto" or a model name in Settings.
 #    It lazy-loads on the first finalized utterance and adds ~1.5 GB RAM only
 #    while active — keep that in mind for any backend memory limit you set.
 #
@@ -44,7 +46,7 @@
 # CUDA (GPU) VARIANT
 # ------------------
 # If the host has an NVIDIA GPU, swap the backend image tag to the -cuda suffix:
-#   image: ghcr.io/xpiatio/hearthwave-backend:v2.12.0-cuda
+#   image: ghcr.io/xpiatio/hearthwave-backend:v2.13.0-cuda
 # The CUDA image uses onnxruntime-gpu for accelerated Whisper inference.
 # Requires the NVIDIA Container Toolkit on the host and the `deploy` section:
 #   deploy:
@@ -57,7 +59,7 @@
 
 services:
   backend:
-    image: ghcr.io/xpiatio/hearthwave-backend:v2.12.0
+    image: ghcr.io/xpiatio/hearthwave-backend:v2.13.0
     volumes:
       - hearthwave-data:/data
       - hearthwave-voices:/app/Voices:ro
@@ -80,7 +82,7 @@ services:
       start_period: 30s
 
   frontend:
-    image: ghcr.io/xpiatio/hearthwave-frontend:v2.12.0
+    image: ghcr.io/xpiatio/hearthwave-frontend:v2.13.0
     ports:
       - "80:8080"
     volumes:

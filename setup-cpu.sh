@@ -33,6 +33,7 @@ ct2_repo_for() {
     medium.en) echo "Systran/faster-whisper-medium.en" ;;
     large-v3) echo "Systran/faster-whisper-large-v3" ;;
     distil-large-v3) echo "Systran/faster-distil-whisper-large-v3" ;;
+    large-v3-turbo) echo "deepdml/faster-whisper-large-v3-turbo-ct2" ;;
     *) echo "Error: unknown model '$1'." >&2; exit 1 ;;
   esac
 }
@@ -104,7 +105,9 @@ fetch_repo "$(ct2_repo_for "$WHISPER_MODEL")" "Models/STT/${WHISPER_MODEL}"
 if [[ -n "$FINAL_MODEL" ]]; then
   echo ""
   fetch_repo "$(ct2_repo_for "$FINAL_MODEL")" "Models/STT/${FINAL_MODEL}"
-  echo "  Set whisper_model_final=\"${FINAL_MODEL}\" in data/config.json to enable two-tier."
+  echo "  New installs default whisper_model_final=\"auto\" and will pick it up on the next"
+  echo "  Listen toggle. If data/config.json has whisper_model_final=\"\" (explicit off), set it"
+  echo "  to \"auto\" or \"${FINAL_MODEL}\" to enable the two-tier pass."
 fi
 
 if ! $SKIP_VOICES; then
