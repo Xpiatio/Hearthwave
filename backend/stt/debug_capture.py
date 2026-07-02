@@ -61,6 +61,7 @@ class UtteranceDebugRecorder:
             "segments": [],
             "processed": [],
             "transcripts": [],
+            "noise_clip": None,
             "started_at": time.time(),
         }
 
@@ -112,6 +113,18 @@ class UtteranceDebugRecorder:
                 self._records[uid] = rec
             rec["segments"].append(audio)
 
+    def on_noise_clip(self, uid: int, clip: np.ndarray) -> None:
+        """Record the squelch-derived noise-floor clip for an utterance.
+
+        Called once per segment with the same per-utterance snapshot; the
+        clip is raw (pre-bandpass) so eval replay can feed it through the
+        exact production preprocessing.
+        """
+        with self._lock:
+            rec = self._records.get(uid)
+            if rec is not None:
+                rec["noise_clip"] = clip
+
     def on_processed(self, uid: int, audio: np.ndarray) -> None:
         with self._lock:
             rec = self._records.get(uid)
@@ -140,11 +153,19 @@ class UtteranceDebugRecorder:
             self._write_wav(utt_dir / "raw.wav", rec["raw"])
             self._write_wav(utt_dir / "segmented.wav", rec["segments"])
             self._write_wav(utt_dir / "processed.wav", rec["processed"])
+            noise_clip = rec.get("noise_clip")
+            if noise_clip is not None:
+                self._write_wav(utt_dir / "noise.wav", [noise_clip])
             payload = {
                 "utterance_id": uid,
                 "sample_rate": self._sample_rate,
                 "started_at": rec["started_at"],
                 "truncated": rec["truncated"],
+                "noise_profile": noise_clip is not None,
+                "noise_clip_s": (
+                    round(noise_clip.size / self._sample_rate, 3)
+                    if noise_clip is not None else None
+                ),
                 "meta": self._meta,
                 "transcripts": rec["transcripts"],
             }

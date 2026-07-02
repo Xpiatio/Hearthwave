@@ -97,6 +97,13 @@ class ServerConfig(dict):
         return val if val in GAIN_MODES else "agc"
 
     @property
+    def stt_noise_profile(self) -> bool:
+        """Feed squelch-closed noise-floor audio to the denoise stage as a
+        stationary noise estimate instead of letting it self-estimate from
+        the speech-bearing segment. Off until WER-proven on a real corpus."""
+        return bool(self.get("stt_noise_profile", False))
+
+    @property
     def squelch_open_threshold(self) -> float:
         return float(self.get("squelch_open_threshold", 0.05))
 

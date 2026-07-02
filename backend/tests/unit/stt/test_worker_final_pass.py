@@ -76,7 +76,7 @@ class TestDisabledMode:
         w, results = make_worker(final_model="")
         run_transcription_loop(
             w,
-            [(1, _audio(), False), (1, _audio(), True)],
+            [(1, _audio(), False, None), (1, _audio(), True, None)],
             StubTranscriber(["part", "tail"]),
         )
         assert results == [
@@ -93,10 +93,10 @@ class TestEnabledFastPath:
     def test_tail_emitted_as_partial_and_full_audio_queued(self):
         w, results = make_worker()
         seg1, seg2 = _audio(0.5), _audio(0.3)
-        run_transcription_loop(w, [(1, seg1, False), (1, seg2, True)], StubTranscriber(["a", "b"]))
+        run_transcription_loop(w, [(1, seg1, False, None), (1, seg2, True, None)], StubTranscriber(["a", "b"]))
         # tail "b" must NOT be a final — the final pass will replace it
         assert results[-1] == {"uid": 1, "text": "b", "partial": True, "replace": False}
-        uid, full = w._final_q.get_nowait()
+        uid, full, _clip = w._final_q.get_nowait()
         assert uid == 1
         assert full.size == seg1.size + seg2.size
 
@@ -106,7 +106,7 @@ class TestEnabledFastPath:
         w, results = make_worker(final_max_s=0.5)
         run_transcription_loop(
             w,
-            [(1, _audio(0.4), False), (1, _audio(0.4), True)],
+            [(1, _audio(0.4), False, None), (1, _audio(0.4), True, None)],
             StubTranscriber(["a", "b"]),
         )
         assert results[-1]["partial"] is False
@@ -122,17 +122,17 @@ class TestEnabledFastPath:
                 super().transcribe(audio)
                 return None
 
-        run_transcription_loop(w, [(1, _audio(), True)], NoneTranscriber())
+        run_transcription_loop(w, [(1, _audio(), True, None)], NoneTranscriber())
         assert not w._final_q.empty()
 
     def test_queue_full_drops_oldest_with_fallback_final(self):
         w, results = make_worker()
         w._final_q = queue.Queue(maxsize=1)
-        w._enqueue_final(1, _audio())
-        w._enqueue_final(2, _audio())
+        w._enqueue_final(1, _audio(), None)
+        w._enqueue_final(2, _audio(), None)
         # uid 1 dropped → empty fallback final so the server flushes partials
         assert {"uid": 1, "text": "", "partial": False, "replace": False} in results
-        uid, _ = w._final_q.get_nowait()
+        uid, _, _clip = w._final_q.get_nowait()
         assert uid == 2
 
 
@@ -143,7 +143,7 @@ class TestEnabledFastPath:
 class TestFinalPassLoop:
     def test_emits_replacing_final(self):
         w, results = make_worker()
-        run_final_loop(w, [(1, _audio())], StubTranscriber(["the better transcript"]))
+        run_final_loop(w, [(1, _audio(), None)], StubTranscriber(["the better transcript"]))
         assert results == [
             {"uid": 1, "text": "the better transcript", "partial": False, "replace": True}
         ]
@@ -153,7 +153,7 @@ class TestFinalPassLoop:
         # segment dropping so long messages aren't truncated.
         w, _ = make_worker()
         stub = StubTranscriber(["full transcript"])
-        run_final_loop(w, [(1, _audio())], stub)
+        run_final_loop(w, [(1, _audio(), None)], stub)
         assert stub.call_kwargs[0] == {"vad_filter": False, "drop_low_confidence": False}
 
     def test_empty_text_falls_back_to_plain_final(self):
@@ -163,7 +163,7 @@ class TestFinalPassLoop:
             def transcribe(self, audio):
                 return None
 
-        run_final_loop(w, [(1, _audio())], NoneTranscriber())
+        run_final_loop(w, [(1, _audio(), None)], NoneTranscriber())
         assert results == [{"uid": 1, "text": "", "partial": False, "replace": False}]
 
     def test_transcription_exception_falls_back(self):
@@ -173,12 +173,12 @@ class TestFinalPassLoop:
             def transcribe(self, audio):
                 raise RuntimeError("boom")
 
-        run_final_loop(w, [(1, _audio())], BoomTranscriber())
+        run_final_loop(w, [(1, _audio(), None)], BoomTranscriber())
         assert results == [{"uid": 1, "text": "", "partial": False, "replace": False}]
 
     def test_model_load_failure_falls_back_for_all_jobs(self):
         w, results = make_worker()
-        run_final_loop(w, [(1, _audio()), (2, _audio())], None)
+        run_final_loop(w, [(1, _audio(), None), (2, _audio(), None)], None)
         assert results == [
             {"uid": 1, "text": "", "partial": False, "replace": False},
             {"uid": 2, "text": "", "partial": False, "replace": False},
@@ -186,7 +186,7 @@ class TestFinalPassLoop:
 
     def test_multiple_jobs_processed_in_order(self):
         w, results = make_worker()
-        run_final_loop(w, [(1, _audio()), (2, _audio())], StubTranscriber(["one", "two"]))
+        run_final_loop(w, [(1, _audio(), None), (2, _audio(), None)], StubTranscriber(["one", "two"]))
         assert [r["uid"] for r in results] == [1, 2]
         assert all(r["replace"] for r in results)
 

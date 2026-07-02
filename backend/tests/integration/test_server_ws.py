@@ -1196,6 +1196,55 @@ class TestSetServerConfigSttGainMode:
 
 
 # ---------------------------------------------------------------------------
+# set_server_config — stt_noise_profile
+# ---------------------------------------------------------------------------
+
+class TestSetServerConfigNoiseProfile:
+    """stt_noise_profile is a worker-construction knob: toggling it must be
+    persisted and restart a listening STT worker; a repeated same value must
+    not trigger a restart; the status broadcast must carry the current value.
+    """
+
+    def test_toggle_persisted_and_triggers_restart(self, tmp_path):
+        with _ws_server(tmp_path) as (tc, cfg):
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                with (
+                    patch("backend.server._stt_listening", True),
+                    patch("backend.server._make_stt_worker") as mock_make,
+                    patch("backend.config.ServerConfig.save"),
+                ):
+                    mock_make.return_value = MagicMock(start=MagicMock(), join=AsyncMock())
+                    ws.send_json({"type": "set_server_config", "stt_noise_profile": True})
+                    msg = ws.receive_json()  # status broadcast
+                assert cfg["stt_noise_profile"] is True
+                assert msg["stt_noise_profile"] is True
+
+    def test_unchanged_value_does_not_trigger_restart(self, tmp_path):
+        with _ws_server(tmp_path) as (tc, cfg):
+            cfg["stt_noise_profile"] = True
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                with (
+                    patch("backend.server._stt_listening", True),
+                    patch("backend.server._make_stt_worker") as mock_make,
+                    patch("backend.config.ServerConfig.save"),
+                ):
+                    ws.send_json({"type": "set_server_config", "stt_noise_profile": True})
+                    ws.receive_json()  # status broadcast
+                    mock_make.assert_not_called()
+
+    def test_status_defaults_to_false(self, tmp_path):
+        with _ws_server(tmp_path) as (tc, cfg):
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                with patch("backend.config.ServerConfig.save"):
+                    ws.send_json({"type": "set_server_config"})
+                    msg = ws.receive_json()
+                assert msg["stt_noise_profile"] is False
+
+
+# ---------------------------------------------------------------------------
 # set_server_config — vox priming word
 # ---------------------------------------------------------------------------
 

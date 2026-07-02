@@ -525,3 +525,114 @@ class TestReset:
         seg.feed(chunk(0.0), 0.0)
         seg.feed(chunk(0.0), 0.0)
         assert vad.reset_count == count_after_reset
+
+
+class TestNoiseBuffer:
+    """Squelch-closed noise-floor capture for the stationary denoise profile.
+
+    Quiet (sub-threshold, squelch-closed, not-in-speech) chunks accumulate in
+    a rolling buffer; at vad_start the buffer is snapshotted once per
+    utterance into `utterance_noise_clip` (or None below the minimum length).
+    """
+
+    def make_noise_seg(self, vad_events=(), *, noise_chunks=8, noise_min=0, **kw):
+        vad = MockVAD(vad_events)
+        squelch = kw.pop("squelch", None) or SquelchDetector(
+            open_threshold=0.1, open_hold_chunks=1, close_hold_chunks=2
+        )
+        seg = SpeechSegmenter(
+            vad,
+            squelch,
+            sample_rate=SAMPLE_RATE,
+            rolling_target_chunks=20,
+            cut_window_chunks=5,
+            pre_buffer_chunks=3,
+            squelch_buffer_max_chunks=8,
+            min_speech_duration_s=0.0,
+            silence_reset_chunks=50,
+            noise_profile_chunks=noise_chunks,
+            noise_min_samples=noise_min,
+        )
+        return seg, vad
+
+    def test_disabled_by_default_snapshot_is_none(self):
+        seg, _ = make_seg(["start"])
+        seg.feed(chunk(0.0), 0.0)
+        assert seg.utterance_noise_clip is None
+
+    def test_quiet_chunks_snapshotted_at_vad_start(self):
+        seg, _ = self.make_noise_seg([None, None, None, "start"])
+        for _ in range(3):
+            seg.feed(chunk(0.0), 0.0)
+        seg.feed(chunk(0.0), 0.0)  # vad_start → snapshot of the 3 quiet chunks
+        assert seg.utterance_noise_clip is not None
+        assert len(seg.utterance_noise_clip) == 3 * CHUNK
+
+    def test_min_samples_gate_yields_none(self):
+        seg, _ = self.make_noise_seg([None, "start"], noise_min=5 * CHUNK)
+        seg.feed(chunk(0.0), 0.0)
+        seg.feed(chunk(0.0), 0.0)  # vad_start; only 1 buffered chunk < minimum
+        assert seg.utterance_noise_clip is None
+
+    def test_buffer_capped_at_noise_profile_chunks(self):
+        seg, _ = self.make_noise_seg([None] * 5 + ["start"], noise_chunks=3)
+        for _ in range(5):
+            seg.feed(chunk(0.0), 0.0)
+        seg.feed(chunk(0.0), 0.0)
+        assert len(seg.utterance_noise_clip) == 3 * CHUNK
+
+    def test_open_squelch_chunks_excluded(self):
+        # 2 quiet chunks buffer, then the carrier opens (above-threshold
+        # peaks) — carrier audio must not pollute the noise profile.
+        squelch = SquelchDetector(open_threshold=0.1, open_hold_chunks=1, close_hold_chunks=50)
+        seg, _ = self.make_noise_seg(
+            [None, None, None, None, "start"], squelch=squelch
+        )
+        seg.feed(chunk(0.0), 0.0)
+        seg.feed(chunk(0.0), 0.0)
+        seg.feed(chunk(0.5), 0.5)  # squelch opens
+        seg.feed(chunk(0.5), 0.5)  # still open
+        seg.feed(chunk(0.4), 0.4)  # vad_start while squelch open
+        assert len(seg.utterance_noise_clip) == 2 * CHUNK
+
+    def test_sub_hold_spike_excluded_while_closed(self):
+        # A single above-threshold spike that doesn't open the squelch
+        # (open_hold_chunks=2) must still be kept out by the peak guard.
+        squelch = SquelchDetector(open_threshold=0.1, open_hold_chunks=2, close_hold_chunks=2)
+        seg, _ = self.make_noise_seg([None, None, None, "start"], squelch=squelch)
+        seg.feed(chunk(0.0), 0.0)
+        seg.feed(chunk(0.5), 0.5)  # spike — squelch stays closed, peak guard excludes
+        seg.feed(chunk(0.0), 0.0)
+        seg.feed(chunk(0.0), 0.0)  # vad_start (trigger chunk itself is in-speech)
+        assert len(seg.utterance_noise_clip) == 2 * CHUNK
+
+    def test_in_speech_chunks_excluded(self):
+        # Chunks between vad_start and vad_end never enter the buffer even
+        # when quiet: the snapshot for the NEXT utterance only carries
+        # post-utterance quiet audio.
+        seg, _ = self.make_noise_seg(
+            [None, "start", None, "end", None, None, "start"]
+        )
+        seg.feed(chunk(0.0), 0.0)   # quiet → buffered
+        seg.feed(chunk(0.0), 0.0)   # vad_start (utterance 1)
+        seg.feed(chunk(0.0), 0.0)   # in speech → excluded
+        seg.feed(chunk(0.0), 0.0)   # vad_end
+        seg.feed(chunk(0.0), 0.0)   # quiet → buffered
+        seg.feed(chunk(0.0), 0.0)   # quiet → buffered
+        seg.feed(chunk(0.0), 0.0)   # vad_start (utterance 2)
+        # buffer: 1 pre-utterance quiet chunk + the vad_end chunk (in_speech
+        # already cleared by finalize when the tail append runs) + 2
+        # post-utterance quiet chunks = 4. The in-speech chunk and both
+        # vad_start trigger chunks stay out.
+        assert len(seg.utterance_noise_clip) == 4 * CHUNK
+
+    def test_reset_clears_buffer_and_snapshot(self):
+        seg, _ = self.make_noise_seg([None, None, "start", None, "start"])
+        seg.feed(chunk(0.0), 0.0)
+        seg.feed(chunk(0.0), 0.0)
+        seg.feed(chunk(0.0), 0.0)  # vad_start → snapshot present
+        assert seg.utterance_noise_clip is not None
+        seg.reset()
+        assert seg.utterance_noise_clip is None
+        seg.feed(chunk(0.0), 0.0)  # vad_start again, buffer empty → None
+        assert seg.utterance_noise_clip is None
