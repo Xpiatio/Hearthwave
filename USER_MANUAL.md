@@ -1,6 +1,6 @@
 # Hearthwave User Manual
 
-> **Version:** v2.14.0
+> **Version:** v2.15.0
 
 This manual covers day-to-day operation of Hearthwave as a GMRS family hub or neighborhood watch base station — a shared radio operating station where every household member or watch volunteer connects from their own device. For installation and server setup, see [README.md](README.md).
 
