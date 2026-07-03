@@ -35,6 +35,10 @@ browser-based React frontend communicating over WebSocket.
 
 ## Features
 
+- **STT calibration wizard** — read a fixed reference passage into the radio
+  and Hearthwave automatically sweeps gain mode, noise-profile denoise, and
+  Whisper model against it, ranks each combination by word-error-rate, and
+  applies whichever one you choose
 - **RX audio level meter** — a live receive-audio level meter sits above the
   chat, so you can see signal strength and confirm the radio is feeding audio at
   a glance

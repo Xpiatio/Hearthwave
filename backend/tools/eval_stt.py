@@ -31,6 +31,7 @@ from backend.audio.squelch import SquelchDetector
 from backend.constants import GAIN_MODES
 from backend.stt.preprocess import preprocess_segment
 from backend.stt.segmenter import SpeechSegmenter
+from backend.stt.wer import normalize_text, score
 from backend.stt.worker import STTWorker
 
 
@@ -145,26 +146,6 @@ def run_pipeline(
         if pieces:
             results.append(_result(uid, " ".join(pieces).strip()))
     return results
-
-
-# ---------------------------------------------------------------------------
-# Scoring
-# ---------------------------------------------------------------------------
-
-def normalize_text(text: str) -> str:
-    """Lowercase, strip punctuation, collapse whitespace — so WER measures
-    word recognition, not Whisper's formatting choices."""
-    cleaned = "".join(c if c.isalnum() or c.isspace() else " " for c in text.lower())
-    return " ".join(cleaned.split())
-
-
-def score(references: list[str], hypotheses: list[str]) -> dict:
-    """Corpus-level WER over normalized text."""
-    import jiwer
-
-    refs = [normalize_text(r) for r in references]
-    hyps = [normalize_text(h) for h in hypotheses]
-    return {"wer": jiwer.wer(refs, hyps), "count": len(refs)}
 
 
 def find_reference(wav_path: Path) -> str | None:

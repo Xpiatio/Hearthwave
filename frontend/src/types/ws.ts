@@ -276,6 +276,46 @@ export interface VocabularyRescannedMsg {
   callsign_count: number;
 }
 
+// STT calibration wizard — read a canned passage into the radio, sweep gain
+// mode / noise profile / Whisper model against it, apply the best combo.
+export interface CalibrationTextMsg {
+  type: 'calibration_text';
+  text: string;
+}
+
+export interface CalibrationStartedMsg {
+  type: 'calibration_started';
+}
+
+export interface CalibrationResultEntry {
+  model: string;
+  gain_mode: string;
+  noise_profile: boolean;
+  wer: number;
+  hypothesis: string;
+}
+
+export interface CalibrationProgressMsg extends CalibrationResultEntry {
+  type: 'calibration_progress';
+  index: number;
+  total: number;
+}
+
+export interface CalibrationResultMsg {
+  type: 'calibration_result';
+  results: CalibrationResultEntry[];
+  recommended: CalibrationResultEntry | null;
+}
+
+export interface CalibrationErrorMsg {
+  type: 'calibration_error';
+  detail: string;
+}
+
+export interface CalibrationAppliedMsg {
+  type: 'calibration_applied';
+}
+
 export interface OnlineStatusMsg {
   type: 'online_status';
   online: boolean;
@@ -517,6 +557,12 @@ export type WsMessage =
   | FccLookupResultMsg
   | VerifyAllCompleteMsg
   | VocabularyRescannedMsg
+  | CalibrationTextMsg
+  | CalibrationStartedMsg
+  | CalibrationProgressMsg
+  | CalibrationResultMsg
+  | CalibrationErrorMsg
+  | CalibrationAppliedMsg
   | OnlineStatusMsg
   | SpectrogramRowMsg
   | InputDevicesMsg

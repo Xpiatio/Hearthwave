@@ -39,6 +39,7 @@ This manual covers day-to-day operation of Hearthwave as a GMRS family hub or ne
 23. [FCC compliance and remote access](#23-fcc-compliance-and-remote-access)
 24. [Transcription vocabulary biasing](#24-transcription-vocabulary-biasing)
 25. [Deployment profiles and GPU acceleration (admin)](#25-deployment-profiles-and-gpu-acceleration-admin)
+26. [STT calibration wizard (admin)](#26-stt-calibration-wizard-admin)
 
 ---
 
@@ -795,6 +796,8 @@ These settings live in the **Settings** dialog, opened from the **Settings** ent
 
 > Changes to VAD threshold, Whisper model, Final-pass model, Adaptive squelch, Noise profile denoise, Gain control, or STT debug capture trigger a live STT worker restart and will briefly interrupt transcription. TX conditioning and Saved Phrases changes take effect immediately.
 
+> Not sure which Gain control / Noise profile denoise / Whisper model combination is best for your radio and environment? The **Run STT calibration…** button on this tab automates finding out — see [section 26](#26-stt-calibration-wizard-admin).
+
 ### Staging the final-pass model
 
 The final-pass model is not bundled — download it once on an internet-connected machine, then it loads automatically on the first finished transmission:
@@ -1039,3 +1042,24 @@ To switch back to CPU-only operation at any time:
 
 - **No rebuild needed:** set `stt_final_device` to `cpu` in Settings (System tab) and restart the STT worker.
 - **Full rollback:** set `COMPUTE_BACKEND=cpu` and restart with `docker-compose.yml` instead of `docker-compose.rocm.yml`.
+
+---
+
+## 26. STT calibration wizard (admin)
+
+Picking the right **Gain control**, **Noise profile denoise**, and **Whisper model** settings (see [section 21](#21-admin-settings-dialog-admin)) for a given radio, room, and noise environment normally means changing one setting at a time and listening for whether transcription got better or worse. The calibration wizard automates this: it has you read a fixed, known passage into the radio, then objectively scores several setting combinations against what Whisper actually heard.
+
+### How to use
+
+1. Open **Settings → System tab** (admin) and click **Run STT calibration…**.
+2. The wizard displays a short passage (the preamble to the Declaration of Independence — chosen because it is long enough and phonetically varied enough to be a meaningful test). Click **Start Recording**.
+3. Key up your radio and read the passage aloud at a natural pace, the way you'd normally talk on the air. When you're done, click **Stop & Analyze**.
+4. Hearthwave replays what it captured through several combinations of gain mode, noise-profile denoise, and Whisper model, and shows a results table ranked by word-error-rate (WER) — the percentage of words each combination got wrong. The lowest-WER row is flagged **Recommended**.
+5. Click **Apply** on whichever row you want — the recommended one, or any other if you'd rather trade some accuracy for a faster/lighter model. This saves the setting the same way changing it manually on the System tab would, and restarts the STT worker.
+
+### Notes
+
+- The recording is capped at 3 minutes as a safety net in case **Stop & Analyze** is never clicked; there's no need to rush.
+- Testing multiple Whisper models means the wizard loads each one in turn — expect the analysis step to take longer than a sweep of just gain mode and noise profile would.
+- Nothing is changed until you click **Apply** — running the wizard and closing the dialog without applying leaves your current settings untouched.
+- For deeper, scriptable tuning (custom recordings, additional decode parameters, A/B against your own labelled audio) see the offline word-error-rate eval harness referenced in [section 24](#24-transcription-vocabulary-biasing).

@@ -1461,3 +1461,143 @@ class TestTxAppliesPrimerWord:
 
         assert "text" in captured, "synthesize_to_buffer was never called"
         assert not captured["text"].startswith("transmit. "), captured["text"]
+
+
+# ---------------------------------------------------------------------------
+# STT calibration wizard
+# ---------------------------------------------------------------------------
+
+class TestCalibrationGetText:
+    def test_admin_receives_preamble_text(self, tmp_path):
+        with _ws_server(tmp_path) as (tc, cfg):
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                ws.send_json({"type": "calibration_get_text"})
+                msg = ws.receive_json()
+                assert msg["type"] == "calibration_text"
+                assert "human events" in msg["text"]
+
+    def test_non_admin_rejected(self, non_admin_client):
+        tc, cfg = non_admin_client
+        with tc.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "calibration_get_text"})
+            msg = ws.receive_json()
+            assert msg["type"] == "error"
+
+
+class TestCalibrationStart:
+    def test_requires_listening_worker(self, tmp_path):
+        with _ws_server(tmp_path) as (tc, cfg):
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                with patch("backend.server._stt_listening", False):
+                    ws.send_json({"type": "calibration_start"})
+                    msg = ws.receive_json()
+                assert msg["type"] == "calibration_error"
+
+    def test_replies_started_when_listening(self, tmp_path):
+        with _ws_server(tmp_path) as (tc, cfg):
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                with patch("backend.server._stt_listening", True):
+                    ws.send_json({"type": "calibration_start"})
+                    msg = ws.receive_json()
+                assert msg["type"] == "calibration_started"
+
+    def test_non_admin_rejected(self, non_admin_client):
+        tc, cfg = non_admin_client
+        with tc.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "calibration_start"})
+            msg = ws.receive_json()
+            assert msg["type"] == "error"
+
+
+class TestCalibrationStop:
+    def test_stop_without_start_errors(self, tmp_path):
+        with _ws_server(tmp_path) as (tc, cfg):
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                ws.send_json({"type": "calibration_stop"})
+                msg = ws.receive_json()
+                assert msg["type"] == "calibration_error"
+
+    def test_stop_with_too_little_audio_errors(self, tmp_path):
+        with _ws_server(tmp_path) as (tc, cfg):
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                with patch("backend.server._stt_listening", True):
+                    ws.send_json({"type": "calibration_start"})
+                    ws.receive_json()  # calibration_started
+                ws.send_json({"type": "calibration_stop"})
+                msg = ws.receive_json()
+                assert msg["type"] == "calibration_error"
+
+    def test_stop_with_enough_audio_runs_sweep_and_streams_result(self, tmp_path):
+        import numpy as np
+        import backend.server as srv
+
+        with _ws_server(tmp_path) as (tc, cfg):
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                with patch("backend.server._stt_listening", True):
+                    ws.send_json({"type": "calibration_start"})
+                    ws.receive_json()  # calibration_started
+                # Feed >2s of audio directly into the module-level capture.
+                # (backend.server.STTWorker is mocked in this fixture, so use
+                # the real sample rate literal rather than STTWorker.SAMPLE_RATE.)
+                srv._calibration_capture.feed_raw(np.zeros(16000 * 3, dtype=np.float32))
+                with (
+                    patch("backend.server.load_vad_model", return_value=object()),
+                    patch("backend.server.WhisperTranscriber"),
+                    patch("backend.server.run_sweep", return_value=[
+                        {"model": "small.en", "gain_mode": "agc", "noise_profile": False,
+                         "wer": 0.1, "hypothesis": "x"},
+                    ]) as mock_sweep,
+                ):
+                    ws.send_json({"type": "calibration_stop"})
+                    msg = _next_of_type(ws, "calibration_result")
+                assert msg is not None
+                assert msg["recommended"]["model"] == "small.en"
+                assert msg["results"][0]["wer"] == 0.1
+                mock_sweep.assert_called_once()
+
+    def test_non_admin_rejected(self, non_admin_client):
+        tc, cfg = non_admin_client
+        with tc.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "calibration_stop"})
+            msg = ws.receive_json()
+            assert msg["type"] == "error"
+
+
+class TestCalibrationApply:
+    def test_apply_delegates_to_set_server_config(self, tmp_path):
+        with _ws_server(tmp_path) as (tc, cfg):
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                with (
+                    patch("backend.server._stt_listening", False),
+                    patch("backend.config.ServerConfig.save"),
+                ):
+                    ws.send_json({
+                        "type": "calibration_apply",
+                        "whisper_model": "medium.en",
+                        "gain_mode": "rms",
+                        "noise_profile": True,
+                    })
+                    _next_of_type(ws, "status")
+                    msg = _next_of_type(ws, "calibration_applied")
+                assert msg is not None
+                assert cfg["whisper_model"] == "medium.en"
+                assert cfg["stt_gain_mode"] == "rms"
+                assert cfg["stt_noise_profile"] is True
+
+    def test_non_admin_rejected(self, non_admin_client):
+        tc, cfg = non_admin_client
+        with tc.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "calibration_apply", "whisper_model": "medium.en"})
+            msg = ws.receive_json()
+            assert msg["type"] == "error"

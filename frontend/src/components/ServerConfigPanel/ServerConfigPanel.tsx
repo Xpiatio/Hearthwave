@@ -109,6 +109,7 @@ interface Props {
    *  a tabbed SettingsDialog. The Save button is kept; Cancel/title are not. */
   embedded?: boolean;
   onRescanVocabulary?: () => void;
+  onOpenCalibration?: () => void;
   /** When true, suppress the embedded/standalone Save button (e.g. a parent
    *  dialog supplies its own footer Save button via the imperative ref). */
   hideSaveButton?: boolean;
@@ -145,7 +146,8 @@ function valuesFromConfig(c: ServerConfig): ServerConfigSaveValues {
 }
 
 export const ServerConfigPanel = forwardRef<ServerConfigPanelHandle, Props>(function ServerConfigPanel(
-  { open, onClose, config, onSave, embedded = false, onRescanVocabulary, hideSaveButton = false, onDirtyChange,
+  { open, onClose, config, onSave, embedded = false, onRescanVocabulary, onOpenCalibration,
+    hideSaveButton = false, onDirtyChange,
   },
   ref
 ) {
@@ -513,6 +515,18 @@ export const ServerConfigPanel = forwardRef<ServerConfigPanelHandle, Props>(func
               </Button>
             )}
           </Box>
+
+          {onOpenCalibration && (
+            <Box>
+              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
+                Read a known passage into the radio to automatically find the best gain
+                mode, noise-profile setting, and Whisper model for this setup.
+              </Typography>
+              <Button variant="outlined" size="small" onClick={onOpenCalibration}>
+                Run STT calibration…
+              </Button>
+            </Box>
+          )}
 
           <Divider />
 
