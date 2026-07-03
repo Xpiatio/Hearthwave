@@ -1,4 +1,4 @@
-# Hearthwave v2.14.0 — Portainer stack (pre-built images, no source required)
+# Hearthwave v2.15.0 — Portainer stack (pre-built images, no source required)
 #
 # QUICK START
 # -----------
@@ -46,7 +46,7 @@
 # CUDA (GPU) VARIANT
 # ------------------
 # If the host has an NVIDIA GPU, swap the backend image tag to the -cuda suffix:
-#   image: ghcr.io/xpiatio/hearthwave-backend:v2.14.0-cuda
+#   image: ghcr.io/xpiatio/hearthwave-backend:v2.15.0-cuda
 # The CUDA image uses onnxruntime-gpu for accelerated Whisper inference.
 # Requires the NVIDIA Container Toolkit on the host and the `deploy` section:
 #   deploy:
@@ -59,7 +59,7 @@
 
 services:
   backend:
-    image: ghcr.io/xpiatio/hearthwave-backend:v2.14.0
+    image: ghcr.io/xpiatio/hearthwave-backend:v2.15.0
     volumes:
       - hearthwave-data:/data
       - hearthwave-voices:/app/Voices:ro
@@ -82,7 +82,7 @@ services:
       start_period: 30s
 
   frontend:
-    image: ghcr.io/xpiatio/hearthwave-frontend:v2.14.0
+    image: ghcr.io/xpiatio/hearthwave-frontend:v2.15.0
     ports:
       - "80:8080"
     volumes:
