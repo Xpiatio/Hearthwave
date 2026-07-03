@@ -2010,7 +2010,29 @@ async def _run_calibration_sweep(ws: WebSocket, audio, sample_rate: int) -> None
     audio and report results back to the requesting client. Runs off the
     event loop thread (model loading + transcription are blocking); progress
     callbacks are marshalled back via call_soon_threadsafe."""
-    models = sorted(VALID_WHISPER_MODELS)
+    # Sweep only models staged on disk — faster-whisper treats a missing
+    # local path as a Hugging Face repo id and tries to download it, and
+    # Hearthwave never downloads models at runtime.
+    models = [
+        m for m in sorted(VALID_WHISPER_MODELS)
+        if (STTWorker._MODELS_DIR / m).is_dir()
+    ]
+    if not models:
+        await _manager.send_to(ws, {
+            "type": "calibration_error",
+            "detail": (
+                "No Whisper models found in Models/STT. Run "
+                "'python bootstrap_models.py' on an internet-connected "
+                "machine, then copy Models/ here."
+            ),
+        })
+        return
+    skipped = sorted(VALID_WHISPER_MODELS - set(models))
+    if skipped:
+        _log.info(
+            "Calibration sweep skipping models not staged on disk: %s",
+            ", ".join(skipped),
+        )
     vad_threshold = _config.vad_threshold if _config is not None else 0.5
     vad_model = await asyncio.to_thread(load_vad_model)
 

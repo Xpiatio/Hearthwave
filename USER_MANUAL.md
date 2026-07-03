@@ -1061,5 +1061,6 @@ Picking the right **Gain control**, **Noise profile denoise**, and **Whisper mod
 
 - The recording is capped at 3 minutes as a safety net in case **Stop & Analyze** is never clicked; there's no need to rush.
 - Testing multiple Whisper models means the wizard loads each one in turn — expect the analysis step to take longer than a sweep of just gain mode and noise profile would.
+- Only models already downloaded to `Models/STT` are swept (Hearthwave never downloads models at runtime). To include a model in the sweep, stage it first with `python bootstrap_models.py --model <name>`.
 - Nothing is changed until you click **Apply** — running the wizard and closing the dialog without applying leaves your current settings untouched.
 - For deeper, scriptable tuning (custom recordings, additional decode parameters, A/B against your own labelled audio) see the offline word-error-rate eval harness referenced in [section 24](#24-transcription-vocabulary-biasing).
