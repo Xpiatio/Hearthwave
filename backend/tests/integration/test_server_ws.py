@@ -1563,6 +1563,55 @@ class TestCalibrationStop:
                 assert msg["results"][0]["wer"] == 0.1
                 mock_sweep.assert_called_once()
 
+    def test_sweep_only_includes_models_staged_on_disk(self, tmp_path):
+        import numpy as np
+        import backend.server as srv
+
+        models_dir = tmp_path / "Models" / "STT"
+        (models_dir / "small.en").mkdir(parents=True)
+        (models_dir / "distil-large-v3").mkdir()
+        with _ws_server(tmp_path) as (tc, cfg):
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                with patch("backend.server._stt_listening", True):
+                    ws.send_json({"type": "calibration_start"})
+                    ws.receive_json()  # calibration_started
+                srv._calibration_capture.feed_raw(np.zeros(16000 * 3, dtype=np.float32))
+                with (
+                    patch("backend.server.STTWorker._MODELS_DIR", models_dir),
+                    patch("backend.server.load_vad_model", return_value=object()),
+                    patch("backend.server.WhisperTranscriber"),
+                    patch("backend.server.run_sweep", return_value=[]) as mock_sweep,
+                ):
+                    ws.send_json({"type": "calibration_stop"})
+                    _next_of_type(ws, "calibration_result")
+                assert mock_sweep.call_args.kwargs["models"] == [
+                    "distil-large-v3", "small.en",
+                ]
+
+    def test_no_staged_models_errors_instead_of_hf_download(self, tmp_path):
+        import numpy as np
+        import backend.server as srv
+
+        models_dir = tmp_path / "Models" / "STT"
+        models_dir.mkdir(parents=True)  # exists but empty: nothing staged
+        with _ws_server(tmp_path) as (tc, cfg):
+            with tc.websocket_connect(WS_URL) as ws:
+                _drain_initial(ws)
+                with patch("backend.server._stt_listening", True):
+                    ws.send_json({"type": "calibration_start"})
+                    ws.receive_json()  # calibration_started
+                srv._calibration_capture.feed_raw(np.zeros(16000 * 3, dtype=np.float32))
+                with (
+                    patch("backend.server.STTWorker._MODELS_DIR", models_dir),
+                    patch("backend.server.run_sweep") as mock_sweep,
+                ):
+                    ws.send_json({"type": "calibration_stop"})
+                    msg = _next_of_type(ws, "calibration_error")
+                assert msg is not None
+                assert "bootstrap_models" in msg["detail"]
+                mock_sweep.assert_not_called()
+
     def test_non_admin_rejected(self, non_admin_client):
         tc, cfg = non_admin_client
         with tc.websocket_connect(WS_URL) as ws:
