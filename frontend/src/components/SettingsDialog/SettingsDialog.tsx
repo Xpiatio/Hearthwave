@@ -48,6 +48,7 @@ interface Props {
   serverConfig: React.ComponentProps<typeof ServerConfigPanel>['config'];
   onServerConfigSave: React.ComponentProps<typeof ServerConfigPanel>['onSave'];
   onRescanVocabulary?: () => void;
+  onOpenCalibration?: () => void;
 
   // Plugins tab (admin only)
   plugins: PluginManifest[];
@@ -204,7 +205,8 @@ export function SettingsDialog(props: Props) {
             <ServerConfigPanel
               ref={serverRef} embedded hideSaveButton open={open} onClose={onClose}
               config={props.serverConfig} onSave={props.onServerConfigSave}
-              onRescanVocabulary={props.onRescanVocabulary} onDirtyChange={setServerDirty}
+              onRescanVocabulary={props.onRescanVocabulary} onOpenCalibration={props.onOpenCalibration}
+              onDirtyChange={setServerDirty}
             />
           </Box>
         )}

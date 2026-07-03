@@ -107,8 +107,15 @@ from backend.ai.gemini_client import GeminiError
 from backend.ai.gemini_client import generate_journal as _gemini_generate
 from backend.audio.capture import enumerate_monitor_sources
 from backend.audio.spectro_task import SpectroTask
+from backend.audio.vad import load_vad_model, make_vad_iterator
 from backend.config import ServerConfig
-from backend.constants import GAIN_MODES, normalize_service, utc_now_iso
+from backend.constants import (
+    GAIN_MODES,
+    VALID_FINAL_MODELS,
+    VALID_WHISPER_MODELS,
+    normalize_service,
+    utc_now_iso,
+)
 from backend.fcc.auto_add import CallsignLookupWorker
 from backend.fcc.crossref import apply_verification, verify_callsign
 from backend.fcc.id_rule import (
@@ -138,6 +145,8 @@ from backend.persistence.journal import delete_journal, load_journals, load_publ
 from backend.persistence.tokens import TokenStore
 from backend.persistence.users import DEFAULT_PREFS, SENSITIVE_PROFILE_FIELDS, UsersStore
 from backend.ptt.factory import make_ptt
+from backend.stt.calibration import CalibrationCapture, PREAMBLE_TEXT, run_sweep
+from backend.stt.transcriber import WhisperTranscriber
 from backend.stt.worker import STTWorker
 from backend.text.callsigns import (
     correct_callsigns,
@@ -192,15 +201,6 @@ _tts_event_queue: asyncio.Queue = asyncio.Queue()
 # Background tasks — kept alive so they are not GC'd mid-run
 _background_tasks: set[asyncio.Task] = set()
 
-# Whisper variants the config UI may select; must match bootstrap_models.py.
-VALID_WHISPER_MODELS = {
-    "tiny.en", "base.en", "small.en", "medium.en", "large-v3", "distil-large-v3",
-}
-# Final-pass-only additions: turbo is too slow for the 2 s streaming slices,
-# so it must never be selectable as the fast model; "auto" resolves to the
-# best staged model at worker construction.
-VALID_FINAL_MODELS = VALID_WHISPER_MODELS | {"large-v3-turbo", "auto"}
-
 # Signal-quality state — written by STT worker callbacks (GIL-safe int/bool assignments)
 _audio_level: int = 0
 _radio_error: bool = False
@@ -209,6 +209,10 @@ _vad_active: bool = False
 _stt_listening: bool = True
 _LEVEL_WINDOW_SIZE = 150
 _level_window: collections.deque = collections.deque(maxlen=_LEVEL_WINDOW_SIZE)
+
+# STT calibration wizard — set while a capture session is running; tapped from
+# the same raw-chunk fanout the spectrogram/monitor already consume.
+_calibration_capture: "CalibrationCapture | None" = None
 
 # FCC ID-rule state — asyncio-only (both writers are asyncio tasks; no cross-thread writes)
 _last_id_time: datetime.datetime | None = None
@@ -448,11 +452,14 @@ def _on_stt_capture_event(event: str) -> None:
 
 
 def _audio_chunk_fanout(chunk) -> None:
-    """Fan out audio chunks to the monitor, spectrogram task, and plugins."""
+    """Fan out audio chunks to the monitor, spectrogram task, plugins, and any
+    running STT calibration capture."""
     if _monitor_chunk_cb is not None:
         _monitor_chunk_cb(chunk)
     if _spectro is not None:
         _spectro.push_chunk(chunk)
+    if _calibration_capture is not None:
+        _calibration_capture.feed_raw(chunk)
     plugin_registry.dispatch_audio_rx_chunk(chunk)
 
 
@@ -1403,6 +1410,7 @@ async def _lifespan(app: FastAPI):
     global _audio_level, _radio_error, _channel_clear, _last_id_time, _has_transmitted, _last_beacon_time, _ncs_plugin
     global _level_window, _attendance, _spectro, _monitor_chunk_cb
     global _pending_stations, _auto_add_tasks, _event_loop, _audit_log
+    global _calibration_capture
 
     # --- startup -----------------------------------------------------------
     # Surface the app's own INFO logs (TX playback, station ID, monitor state,
@@ -1490,6 +1498,7 @@ async def _lifespan(app: FastAPI):
     _stream_history.clear()
     _pending_stations = {}
     _auto_add_tasks = {}
+    _calibration_capture = None
     _voice_cache.clear()
     _invalidate_online()  # force fresh probe on startup
 
@@ -1974,6 +1983,105 @@ async def _ws_handle_set_server_config(ws: WebSocket, data: dict, state: "Connec
         await _stt_worker.join()
         _stt_worker = _make_stt_worker()
         _stt_worker.start()
+
+
+# ---------------------------------------------------------------------------
+# STT calibration wizard
+# ---------------------------------------------------------------------------
+
+async def _ws_handle_calibration_start(ws: WebSocket, state: "ConnectionState") -> None:
+    """Begin buffering raw RX audio for a calibration reading. Requires a
+    listening STT worker — the capture taps the same raw-chunk fanout it
+    already feeds (_audio_chunk_fanout)."""
+    global _calibration_capture
+    if _stt_worker is None or not _stt_listening:
+        await _manager.send_to(ws, {
+            "type": "calibration_error",
+            "detail": "STT must be listening to run calibration.",
+        })
+        return
+    _calibration_capture = CalibrationCapture(sample_rate=STTWorker.SAMPLE_RATE)
+    _calibration_capture.start()
+    await _manager.send_to(ws, {"type": "calibration_started"})
+
+
+async def _run_calibration_sweep(ws: WebSocket, audio, sample_rate: int) -> None:
+    """Sweep gain mode / noise profile / Whisper model against the captured
+    audio and report results back to the requesting client. Runs off the
+    event loop thread (model loading + transcription are blocking); progress
+    callbacks are marshalled back via call_soon_threadsafe."""
+    models = sorted(VALID_WHISPER_MODELS)
+    vad_threshold = _config.vad_threshold if _config is not None else 0.5
+    vad_model = await asyncio.to_thread(load_vad_model)
+
+    def transcriber_loader(model: str):
+        return WhisperTranscriber.load(str(STTWorker._MODELS_DIR / model))
+
+    def vad_iterator_factory():
+        return make_vad_iterator(vad_model, sample_rate=sample_rate, threshold=vad_threshold)
+
+    loop = asyncio.get_running_loop()
+
+    def progress_cb(entry: dict) -> None:
+        asyncio.run_coroutine_threadsafe(
+            _manager.send_to(ws, {"type": "calibration_progress", **entry}), loop,
+        )
+
+    try:
+        results = await asyncio.to_thread(
+            run_sweep, audio,
+            models=models,
+            transcriber_loader=transcriber_loader,
+            vad_iterator_factory=vad_iterator_factory,
+            progress_cb=progress_cb,
+        )
+    except Exception as exc:
+        _log.error("Calibration sweep failed: %s", exc)
+        await _manager.send_to(ws, {"type": "calibration_error", "detail": str(exc)})
+        return
+
+    await _manager.send_to(ws, {
+        "type": "calibration_result",
+        "results": results,
+        "recommended": results[0] if results else None,
+    })
+
+
+async def _ws_handle_calibration_stop(ws: WebSocket, state: "ConnectionState") -> None:
+    """Stop capture and, if enough audio was heard, run the sweep in the
+    background — results stream back as calibration_progress/_result."""
+    global _calibration_capture
+    if _calibration_capture is None:
+        await _manager.send_to(ws, {
+            "type": "calibration_error", "detail": "No calibration in progress.",
+        })
+        return
+    audio = _calibration_capture.stop()
+    _calibration_capture = None
+    min_samples = int(2.0 * STTWorker.SAMPLE_RATE)
+    if audio.size < min_samples:
+        await _manager.send_to(ws, {
+            "type": "calibration_error",
+            "detail": "No audio captured — key up and read the passage before stopping.",
+        })
+        return
+    task = asyncio.create_task(_run_calibration_sweep(ws, audio, STTWorker.SAMPLE_RATE))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+
+
+async def _ws_handle_calibration_apply(ws: WebSocket, data: dict, state: "ConnectionState") -> None:
+    """Apply a chosen sweep combo by delegating to the same validated
+    set_server_config path every other STT setting goes through."""
+    payload: dict = {}
+    if "whisper_model" in data:
+        payload["whisper_model"] = data["whisper_model"]
+    if "gain_mode" in data:
+        payload["stt_gain_mode"] = data["gain_mode"]
+    if "noise_profile" in data:
+        payload["stt_noise_profile"] = data["noise_profile"]
+    await _ws_handle_set_server_config(ws, payload, state)
+    await _manager.send_to(ws, {"type": "calibration_applied"})
 
 
 async def _ws_handle_fcc_lookup(ws: WebSocket, data: dict, state: "ConnectionState") -> None:
@@ -2617,6 +2725,30 @@ async def websocket_endpoint(
                     await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
                     continue
                 await _ws_handle_set_server_config(ws, data, state)
+
+            elif msg_type == "calibration_get_text":
+                if not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
+                    continue
+                await _manager.send_to(ws, {"type": "calibration_text", "text": PREAMBLE_TEXT})
+
+            elif msg_type == "calibration_start":
+                if not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
+                    continue
+                await _ws_handle_calibration_start(ws, state)
+
+            elif msg_type == "calibration_stop":
+                if not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
+                    continue
+                await _ws_handle_calibration_stop(ws, state)
+
+            elif msg_type == "calibration_apply":
+                if not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
+                    continue
+                await _ws_handle_calibration_apply(ws, data, state)
 
             elif msg_type == "save_user_prefs":
                 if _users_store is None:

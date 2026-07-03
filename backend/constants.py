@@ -31,6 +31,15 @@ def validate_voice_path(voice_path: str) -> bool:
 
 GAIN_MODES: tuple[str, ...] = ("agc", "rms", "off")
 
+# Whisper variants the config UI may select; must match bootstrap_models.py.
+VALID_WHISPER_MODELS: frozenset[str] = frozenset({
+    "tiny.en", "base.en", "small.en", "medium.en", "large-v3", "distil-large-v3",
+})
+# Final-pass-only additions: turbo is too slow for the 2 s streaming slices,
+# so it must never be selectable as the fast model; "auto" resolves to the
+# best staged model at worker construction.
+VALID_FINAL_MODELS: frozenset[str] = VALID_WHISPER_MODELS | {"large-v3-turbo", "auto"}
+
 HALLUCINATIONS: frozenset[str] = frozenset({
     # Common single-word/phrase Whisper hallucinations on silence
     "you", "thank you", "thanks", "thanks for watching",

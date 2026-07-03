@@ -35,6 +35,7 @@ import { SetupScreen } from './components/SetupScreen/SetupScreen';
 import { DesktopApp } from './components/DesktopApp/DesktopApp';
 import { MobileApp } from './components/MobileApp/MobileApp';
 import { SettingsDialog } from './components/SettingsDialog/SettingsDialog';
+import { CalibrationDialog } from './components/CalibrationDialog/CalibrationDialog';
 import { UsersPanel } from './components/UsersPanel/UsersPanel';
 import { useDeviceClass } from './hooks/useDeviceClass';
 import './App.css';
@@ -146,6 +147,7 @@ export default function App() {
   const [showJournal, setShowJournal] = useState(false);
   const [showContacts, setShowContacts] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showCalibration, setShowCalibration] = useState(false);
   const [serverConfig, setServerConfig] = useState<ServerConfig>({
     vadThreshold: 0.5,
     whisperModel: 'small.en',
@@ -1230,6 +1232,7 @@ export default function App() {
         serverConfig={serverConfig}
         onServerConfigSave={handleServerConfigSave}
         onRescanVocabulary={handleRescanVocabulary}
+        onOpenCalibration={() => setShowCalibration(true)}
         plugins={plugins}
         onPluginsSave={handlePluginsSave}
         onInstallPlugin={handleInstallPlugin}
@@ -1245,6 +1248,12 @@ export default function App() {
             onResetLockout={(userId) => send({ type: 'reset_lockout', user_id: userId })}
           />
         )}
+      />
+      <CalibrationDialog
+        open={showCalibration}
+        onClose={() => setShowCalibration(false)}
+        send={send}
+        lastMessage={lastMessage}
       />
     </ThemeProvider>
   );
