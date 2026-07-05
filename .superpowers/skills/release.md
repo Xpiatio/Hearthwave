@@ -106,10 +106,14 @@ Rules:
 
 If in doubt, leave the grid alone. The version stamp in 6a is the only mandatory edit in this file.
 
+### 6c — docs/legality.html (usually no change)
+
+`docs/legality.html` carries a "Reviewed <Month Year>" date, not a version stamp — it only changes when its compliance content changes. If this release altered any transmission behavior (new auto-TX path, linking-adjacent feature, ID logic), update the page and its reviewed date; otherwise leave it alone.
+
 ## Step 7 — Commit the doc updates
 
 ```bash
-git add README.md USER_MANUAL.md docs/index.html
+git add README.md USER_MANUAL.md docs/index.html docs/legality.html
 git commit -m "docs: update docs for vNEW_VERSION release"
 ```
 

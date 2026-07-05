@@ -211,6 +211,10 @@ Remote access over the internet is the operator's responsibility. Hearthwave
 provides no port-forwarding, relay, or TURN/STUN infrastructure — use a VPN or
 private tunnel.
 
+For the full rule-by-rule breakdown — verbatim Part 95E citations, the
+remote-control vs. repeater-linking distinction, and every automated function
+disclosed — see [Legality & FCC compliance](https://xpiatio.github.io/Hearthwave/legality.html).
+
 ## Hardware requirements
 
 | Component | Requirement |
