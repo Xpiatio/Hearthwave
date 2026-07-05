@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<title>Hearthwave &amp; FCC Part 95 — why this is legal GMRS operation</title>
+<meta name="description" content="How Hearthwave stays inside FCC Part 95E: a remote control point for one licensed GMRS station — licensee-controlled access, no internet repeater linking, automatic station ID, and full transmission accountability.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+/* ══════════════════════════════════════════════════════════════
+   HEARTHWAVE — "Porch at Dusk" · Legality page
+   Shares the design system of index.html. No framework.
+══════════════════════════════════════════════════════════════ */
+:root{
+  --night:      #1B2440;
+  --night-2:    #2E3A5C;
+  --night-panel:#232E4E;
+  --night-line: rgba(248,241,227,.16);
+  --night-text: #F8F1E3;
+  --night-soft: #C9C3B4;
+  --glow:       #FFD98E;
+  --lamp:       #F5B04C;
+  --beacon:     #E4572E;
+  --horizon:    #E8A87C;
+
+  --bg:        #F8F1E3;
+  --bg-2:      #F1E7D2;
+  --panel:     #FFFBF2;
+  --line:      rgba(74,56,34,.14);
+  --line-2:    rgba(74,56,34,.26);
+  --text:      #2B2417;
+  --text-soft: #5A4E3C;
+  --text-dim:  #6F6147;
+  --accent:    #96520E;
+  --navy:      #2E3A5C;
+
+  --wrap: 1140px;
+  --r:    14px;
+  --shadow: 0 18px 40px -30px rgba(74,46,18,.45);
+}
+*{ box-sizing:border-box; }
+html{ scroll-behavior:smooth; }
+body{
+  margin:0;
+  font-family:'Hanken Grotesk',system-ui,sans-serif;
+  color:var(--text);
+  background:var(--bg);
+  line-height:1.62;
+  overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+main,nav,footer{ position:relative; z-index:1; }
+.wrap{ max-width:var(--wrap); margin:0 auto; padding:0 28px; }
+::selection{ background:rgba(245,176,76,.45); color:#2B2417; }
+::-webkit-scrollbar{ width:11px; }
+::-webkit-scrollbar-track{ background:var(--bg); }
+::-webkit-scrollbar-thumb{ background:#8A7458; border-radius:9px; border:3px solid var(--bg); }
+a{ color:var(--accent); text-decoration:none; }
+.mono{ font-family:'Space Mono',ui-monospace,monospace; }
+
+h1,h2,h3,h4{ font-family:'Fraunces',Georgia,serif; font-weight:700; line-height:1.08; letter-spacing:-.01em; margin:0; }
+.eyebrow{ font-size:13.5px; font-weight:700; letter-spacing:.05em; color:var(--accent); }
+.lead{ color:var(--text-soft); font-size:clamp(16px,1.6vw,18.5px); max-width:64ch; }
+.ember{ color:var(--accent); }
+:focus-visible{ outline:3px solid var(--lamp); outline-offset:2px; border-radius:4px; }
+
+.btn{
+  display:inline-flex; align-items:center; gap:9px;
+  font-weight:600; font-size:15px; padding:13px 22px; border-radius:12px;
+  border:1px solid transparent; cursor:pointer; transition:background .2s ease,color .2s ease,border-color .2s ease;
+}
+.btn-primary{ color:#2B2417; background:var(--lamp); }
+.btn-primary:hover{ background:#E89B3C; }
+.btn-ghost{ color:var(--text); border-color:var(--line-2); background:transparent; }
+.btn-ghost:hover{ border-color:var(--accent); color:var(--accent); }
+
+/* ── nav ── */
+nav{ position:sticky; top:0; z-index:50; background:var(--bg); border-bottom:1px solid var(--line); }
+.nav-in{ display:flex; align-items:center; justify-content:space-between; gap:24px; height:70px; }
+.brand{ display:flex; align-items:center; gap:12px; }
+.brand .word{ font-family:'Fraunces',Georgia,serif; font-weight:700; font-size:20px; letter-spacing:-.01em; color:var(--text); }
+.brand .word b{ color:var(--accent); font-weight:700; }
+.nav-links{ display:flex; align-items:center; gap:22px; }
+.nav-links a{ color:var(--text-soft); font-size:14.5px; font-weight:500; transition:color .2s; white-space:nowrap; }
+.nav-links a:hover{ color:var(--text); }
+.nav-cta{ display:flex; align-items:center; gap:12px; }
+.nav-cta .btn{ white-space:nowrap; }
+@media(max-width:1180px){ .nav-links{ display:none; } }
+@media(max-width:480px){
+  .nav-cta .btn-ghost{ display:none; }
+  .nav-cta .btn{ padding:11px 16px; font-size:14px; }
+  .brand .word{ display:none; }
+}
+.mark{ width:38px; height:38px; display:block; flex:none; }
+.mark .house{ stroke:var(--navy); }
+.mark .win{ stroke:var(--navy); }
+.mark .arcs{ stroke:var(--lamp); }
+.wave-pulse{ animation:pulse 3.4s ease-in-out infinite; }
+.wave-pulse:nth-child(2){ animation-delay:.18s; }
+.wave-pulse:nth-child(3){ animation-delay:.36s; }
+.wave-pulse:nth-child(4){ animation-delay:.54s; }
+@keyframes pulse{ 0%,100%{ opacity:.55; } 50%{ opacity:1; } }
+
+/* ── hero band ── */
+.hero{
+  position:relative; overflow:hidden;
+  padding:84px 0 72px;
+  background:linear-gradient(180deg,#111830 0%,var(--night) 55%,var(--night-2) 100%);
+  color:var(--night-text);
+}
+.hero .eyebrow{ color:var(--lamp); }
+.hero h1{ font-size:clamp(36px,5.2vw,58px); margin:18px 0 0; max-width:18ch; }
+.hero h1 .l2{ display:block; color:var(--glow); }
+.hero p.lead{ margin:22px 0 0; color:var(--night-soft); }
+.hero p.lead b{ color:var(--night-text); }
+
+/* ── sections ── */
+section{ padding:88px 0; }
+.sec-head{ max-width:66ch; margin-bottom:42px; }
+.sec-head h2{ font-size:clamp(26px,3.4vw,40px); margin:16px 0 14px; }
+.band{ background:var(--bg-2); border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+.reveal{ opacity:0; transform:translateY(22px); transition:opacity .7s ease,transform .7s cubic-bezier(.2,.7,.2,1); }
+.reveal.in{ opacity:1; transform:none; }
+
+/* pillars */
+.three{ display:grid; grid-template-columns:repeat(3,1fr); gap:22px; }
+@media(max-width:820px){ .three{ grid-template-columns:1fr; } }
+.pill{
+  background:var(--panel); border:1px solid var(--line); border-radius:var(--r);
+  padding:26px 24px; transition:border-color .25s ease;
+}
+.pill:hover{ border-color:var(--line-2); }
+.pill .cite{ font-family:'Space Mono',monospace; font-size:11.5px; font-weight:700; letter-spacing:.08em; color:var(--accent); display:block; margin-bottom:12px; }
+.pill h3{ font-size:19px; margin-bottom:8px; }
+.pill p{ color:var(--text-soft); font-size:14.5px; margin:0; }
+
+/* diagram */
+.dia{ display:grid; gap:14px; margin-top:40px; }
+.dia-row{ display:flex; align-items:stretch; gap:0; flex-wrap:wrap; }
+.dia-box{
+  flex:1 1 180px; background:var(--panel); border:1.5px solid var(--line-2); border-radius:var(--r);
+  padding:18px 16px; text-align:center; min-width:160px;
+}
+.dia-box b{ display:block; font-size:15px; }
+.dia-box span{ display:block; color:var(--text-dim); font-size:12.5px; margin-top:4px; }
+.dia-arrow{
+  flex:0 0 auto; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  padding:0 10px; color:var(--accent); font-weight:700; min-width:96px;
+}
+.dia-arrow .lbl{ font-family:'Space Mono',monospace; font-size:10.5px; letter-spacing:.04em; color:var(--text-dim); text-align:center; }
+.dia-arrow .ar{ font-size:20px; line-height:1; }
+.dia-no{
+  border:1.5px dashed rgba(228,87,46,.65); border-radius:var(--r); padding:18px 20px;
+  display:flex; gap:14px; align-items:center; flex-wrap:wrap;
+}
+.dia-no .x{ flex:none; width:34px; height:34px; border-radius:50%; display:grid; place-items:center;
+  background:rgba(228,87,46,.14); color:var(--beacon); font-weight:700; font-size:17px; }
+.dia-no p{ margin:0; color:var(--text-soft); font-size:14.5px; }
+.dia-no p b{ color:var(--text); }
+@media(max-width:760px){
+  .dia-row{ flex-direction:column; }
+  .dia-arrow{ min-width:0; padding:6px 0; }
+  .dia-arrow .ar{ transform:rotate(90deg); }
+}
+
+/* rule quotes */
+.rules-grid{ display:grid; gap:18px; }
+.rule{
+  background:var(--panel); border:1px solid var(--line); border-left:4px solid var(--lamp);
+  border-radius:var(--r); padding:22px 26px; margin:0;
+}
+.rule .cite{ font-family:'Space Mono',monospace; font-size:12px; font-weight:700; letter-spacing:.08em; color:var(--accent); display:block; margin-bottom:10px; }
+.rule blockquote{ margin:0; font-size:15.5px; color:var(--text); }
+.rule blockquote p{ margin:0 0 8px; }
+.rule blockquote p:last-child{ margin-bottom:0; }
+.rule .src{ display:inline-block; margin-top:12px; font-size:13px; }
+.rule .gloss{ margin:12px 0 0; padding-top:12px; border-top:1px dashed var(--line-2); color:var(--text-soft); font-size:14px; }
+.rule .gloss b{ color:var(--text); }
+
+/* mapping table */
+.tablewrap{ overflow-x:auto; border:1px solid var(--line); border-radius:var(--r); background:var(--panel); }
+table.rulemap{ border-collapse:collapse; width:100%; min-width:760px; font-size:14px; }
+.rulemap th{
+  text-align:left; font-family:'Hanken Grotesk',sans-serif; font-size:12.5px; font-weight:700;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--accent);
+  padding:14px 18px; border-bottom:2px solid var(--line-2); background:var(--bg-2);
+}
+.rulemap td{ padding:15px 18px; border-bottom:1px solid var(--line); vertical-align:top; color:var(--text-soft); }
+.rulemap tr:last-child td{ border-bottom:none; }
+.rulemap td:first-child{ font-family:'Space Mono',monospace; font-size:12.5px; color:var(--text); white-space:nowrap; }
+.rulemap td b{ color:var(--text); }
+.rulemap code{ font-family:'Space Mono',monospace; font-size:12px; color:var(--accent); }
+
+/* automated functions */
+.autotx{ display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+@media(max-width:820px){ .autotx{ grid-template-columns:1fr; } }
+.atx{ background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:26px; }
+.atx-top{ display:flex; align-items:center; gap:12px; margin-bottom:8px; flex-wrap:wrap; }
+.atx-top h3{ font-size:19px; }
+.badge{ font-family:'Space Mono',monospace; font-size:10px; font-weight:700; letter-spacing:.14em; color:var(--accent);
+  border:1px solid var(--line-2); border-radius:7px; padding:3px 8px; white-space:nowrap; }
+.atx>p{ color:var(--text-soft); font-size:14.5px; margin:0 0 14px; }
+.atx ul{ list-style:none; padding:0; margin:0; display:grid; gap:9px; }
+.atx li{ display:flex; gap:10px; font-size:14px; color:var(--text-soft); }
+.atx li b{ color:var(--text); }
+.atx li .s{ color:var(--accent); flex:none; }
+
+/* checks */
+.checks{ list-style:none; padding:0; margin:24px 0 0; display:grid; gap:14px; }
+.checks li{ display:flex; gap:13px; align-items:flex-start; }
+.checks .ck{ flex:none; width:24px; height:24px; border-radius:50%; display:grid; place-items:center; margin-top:2px;
+  background:rgba(245,176,76,.22); color:var(--accent); }
+.checks b{ display:block; }
+.checks span{ color:var(--text-soft); font-size:14px; }
+
+/* disclaimer */
+.note{
+  background:var(--bg-2); border:1px solid var(--line-2); border-radius:var(--r);
+  padding:22px 26px; font-size:14px; color:var(--text-soft); max-width:80ch;
+}
+.note b{ color:var(--text); }
+
+/* sources */
+.sources{ list-style:none; padding:0; margin:20px 0 0; display:grid; gap:10px; font-size:14.5px; }
+.sources li{ color:var(--text-soft); }
+
+/* footer */
+footer{ background:linear-gradient(180deg,var(--night-2),var(--night) 40%); padding:56px 0 40px; color:var(--night-soft); margin-top:40px; }
+footer .mark .house, footer .mark .win{ stroke:var(--night-text); }
+footer .mark .arcs{ stroke:var(--lamp); }
+footer .brand .word{ color:var(--night-text); }
+footer .brand .word b{ color:var(--lamp); }
+.foot-grid{ display:flex; justify-content:space-between; align-items:flex-start; gap:30px; flex-wrap:wrap; }
+.foot-links{ display:flex; gap:40px; flex-wrap:wrap; }
+.foot-links div b{ display:block; color:var(--night-text); font-size:13px; margin-bottom:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
+.foot-links a{ display:block; color:var(--night-soft); font-size:14px; margin-bottom:9px; }
+.foot-links a:hover{ color:var(--glow); }
+.foot-bot{ margin-top:40px; padding-top:22px; border-top:1px solid var(--night-line); display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; font-size:13px; }
+.tag{ font-family:'Space Mono',monospace; font-size:12.5px; color:var(--glow); }
+
+@media(prefers-reduced-motion:reduce){ *{ animation:none !important; } .reveal{ transition:none; opacity:1; transform:none; } }
+
+/* ══ Day / Dusk themes ══ */
+html[data-theme="dusk"]{
+  --bg:#141B30; --bg-2:#1B2440; --panel:#232E4E;
+  --line:rgba(248,241,227,.14); --line-2:rgba(248,241,227,.30);
+  --text:#F8F1E3; --text-soft:#C9C3B4; --text-dim:#AFA692;
+  --accent:#F5B04C; --navy:#F8F1E3;
+  --shadow:0 18px 40px -30px rgba(0,0,0,.85);
+}
+html[data-theme="dusk"] ::-webkit-scrollbar-thumb{ background:#5B6478; border-color:var(--bg); }
+html[data-theme="dusk"] .rulemap th{ color:var(--glow); }
+
+.theme-toggle{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:42px; height:42px; border-radius:50%; flex:none;
+  border:1px solid var(--line-2); background:transparent; color:var(--text);
+  cursor:pointer; transition:border-color .2s ease,color .2s ease;
+}
+.theme-toggle:hover{ border-color:var(--accent); color:var(--accent); }
+.theme-toggle svg{ display:block; }
+.theme-toggle .i-sun{ display:none; }
+html[data-theme="dusk"] .theme-toggle .i-sun{ display:block; }
+html[data-theme="dusk"] .theme-toggle .i-moon{ display:none; }
+</style>
+<script>
+(function(){
+  var t=null;
+  try{ t=localStorage.getItem('hw_theme'); }catch(e){}
+  if(t!=='day'&&t!=='dusk') t=matchMedia('(prefers-color-scheme: dark)').matches?'dusk':'day';
+  document.documentElement.dataset.theme=t;
+})();
+</script>
+</head>
+<body>
+
+<!-- ═══════════ NAV ═══════════ -->
+<nav>
+  <div class="wrap nav-in">
+    <a class="brand" href="index.html">
+      <svg class="mark" viewBox="0 0 100 100" fill="none" aria-hidden="true">
+        <g class="house" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="50" cy="13" r="6" stroke-width="4"/>
+          <path d="M38 34 L50 16 L62 34"/>
+          <rect x="36" y="33" width="28" height="40" rx="5"/>
+          <line x1="32" y1="79" x2="68" y2="79"/>
+        </g>
+        <rect x="42" y="39" width="16" height="28" rx="2" fill="var(--lamp)" opacity=".9"/>
+        <g class="win" stroke-width="2.6">
+          <line x1="50" y1="39" x2="50" y2="67"/>
+          <line x1="42" y1="53" x2="58" y2="53"/>
+        </g>
+        <g class="arcs" stroke-linecap="round" fill="none" stroke-width="5">
+          <path class="wave-pulse" d="M72 42 A16 16 0 0 1 72 66"/>
+          <path class="wave-pulse" d="M80 36 A24 24 0 0 1 80 72" opacity=".55"/>
+          <path class="wave-pulse" d="M28 42 A16 16 0 0 0 28 66"/>
+          <path class="wave-pulse" d="M20 36 A24 24 0 0 0 20 72" opacity=".55"/>
+        </g>
+      </svg>
+      <span class="word">HEARTH<b>WAVE</b></span>
+    </a>
+    <div class="nav-links">
+      <a href="#what">Architecture</a>
+      <a href="#rules">The rules</a>
+      <a href="#map">Rule map</a>
+      <a href="#autotx">Automated functions</a>
+      <a href="#duties">Responsibilities</a>
+    </div>
+    <div class="nav-cta">
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch theme">
+        <svg class="i-sun" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5 5l2.1 2.1M16.9 16.9L19 19M19 5l-2.1 2.1M7.1 16.9L5 19"/></svg>
+        <svg class="i-moon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"/></svg>
+      </button>
+      <a class="btn btn-ghost" href="https://github.com/Xpiatio/Hearthwave" target="_blank" rel="noopener">GitHub</a>
+      <a class="btn btn-primary" href="index.html">← Back to site</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+
+<!-- ═══════════ HERO ═══════════ -->
+<header class="hero">
+  <div class="wrap">
+    <div class="reveal in">
+      <span class="eyebrow">GMRS · FCC Part 95, Subpart E</span>
+      <h1>Legal by architecture,<span class="l2">not by promise.</span></h1>
+      <p class="lead">Hearthwave is a <b>remote control point</b> for one GMRS station you own and license — a keyboard, screen, and speaker for the radio in your house. The FCC explicitly permits that. What it prohibits — internet-linked repeaters, phone patches, retransmission between stations — <b>Hearthwave cannot do, because the code to do it does not exist.</b> This page walks through the rules and shows exactly how the design maps onto them.</p>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════ THREE PILLARS ═══════════ -->
+<section class="band" id="pillars">
+  <div class="wrap">
+    <div class="three">
+      <div class="pill reveal">
+        <span class="cite">47 CFR §§ 95.1745 · 95.1749</span>
+        <h3>It's remote control — expressly permitted</h3>
+        <p>The rules state that GMRS base stations "may be operated by remote control," and may be connected to "the public switched network or other networks for the sole purpose of operation by remote control." Your browser is the control point; the station is the radio.</p>
+      </div>
+      <div class="pill reveal">
+        <span class="cite">47 CFR § 95.1705(c)</span>
+        <h3>You control who reaches the hub</h3>
+        <p>Accounts exist only if the admin — the licensee — creates them. Passwords, session tokens, a transmit-blocking listen-only mode, and a per-user audit log keep station access inside the household your license covers.</p>
+      </div>
+      <div class="pill reveal">
+        <span class="cite">47 CFR § 95.1733(a)(8)</span>
+        <h3>No internet repeater linking</h3>
+        <p>What the FCC actually prohibits is using a network to link stations and extend radio range. Hearthwave has no linking, no repeater bridge, no voice-over-IP interconnect — received audio becomes text on your screen and never touches another transmitter.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ WHAT IT IS ═══════════ -->
+<section id="what">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">The architecture</span>
+      <h2>One station. One radio. <span class="ember">One control link.</span></h2>
+      <p class="lead">Hearthwave never generates a radio signal. It synthesizes speech through a sound card wired to your own Part 95E–certified radio and keys the push-to-talk line — the same thing a microphone and a finger do, reachable from a browser. Everything on the network side is <b>control traffic for that one station</b>: typed text in, transcribed text out.</p>
+    </div>
+    <div class="dia reveal">
+      <div class="dia-row">
+        <div class="dia-box"><b>Family browsers</b><span>on your home network</span></div>
+        <div class="dia-arrow"><span class="lbl">control link<br>typed text</span><span class="ar" aria-hidden="true">→</span></div>
+        <div class="dia-box"><b>Hearthwave hub</b><span>text → speech · speech → text<br>PTT keying · audit log</span></div>
+        <div class="dia-arrow"><span class="lbl">audio + PTT<br>wired, local</span><span class="ar" aria-hidden="true">→</span></div>
+        <div class="dia-box"><b>Your GMRS radio</b><span>Part 95E certified<br>does all RF, analog FM voice</span></div>
+        <div class="dia-arrow"><span class="lbl">airwaves</span><span class="ar" aria-hidden="true">→</span></div>
+        <div class="dia-box"><b>The channel</b><span>ordinary GMRS voice,<br>identified with your callsign</span></div>
+      </div>
+      <div class="dia-no">
+        <span class="x" aria-hidden="true">✕</span>
+        <p><b>The path that does not exist:</b> radio → internet → another radio. There is no code in Hearthwave that carries received audio to another transmitter, another repeater, another Hearthwave instance, or a telephone. Incoming transmissions become <b>text on a screen</b> — a family message log — and stop there.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ THE RULES ═══════════ -->
+<section class="band" id="rules">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">The rules, verbatim</span>
+      <h2>What Part 95E <span class="ember">actually says.</span></h2>
+      <p class="lead">These are the operative sections, quoted from the Code of Federal Regulations (2025 edition, via GPO). Read them yourself — the sources are linked under each quote.</p>
+    </div>
+    <div class="rules-grid">
+      <figure class="rule reveal">
+        <span class="cite">§ 95.1745 — GMRS remote control</span>
+        <blockquote><p>"Notwithstanding the prohibition in § 95.345, GMRS repeater, base and fixed stations may be operated by remote control."</p></blockquote>
+        <p class="gloss"><b>What it means here:</b> the general Personal Radio Services ban on remote control is expressly lifted for GMRS base stations. Operating your base station from a browser instead of the front-panel microphone is the permitted case, not an edge case.</p>
+        <a class="src" href="https://www.ecfr.gov/current/title-47/chapter-I/subchapter-D/part-95/subpart-E/section-95.1745" target="_blank" rel="noopener">Read § 95.1745 on eCFR →</a>
+      </figure>
+
+      <figure class="rule reveal">
+        <span class="cite">§ 95.1749 — GMRS network connection</span>
+        <blockquote><p>"Operation of a GMRS station with a telephone connection is prohibited, as in § 95.349. GMRS repeater, base and fixed stations, however, may be connected to the public switched network or other networks for the sole purpose of operation by remote control pursuant to § 95.1745."</p></blockquote>
+        <p class="gloss"><b>What it means here:</b> a network — including an IP network — may sit between the operator and the station, so long as it exists to <b>operate that station</b> and not to patch calls or carry traffic between stations. Hearthwave's network side is exactly and only that: the operator's control link. There is no telephone interconnection of any kind.</p>
+        <a class="src" href="https://www.ecfr.gov/current/title-47/chapter-I/subchapter-D/part-95/subpart-E/section-95.1749" target="_blank" rel="noopener">Read § 95.1749 on eCFR →</a>
+      </figure>
+
+      <figure class="rule reveal">
+        <span class="cite">§ 95.1733 — Prohibited GMRS uses (excerpts)</span>
+        <blockquote>
+          <p>"(a) In addition to the prohibited uses outlined in § 95.333 of this chapter, GMRS stations must not communicate: … (8) Messages which are both conveyed by a wireline control link and transmitted by a GMRS station; … (10) Continuous or uninterrupted transmissions, except for communications involving the immediate safety of life or property; …"</p>
+          <p>"(b) GMRS stations must not be used for one-way communications other than those listed in § 95.1731(b). Initial transmissions to establish two-way communications and data transmissions listed in § 95.1731(d) are not considered to be one-way communications for the purposes of this section."</p>
+        </blockquote>
+        <p class="gloss"><b>What it means here — read honestly:</b> paragraph (a)(8) is the linking rule. The FCC's published guidance applies it to using a network to carry traffic <b>between stations</b> — linking repeaters over the internet so a distant transmitter retransmits your message and extends your range. That is what the FCC has said violates §§ 95.1733(a)(8) and 95.1749. It has to be read alongside §§ 95.1745/95.1749, which in the same subpart expressly allow the operator's own control connection to the station — otherwise remote control would be permitted and impossible at the same time. Hearthwave sits squarely on the permitted side: one licensee's control link to one station, with no second station, no retransmission, and no range extension anywhere in the system. Paragraph (a)(10) is enforced in code by a hard transmit-duration watchdog that forcibly unkeys the radio.</p>
+        <a class="src" href="https://www.ecfr.gov/current/title-47/chapter-I/subchapter-D/part-95/subpart-E/section-95.1733" target="_blank" rel="noopener">Read § 95.1733 on eCFR →</a>
+      </figure>
+
+      <figure class="rule reveal">
+        <span class="cite">§ 95.1751 — GMRS station identification</span>
+        <blockquote><p>"Each GMRS station must be identified by transmission of its FCC-assigned call sign at the end of transmissions and at periodic intervals during transmissions … (2) After 15 minutes and at least once every 15 minutes thereafter during a series of transmissions lasting more than 15 minutes. (b) The call sign must be transmitted using voice in the English language or international Morse code telegraphy using an audible tone."</p></blockquote>
+        <p class="gloss"><b>What it means here:</b> Hearthwave doesn't leave identification to memory. Every outgoing message is framed with the station callsign in spoken English, and a timer enforces the 15-minute rule automatically whenever the station has been transmitting.</p>
+        <a class="src" href="https://www.ecfr.gov/current/title-47/chapter-I/subchapter-D/part-95/subpart-E/section-95.1751" target="_blank" rel="noopener">Read § 95.1751 on eCFR →</a>
+      </figure>
+
+      <figure class="rule reveal">
+        <span class="cite">§ 95.1705(c)(2) — Individual licenses · § 95.1743 — Minor operators</span>
+        <blockquote><p>"Any individual who holds an individual license may allow his or her immediate family members to operate his or her GMRS station or stations." Immediate family includes the licensee's spouse, children, grandchildren, stepchildren, parents, grandparents, stepparents, brothers, sisters, aunts, uncles, nieces, nephews, and in-laws. Under § 95.1743, when a minor operates the station, the licensee is solely responsible for its proper operation.</p></blockquote>
+        <p class="gloss"><b>What it means here:</b> one license covers the household — which is precisely the audience Hearthwave's account system is built to admit, and no one else. Because the licensee answers for every operator, the hub gives the licensee the controls to match: account creation is admin-only, and every transmission is logged to the user who sent it.</p>
+        <a class="src" href="https://www.ecfr.gov/current/title-47/chapter-I/subchapter-D/part-95/subpart-E/section-95.1705" target="_blank" rel="noopener">Read § 95.1705 on eCFR →</a>
+      </figure>
+    </div>
+    <p class="lead" style="margin-top:34px">The FCC's own GMRS guidance draws the same line this page does: networks may be used for <b>remote control</b> of a station, and may <b>not</b> be used to link repeaters so that a repeater beyond your radio's range retransmits your messages. See the <a href="https://www.fcc.gov/wireless/bureau-divisions/mobility-division/general-mobile-radio-service-gmrs" target="_blank" rel="noopener">FCC's GMRS page</a>.</p>
+  </div>
+</section>
+
+<!-- ═══════════ RULE MAP ═══════════ -->
+<section id="map">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">Feature-to-rule mapping</span>
+      <h2>Every rule, <span class="ember">answered in code.</span></h2>
+      <p class="lead">Claims are easy; architecture is checkable. Hearthwave is open source — every row below points at behavior you can verify in the repository.</p>
+    </div>
+    <div class="tablewrap reveal">
+      <table class="rulemap">
+        <thead>
+          <tr><th scope="col">Rule</th><th scope="col">What it requires or prohibits</th><th scope="col">How Hearthwave answers it</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>§ 95.1745<br>§ 95.1749</td>
+            <td><b>Remote control is permitted</b>; network connections only for operating the station.</td>
+            <td>The network carries the operator's control link: typed messages in, transcripts out. Transmit audio is synthesized on the hub and played straight into the radio — it is <b>never streamed over the network</b>. The browser is a control surface, not a voice path.</td>
+          </tr>
+          <tr>
+            <td>§ 95.1733(a)(8)</td>
+            <td><b>No linking</b> — no messages carried by wireline between stations and retransmitted to extend range.</td>
+            <td>Received audio is transcribed to text and displayed; <b>no code path retransmits received audio anywhere</b> — not to another radio, repeater, instance, or phone. There is no RoIP, repeater, or linking module in the codebase to misconfigure.</td>
+          </tr>
+          <tr>
+            <td>§ 95.1749<br>§ 95.349</td>
+            <td><b>No telephone connection</b> — no phone patch into GMRS.</td>
+            <td>No telephony integration exists. The hub's only outbound internet calls are read-only data lookups (NWS weather alerts, FCC license database) — nothing dials, bridges, or carries a call.</td>
+          </tr>
+          <tr>
+            <td>§ 95.1751</td>
+            <td><b>Station ID</b> — spoken callsign after transmissions and every 15 minutes during a series.</td>
+            <td>Every transmission is automatically framed with the station callsign in spoken English, and an ID timer transmits the callsign whenever 15 minutes pass with the station active. Identification is enforced by the software, not left to habit.</td>
+          </tr>
+          <tr>
+            <td>§ 95.1733(a)(10)</td>
+            <td><b>No continuous transmissions.</b></td>
+            <td>A hard transmit watchdog (<code>tx_max_duration_seconds</code>) force-unkeys the radio if any transmission runs too long, and a channel-busy gate holds or discards non-operator audio when someone else is talking.</td>
+          </tr>
+          <tr>
+            <td>§ 95.1705(c)<br>§ 95.1743</td>
+            <td><b>Operation under your license</b> — immediate family; licensee responsible.</td>
+            <td>No open signup: only the admin (licensee) creates accounts. Salted-and-hashed passwords, expiring session tokens, login rate-limiting and lockout, and a <b>listen-only mode</b> that blocks transmission for guests who aren't covered by the license.</td>
+          </tr>
+          <tr>
+            <td>§ 95.1731</td>
+            <td><b>Permissible uses</b> — two-way plain-language voice about personal activities.</td>
+            <td>That is the entire product: family members exchanging plain spoken English on their own channel. Text-to-speech output is ordinary analog FM voice from a certified radio — no digital voice modes, no encryption, nothing hidden in the audio.</td>
+          </tr>
+          <tr>
+            <td>Accountability</td>
+            <td>The licensee answers for everything the station transmits.</td>
+            <td>Every transmission is written to an audit log with the account, callsign, and message text; net sessions are journaled with rosters and transcripts. If a question is ever raised, the licensee can show <b>who transmitted what, and when</b>.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ AUTOMATED FUNCTIONS ═══════════ -->
+<section class="band" id="autotx">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">Full disclosure</span>
+      <h2>Automated functions, <span class="ember">named and bounded.</span></h2>
+      <p class="lead">A credible compliance page names its edge cases. Nearly everything Hearthwave transmits is one human action → one transmission. Four functions can key the radio on a timer or trigger instead — here is each one, what gates it, and what it asks of you. Note that Part 95E permits <b>automatic</b> (unattended) control only for repeater stations (§ 95.1747); a Hearthwave base station is designed to be run <b>attended</b> — these functions assist an operator, they don't replace one.</p>
+    </div>
+    <div class="autotx">
+      <div class="atx reveal">
+        <div class="atx-top"><h3>Automatic station ID</h3><span class="badge">ALWAYS ON</span></div>
+        <p>Transmits "This is &lt;callsign&gt;" when 15 minutes elapse during station activity.</p>
+        <ul>
+          <li><span class="s">✦</span><span><b>Why it exists:</b> it <i>is</i> § 95.1751 — the identification the rule demands, on the rule's own schedule.</span></li>
+          <li><span class="s">✦</span><span><b>Gating:</b> only fires after the station has actually transmitted; silent stations stay silent.</span></li>
+        </ul>
+      </div>
+      <div class="atx reveal">
+        <div class="atx-top"><h3>Monitoring beacon</h3><span class="badge">OFF BY DEFAULT</span></div>
+        <p>Optionally announces "&lt;callsign&gt; Hearthwave base, monitoring." at a set interval (default 15 minutes).</p>
+        <ul>
+          <li><span class="s">✦</span><span><b>Gating:</b> disabled unless the admin turns it on; skipped whenever the channel is busy; leads with the callsign, so it also satisfies the ID rule.</span></li>
+          <li><span class="s">✦</span><span><b>Your duty:</b> enable it only while the station is genuinely attended and monitoring — the message should be true when it airs. One-way announcements on GMRS are limited (§ 95.1733(b)); keep this as a brief availability call, which is what it is.</span></li>
+        </ul>
+      </div>
+      <div class="atx reveal">
+        <div class="atx-top"><h3>Net announcement (NCS)</h3><span class="badge">ACTIVE NET ONLY</span></div>
+        <p>While a net-control session is running, periodically announces the net and invites check-ins.</p>
+        <ul>
+          <li><span class="s">✦</span><span><b>Gating:</b> exists only while an operator has deliberately opened a net and is running it; waits for a clear channel; stops when the net closes.</span></li>
+          <li><span class="s">✦</span><span><b>Your duty:</b> the net-control operator stays at the position for the duration of the net — the announcement is the NCS's voice, not a substitute for the NCS.</span></li>
+        </ul>
+      </div>
+      <div class="atx reveal">
+        <div class="atx-top"><h3>SKYWARN alert relay (NCS)</h3><span class="badge">ACTIVE NET + ZONE SET</span></div>
+        <p>During an active weather net, reads new National Weather Service <b>Extreme/Severe</b> alerts for your configured county zone over the air.</p>
+        <ul>
+          <li><span class="s">✦</span><span><b>Gating:</b> requires an operator-run net <i>and</i> a deliberately configured NWS zone; only the most severe alert classes air; waits for a clear channel.</span></li>
+          <li><span class="s">✦</span><span><b>Why it's defensible:</b> emergency and safety-of-life communications are GMRS's highest-priority permitted use (§ 95.1731(a)) — and the supervising net-control operator is present the entire time it can run.</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ OPERATOR DUTIES ═══════════ -->
+<section id="duties">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">The other half of legal</span>
+      <h2>What the software can't do <span class="ember">for you.</span></h2>
+      <p class="lead">Hearthwave keeps the <i>station</i> inside the rules. Keeping the <i>operation</i> inside the rules is the licensee's job — the same job every GMRS operator has, with or without software. The short list:</p>
+    </div>
+    <ul class="checks reveal">
+      <li><span class="ck">✓</span><div><b>Hold a GMRS license</b><span>One license covers your immediate family (§ 95.1705). No license, no transmitting — use listen-only accounts until yours is granted.</span></div></li>
+      <li><span class="ck">✓</span><div><b>Use a Part 95E–certified radio</b><span>Hearthwave is the control point; the certified radio is the station. Don't wire it to equipment not certified for GMRS.</span></div></li>
+      <li><span class="ck">✓</span><div><b>Keep accounts inside the license</b><span>Create transmit-capable accounts only for immediate family covered by your license; give everyone else listen-only. You are responsible for every operator, including minors (§ 95.1743).</span></div></li>
+      <li><span class="ck">✓</span><div><b>Keep the hub off the public internet</b><span>Hearthwave ships no relay, tunnel, or port-forwarding service on purpose. Away from home, reach it over your own VPN (WireGuard/Tailscale) — the control link stays yours, exactly as § 95.1749 intends.</span></div></li>
+      <li><span class="ck">✓</span><div><b>Stay present for automated functions</b><span>Enable the beacon only when the station is attended; run nets from the chair, not from memory.</span></div></li>
+      <li><span class="ck">✓</span><div><b>Transmit permissible content</b><span>Plain-language personal communications (§ 95.1731). No music, ads, coded messages, or false traffic (§ 95.1733(a)) — software can frame your callsign, but what you say is on you.</span></div></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════ SOURCES + DISCLAIMER ═══════════ -->
+<section class="band" id="sources" style="padding:64px 0">
+  <div class="wrap">
+    <div class="sec-head reveal" style="margin-bottom:26px">
+      <span class="eyebrow">Sources</span>
+      <h2 style="font-size:clamp(22px,2.6vw,30px)">Primary sources</h2>
+    </div>
+    <ul class="sources reveal">
+      <li><a href="https://www.ecfr.gov/current/title-47/chapter-I/subchapter-D/part-95/subpart-E" target="_blank" rel="noopener">47 CFR Part 95, Subpart E — General Mobile Radio Service</a> (eCFR, current text)</li>
+      <li><a href="https://www.govinfo.gov/content/pkg/CFR-2025-title47-vol5/pdf/CFR-2025-title47-vol5-sec95-1733.pdf" target="_blank" rel="noopener">§ 95.1733 as printed in the 2025 CFR</a> (GPO, authenticated PDF)</li>
+      <li><a href="https://www.fcc.gov/wireless/bureau-divisions/mobility-division/general-mobile-radio-service-gmrs" target="_blank" rel="noopener">FCC — General Mobile Radio Service overview</a> (licensing, permitted uses, and the Commission's guidance on network connections and repeater linking)</li>
+      <li><a href="https://github.com/Xpiatio/Hearthwave" target="_blank" rel="noopener">Hearthwave source code</a> — every claim on this page about behavior is verifiable in the repository</li>
+    </ul>
+    <div class="note reveal" style="margin-top:30px">
+      <b>This page is information, not legal advice.</b> It reflects our good-faith reading of Part 95E and the FCC's published guidance as of <b>July 2026</b>. Regulations and interpretations change; the eCFR links above always show the current text. You — the licensee — are responsible for your station's operation. If you have a compliance question the rules don't clearly answer, ask the FCC or a communications attorney, not a website.
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ═══════════ FOOTER ═══════════ -->
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div style="max-width:300px">
+        <a class="brand" href="index.html" style="margin-bottom:14px">
+          <svg class="mark" viewBox="0 0 100 100" fill="none" aria-hidden="true">
+            <g class="house" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="50" cy="13" r="6" stroke-width="4"/>
+              <path d="M38 34 L50 16 L62 34"/>
+              <rect x="36" y="33" width="28" height="40" rx="5"/>
+              <line x1="32" y1="79" x2="68" y2="79"/>
+            </g>
+            <rect x="42" y="39" width="16" height="28" rx="2" fill="var(--lamp)" opacity=".9"/>
+            <g class="win" stroke-width="2.6">
+              <line x1="50" y1="39" x2="50" y2="67"/>
+              <line x1="42" y1="53" x2="58" y2="53"/>
+            </g>
+            <g class="arcs" stroke-linecap="round" fill="none" stroke-width="5">
+              <path class="wave-pulse" d="M72 42 A16 16 0 0 1 72 66"/>
+              <path class="wave-pulse" d="M80 36 A24 24 0 0 1 80 72" opacity=".55"/>
+              <path class="wave-pulse" d="M28 42 A16 16 0 0 0 28 66"/>
+              <path class="wave-pulse" d="M20 36 A24 24 0 0 0 20 72" opacity=".55"/>
+            </g>
+          </svg>
+          <span class="word">HEARTH<b>WAVE</b></span>
+        </a>
+        <p style="font-size:14px;margin:0">The family airwaves, open to everyone. Self-hosted, accessible GMRS — built so no one is left off the channel.</p>
+      </div>
+      <div class="foot-links">
+        <div><b>Legal</b><a href="#rules">The rules</a><a href="#autotx">Automated functions</a><a href="https://www.fcc.gov/wireless/bureau-divisions/mobility-division/general-mobile-radio-service-gmrs" target="_blank" rel="noopener">Get a license</a></div>
+        <div><b>Project</b><a href="index.html">Hearthwave home</a><a href="https://github.com/Xpiatio/Hearthwave" target="_blank" rel="noopener">GitHub</a><a href="https://github.com/Xpiatio/Hearthwave#readme" target="_blank" rel="noopener">User manual</a></div>
+      </div>
+    </div>
+    <div class="foot-bot">
+      <span>© 2026 Hearthwave · MIT licensed · <span class="tag">Reviewed July 2026</span></span>
+      <span>Informational only — not legal advice</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+/* scroll reveal */
+const io=new IntersectionObserver((es)=>{
+  es.forEach((e)=>{ if(e.isIntersecting){ e.target.style.transitionDelay=(e.target.dataset.d||0)+'ms'; e.target.classList.add('in'); io.unobserve(e.target);} });
+},{threshold:.14});
+document.querySelectorAll('.reveal:not(.in)').forEach((el,idx)=>{ el.dataset.d=(idx%4)*70; io.observe(el); });
+</script>
+<script>
+(function(){
+  var btn=document.getElementById('theme-toggle');
+  if(!btn) return;
+  function label(){
+    btn.setAttribute('aria-label',
+      document.documentElement.dataset.theme==='dusk' ? 'Switch to day theme' : 'Switch to dusk theme');
+  }
+  btn.addEventListener('click', function(){
+    var next=document.documentElement.dataset.theme==='dusk'?'day':'dusk';
+    document.documentElement.dataset.theme=next;
+    try{ localStorage.setItem('hw_theme', next); }catch(e){}
+    label();
+  });
+  label();
+})();
+</script>
+</body>
+</html>

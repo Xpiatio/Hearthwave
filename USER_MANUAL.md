@@ -928,6 +928,8 @@ The two mesh-bridge plugins above are seeded into `/data/plugins` as references 
 
 Hearthwave allows family members to send text-to-speech messages to the base station over the internet. This section explains how that is designed to comply with FCC Part 95 GMRS regulations and what it means for your licence.
 
+> A full rule-by-rule legality breakdown — with verbatim 47 CFR Part 95E citations, the remote-control vs. repeater-linking distinction, and disclosure of every automated transmission — is published at [Legality & FCC compliance](https://xpiatio.github.io/Hearthwave/legality.html).
+
 ### What it is: remote control, not an internet gateway
 
 An internet repeater gateway (sometimes called RoIP or a VoIP bridge) takes audio received from a radio in one location, streams it across the public internet, and retransmits it from a different radio elsewhere. The FCC prohibits this type of internet interconnection on GMRS under Part 95.1749 — GMRS is licensed as a localized family and community service, not a globally-linked network.
