@@ -41,6 +41,8 @@ DEFAULT_PREFS: dict = {
     "spectro_time_window_s": 30,
     "tts_voice": "",
     "tts_length_scale": 0,  # 0 = inherit station default
+    "aac_mode": False,
+    "aac_grid": None,  # None = client renders its built-in default grid
 }
 
 

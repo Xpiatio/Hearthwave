@@ -282,6 +282,32 @@ class TestTxMessageValidation:
 
 
 # ---------------------------------------------------------------------------
+# save_user_prefs — aac_grid validation
+# ---------------------------------------------------------------------------
+
+class TestSaveUserPrefsAacGrid:
+    def test_aac_grid_oversized_returns_error(self, client):
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            huge = {"version": 1, "categories": [
+                {"id": f"c{i}", "name": "x" * 200, "emoji": "⭐", "buttons": []}
+                for i in range(400)
+            ]}
+            ws.send_json({"type": "save_user_prefs", "prefs": {"aac_grid": huge}})
+            msg = ws.receive_json()
+            assert msg["type"] == "error"
+            assert "aac_grid" in msg["detail"]
+
+    def test_aac_grid_non_dict_returns_error(self, client):
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "save_user_prefs", "prefs": {"aac_grid": ["not", "a", "dict"]}})
+            msg = ws.receive_json()
+            assert msg["type"] == "error"
+            assert "aac_grid" in msg["detail"]
+
+
+# ---------------------------------------------------------------------------
 # tx_message — happy path
 # ---------------------------------------------------------------------------
 

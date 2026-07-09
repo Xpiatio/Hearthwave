@@ -40,6 +40,7 @@ This manual covers day-to-day operation of Hearthwave as a GMRS family hub or ne
 24. [Transcription vocabulary biasing](#24-transcription-vocabulary-biasing)
 25. [Deployment profiles and GPU acceleration (admin)](#25-deployment-profiles-and-gpu-acceleration-admin)
 26. [STT calibration wizard (admin)](#26-stt-calibration-wizard-admin)
+27. [AAC interface (symbol-button communication)](#27-aac-interface-symbol-button-communication)
 
 ---
 
@@ -431,6 +432,7 @@ Open your personal settings panel by clicking your **account chip** in the top b
 |---------|-------------|
 | Profanity filter | Masks profanity in your sent and received text (other users unaffected) |
 | Listen-only mode | Disables TX for your account only |
+| AAC Interface (symbol buttons) | Replaces the whole UI with a full-screen symbol-button communication screen — see [section 27](#27-aac-interface-symbol-button-communication) |
 | Fuzzy callsign matching | Station-wide; when Whisper mishears a single character in a callsign (e.g. `WSLZ235` → `WSLZ233`), the chip in chat and the pending/attendance entry are corrected to the known canonical form |
 | Callsign auto-correct | Station-wide; requires fuzzy matching. Rewrites the misheard callsign in the final transcript itself (journal, read-aloud, and plugins see the corrected text). Corrected chips are marked with a dotted underline and a tooltip showing the heard text |
 
@@ -1066,3 +1068,57 @@ Picking the right **Gain control**, **Noise profile denoise**, and **Whisper mod
 - Only models already downloaded to `Models/STT` are swept (Hearthwave never downloads models at runtime). To include a model in the sweep, stage it first with `python bootstrap_models.py --model <name>`.
 - Nothing is changed until you click **Apply** — running the wizard and closing the dialog without applying leaves your current settings untouched.
 - For deeper, scriptable tuning (custom recordings, additional decode parameters, A/B against your own labelled audio) see the offline word-error-rate eval harness referenced in [section 24](#24-transcription-vocabulary-biasing).
+
+---
+
+## 27. AAC interface (symbol-button communication)
+
+The AAC interface turns Hearthwave into an **AAC communication device that transmits** — the same interaction model as the symbol-button speech devices used by many non-speaking people (AAC stands for Augmentative and Alternative Communication). Instead of typing, you tap large picture buttons to build a message, then press one big **SEND** button and Hearthwave speaks it over the radio in your voice.
+
+It is a per-user setting: one family member can use the AAC screen full-time while everyone else keeps the standard interface.
+
+### Turning it on and off
+
+1. Open **Settings → Preferences** and switch on **AAC Interface (symbol buttons)**, then **Save**.
+2. The whole app is replaced by the AAC screen. The setting is remembered per user — signing in from any device (or reloading the page) lands straight on the AAC screen.
+3. To leave, tap the **✕** button in the top-right corner. A confirmation appears with two large buttons — **Yes, exit** returns to the standard interface (and turns the preference off). This confirmation exists so the exit can't be hit by accident mid-conversation.
+
+> **Caregiver note:** the Settings dialog is not reachable from inside the AAC screen — the ✕ Exit button is the only way back. Everything an AAC user needs day-to-day (composing, sending, editing buttons) is available without leaving.
+
+### The AAC screen, top to bottom
+
+| Area | What it does |
+|---|---|
+| Header | Your name and callsign, connection status, ✏️ edit-mode toggle, ✕ exit |
+| Recent messages | The last three transmissions heard or sent, updated live |
+| Sentence strip | The message you are building, one chip per button press, with **Undo** (removes the last word) and **Clear** |
+| Category tabs | Groups of buttons — the starter set is **⭐ Core**, **📻 Radio**, **💬 Status**, **🙋 About me** |
+| Button grid | Large emoji + label buttons; tapping one adds its text to the sentence strip |
+| SEND | Transmits the sentence strip over the radio, exactly like the standard TRANSMIT button. While the radio is keyed it becomes an **ABORT** button |
+
+### Composing and sending
+
+Tap buttons in any order — each press appends its phrase to the sentence strip. **Undo** removes the most recent press (whole phrase, not one letter); **Clear** empties the strip. Press **SEND** when ready: the message is spoken on the air in your TTS voice, appears in everyone's message log, and the strip clears for the next message.
+
+Buttons can carry placeholders: `{Name}` becomes your operator name and `{callsign}` becomes your callsign at the moment you press SEND — so one **Check in** button says *"This is WRXB123 checking in"* for whoever owns the grid. Any other `{...}` placeholder is silently dropped rather than opening a typing prompt.
+
+If your account is set to **Listen-only mode** ([section 13](#13-settings)), the SEND button stays disabled and says so.
+
+### Editing your buttons
+
+Every user gets their own grid, and it can be reshaped freely:
+
+1. Tap the **✏️ pencil** in the header — edit mode. Button borders turn dashed and SEND is disabled so taps can't transmit.
+2. **Change a button:** tap it. A dialog lets you set the emoji, the short label shown on the button, and the (optionally longer) spoken text. **DELETE** removes it after a confirmation.
+3. **Add a button:** tap the dashed **＋ Add** tile at the end of the grid.
+4. **Categories:** the **Category** button renames the current tab (or deletes it, buttons and all); **＋** next to the tabs adds a new category.
+5. Tap the pencil again to leave edit mode.
+
+Every change saves immediately to your account on the station — customize once, and the same grid appears on the tablet, the phone, and the desktop. Limits: 20 categories, 40 buttons per category.
+
+### Tips
+
+- The starter grid is radio-flavored on purpose (QSL, Say again, 73, check-in), but nothing stops you from making it a general communication board — add **I'm hungry**, **Watch TV?**, family names, whatever gets used.
+- Emoji come from the standard emoji keyboard on your device — when editing a button, use it to pick any picture you like.
+- The AAC screen uses extra-large touch targets everywhere and works well on a wall-mounted or lap tablet.
+- Deleting things you regret? The four starter categories can be rebuilt by hand; as a last resort, an admin can restore the default grid by removing the `aac_grid` entry from your user's `prefs` in `/data/users.json` on the server.

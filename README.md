@@ -32,9 +32,20 @@ browser-based React frontend communicating over WebSocket.
   designated net control operators. The NCS roster tracks who is active on each
   patrol; SKYWARN alerts auto-announce over the air when severe weather approaches,
   and trained spotters can file standardized SKYWARN spot reports straight from the net.
+- **Non-speaking operators** — the AAC interface turns Hearthwave into a
+  communication device that transmits: tap large symbol buttons to build a
+  message, press SEND, and it is spoken over the air in your own chosen voice.
+  Deaf and hard-of-hearing operators read every transmission as live text.
 
 ## Features
 
+- **AAC interface** — a per-user toggle swaps the entire UI for a full-screen
+  AAC (Augmentative and Alternative Communication) screen, like the
+  symbol-button speech devices used by non-speaking people: category tabs of
+  large emoji + label buttons build a message in a sentence strip, and one big
+  SEND button speaks it over the radio. The button grid is fully user-editable
+  (buttons, categories, `{Name}`/`{callsign}` placeholders) and follows the
+  user to any device
 - **STT calibration wizard** — read a fixed reference passage into the radio
   and Hearthwave automatically sweeps gain mode, noise-profile denoise, and
   Whisper model against it, ranks each combination by word-error-rate, and

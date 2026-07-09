@@ -1,0 +1,45 @@
+import { Box, Button } from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import type { AACButton, AACCategory } from '../../types/aac';
+import { AAC_MAX_BUTTONS_PER_CATEGORY } from '../../types/aac';
+import { AACGridButton } from './AACGridButton';
+
+interface Props {
+  category: AACCategory;
+  editMode: boolean;
+  onPress: (button: AACButton) => void;
+  onAdd: () => void;
+}
+
+export function ButtonGrid({ category, editMode, onPress, onAdd }: Props) {
+  return (
+    <Box
+      role="group"
+      aria-label={`${category.name} buttons`}
+      sx={{
+        flex: 1,
+        overflowY: 'auto',
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+        gap: 1,
+        p: 1,
+        alignContent: 'start',
+      }}
+    >
+      {category.buttons.map((b) => (
+        <AACGridButton key={b.id} button={b} editMode={editMode} onPress={onPress} />
+      ))}
+      {editMode && category.buttons.length < AAC_MAX_BUTTONS_PER_CATEGORY && (
+        <Button
+          variant="outlined"
+          onClick={onAdd}
+          aria-label="Add new button"
+          sx={{ minHeight: 88, borderStyle: 'dashed', flexDirection: 'column', gap: 0.5 }}
+        >
+          <AddIcon sx={{ fontSize: '2rem' }} />
+          Add
+        </Button>
+      )}
+    </Box>
+  );
+}

@@ -7,6 +7,7 @@ import type { InputDeviceOption, MonitorSinkOption, OutputDeviceOption } from '.
 
 interface Props {
   filterProfanity: boolean;
+  aacMode: boolean;
   fuzzyCallsign: boolean;
   fuzzyCallsignRewrite: boolean;
   inputDevice: string | number;
@@ -19,6 +20,7 @@ interface Props {
   spectroFreqRange: 'voice' | 'full';
   spectroTimeWindowS: number;
   onToggleProfanity: () => void;
+  onToggleAacMode: () => void;
   onToggleFuzzy: () => void;
   onToggleFuzzyRewrite: () => void;
   onInputDeviceChange: (device: string | number, sink: string) => void;
@@ -31,6 +33,7 @@ interface Props {
 
 export function ConfigPanel({
   filterProfanity,
+  aacMode,
   fuzzyCallsign,
   fuzzyCallsignRewrite,
   inputDevice,
@@ -43,6 +46,7 @@ export function ConfigPanel({
   spectroFreqRange,
   spectroTimeWindowS,
   onToggleProfanity,
+  onToggleAacMode,
   onToggleFuzzy,
   onToggleFuzzyRewrite,
   onInputDeviceChange,
@@ -76,6 +80,15 @@ export function ConfigPanel({
             <Switch checked={filterProfanity} onChange={onToggleProfanity} size="small" />
           }
           label="Profanity Filter"
+        />
+
+        {/* Full-screen symbol-button communication interface; the Exit button
+            on the AAC screen is the way back to this dialog. */}
+        <FormControlLabel
+          control={
+            <Switch checked={aacMode} onChange={onToggleAacMode} size="small" />
+          }
+          label="AAC Interface (symbol buttons)"
         />
 
         <FormControlLabel
