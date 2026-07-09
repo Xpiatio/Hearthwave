@@ -34,6 +34,8 @@ import { LoginScreen } from './components/LoginScreen/LoginScreen';
 import { SetupScreen } from './components/SetupScreen/SetupScreen';
 import { DesktopApp } from './components/DesktopApp/DesktopApp';
 import { MobileApp } from './components/MobileApp/MobileApp';
+import { AACApp } from './components/AACApp/AACApp';
+import { makeDefaultGrid, sanitizeAacGrid } from './components/AACApp/defaultGrid';
 import { SettingsDialog } from './components/SettingsDialog/SettingsDialog';
 import { CalibrationDialog } from './components/CalibrationDialog/CalibrationDialog';
 import { UsersPanel } from './components/UsersPanel/UsersPanel';
@@ -123,6 +125,7 @@ export function streamMsgToEntry(msg: StoredStreamMsg): ChatEntry {
 }
 
 import type { JournalResultDraft, PendingStation, PromptState } from './types/appTypes';
+import type { AACGrid } from './types/aac';
 import { TokenPromptDialog } from './components/TokenPromptDialog/TokenPromptDialog';
 
 export default function App() {
@@ -187,13 +190,22 @@ export default function App() {
     () => localStorage.getItem('radio_tty_show_level_meter') !== 'false'
   );
 
+  // AAC mode — initialized from localStorage so a reload lands straight on the
+  // AAC screen (no normal-UI flash); overridden by profile prefs on load
+  const [aacMode, setAacMode] = useState(
+    () => localStorage.getItem('radio_tty_aac_mode') === 'true'
+  );
+  const [aacGrid, setAacGrid] = useState<AACGrid | null>(null);
+  // Stable fallback grid — regenerating per render would churn button ids.
+  const defaultAacGrid = useMemo(() => makeDefaultGrid(), []);
+
   const deviceClass = useDeviceClass();
   const isMobile = deviceClass === 'phone';
 
   const baseTheme = useMemo(() => makeTheme(darkMode), [darkMode]);
   const theme = useMemo(
-    () => (deviceClass === 'tablet' ? withTouchDensity(baseTheme) : baseTheme),
-    [baseTheme, deviceClass],
+    () => (deviceClass === 'tablet' || aacMode ? withTouchDensity(baseTheme) : baseTheme),
+    [baseTheme, deviceClass, aacMode],
   );
 
   // Attendance
@@ -436,6 +448,13 @@ export default function App() {
         if (prefs.notifications_enabled !== undefined) setNotificationsEnabled(prefs.notifications_enabled);
         if (prefs.spectro_colormap) setSpectroColormap(prefs.spectro_colormap);
         if (prefs.spectro_time_window_s) setSpectroTimeWindowS(prefs.spectro_time_window_s);
+        if (prefs.aac_mode !== undefined) {
+          setAacMode(prefs.aac_mode);
+          localStorage.setItem('radio_tty_aac_mode', String(prefs.aac_mode));
+        }
+        if (prefs.aac_grid !== undefined && prefs.aac_grid !== null) {
+          setAacGrid(sanitizeAacGrid(prefs.aac_grid));
+        }
         break;
       }
 
@@ -893,6 +912,18 @@ export default function App() {
     send({ type: 'save_user_prefs', prefs: { dark_mode: next } });
   }
 
+  function handleToggleAacMode() {
+    const next = !aacMode;
+    setAacMode(next);
+    localStorage.setItem('radio_tty_aac_mode', String(next));
+    send({ type: 'save_user_prefs', prefs: { aac_mode: next } });
+  }
+
+  function handleSaveAacGrid(grid: AACGrid) {
+    setAacGrid(grid);
+    send({ type: 'save_user_prefs', prefs: { aac_grid: grid } });
+  }
+
   function handleToggleWaterfall() {
     const next = !showWaterfall;
     setShowWaterfall(next);
@@ -1170,7 +1201,21 @@ export default function App() {
         onSubmit={handleTokenSubmit}
         onCancel={handleTokenCancel}
       />
-      {isMobile ? (
+      {aacMode ? (
+        <AACApp
+          profile={profile}
+          effectiveCallsign={effectiveCallsign}
+          connected={connected}
+          transmitting={transmitting}
+          listenOnly={listenOnly}
+          messages={messages}
+          grid={aacGrid ?? defaultAacGrid}
+          onSend={handleSend}
+          onTxAbort={handleTxAbort}
+          onSaveGrid={handleSaveAacGrid}
+          onExitAac={handleToggleAacMode}
+        />
+      ) : isMobile ? (
         <MobileApp
           {...sharedProps}
           effectiveCallsign={effectiveCallsign}
@@ -1205,6 +1250,8 @@ export default function App() {
         onClose={handleToggleSettings}
         isAdmin={!!profile?.is_admin}
         filterProfanity={filterProfanity}
+        aacMode={aacMode}
+        onToggleAacMode={handleToggleAacMode}
         fuzzyCallsign={fuzzyCallsign}
         fuzzyCallsignRewrite={fuzzyCallsignRewrite}
         inputDevice={inputDevice}

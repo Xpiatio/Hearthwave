@@ -1,3 +1,5 @@
+import type { AACGrid } from './aac';
+
 // [start, end, canonical_callsign, original_heard_text?] — the 4th element is
 // present (non-null) only when fuzzy_callsign_rewrite corrected the transcript.
 export type CallsignSpan =
@@ -391,6 +393,8 @@ export interface UserPrefs {
   spectro_time_window_s: number;
   tts_voice?: string;
   tts_length_scale?: number;
+  aac_mode?: boolean;
+  aac_grid?: AACGrid | null; // null = client renders its built-in default grid
 }
 
 export interface UserProfile {

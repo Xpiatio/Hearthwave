@@ -92,6 +92,7 @@ import base64
 import collections
 import dataclasses
 import datetime
+import json
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -2777,8 +2778,14 @@ async def websocket_endpoint(
                     continue
                 allowed = {"dark_mode", "filter_profanity", "listen_only",
                            "read_aloud", "notifications_enabled", "spectro_colormap", "spectro_time_window_s",
-                           "tts_voice", "tts_length_scale"}
+                           "tts_voice", "tts_length_scale", "aac_mode", "aac_grid"}
                 updates = {k: v for k, v in data.get("prefs", data).items() if k in allowed}
+                grid = updates.get("aac_grid")
+                if grid is not None and (
+                    not isinstance(grid, dict) or len(json.dumps(grid)) > 65536
+                ):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Invalid aac_grid (must be an object under 64 KB)."})
+                    updates.pop("aac_grid")
                 if updates:
                     state.prefs.update(updates)
                     try:

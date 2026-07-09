@@ -326,6 +326,20 @@ class TestUpdatePrefs:
         result = store.update_prefs(alice["id"], {"dark_mode": True})
         assert result["prefs"]["dark_mode"] is True
 
+    def test_aac_defaults(self, store: UsersStore, alice: dict):
+        assert alice["prefs"]["aac_mode"] is False
+        assert alice["prefs"]["aac_grid"] is None
+
+    def test_aac_grid_round_trips_dict(self, store_path: Path, store: UsersStore, alice: dict):
+        grid = {"version": 1, "categories": [
+            {"id": "c1", "name": "Core", "emoji": "⭐",
+             "buttons": [{"id": "b1", "emoji": "👍", "label": "Yes", "text": "Yes"}]},
+        ]}
+        store.update_prefs(alice["id"], {"aac_grid": grid, "aac_mode": True})
+        on_disk = json.loads(store_path.read_text(encoding="utf-8"))
+        assert on_disk[0]["prefs"]["aac_grid"] == grid
+        assert on_disk[0]["prefs"]["aac_mode"] is True
+
 
 # ---------------------------------------------------------------------------
 # Tests: update_profile
