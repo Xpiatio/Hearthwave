@@ -2855,7 +2855,7 @@ async def websocket_endpoint(
                         "type": "profiles",
                         "profiles": _users_store.get_public(),
                     })
-                except KeyError as exc:
+                except (KeyError, ValueError) as exc:
                     await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
 
             elif msg_type == "create_profile":

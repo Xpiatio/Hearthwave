@@ -84,3 +84,34 @@ class TestRoleField:
 
     def test_roles_constant_matches_spec(self):
         assert set(ROLES) == {"admin", "adult", "kid"}
+
+
+class TestUpdateProfileRoleSync:
+    """update_profile must keep role == 'admin' <=> is_admin in sync (Finding 1)."""
+
+    def test_is_admin_true_syncs_role_to_admin(self, store: UsersStore):
+        u = store.create(display_name="Adult", password="pw12345678")
+        assert u["role"] == "adult"
+        out = store.update_profile(u["id"], {"is_admin": True})
+        assert out["is_admin"] is True
+        assert out["role"] == "admin"
+
+    def test_is_admin_false_on_admin_syncs_role_to_adult(self, store: UsersStore):
+        u = store.create(display_name="Admin", password="pw12345678", is_admin=True)
+        out = store.update_profile(u["id"], {"is_admin": False})
+        assert out["is_admin"] is False
+        assert out["role"] == "adult"
+
+    def test_is_admin_true_on_kid_is_rejected(self, store: UsersStore):
+        u = store.create(display_name="Kid", password="pw12345678", role="kid")
+        with pytest.raises(ValueError):
+            store.update_profile(u["id"], {"is_admin": True})
+        after = store.get(u["id"])
+        assert after["role"] == "kid"
+        assert after["is_admin"] is False
+
+    def test_is_admin_false_on_non_admin_leaves_role_unchanged(self, store: UsersStore):
+        u = store.create(display_name="Adult", password="pw12345678")
+        out = store.update_profile(u["id"], {"is_admin": False})
+        assert out["is_admin"] is False
+        assert out["role"] == "adult"

@@ -1913,3 +1913,29 @@ class TestRoleHandlers:
         assert prefs["filter_profanity"] is True
         assert prefs["ui_level"] == "simple"
         assert prefs["listen_only"] is False
+
+    # -- Finding 1: update_profile must sync role when is_admin changes,
+    #    and reject granting is_admin to a kid --
+
+    def test_update_profile_is_admin_rejection_returns_error(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()  # admin caller
+        mock_users.update_profile.side_effect = ValueError(
+            "Cannot grant admin to a kid profile directly; promote via set_role."
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "update_profile", "user_id": "kid-1", "is_admin": True})
+                    msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert "kid" in msg["detail"].lower()

@@ -203,10 +203,31 @@ class UsersStore:
         return dict(self._users[i])
 
     def update_profile(self, user_id: str, updates: dict) -> dict:
-        """Update identity fields on a profile (not password — use change_password)."""
-        allowed = {"display_name", "avatar_emoji", "operator_name", "callsign", "location", "is_admin"}
+        """Update identity fields on a profile (not password — use change_password).
+
+        Keeps the role invariant (role == "admin" <=> is_admin) in sync when
+        *updates* changes is_admin:
+          - is_admin -> True syncs role to "admin".
+          - is_admin -> False on a currently-admin profile syncs role to "adult".
+          - Granting is_admin to a role="kid" profile is rejected outright —
+            a kid must first be promoted off "kid" via set_role, which applies
+            the deliberate, explicit role transition instead of a side-effect
+            of an identity-field edit.
+        """
+        allowed = {"display_name", "avatar_emoji", "operator_name", "callsign", "location"}
         i = self._find_index(user_id)
         merged = dict(self._users[i])
+        if "is_admin" in updates:
+            new_is_admin = bool(updates["is_admin"])
+            if new_is_admin and merged.get("role") == "kid":
+                raise ValueError(
+                    "Cannot grant admin to a kid profile directly; promote via set_role."
+                )
+            merged["is_admin"] = new_is_admin
+            if new_is_admin:
+                merged["role"] = "admin"
+            elif merged.get("role") == "admin":
+                merged["role"] = "adult"
         for k in allowed:
             if k in updates:
                 merged[k] = updates[k]
