@@ -2893,8 +2893,12 @@ async def websocket_endpoint(
                     continue
                 if _users_store is None:
                     continue
+                target_role_id = data.get("user_id", "")
+                if target_role_id == state.user_id and data.get("role") != "admin":
+                    await _manager.send_to(ws, {"type": "error", "detail": "Cannot change your own role away from admin."})
+                    continue
                 try:
-                    updated = _users_store.set_role(data.get("user_id", ""), data.get("role"))
+                    updated = _users_store.set_role(target_role_id, data.get("role"))
                 except ValueError:
                     updated = None
                 if updated is None:

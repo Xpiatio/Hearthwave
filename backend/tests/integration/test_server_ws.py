@@ -1914,6 +1914,52 @@ class TestRoleHandlers:
         assert prefs["ui_level"] == "simple"
         assert prefs["listen_only"] is False
 
+    # -- Finding 2: set_role must not allow an admin to demote themselves --
+
+    def test_set_role_rejects_self_demotion(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()  # admin, id="test-user"
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "set_role", "user_id": "test-user", "role": "adult"})
+                    msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert "own" in msg["detail"].lower()
+        mock_users.set_role.assert_not_called()
+
+    def test_set_role_allows_admin_to_change_others(self, tmp_path):
+        """Sanity check: the self-demotion guard doesn't block changing OTHER users."""
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()  # admin, id="test-user"
+        mock_users.set_role.return_value = {"id": "other", "role": "adult", "is_admin": False}
+        mock_users.get_public.return_value = []
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "set_role", "user_id": "other", "role": "adult"})
+                    msg = _next_of_type(ws, "profiles")
+        assert msg is not None
+        mock_users.set_role.assert_called_once_with("other", "adult")
+
     # -- Finding 1: update_profile must sync role when is_admin changes,
     #    and reject granting is_admin to a kid --
 
