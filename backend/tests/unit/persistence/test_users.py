@@ -116,6 +116,12 @@ class TestCreate:
         for k, v in DEFAULT_PREFS.items():
             assert p["prefs"][k] == v
 
+    def test_default_prefs_include_ui_level_and_a11y(self, store: UsersStore):
+        p = store.create(display_name="Alice", password="pw")
+        assert p["prefs"]["ui_level"] == "simple"
+        assert p["prefs"]["font_scale"] == 1
+        assert p["prefs"]["high_contrast"] is False
+
     def test_custom_prefs_override_defaults(self, store: UsersStore):
         p = store.create(display_name="Alice", password="pw", prefs={"dark_mode": True})
         assert p["prefs"]["dark_mode"] is True

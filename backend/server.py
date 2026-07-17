@@ -2778,7 +2778,8 @@ async def websocket_endpoint(
                     continue
                 allowed = {"dark_mode", "filter_profanity", "listen_only",
                            "read_aloud", "notifications_enabled", "spectro_colormap", "spectro_time_window_s",
-                           "tts_voice", "tts_length_scale", "aac_mode", "aac_grid"}
+                           "tts_voice", "tts_length_scale", "aac_mode", "aac_grid",
+                           "ui_level", "font_scale", "high_contrast"}
                 updates = {k: v for k, v in data.get("prefs", data).items() if k in allowed}
                 grid = updates.get("aac_grid")
                 if grid is not None and (
@@ -2786,6 +2787,12 @@ async def websocket_endpoint(
                 ):
                     await _manager.send_to(ws, {"type": "error", "detail": "Invalid aac_grid (must be an object under 64 KB)."})
                     updates.pop("aac_grid")
+                if "ui_level" in updates and updates["ui_level"] not in ("simple", "operator"):
+                    updates.pop("ui_level")
+                if "font_scale" in updates and updates["font_scale"] not in (1, 1.25, 1.5, 2):
+                    updates.pop("font_scale")
+                if "high_contrast" in updates and not isinstance(updates["high_contrast"], bool):
+                    updates.pop("high_contrast")
                 if updates:
                     state.prefs.update(updates)
                     try:
