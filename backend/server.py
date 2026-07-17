@@ -2156,6 +2156,21 @@ def _is_kid(state: "ConnectionState") -> bool:
     return getattr(state, "role", "adult") == "kid"
 
 
+def _validate_quick_messages(value) -> list[str] | None:
+    """Return sanitized list or None if invalid."""
+    if not isinstance(value, list) or not (1 <= len(value) <= 20):
+        return None
+    out = []
+    for item in value:
+        if not isinstance(item, str):
+            return None
+        item = item.strip()
+        if not (1 <= len(item) <= 200) or any(ord(c) < 32 for c in item):
+            return None
+        out.append(item)
+    return out
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(
     ws: WebSocket,
@@ -2244,6 +2259,12 @@ async def websocket_endpoint(
 
                 if await _check_listen_only(ws, state):
                     continue
+
+                if _is_kid(state):
+                    presets = state.prefs.get("quick_messages") or []
+                    if (data.get("text") or "").strip() not in presets:
+                        await _manager.send_to(ws, {"type": "error", "detail": "TX not allowed for this account"})
+                        continue
 
                 # If the message text contains unresolved {Token} placeholders,
                 # ask the client to fill them in before transmitting.
@@ -2804,7 +2825,7 @@ async def websocket_endpoint(
                 allowed = {"dark_mode", "filter_profanity", "listen_only",
                            "read_aloud", "notifications_enabled", "spectro_colormap", "spectro_time_window_s",
                            "tts_voice", "tts_length_scale", "aac_mode", "aac_grid",
-                           "ui_level", "font_scale", "high_contrast"}
+                           "ui_level", "font_scale", "high_contrast", "quick_messages"}
                 updates = {k: v for k, v in data.get("prefs", data).items() if k in allowed}
                 if _is_kid(state):
                     updates = {k: v for k, v in updates.items() if k in KID_ALLOWED_PREF_KEYS}
@@ -2820,6 +2841,12 @@ async def websocket_endpoint(
                     updates.pop("font_scale")
                 if "high_contrast" in updates and not isinstance(updates["high_contrast"], bool):
                     updates.pop("high_contrast")
+                if "quick_messages" in updates:
+                    qm = _validate_quick_messages(updates["quick_messages"])
+                    if qm is None:
+                        updates.pop("quick_messages")
+                    else:
+                        updates["quick_messages"] = qm
                 if updates:
                     state.prefs.update(updates)
                     try:
@@ -2903,6 +2930,28 @@ async def websocket_endpoint(
                     updated = None
                 if updated is None:
                     await _manager.send_to(ws, {"type": "error", "detail": "Unknown user or role."})
+                    continue
+                await _manager.broadcast({
+                    "type": "profiles",
+                    "profiles": _users_store.get_public(),
+                })
+
+            elif msg_type == "set_user_quick_messages":
+                if not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
+                    continue
+                if _users_store is None:
+                    continue
+                qm = _validate_quick_messages(data.get("quick_messages"))
+                if qm is None:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Invalid quick_messages (must be 1-20 non-empty strings, each 1-200 chars)."})
+                    continue
+                try:
+                    updated = _users_store.update_prefs(data.get("user_id", ""), {"quick_messages": qm})
+                except KeyError:
+                    updated = None
+                if updated is None:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Unknown user."})
                     continue
                 await _manager.broadcast({
                     "type": "profiles",

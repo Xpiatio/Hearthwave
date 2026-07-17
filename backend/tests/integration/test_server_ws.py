@@ -167,6 +167,7 @@ def kid_client(tmp_path):
     cfg = _minimal_cfg(tmp_path)
     mock_stt, mock_tts = _make_mocks()
     mock_users, mock_tokens = _make_auth_mocks(is_admin=False, role="kid")
+    mock_users.get.return_value["prefs"] = {"quick_messages": ["I'm home"]}
     mock_users.update_prefs.return_value = {
         "id": "test-user",
         "display_name": "Test Operator",
@@ -2109,3 +2110,285 @@ class TestRoleHandlers:
                     msg = _next_of_type(ws, "error")
         assert msg is not None
         mock_users.create.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# quick_messages pref — validation, save, and admin-set path
+# ---------------------------------------------------------------------------
+
+class TestValidateQuickMessages:
+    """Unit coverage for the shared _validate_quick_messages() sanitizer."""
+
+    def test_valid_list_stripped(self):
+        from backend.server import _validate_quick_messages
+        assert _validate_quick_messages([" Standing by ", "QSL"]) == ["Standing by", "QSL"]
+
+    def test_rejects_non_list(self):
+        from backend.server import _validate_quick_messages
+        assert _validate_quick_messages("Standing by") is None
+
+    def test_rejects_empty_list(self):
+        from backend.server import _validate_quick_messages
+        assert _validate_quick_messages([]) is None
+
+    def test_rejects_too_many_items(self):
+        from backend.server import _validate_quick_messages
+        assert _validate_quick_messages([f"msg {i}" for i in range(21)]) is None
+
+    def test_accepts_twenty_items(self):
+        from backend.server import _validate_quick_messages
+        assert _validate_quick_messages([f"msg {i}" for i in range(20)]) is not None
+
+    def test_rejects_non_string_item(self):
+        from backend.server import _validate_quick_messages
+        assert _validate_quick_messages(["ok", 42]) is None
+
+    def test_rejects_empty_string_item(self):
+        from backend.server import _validate_quick_messages
+        assert _validate_quick_messages(["ok", "   "]) is None
+
+    def test_rejects_item_over_200_chars(self):
+        from backend.server import _validate_quick_messages
+        assert _validate_quick_messages(["x" * 201]) is None
+
+    def test_rejects_control_chars(self):
+        from backend.server import _validate_quick_messages
+        assert _validate_quick_messages(["bad\x00text"]) is None
+
+
+class TestQuickMessagesPref:
+    def test_save_valid_list(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()
+        mock_users.update_prefs.return_value = {
+            "id": "test-user",
+            "display_name": "Test Operator",
+            "is_admin": True,
+            "prefs": {"quick_messages": ["Standing by", "QSL"]},
+        }
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "save_user_prefs",
+                                  "prefs": {"quick_messages": ["Standing by", "QSL"]}})
+                    msg = _next_of_type(ws, "user_profile")
+        assert msg is not None
+        assert msg["profile"]["prefs"]["quick_messages"] == ["Standing by", "QSL"]
+        mock_users.update_prefs.assert_called_once_with(
+            "test-user", {"quick_messages": ["Standing by", "QSL"]}
+        )
+
+    def test_reject_bad_shapes_but_sibling_key_still_applied(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()
+        mock_users.update_prefs.return_value = {
+            "id": "test-user",
+            "display_name": "Test Operator",
+            "is_admin": True,
+            "prefs": {"dark_mode": True},
+        }
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "save_user_prefs",
+                                  "prefs": {"quick_messages": ["ok", 42], "dark_mode": True}})
+                    msg = _next_of_type(ws, "user_profile")
+        assert msg is not None
+        assert "quick_messages" not in msg["profile"]["prefs"]
+        assert msg["profile"]["prefs"]["dark_mode"] is True
+        # Invalid key silently dropped before reaching the store — only the
+        # valid sibling key is persisted.
+        mock_users.update_prefs.assert_called_once_with("test-user", {"dark_mode": True})
+
+    def test_kid_cannot_save_own_quick_messages(self, kid_client):
+        """quick_messages is intentionally absent from KID_ALLOWED_PREF_KEYS —
+        kids cannot edit their own preset allowlist."""
+        with kid_client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "save_user_prefs",
+                          "prefs": {"quick_messages": ["anything"], "dark_mode": True}})
+            msg = _next_of_type(ws, "user_profile")
+        assert msg is not None
+        assert msg["profile"]["prefs"].get("quick_messages") != ["anything"]
+        assert msg["profile"]["prefs"]["dark_mode"] is True
+
+
+class TestSetUserQuickMessages:
+    def test_admin_sets_kid_presets(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()  # admin, id="test-user"
+        mock_users.update_prefs.return_value = {
+            "id": "kid-1", "role": "kid", "is_admin": False,
+            "prefs": {"quick_messages": ["I'm home", "Call me"]},
+        }
+        mock_users.get_public.return_value = [
+            {"id": "kid-1", "role": "kid", "is_admin": False,
+             "prefs": {"quick_messages": ["I'm home", "Call me"]}},
+        ]
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "set_user_quick_messages", "user_id": "kid-1",
+                                  "quick_messages": ["I'm home", "Call me"]})
+                    msg = _next_of_type(ws, "profiles")
+        assert msg is not None
+        target = next(p for p in msg["profiles"] if p["id"] == "kid-1")
+        assert target["prefs"]["quick_messages"] == ["I'm home", "Call me"]
+        mock_users.update_prefs.assert_called_once_with(
+            "kid-1", {"quick_messages": ["I'm home", "Call me"]}
+        )
+
+    def test_requires_admin(self, non_admin_client):
+        tc, _cfg = non_admin_client
+        with tc.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "set_user_quick_messages", "user_id": "kid-1",
+                          "quick_messages": ["I'm home"]})
+            msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert "admin" in msg["detail"].lower()
+
+    def test_rejects_invalid_shape(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "set_user_quick_messages", "user_id": "kid-1",
+                                  "quick_messages": ["ok", 42]})
+                    msg = _next_of_type(ws, "error")
+        assert msg is not None
+        mock_users.update_prefs.assert_not_called()
+
+    def test_unknown_user_returns_error(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()
+        mock_users.update_prefs.side_effect = KeyError("no such user")
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "set_user_quick_messages", "user_id": "no-such-user",
+                                  "quick_messages": ["I'm home"]})
+                    msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert "unknown" in msg["detail"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Kid TX allowlist gate — kids may only transmit an admin-curated preset
+# ---------------------------------------------------------------------------
+
+class TestKidTxGate:
+    def test_kid_tx_preset_allowed(self, kid_client):
+        """kid_client's profile prefs include quick_messages == ["I'm home"];
+        sending that exact text (strip-compared) transmits normally."""
+        with kid_client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "tx_message", "callsign": "WRXB123", "text": "I'm home"})
+            frames = _drain_until_idle(ws)
+        types = [f["type"] for f in frames]
+        assert "tx_status" in types
+        assert frames[0] == {"type": "tx_status", "status": "transmitting"}
+        assert frames[-1] == {"type": "tx_status", "status": "idle"}
+
+    def test_kid_tx_preset_allowed_with_surrounding_whitespace(self, kid_client):
+        """Preset match is strip-compared, not exact-byte."""
+        with kid_client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "tx_message", "callsign": "WRXB123", "text": "  I'm home  "})
+            frames = _drain_until_idle(ws)
+        assert frames[0] == {"type": "tx_status", "status": "transmitting"}
+
+    def test_kid_tx_freetext_rejected(self, kid_client):
+        with kid_client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "tx_message", "callsign": "WRXB123", "text": "arbitrary words"})
+            msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert "not allowed" in msg["detail"].lower()
+
+    def test_kid_tx_with_no_presets_rejects_everything(self, tmp_path):
+        """Edge case: a kid profile with no configured presets rejects all TX,
+        including a text that happens to be an empty string."""
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks(is_admin=False, role="kid")
+        # No quick_messages set — prefs stay at the {} default from _make_auth_mocks.
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "tx_message", "callsign": "WRXB123", "text": ""})
+                    msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert "not allowed" in msg["detail"].lower()
+
+    def test_kid_chat_message_stays_ungated(self, kid_client):
+        """chat_message is never gated by the TX allowlist, even for kids —
+        only on-air tx_message is restricted to presets."""
+        with kid_client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "chat_message", "text": "arbitrary chat text",
+                          "callsign": "WRXB123", "operator": "Kid"})
+            msg = _next_of_type(ws, "chat_echo")
+        assert msg is not None
+
+    def test_adult_tx_unaffected_by_gate(self, client):
+        """Sanity check: the kid gate must not affect non-kid roles."""
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "tx_message", "callsign": "W5TST", "text": "arbitrary words"})
+            frames = _drain_until_idle(ws)
+        assert frames[0] == {"type": "tx_status", "status": "transmitting"}
