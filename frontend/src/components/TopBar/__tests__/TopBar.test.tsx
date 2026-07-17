@@ -49,6 +49,7 @@ function makeProps(overrides: Partial<Parameters<typeof TopBar>[0]> = {}) {
     stationStatus: 'READY',
     connected: true,
     isOnline: true,
+    uiLevel: 'operator' as const,
     serviceMode: 'GMRS',
     listenOnly: false,
     readAloud: false,

@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import { Box, Snackbar, Alert, Dialog } from '@mui/material';
 import { TopBar } from '../TopBar/TopBar';
 import { ChatDisplay } from '../ChatDisplay/ChatDisplay';
@@ -36,6 +36,11 @@ export interface DesktopAppProps {
   isOnline: boolean | null;
   stationStatus: string;
   showCallsignChips: boolean;
+  /** Interface tier — gates advanced/operator-only TopBar controls. */
+  uiLevel: 'simple' | 'operator';
+  /** Returns to the HomeScreen shell. Renders a Home button (and Escape
+   *  listener) when provided; the desktop-only home routing lives in App.tsx. */
+  onGoHome?: () => void;
 
   // Core data
   messages: ChatEntry[];
@@ -171,6 +176,8 @@ export function DesktopApp({
   isOnline,
   stationStatus,
   showCallsignChips,
+  uiLevel,
+  onGoHome,
   messages,
   contacts,
   radioStatus,
@@ -264,6 +271,18 @@ export function DesktopApp({
 }: DesktopAppProps) {
   const messageInputRef = useRef<MessageInputHandle>(null);
 
+  // Escape returns to the home screen. MUI dialogs close themselves on Esc
+  // first (calling preventDefault), so a plain document listener guarded by
+  // defaultPrevented is enough to avoid double-handling.
+  useEffect(() => {
+    if (!onGoHome) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape' && !e.defaultPrevented) onGoHome!();
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onGoHome]);
+
   return (
     <Box
       className="app-shell"
@@ -274,6 +293,8 @@ export function DesktopApp({
         stationStatus={stationStatus}
         connected={connected}
         isOnline={isOnline}
+        uiLevel={uiLevel}
+        onGoHome={onGoHome}
         serviceMode={serviceMode}
         listenOnly={listenOnly}
         readAloud={readAloud}

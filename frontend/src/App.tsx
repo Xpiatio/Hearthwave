@@ -35,6 +35,7 @@ import { SetupScreen } from './components/SetupScreen/SetupScreen';
 import { DesktopApp } from './components/DesktopApp/DesktopApp';
 import { MobileApp } from './components/MobileApp/MobileApp';
 import { AACApp } from './components/AACApp/AACApp';
+import { HomeScreen } from './components/HomeScreen/HomeScreen';
 import { makeDefaultGrid, sanitizeAacGrid } from './components/AACApp/defaultGrid';
 import { SettingsDialog } from './components/SettingsDialog/SettingsDialog';
 import { CalibrationDialog } from './components/CalibrationDialog/CalibrationDialog';
@@ -151,6 +152,11 @@ export default function App() {
   const [showContacts, setShowContacts] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showCalibration, setShowCalibration] = useState(false);
+
+  // Home-screen shell: which activity is in front (desktop only). Chat unread
+  // count is the simplest honest Phase 1 measure — messages received while on home.
+  const [activity, setActivity] = useState<'home' | 'station'>('home');
+  const homeSeenCountRef = useRef(0);
   const [serverConfig, setServerConfig] = useState<ServerConfig>({
     vadThreshold: 0.5,
     whisperModel: 'small.en',
@@ -1125,6 +1131,16 @@ export default function App() {
   function handleCloseVocabSnack() { setVocabSnack(null); }
   function handleVerifyAllDismiss() { setVerifyAllComplete(false); }
 
+  function handleGoHome() {
+    homeSeenCountRef.current = messages.length;
+    setActivity('home');
+  }
+  function handleOpenActivity(a: 'station' | 'ncs') {
+    if (a === 'ncs') setShowNcs(true);
+    setActivity('station');
+  }
+  const unreadCount = Math.max(0, messages.length - homeSeenCountRef.current);
+
   // Show a blank screen while validating existing token on startup.
   if (authLoading) {
     return (
@@ -1215,6 +1231,7 @@ export default function App() {
     onToggleNotifications: handleToggleNotifications,
     onToggleSttListening: handleToggleSttListening,
     onToggleDark: handleToggleDark,
+    uiLevel,
     adminConfig,
     showSettings,
     onToggleSettings: handleToggleSettings,
@@ -1270,9 +1287,21 @@ export default function App() {
           {...sharedProps}
           effectiveCallsign={effectiveCallsign}
         />
+      ) : activity === 'home' ? (
+        <HomeScreen
+          profile={profile}
+          connected={connected}
+          uiLevel={uiLevel}
+          ncsEnabled={isPluginEnabled(plugins, 'ncs')}
+          unreadCount={unreadCount}
+          onOpenActivity={handleOpenActivity}
+          onOpenSettings={handleToggleSettings}
+          onLogout={handleLogout}
+        />
       ) : (
         <DesktopApp
           {...sharedProps}
+          onGoHome={handleGoHome}
           stationStatus={stationStatus}
           spectroColormap={spectroColormap}
           spectroTimeWindowS={spectroTimeWindowS}
