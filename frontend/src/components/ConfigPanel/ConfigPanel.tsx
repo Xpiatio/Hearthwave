@@ -19,6 +19,9 @@ interface Props {
   spectroColormap: 'viridis' | 'grayscale';
   spectroFreqRange: 'voice' | 'full';
   spectroTimeWindowS: number;
+  uiLevel: 'simple' | 'operator';
+  fontScale: number;
+  highContrast: boolean;
   onToggleProfanity: () => void;
   onToggleAacMode: () => void;
   onToggleFuzzy: () => void;
@@ -28,6 +31,9 @@ interface Props {
   onSpectroColormapChange: (cm: 'viridis' | 'grayscale') => void;
   onSpectroFreqRangeChange: (range: 'voice' | 'full') => void;
   onSpectroTimeWindowChange: (s: number) => void;
+  onUiLevelChange: (v: 'simple' | 'operator') => void;
+  onFontScaleChange: (v: number) => void;
+  onToggleHighContrast: () => void;
   hideHeader?: boolean;
 }
 
@@ -45,6 +51,9 @@ export function ConfigPanel({
   spectroColormap,
   spectroFreqRange,
   spectroTimeWindowS,
+  uiLevel,
+  fontScale,
+  highContrast,
   onToggleProfanity,
   onToggleAacMode,
   onToggleFuzzy,
@@ -54,6 +63,9 @@ export function ConfigPanel({
   onSpectroColormapChange,
   onSpectroFreqRangeChange,
   onSpectroTimeWindowChange,
+  onUiLevelChange,
+  onFontScaleChange,
+  onToggleHighContrast,
   hideHeader = false,
 }: Props) {
   const isLoopback = inputDevice === 'system_monitor';
@@ -73,6 +85,37 @@ export function ConfigPanel({
 
   const body = (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center', px: 2, py: 1.5 }}>
+
+        {/* Interface tier + accessibility */}
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, alignItems: 'center' }}>
+          <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', color: 'text.secondary' }}>
+            Interface:
+          </Typography>
+          <ToggleButtonGroup
+            size="small" exclusive value={uiLevel}
+            onChange={(_, v) => v && onUiLevelChange(v)}
+            aria-label="Interface level"
+          >
+            <ToggleButton value="simple" aria-label="Simple interface">Simple</ToggleButton>
+            <ToggleButton value="operator" aria-label="Operator interface">Operator</ToggleButton>
+          </ToggleButtonGroup>
+          <ToggleButtonGroup
+            size="small" exclusive value={fontScale}
+            onChange={(_, v) => v != null && onFontScaleChange(v)}
+            aria-label="Text size"
+          >
+            <ToggleButton value={1} aria-label="100% text size">A</ToggleButton>
+            <ToggleButton value={1.25} aria-label="125% text size">A+</ToggleButton>
+            <ToggleButton value={1.5} aria-label="150% text size">A++</ToggleButton>
+            <ToggleButton value={2} aria-label="200% text size">A+++</ToggleButton>
+          </ToggleButtonGroup>
+          <FormControlLabel
+            control={<Switch checked={highContrast} onChange={onToggleHighContrast} size="small" />}
+            label="High Contrast"
+          />
+        </Box>
+
+        <Divider orientation="vertical" flexItem />
 
         {/* Text / content toggles */}
         <FormControlLabel

@@ -9,9 +9,11 @@ function makeProps(overrides = {}) {
     filterProfanity: false, fuzzyCallsign: false, inputDevice: -1, systemMonitorSink: '',
     inputDevices: [], monitorSinks: [], outputDevice: -1, outputDevices: [],
     spectroColormap: 'viridis' as const, spectroFreqRange: 'full' as const, spectroTimeWindowS: 30,
+    uiLevel: 'operator' as const, fontScale: 1, highContrast: false,
     onToggleProfanity: vi.fn(), onToggleFuzzy: vi.fn(), onInputDeviceChange: vi.fn(),
     onOutputDeviceChange: vi.fn(), onSpectroColormapChange: vi.fn(),
     onSpectroFreqRangeChange: vi.fn(), onSpectroTimeWindowChange: vi.fn(),
+    onUiLevelChange: vi.fn(), onFontScaleChange: vi.fn(), onToggleHighContrast: vi.fn(),
     adminConfig: {
       stationCallsign: 'N0CALL', stationName: '', stationLocation: '', stationVoice: '',
       stationLengthScale: 1, geminiApiKeySet: false, journalsDir: '', ncsZone: '', rxMode: 'voice',

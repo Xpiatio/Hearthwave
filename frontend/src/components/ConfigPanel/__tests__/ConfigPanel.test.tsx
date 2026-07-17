@@ -42,6 +42,9 @@ function makeDefaultProps() {
     spectroColormap: 'viridis' as const,
     spectroFreqRange: 'voice' as const,
     spectroTimeWindowS: 30,
+    uiLevel: 'operator' as const,
+    fontScale: 1,
+    highContrast: false,
     onToggleProfanity: vi.fn(),
     onToggleFuzzy: vi.fn(),
     onToggleFuzzyRewrite: vi.fn(),
@@ -50,6 +53,9 @@ function makeDefaultProps() {
     onSpectroColormapChange: vi.fn(),
     onSpectroFreqRangeChange: vi.fn(),
     onSpectroTimeWindowChange: vi.fn(),
+    onUiLevelChange: vi.fn(),
+    onFontScaleChange: vi.fn(),
+    onToggleHighContrast: vi.fn(),
   }
 }
 

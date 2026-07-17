@@ -199,10 +199,29 @@ export default function App() {
   // Stable fallback grid — regenerating per render would churn button ids.
   const defaultAacGrid = useMemo(() => makeDefaultGrid(), []);
 
+  // Interface tier ("simple" hides advanced controls) — persisted locally;
+  // overridden by profile prefs on load
+  const [uiLevel, setUiLevel] = useState<'simple' | 'operator'>(
+    () => (localStorage.getItem('radio_tty_ui_level') as 'simple' | 'operator' | null) ?? 'operator'
+  );
+
+  // Text size scale — persisted locally; overridden by profile prefs on load
+  const [fontScale, setFontScale] = useState(
+    () => Number(localStorage.getItem('radio_tty_font_scale')) || 1
+  );
+
+  // High contrast theme — persisted locally; overridden by profile prefs on load
+  const [highContrast, setHighContrast] = useState(
+    () => localStorage.getItem('radio_tty_high_contrast') === 'true'
+  );
+
   const deviceClass = useDeviceClass();
   const isMobile = deviceClass === 'phone';
 
-  const baseTheme = useMemo(() => makeTheme(darkMode), [darkMode]);
+  const baseTheme = useMemo(
+    () => makeTheme(darkMode, { fontScale, highContrast }),
+    [darkMode, fontScale, highContrast],
+  );
   const theme = useMemo(
     () => (deviceClass === 'tablet' || aacMode ? withTouchDensity(baseTheme) : baseTheme),
     [baseTheme, deviceClass, aacMode],
@@ -454,6 +473,18 @@ export default function App() {
         }
         if (prefs.aac_grid !== undefined && prefs.aac_grid !== null) {
           setAacGrid(sanitizeAacGrid(prefs.aac_grid));
+        }
+        if (prefs.ui_level) {
+          setUiLevel(prefs.ui_level);
+          localStorage.setItem('radio_tty_ui_level', prefs.ui_level);
+        }
+        if (prefs.font_scale) {
+          setFontScale(prefs.font_scale);
+          localStorage.setItem('radio_tty_font_scale', String(prefs.font_scale));
+        }
+        if (prefs.high_contrast !== undefined) {
+          setHighContrast(prefs.high_contrast);
+          localStorage.setItem('radio_tty_high_contrast', String(prefs.high_contrast));
         }
         break;
       }
@@ -912,6 +943,25 @@ export default function App() {
     send({ type: 'save_user_prefs', prefs: { dark_mode: next } });
   }
 
+  function handleUiLevelChange(next: 'simple' | 'operator') {
+    setUiLevel(next);
+    localStorage.setItem('radio_tty_ui_level', next);
+    send({ type: 'save_user_prefs', prefs: { ui_level: next } });
+  }
+
+  function handleFontScaleChange(next: number) {
+    setFontScale(next);
+    localStorage.setItem('radio_tty_font_scale', String(next));
+    send({ type: 'save_user_prefs', prefs: { font_scale: next } });
+  }
+
+  function handleToggleHighContrast() {
+    const next = !highContrast;
+    setHighContrast(next);
+    localStorage.setItem('radio_tty_high_contrast', String(next));
+    send({ type: 'save_user_prefs', prefs: { high_contrast: next } });
+  }
+
   function handleToggleAacMode() {
     const next = !aacMode;
     setAacMode(next);
@@ -1263,6 +1313,9 @@ export default function App() {
         spectroColormap={spectroColormap}
         spectroFreqRange={spectroFreqRange}
         spectroTimeWindowS={spectroTimeWindowS}
+        uiLevel={uiLevel}
+        fontScale={fontScale}
+        highContrast={highContrast}
         onToggleProfanity={handleToggleProfanity}
         onToggleFuzzy={handleToggleFuzzy}
         onToggleFuzzyRewrite={handleToggleFuzzyRewrite}
@@ -1271,6 +1324,9 @@ export default function App() {
         onSpectroColormapChange={handleSpectroColormapChange}
         onSpectroFreqRangeChange={handleSpectroFreqRangeChange}
         onSpectroTimeWindowChange={handleSpectroTimeWindowChange}
+        onUiLevelChange={handleUiLevelChange}
+        onFontScaleChange={handleFontScaleChange}
+        onToggleHighContrast={handleToggleHighContrast}
         adminConfig={adminConfig}
         voices={voices}
         voicePreviewBusy={voicePreviewBusy}
