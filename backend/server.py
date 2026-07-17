@@ -143,6 +143,7 @@ from backend.persistence.contacts import (
 from backend.persistence.audit import AuditLog
 from backend.auth_ratelimit import _extract_ip, get_client_ip
 from backend.persistence.journal import delete_journal, load_journals, load_published_manifest, publish_journal, save_journal, unpublish_journal
+from backend.persistence.presence import PresenceStore
 from backend.persistence.tokens import TokenStore
 from backend.persistence.users import (
     DEFAULT_PREFS,
@@ -187,6 +188,7 @@ _plugin_ctx = None
 _contacts_store: ContactsStore | None = None
 _users_store: UsersStore | None = None
 _token_store: TokenStore | None = None
+_presence_store: PresenceStore | None = None
 _audit_log: AuditLog | None = None
 _stt_worker: STTWorker | None = None
 _synthesizer: TTSSynthesizer | None = None
@@ -548,6 +550,31 @@ def _build_pending_payload() -> dict:
         for cs, info in _pending_stations.items()
     ]
     return {"type": "pending_stations", "stations": stations}
+
+
+_NO_PRESENCE_RECORD: dict = {"last_heard": None, "last_ok": None, "missed_checkin": False}
+
+
+def _build_family_presence_msg() -> dict:
+    """Join presence records onto every known user profile.
+
+    Users with no presence record yet (never transmitted or checked in) still
+    get an entry, with null last_heard/last_ok and missed_checkin=False, so
+    the client can render the full family roster.
+    """
+    entries = []
+    profiles = _users_store.get_public() if _users_store else []
+    for prof in profiles:
+        e = _presence_store.get(prof["id"]) if _presence_store else dict(_NO_PRESENCE_RECORD)
+        entries.append({
+            "user_id": prof["id"],
+            "display_name": prof.get("display_name"),
+            "avatar_emoji": prof.get("avatar_emoji"),
+            "last_heard": e["last_heard"],
+            "last_ok": e["last_ok"],
+            "missed_checkin": e["missed_checkin"],
+        })
+    return {"type": "family_presence", "entries": entries}
 
 
 async def _on_auto_add_result(
@@ -1415,7 +1442,7 @@ async def _voices_watcher_pump() -> None:
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     """Startup / shutdown wiring."""
-    global _config, _contacts_store, _users_store, _token_store, _stt_worker, _synthesizer, _monitor, _plugin_ctx
+    global _config, _contacts_store, _users_store, _token_store, _presence_store, _stt_worker, _synthesizer, _monitor, _plugin_ctx
     global _stt_out_queue, _tx_queue, _tts_event_queue, _background_tasks, _tx_abort_event
     global _audio_level, _radio_error, _channel_clear, _last_id_time, _has_transmitted, _last_beacon_time, _ncs_plugin
     global _level_window, _attendance, _spectro, _monitor_chunk_cb
@@ -1451,6 +1478,7 @@ async def _lifespan(app: FastAPI):
 
     _users_store = UsersStore(_config.users_file)
     _token_store = TokenStore(_config.tokens_file)
+    _presence_store = PresenceStore(_config.presence_file)
     purged = _token_store.purge_expired()
     if purged:
         _log.info("Purged %d expired session tokens.", purged)
@@ -2156,6 +2184,32 @@ def _is_kid(state: "ConnectionState") -> bool:
     return getattr(state, "role", "adult") == "kid"
 
 
+async def _enqueue_family_tts(text: str) -> None:
+    """Enqueue a pre-formatted family_status phrase for TTS/PTT.
+
+    Mirrors the NCS spot-report/net-script enqueue idiom: operator-initiated
+    (keys even over a busy channel), pre-formatted (no further TTS templating).
+    """
+    await _tx_queue.put({"text": text, "_pre_formatted": True, "_operator_initiated": True})
+
+
+async def _broadcast_family_chat(text: str, display_name: str) -> None:
+    """Broadcast a family_status phrase to the shared chat log.
+
+    Mirrors the chat_message idiom: broadcast_rx + StreamHistory.record_rx
+    raw/filtered split, so each client's own filter_profanity pref applies.
+    """
+    chat_echo_base = {
+        "type": "chat_echo",
+        "ts": utc_now_iso(),
+        "display_name": display_name,
+        "operator": "",
+        "callsign": "",
+    }
+    await _manager.broadcast_rx(chat_echo_base, text, mask_profanity(text))
+    _stream_history.record_rx(chat_echo_base, text, mask_profanity(text))
+
+
 def _validate_quick_messages(value) -> list[str] | None:
     """Return sanitized list or None if invalid."""
     if not isinstance(value, list) or not (1 <= len(value) <= 20):
@@ -2227,6 +2281,7 @@ async def websocket_endpoint(
         })
     await _manager.send_to(ws, _build_attendance_payload())
     await _manager.send_to(ws, _build_pending_payload())
+    await _manager.send_to(ws, _build_family_presence_msg())
     await _manager.send_to(ws, {"type": "voices_list", "voices": _list_voices()})
     # Backfill the shared message stream accumulated since the last clear
     # (snapshotted above, before this socket joined the broadcast set).
@@ -2311,6 +2366,9 @@ async def websocket_endpoint(
                     continue  # TX blocked by a plugin
                 await _tx_queue.put(tx_payload)
                 await _manager.broadcast({"type": "tx_status", "status": "transmitting"})
+                if _presence_store is not None:
+                    _presence_store.touch_heard(state.user_id, utc_now_iso())
+                    await _manager.broadcast(_build_family_presence_msg())
 
             elif msg_type == "chat_message":
                 # Chat-only: shared to all operators in the log but never keyed
@@ -2338,6 +2396,26 @@ async def websocket_endpoint(
                     mask_profanity(text),
                 )
                 _stream_history.record_rx(chat_echo_base, text, mask_profanity(text))
+
+            elif msg_type == "family_status":
+                # "I'm OK" check-in — a safety feature, so kids CAN send this
+                # (no _is_kid gate) and listen-only users still get recorded;
+                # listen-only only skips the TTS/PTT leg, not the chat entry,
+                # the presence update, or the broadcast.
+                if data.get("status") != "ok":
+                    await _manager.send_to(ws, {"type": "error", "detail": "Unknown family status"})
+                    continue
+                profile_rec = (
+                    (_users_store.get_public_one(state.user_id) or {}) if _users_store else {}
+                )
+                name = (profile_rec.get("operator_name") or profile_rec.get("display_name") or "Operator").strip()
+                text = f"Family status: {name} is okay."
+                if not state.prefs.get("listen_only", False):
+                    await _enqueue_family_tts(text)
+                await _broadcast_family_chat(text, profile_rec.get("display_name") or "")
+                if _presence_store is not None:
+                    _presence_store.mark_ok(state.user_id, utc_now_iso())
+                    await _manager.broadcast(_build_family_presence_msg())
 
             elif msg_type == "add_contact":
                 if _contacts_store is None:

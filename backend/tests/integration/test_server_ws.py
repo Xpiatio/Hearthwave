@@ -35,6 +35,7 @@ def _minimal_cfg(tmp_path: Path, *, listen_only: bool = False) -> ServerConfig:
         "location": "Test City",
         "voice": "fake_voice",
         "contacts_file": str(contacts_file),
+        "presence_file": str(tmp_path / "presence.json"),
         "listen_only": listen_only,
     })
 
@@ -200,8 +201,9 @@ def _drain_initial(ws, limit: int = 10) -> list[dict]:
     """Drain the burst of initial frames every new connection receives.
 
     The server sends: status, user_profile, contacts, session_attendance,
-    pending_stations, voices_list, chat_history (and optionally online_status).
-    Stop when chat_history is seen so tests start from a clean slate.
+    pending_stations, family_presence, voices_list, chat_history (and
+    optionally online_status). Stop when chat_history is seen so tests start
+    from a clean slate.
     """
     frames = []
     for _ in range(limit):
@@ -2470,3 +2472,188 @@ class TestKidTxGate:
             ws.send_json({"type": "tx_message", "callsign": "W5TST", "text": "arbitrary words"})
             frames = _drain_until_idle(ws)
         assert frames[0] == {"type": "tx_status", "status": "transmitting"}
+
+
+# ---------------------------------------------------------------------------
+# family_status ("I'm OK") — presence + chat + TTS fan-out
+# ---------------------------------------------------------------------------
+
+def _family_status_auth_mocks(*, is_admin: bool = True, role: str | None = None, listen_only: bool = False):
+    """_make_auth_mocks() plus get_public() wired.
+
+    _build_family_presence_msg() joins presence onto *every* known profile via
+    get_public() (unlike get()/get_public_one(), which are keyed to the
+    connecting user) — so family_presence assertions need it configured.
+    """
+    mock_users, mock_tokens = _make_auth_mocks(is_admin=is_admin, role=role, listen_only=listen_only)
+    mock_users.get_public.return_value = [
+        {"id": "test-user", "display_name": "Test Operator", "avatar_emoji": "👤"},
+    ]
+    return mock_users, mock_tokens
+
+
+class TestFamilyStatus:
+    def test_im_ok_fans_out_presence_chat_and_tts(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        captured: dict[str, str] = {}
+
+        async def _capture_synth(_voice, text, *_args, **_kwargs):
+            captured["text"] = text
+            return None, None
+
+        mock_tts.synthesize_to_buffer = _capture_synth
+        mock_users, mock_tokens = _family_status_auth_mocks()
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch("piper.PiperVoice"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "family_status", "status": "ok"})
+
+                    chat = _next_of_type(ws, "chat_echo")
+                    assert chat is not None
+                    assert chat["text"] == "Family status: Test Operator is okay."
+
+                    presence = _next_of_type(ws, "family_presence")
+                    assert presence is not None
+                    me = next(e for e in presence["entries"] if e["user_id"] == "test-user")
+                    assert me["last_ok"] is not None
+                    assert me["missed_checkin"] is False
+
+                    _drain_until_idle(ws)  # blocks until the TTS leg has actually run
+
+        assert captured.get("text") == "Family status: Test Operator is okay."
+
+    def test_listen_only_skips_tts_leg_but_still_chats_and_marks_ok(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path, listen_only=True)
+        mock_stt, mock_tts = _make_mocks()
+        captured: dict[str, str] = {}
+
+        async def _capture_synth(_voice, text, *_args, **_kwargs):
+            captured["text"] = text
+            return None, None
+
+        mock_tts.synthesize_to_buffer = _capture_synth
+        mock_users, mock_tokens = _family_status_auth_mocks(listen_only=True)
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch("piper.PiperVoice"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "family_status", "status": "ok"})
+
+                    chat = _next_of_type(ws, "chat_echo")
+                    assert chat is not None
+
+                    presence = _next_of_type(ws, "family_presence")
+                    me = next(e for e in presence["entries"] if e["user_id"] == "test-user")
+                    assert me["last_ok"] is not None
+                    assert me["missed_checkin"] is False
+
+        assert "text" not in captured, "listen-only family_status must not enqueue TTS"
+
+    def test_kid_can_send_family_status(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _family_status_auth_mocks(is_admin=False, role="kid")
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch("piper.PiperVoice"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "family_status", "status": "ok"})
+                    assert _next_of_type(ws, "family_presence") is not None
+
+    def test_unknown_status_value_returns_error(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _family_status_auth_mocks()
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch("piper.PiperVoice"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "family_status", "status": "not-ok"})
+                    err = _next_of_type(ws, "error")
+        assert err is not None
+        assert err["detail"] == "Unknown family status"
+
+    def test_family_presence_sent_on_connect(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _family_status_auth_mocks()
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    frames = _drain_initial(ws)
+        presence_frames = [f for f in frames if f["type"] == "family_presence"]
+        assert len(presence_frames) == 1
+        me = next(e for e in presence_frames[0]["entries"] if e["user_id"] == "test-user")
+        assert me == {
+            "user_id": "test-user",
+            "display_name": "Test Operator",
+            "avatar_emoji": "👤",
+            "last_heard": None,
+            "last_ok": None,
+            "missed_checkin": False,
+        }
+
+
+class TestTxMessageTouchesPresence:
+    def test_tx_message_touches_last_heard(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _family_status_auth_mocks()
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch("piper.PiperVoice"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "tx_message", "callsign": "WRXB123", "text": "hello net"})
+                    presence = _next_of_type(ws, "family_presence")
+        assert presence is not None
+        me = next(e for e in presence["entries"] if e["user_id"] == "test-user")
+        assert me["last_heard"] is not None
