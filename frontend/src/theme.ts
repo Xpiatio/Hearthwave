@@ -70,23 +70,18 @@ export function makeTheme(dark: boolean, opts?: ThemeOptionsExtra) {
       },
       MuiButtonBase: {
         styleOverrides: {
-          root: {
-            '&:focus-visible': {
-              outline: '3px solid',
-              outlineOffset: '2px',
-              outlineColor: dark ? '#60A5FA' : '#2563EB',
+          root: ({ theme }) => ({
+            '&.Mui-focusVisible': {
+              outline: `3px solid ${theme.palette.primary.main}`,
+              outlineOffset: 2,
             },
-          },
+          }),
         },
       },
       MuiOutlinedInput: {
         styleOverrides: {
           root: {
             fontSize: `${1.125 * s}rem`,
-            '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-              borderWidth: '2px',
-              borderColor: dark ? '#60A5FA' : '#2563EB',
-            },
           },
         },
       },

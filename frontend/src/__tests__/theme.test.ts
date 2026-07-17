@@ -61,3 +61,19 @@ describe('AppBar (top header) theming', () => {
     expect(style.color).toBe('#0F2540');
   });
 });
+
+describe('Focus ring (MuiButtonBase)', () => {
+  it('focus ring uses the active (high-contrast) primary color', () => {
+    const t = makeTheme(false, { highContrast: true });
+    const override = t.components?.MuiButtonBase?.styleOverrides?.root as (o: { theme: typeof t }) => Record<string, unknown>;
+    const styles = override({ theme: t }) as { '&.Mui-focusVisible': { outline: string } };
+    expect(styles['&.Mui-focusVisible'].outline).toBe('3px solid #003399');
+  });
+
+  it('focus ring uses default primary in light mode without high-contrast', () => {
+    const t = makeTheme(false);
+    const override = t.components?.MuiButtonBase?.styleOverrides?.root as (o: { theme: typeof t }) => Record<string, unknown>;
+    const styles = override({ theme: t }) as { '&.Mui-focusVisible': { outline: string } };
+    expect(styles['&.Mui-focusVisible'].outline).toBe('3px solid #2563EB');
+  });
+});
