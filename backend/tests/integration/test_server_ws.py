@@ -2296,6 +2296,84 @@ class TestSetUserQuickMessages:
         assert msg is not None
         mock_users.update_prefs.assert_not_called()
 
+    def test_rejects_placeholder_preset_for_kid(self, tmp_path):
+        """A kid preset containing a {Token} placeholder is permanently
+        untransmittable (the kid TX gate matches raw preset text, but the
+        client's resend after prompt_token carries resolved text, which no
+        longer matches any preset).  Reject at write time instead."""
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()  # admin, id="test-user"
+
+        def get_side_effect(user_id):
+            if user_id == "kid-1":
+                return {"id": "kid-1", "role": "kid", "is_admin": False, "prefs": {}}
+            return {"id": "test-user", "display_name": "Test Operator",
+                    "is_admin": True, "role": "admin", "prefs": {}}
+        mock_users.get.side_effect = get_side_effect
+
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "set_user_quick_messages", "user_id": "kid-1",
+                                  "quick_messages": ["Home by {Time}"]})
+                    msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert msg["detail"] == "Kid presets cannot contain placeholders"
+        mock_users.update_prefs.assert_not_called()
+
+    def test_allows_placeholder_preset_for_adult(self, tmp_path):
+        """Regression guard: adult/admin presets legitimately use {N}
+        placeholders (resolved client-side before TX) and must not be
+        blocked by the kid-only placeholder rule."""
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()  # admin, id="test-user"
+
+        def get_side_effect(user_id):
+            if user_id == "adult-1":
+                return {"id": "adult-1", "role": "adult", "is_admin": False, "prefs": {}}
+            return {"id": "test-user", "display_name": "Test Operator",
+                    "is_admin": True, "role": "admin", "prefs": {}}
+        mock_users.get.side_effect = get_side_effect
+        mock_users.update_prefs.return_value = {
+            "id": "adult-1", "role": "adult", "is_admin": False,
+            "prefs": {"quick_messages": ["Home by {Time}"]},
+        }
+        mock_users.get_public.return_value = [
+            {"id": "adult-1", "role": "adult", "is_admin": False,
+             "prefs": {"quick_messages": ["Home by {Time}"]}},
+        ]
+
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "set_user_quick_messages", "user_id": "adult-1",
+                                  "quick_messages": ["Home by {Time}"]})
+                    msg = _next_of_type(ws, "profiles")
+        assert msg is not None
+        target = next(p for p in msg["profiles"] if p["id"] == "adult-1")
+        assert target["prefs"]["quick_messages"] == ["Home by {Time}"]
+        mock_users.update_prefs.assert_called_once_with(
+            "adult-1", {"quick_messages": ["Home by {Time}"]}
+        )
+
     def test_unknown_user_returns_error(self, tmp_path):
         cfg = _minimal_cfg(tmp_path)
         mock_stt, mock_tts = _make_mocks()

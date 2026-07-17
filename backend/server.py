@@ -2946,8 +2946,17 @@ async def websocket_endpoint(
                 if qm is None:
                     await _manager.send_to(ws, {"type": "error", "detail": "Invalid quick_messages (must be 1-20 non-empty strings, each 1-200 chars)."})
                     continue
+                target_user_id = data.get("user_id", "")
+                target_profile = _users_store.get(target_user_id)
+                if (
+                    target_profile is not None
+                    and target_profile.get("role") == "kid"
+                    and any("{" in msg or "}" in msg for msg in qm)
+                ):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Kid presets cannot contain placeholders"})
+                    continue
                 try:
-                    updated = _users_store.update_prefs(data.get("user_id", ""), {"quick_messages": qm})
+                    updated = _users_store.update_prefs(target_user_id, {"quick_messages": qm})
                 except KeyError:
                     updated = None
                 if updated is None:
