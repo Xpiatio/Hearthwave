@@ -144,7 +144,13 @@ from backend.persistence.audit import AuditLog
 from backend.auth_ratelimit import _extract_ip, get_client_ip
 from backend.persistence.journal import delete_journal, load_journals, load_published_manifest, publish_journal, save_journal, unpublish_journal
 from backend.persistence.tokens import TokenStore
-from backend.persistence.users import DEFAULT_PREFS, ROLES, SENSITIVE_PROFILE_FIELDS, UsersStore
+from backend.persistence.users import (
+    DEFAULT_PREFS,
+    ROLES,
+    SENSITIVE_PROFILE_FIELDS,
+    UsersStore,
+    effective_prefs as _effective_prefs,
+)
 from backend.ptt.factory import make_ptt
 from backend.stt.calibration import CalibrationCapture, PREAMBLE_TEXT, run_sweep
 from backend.stt.transcriber import WhisperTranscriber
@@ -1275,16 +1281,6 @@ def _build_status() -> dict:
         # Drives the admin Plugins manager (list, enable/disable, settings form).
         "plugins": plugin_registry.manifests(_config) if _config else [],
     }
-
-
-def _effective_prefs(profile: dict) -> dict:
-    """Merge profile prefs with defaults, forcing server-enforced kid locks."""
-    prefs = {**DEFAULT_PREFS, **profile.get("prefs", {})}
-    if profile.get("role") == "kid":
-        prefs["filter_profanity"] = True
-        prefs["ui_level"] = "simple"
-        prefs["listen_only"] = False
-    return prefs
 
 
 def _safe_profile(profile: dict) -> dict:

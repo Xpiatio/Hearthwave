@@ -52,6 +52,22 @@ DEFAULT_PREFS: dict = {
 }
 
 
+def effective_prefs(profile: dict) -> dict:
+    """Merge profile prefs with defaults, forcing server-enforced kid locks.
+
+    Shared by the WS server and the REST auth routes so both surfaces apply
+    the same kid pref locks (filter_profanity/ui_level/listen_only) — a
+    profile's *stored* prefs must never be handed back to the client as-is
+    when role == "kid".
+    """
+    prefs = {**DEFAULT_PREFS, **profile.get("prefs", {})}
+    if profile.get("role") == "kid":
+        prefs["filter_profanity"] = True
+        prefs["ui_level"] = "simple"
+        prefs["listen_only"] = False
+    return prefs
+
+
 def _hash_password(password: str, salt_hex: str) -> str:
     """Return PBKDF2-SHA256 hex digest for *password* using *salt_hex*."""
     salt = bytes.fromhex(salt_hex)
