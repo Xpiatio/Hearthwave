@@ -3,8 +3,9 @@ import { streamMsgToEntry } from '../App';
 import type { StoredStreamMsg } from '../types/ws';
 
 // streamMsgToEntry maps a backfilled chat_history entry to a ChatEntry. The
-// chat_history handler is just `messages.map(streamMsgToEntry)` and chat_cleared
-// just empties the list, so covering the mapper covers the backfill behaviour.
+// chat_history handler is just `messages.map(streamMsgToEntry)`, so covering
+// the mapper covers the backfill behaviour. (chat_cleared empties the list
+// and also resets homeSeenCountRef — see App.tsx.)
 describe('streamMsgToEntry', () => {
   it('maps a chat_echo to a chat entry, preferring display_name as sender', () => {
     const msg = {

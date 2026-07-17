@@ -4,6 +4,11 @@ interface Props {
   emoji: string;
   title: string;
   subtitle?: string;
+  /** Unread count for this activity (e.g. unseen chat messages). When
+   *  nonzero it's folded into the accessible name — aria-label overrides
+   *  the button's text content for the accessible name, so without this
+   *  the "N new" subtitle text is invisible to screen readers. */
+  unreadCount?: number;
   onClick: () => void;
   tabIndex?: number;
   onKeyDown?: (e: React.KeyboardEvent) => void;
@@ -13,12 +18,13 @@ interface Props {
 
 /** Large tap-target card for the home activity grid (AAC-style sizing). */
 export function ActivityCard({
-  emoji, title, subtitle, onClick, tabIndex, onKeyDown, onFocus, buttonRef,
+  emoji, title, subtitle, unreadCount, onClick, tabIndex, onKeyDown, onFocus, buttonRef,
 }: Props) {
+  const accessibleName = unreadCount ? `${title}, ${unreadCount} new` : title;
   return (
     <ButtonBase
       onClick={onClick}
-      aria-label={title}
+      aria-label={accessibleName}
       tabIndex={tabIndex}
       onKeyDown={onKeyDown}
       onFocus={onFocus}

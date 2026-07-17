@@ -549,8 +549,14 @@ export default function App() {
       }
 
       case 'chat_cleared':
-        // An admin cleared the chat for everyone.
+        // An admin cleared the chat for everyone. Reset the seen-count
+        // ref alongside the message list — otherwise it stays ahead of
+        // the now-empty log and the Home unread badge math
+        // (messages.length - homeSeenCountRef.current) goes negative
+        // (clamped to 0, but stays wrong) until enough new messages
+        // arrive to catch back up.
         setMessages([]);
+        homeSeenCountRef.current = 0;
         break;
 
       case 'system_msg':

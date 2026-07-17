@@ -64,6 +64,19 @@ describe('HomeScreen', () => {
     expect(screen.getByText(/3 new/i)).toBeInTheDocument();
   });
 
+  it('folds the unread count into the Chat card accessible name', () => {
+    // aria-label overrides a button's text-content accessible name, so the
+    // "3 new" subtitle text alone is invisible to screen readers unless
+    // it's also reflected in aria-label.
+    render(<HomeScreen {...base} unreadCount={3} />);
+    expect(screen.getByRole('button', { name: 'Chat, 3 new' })).toBeInTheDocument();
+  });
+
+  it('omits the unread suffix from the accessible name when there are no unread messages', () => {
+    render(<HomeScreen {...base} unreadCount={0} />);
+    expect(screen.getByRole('button', { name: 'Chat' })).toBeInTheDocument();
+  });
+
   it('has no axe violations', async () => {
     const { container } = render(<HomeScreen {...base} uiLevel="operator" />);
     expect(await axe(container)).toHaveNoViolations();

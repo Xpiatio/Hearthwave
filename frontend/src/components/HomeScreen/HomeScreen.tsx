@@ -22,6 +22,10 @@ interface CardDef {
   emoji: string;
   title: string;
   subtitle?: string;
+  /** Passed through to ActivityCard so it can fold the count into the
+   *  accessible name — see ActivityCard for why the subtitle text alone
+   *  isn't enough. */
+  unreadCount?: number;
   onClick: () => void;
 }
 
@@ -31,6 +35,7 @@ export function HomeScreen(props: Props) {
     {
       key: 'chat', emoji: '💬', title: 'Chat',
       subtitle: props.unreadCount > 0 ? `${props.unreadCount} new` : 'Talk on the radio',
+      unreadCount: props.unreadCount,
       onClick: () => props.onOpenActivity('station'),
     },
   ];
@@ -97,6 +102,7 @@ export function HomeScreen(props: Props) {
               emoji={c.emoji}
               title={c.title}
               subtitle={c.subtitle}
+              unreadCount={c.unreadCount}
               onClick={c.onClick}
               buttonRef={(el) => { refs.current[i] = el; }}
               tabIndex={i === effectiveFocusIdx ? 0 : -1}
