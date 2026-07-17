@@ -41,6 +41,8 @@ This manual covers day-to-day operation of Hearthwave as a GMRS family hub or ne
 25. [Deployment profiles and GPU acceleration (admin)](#25-deployment-profiles-and-gpu-acceleration-admin)
 26. [STT calibration wizard (admin)](#26-stt-calibration-wizard-admin)
 27. [AAC interface (symbol-button communication)](#27-aac-interface-symbol-button-communication)
+28. [Home screen & interface levels](#28-home-screen--interface-levels)
+29. [Accessibility options](#29-accessibility-options)
 
 ---
 
@@ -1122,3 +1124,72 @@ Every change saves immediately to your account on the station — customize once
 - Emoji come from the standard emoji keyboard on your device — when editing a button, use it to pick any picture you like.
 - The AAC screen uses extra-large touch targets everywhere and works well on a wall-mounted or lap tablet.
 - Deleting things you regret? The four starter categories can be rebuilt by hand; as a last resort, an admin can restore the default grid by removing the `aac_grid` entry from your user's `prefs` in `/data/users.json` on the server.
+
+---
+
+## 28. Home screen & interface levels
+
+On desktop and tablet, signing in lands you on a **Home screen** — a small grid of activity cards — instead of dropping you straight into the full station console. (Phones keep the mobile bottom-tab layout and AAC Interface users keep the AAC screen; both are unaffected by the Home screen.)
+
+### Activity cards
+
+| Card | Shown when |
+|---|---|
+| **💬 Chat** | Always. Subtitle shows a new-message count if there's unread chat since you last left Home. |
+| **🎙 Net Control** | Only for accounts on the **Operator** interface level, and only when the NCS plugin is enabled (see [section 22](#22-plugins)). |
+
+Click a card (or focus it and press **Enter**) to open it:
+
+- **Chat** opens the full station console — chat display, spectrogram, quick messages, message box, and whichever panels you have toggled on.
+- **Net Control** opens the same station console with the NCS panel already showing.
+
+### Returning to Home
+
+- Click the **home icon** in the top bar, or
+- Press **Escape** from anywhere in the station console.
+
+Either one takes you back to the Home screen without signing out; your connection and any in-progress typing elsewhere are unaffected.
+
+### Interface level — Simple vs. Operator
+
+Every account has an **Interface level**, set on the **Preferences** tab of Settings (click your account chip → **Settings**): **Simple** or **Operator**. It's a per-user preference, saved to your account like everything else in Preferences — click **Save** in the dialog footer to apply it.
+
+- **Simple** (the default) shows only what a casual family member or watch volunteer needs: the Chat card on Home, and inside the station console the core send/receive controls, contacts, listen-only, read-aloud, and notifications.
+- **Operator** unlocks the controls a net-running or technically-minded user wants:
+
+| Adds | Where |
+|---|---|
+| **Net Control** card | Home screen (also requires the NCS plugin enabled) |
+| **STATIONS** (session attendance) panel | Top bar toggle |
+| **JOURNAL** panel | Top bar toggle |
+| **WATERFALL** (spectrogram) toggle | Top bar toggle |
+| **LEVEL** (RX audio level meter) toggle | Top bar toggle |
+| **NCS MODE** button | Top bar (admin accounts only, and only when the NCS plugin is enabled) |
+| Service mode switch (GMRS ⇄ FRS) | Top bar |
+| **LISTEN** / **LISTENING** (STT start/stop) button | Top bar |
+| **Clear chat log** button | Top bar (admin accounts only) |
+
+Switching between Simple and Operator doesn't lose any data — panels and settings gated behind Operator simply reappear if you switch back.
+
+---
+
+## 29. Accessibility options
+
+Text size and contrast are per-user preferences on the **Preferences** tab of Settings, alongside the Interface level toggle. Both apply immediately across the whole app, not just chat text.
+
+### Text size
+
+Four steps are available — **A** (100%, default), **A+** (125%), **A++** (150%), **A+++** (200%). Pick one with the text-size buttons in Settings → Preferences. Scaling applies to the entire interface, including the Home screen cards, buttons, and chat log, and the layout reflows to avoid horizontal scrolling at any step.
+
+### High Contrast
+
+The **High Contrast** switch in Settings → Preferences increases color contrast throughout the app — most noticeably a pure black background with white text when combined with dark mode (or a plain white background with black text in light mode), plus stronger, more saturated primary and error colors. It works independently of the dark/light mode toggle ([section 13](#13-settings)), so you can combine either mode with High Contrast on or off.
+
+### Keyboard navigation
+
+The whole app, including the Home screen, is operable from the keyboard:
+
+- **Tab** moves focus into the Home screen's activity card grid; the arrow keys (**↑ ↓ ← →**) move focus between cards without leaving the grid.
+- **Enter** (or **Space**) activates the focused card, quick message, or button anywhere in the app.
+- **Escape** returns to the Home screen from the station console (see [section 28](#28-home-screen--interface-levels)).
+- Focused controls show a visible focus ring (a colored outline) so keyboard users can always see where focus is — this is especially clear with High Contrast enabled.
