@@ -275,6 +275,13 @@ export function DesktopApp({
   // Escape returns to the home screen (no-ops when onGoHome is undefined).
   useEscapeToHome(onGoHome);
 
+  // Operator-only panels (waterfall, RX level meter, NCS, attendance,
+  // journal) must not render in simple tier even if their show-flags are
+  // still true from a prior operator-tier session — the flags persist
+  // independently of uiLevel in App.tsx state, so gate rendering here too,
+  // not just the TopBar toggle buttons that flip the flags.
+  const isOperatorTier = uiLevel === 'operator';
+
   return (
     <Box
       className="app-shell"
@@ -331,7 +338,7 @@ export function DesktopApp({
         onTxAbort={onTxAbort}
       />
 
-      {showNcs && ncsEnabled && (
+      {showNcs && ncsEnabled && isOperatorTier && (
         <NCSPanel send={send} lastMessage={lastMessage} contacts={contacts}
                   channelClear={channelClear} transmitting={transmitting} />
       )}
@@ -343,10 +350,10 @@ export function DesktopApp({
         onDismissAll={onDismissAllPending}
       />
 
-      {showLevelMeter && <AudioLevelMeter ref={levelMeterRef} />}
+      {showLevelMeter && isOperatorTier && <AudioLevelMeter ref={levelMeterRef} />}
 
       <Box sx={{ display: 'flex', flexDirection: 'row', flex: '1 1 auto', overflow: 'hidden' }}>
-        {showWaterfall && (
+        {showWaterfall && isOperatorTier && (
           <Spectrogram
             ref={spectroRef}
             colormap={spectroColormap}
@@ -383,23 +390,21 @@ export function DesktopApp({
       )}
 
       <Dialog
-        open={showAttendance}
+        open={showAttendance && isOperatorTier}
         onClose={onToggleAttendance}
         maxWidth="lg"
         fullWidth
-        slotProps={{ paper: { sx: { height: '80vh' } } }}
-        aria-label="Stations heard this session"
+        slotProps={{ paper: { sx: { height: '80vh' }, 'aria-label': 'Stations heard this session' } }}
       >
         <AttendancePanel stations={attendanceStations} onClear={onClearAttendance} fillHeight />
       </Dialog>
 
       <Dialog
-        open={showJournal}
+        open={showJournal && isOperatorTier}
         onClose={onToggleJournal}
         maxWidth="lg"
         fullWidth
-        slotProps={{ paper: { sx: { height: '80vh' } } }}
-        aria-label="Session journal"
+        slotProps={{ paper: { sx: { height: '80vh' }, 'aria-label': 'Session journal' } }}
       >
         <JournalPanel
           journals={journals} pendingResult={journalResult} generating={journalGenerating}
