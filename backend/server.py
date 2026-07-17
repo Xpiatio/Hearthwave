@@ -144,7 +144,7 @@ from backend.persistence.audit import AuditLog
 from backend.auth_ratelimit import _extract_ip, get_client_ip
 from backend.persistence.journal import delete_journal, load_journals, load_published_manifest, publish_journal, save_journal, unpublish_journal
 from backend.persistence.tokens import TokenStore
-from backend.persistence.users import DEFAULT_PREFS, SENSITIVE_PROFILE_FIELDS, UsersStore
+from backend.persistence.users import DEFAULT_PREFS, ROLES, SENSITIVE_PROFILE_FIELDS, UsersStore
 from backend.ptt.factory import make_ptt
 from backend.stt.calibration import CalibrationCapture, PREAMBLE_TEXT, run_sweep
 from backend.stt.transcriber import WhisperTranscriber
@@ -263,6 +263,7 @@ class ConnectionState:
     user_id: str
     is_admin: bool
     prefs: dict = dataclasses.field(default_factory=lambda: dict(DEFAULT_PREFS))
+    role: str = "adult"
     # Voice PTT session
     voice_tx_active:   bool = False
     voice_tx_chunks:   list = dataclasses.field(default_factory=list)  # list[bytes]
@@ -1276,8 +1277,20 @@ def _build_status() -> dict:
     }
 
 
+def _effective_prefs(profile: dict) -> dict:
+    """Merge profile prefs with defaults, forcing server-enforced kid locks."""
+    prefs = {**DEFAULT_PREFS, **profile.get("prefs", {})}
+    if profile.get("role") == "kid":
+        prefs["filter_profanity"] = True
+        prefs["ui_level"] = "simple"
+        prefs["listen_only"] = False
+    return prefs
+
+
 def _safe_profile(profile: dict) -> dict:
-    return {k: v for k, v in profile.items() if k not in SENSITIVE_PROFILE_FIELDS}
+    safe = {k: v for k, v in profile.items() if k not in SENSITIVE_PROFILE_FIELDS}
+    safe["prefs"] = _effective_prefs(profile)
+    return safe
 
 
 def _build_user_profile_msg(profile: dict) -> dict:
@@ -2138,6 +2151,15 @@ async def _check_listen_only(ws: WebSocket, state: "ConnectionState") -> bool:
     return False
 
 
+# Kid-role connections may only self-serve cosmetic prefs via save_user_prefs;
+# filter_profanity/ui_level/listen_only are server-enforced (see _effective_prefs).
+KID_ALLOWED_PREF_KEYS = {"dark_mode", "font_scale", "high_contrast"}
+
+
+def _is_kid(state: "ConnectionState") -> bool:
+    return getattr(state, "role", "adult") == "kid"
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(
     ws: WebSocket,
@@ -2162,10 +2184,17 @@ async def websocket_endpoint(
         return
 
     await ws.accept()
+    role = profile.get("role") or ("admin" if profile.get("is_admin") else "adult")
+    conn_prefs = {**DEFAULT_PREFS, **profile.get("prefs", {})}
+    if role == "kid":
+        conn_prefs["filter_profanity"] = True
+        conn_prefs["ui_level"] = "simple"
+        conn_prefs["listen_only"] = False
     state = ConnectionState(
         user_id=user_id,
         is_admin=bool(profile.get("is_admin", False)),
-        prefs={**DEFAULT_PREFS, **profile.get("prefs", {})},
+        prefs=conn_prefs,
+        role=role,
     )
     # Snapshot the stream backfill *before* registering the socket (no await in
     # between, so no interleaving): anything broadcast after `add` reaches this
@@ -2781,6 +2810,8 @@ async def websocket_endpoint(
                            "tts_voice", "tts_length_scale", "aac_mode", "aac_grid",
                            "ui_level", "font_scale", "high_contrast"}
                 updates = {k: v for k, v in data.get("prefs", data).items() if k in allowed}
+                if _is_kid(state):
+                    updates = {k: v for k, v in updates.items() if k in KID_ALLOWED_PREF_KEYS}
                 grid = updates.get("aac_grid")
                 if grid is not None and (
                     not isinstance(grid, dict) or len(json.dumps(grid)) > 65536
@@ -2838,6 +2869,9 @@ async def websocket_endpoint(
                 if not display_name or not password:
                     await _manager.send_to(ws, {"type": "error", "detail": "display_name and password are required."})
                     continue
+                role = data.get("role")
+                if role is not None and role not in ROLES:
+                    role = None
                 _users_store.create(
                     display_name=display_name,
                     password=password,
@@ -2846,7 +2880,26 @@ async def websocket_endpoint(
                     callsign=(data.get("callsign") or ""),
                     location=(data.get("location") or ""),
                     is_admin=bool(data.get("is_admin", False)),
+                    role=role,
                 )
+                await _manager.broadcast({
+                    "type": "profiles",
+                    "profiles": _users_store.get_public(),
+                })
+
+            elif msg_type == "set_role":
+                if not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
+                    continue
+                if _users_store is None:
+                    continue
+                try:
+                    updated = _users_store.set_role(data.get("user_id", ""), data.get("role"))
+                except ValueError:
+                    updated = None
+                if updated is None:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Unknown user or role."})
+                    continue
                 await _manager.broadcast({
                     "type": "profiles",
                     "profiles": _users_store.get_public(),

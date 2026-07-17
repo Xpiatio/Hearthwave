@@ -48,13 +48,16 @@ def _make_mocks():
     return mock_stt, mock_tts
 
 
-def _make_auth_mocks(*, listen_only: bool = False, is_admin: bool = True):
+def _make_auth_mocks(*, listen_only: bool = False, is_admin: bool = True, role: str | None = None):
+    if role is None:
+        role = "admin" if is_admin else "adult"
     mock_users = MagicMock()
     mock_users.is_empty.return_value = False
     mock_users.get.return_value = {
         "id": "test-user",
         "display_name": "Test Operator",
         "is_admin": is_admin,
+        "role": role,
         "prefs": {"listen_only": listen_only} if listen_only else {},
     }
     mock_users.get_public_one.return_value = {"display_name": "Test Operator"}
@@ -146,6 +149,36 @@ def listen_only_client(tmp_path):
     cfg = _minimal_cfg(tmp_path, listen_only=True)
     mock_stt, mock_tts = _make_mocks()
     mock_users, mock_tokens = _make_auth_mocks(listen_only=True)
+    with (
+        patch("backend.server.ServerConfig.load", return_value=cfg),
+        patch("backend.server.STTWorker", return_value=mock_stt),
+        patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+        patch("backend.server.UsersStore", return_value=mock_users),
+        patch("backend.server.TokenStore", return_value=mock_tokens),
+        patch("backend.auth_routes.init"),
+    ):
+        with TestClient(app) as tc:
+            yield tc
+
+
+@pytest.fixture
+def kid_client(tmp_path):
+    """Connected as a role="kid" user — server-enforced pref locks apply."""
+    cfg = _minimal_cfg(tmp_path)
+    mock_stt, mock_tts = _make_mocks()
+    mock_users, mock_tokens = _make_auth_mocks(is_admin=False, role="kid")
+    mock_users.update_prefs.return_value = {
+        "id": "test-user",
+        "display_name": "Test Operator",
+        "is_admin": False,
+        "role": "kid",
+        "prefs": {
+            "dark_mode": True,
+            "filter_profanity": True,
+            "ui_level": "simple",
+            "listen_only": False,
+        },
+    }
     with (
         patch("backend.server.ServerConfig.load", return_value=cfg),
         patch("backend.server.STTWorker", return_value=mock_stt),
@@ -1778,3 +1811,105 @@ class TestCalibrationApply:
             ws.send_json({"type": "calibration_apply", "whisper_model": "medium.en"})
             msg = ws.receive_json()
             assert msg["type"] == "error"
+
+
+# ---------------------------------------------------------------------------
+# Role management (admin|adult|kid) — set_role handler + kid pref locking
+# ---------------------------------------------------------------------------
+
+class TestRoleHandlers:
+    def test_set_role_requires_admin(self, non_admin_client):
+        tc, _cfg = non_admin_client
+        with tc.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "set_role", "user_id": "other", "role": "kid"})
+            msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert "admin" in msg["detail"].lower()
+
+    def test_set_role_broadcasts_profiles(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()
+        mock_users.set_role.return_value = {"id": "other", "role": "kid", "is_admin": False}
+        mock_users.get_public.return_value = [
+            {"id": "test-user", "role": "admin", "is_admin": True},
+            {"id": "other", "role": "kid", "is_admin": False},
+        ]
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "set_role", "user_id": "other", "role": "kid"})
+                    msg = _next_of_type(ws, "profiles")
+        assert msg is not None
+        assert any(p.get("role") == "kid" for p in msg["profiles"])
+        mock_users.set_role.assert_called_once_with("other", "kid")
+
+    def test_set_role_unknown_role_returns_error(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()
+        mock_users.set_role.side_effect = ValueError("unknown role: superuser")
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "set_role", "user_id": "other", "role": "superuser"})
+                    msg = _next_of_type(ws, "error")
+        assert msg is not None
+
+    def test_kid_prefs_locked(self, kid_client):
+        with kid_client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "save_user_prefs",
+                          "prefs": {"filter_profanity": False, "ui_level": "operator",
+                                    "listen_only": True, "dark_mode": True}})
+            msg = _next_of_type(ws, "user_profile")
+        assert msg is not None
+        prefs = msg["profile"]["prefs"]
+        assert prefs["filter_profanity"] is True
+        assert prefs["ui_level"] == "simple"
+        assert prefs["dark_mode"] is True      # allowed key applied
+        assert prefs["listen_only"] is False   # disallowed key dropped/locked
+
+    def test_kid_connection_prefs_locked_on_connect(self, tmp_path):
+        """A kid profile with subverted saved prefs still connects locked."""
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks(is_admin=False, role="kid")
+        mock_users.get.return_value["prefs"] = {
+            "filter_profanity": False,
+            "ui_level": "operator",
+            "listen_only": True,
+        }
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    frames = _drain_initial(ws)
+        profile_msg = next(f for f in frames if f.get("type") == "user_profile")
+        prefs = profile_msg["profile"]["prefs"]
+        assert prefs["filter_profanity"] is True
+        assert prefs["ui_level"] == "simple"
+        assert prefs["listen_only"] is False
