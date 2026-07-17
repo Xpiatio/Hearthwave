@@ -2839,6 +2839,9 @@ async def websocket_endpoint(
                 if state.is_admin:
                     allowed.add("is_admin")
                 updates = {k: v for k, v in data.items() if k in allowed}
+                if target_id == state.user_id and "is_admin" in updates and not updates["is_admin"]:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Cannot remove your own admin access."})
+                    continue
                 new_password = data.get("new_password")
                 try:
                     updated = _users_store.update_profile(target_id, updates)

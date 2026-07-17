@@ -1986,6 +1986,103 @@ class TestRoleHandlers:
         assert msg is not None
         assert "kid" in msg["detail"].lower()
 
+    # -- Phase 2 re-review Finding A: update_profile must not allow an admin
+    #    to demote themselves via is_admin: false (would reopen the
+    #    sole-admin lockout that set_role's self-demotion guard closed) --
+
+    def test_update_profile_rejects_self_demotion(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()  # admin, id="test-user"
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "update_profile", "is_admin": False})
+                    msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert "own" in msg["detail"].lower()
+        mock_users.update_profile.assert_not_called()
+
+    def test_update_profile_rejects_self_demotion_with_explicit_user_id(self, tmp_path):
+        """Same guard when the admin targets their own id explicitly rather than omitting user_id."""
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()  # admin, id="test-user"
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "update_profile", "user_id": "test-user", "is_admin": False})
+                    msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert "own" in msg["detail"].lower()
+        mock_users.update_profile.assert_not_called()
+
+    def test_update_profile_allows_self_edit_of_non_role_fields(self, tmp_path):
+        """Sanity check: the self-demotion guard doesn't block editing your own other fields."""
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()  # admin, id="test-user"
+        mock_users.update_profile.return_value = {
+            "id": "test-user", "display_name": "New Name", "is_admin": True, "role": "admin", "prefs": {},
+        }
+        mock_users.get_public.return_value = []
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "update_profile", "display_name": "New Name"})
+                    msg = _next_of_type(ws, "user_profile")
+        assert msg is not None
+        mock_users.update_profile.assert_called_once_with("test-user", {"display_name": "New Name"})
+
+    def test_update_profile_allows_demoting_others(self, tmp_path):
+        """Sanity check: the self-demotion guard doesn't block demoting OTHER users."""
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()  # admin, id="test-user"
+        mock_users.update_profile.return_value = {
+            "id": "other", "display_name": "Other", "is_admin": False, "role": "adult", "prefs": {},
+        }
+        mock_users.get_public.return_value = []
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "update_profile", "user_id": "other", "is_admin": False})
+                    msg = _next_of_type(ws, "profiles")
+        assert msg is not None
+        mock_users.update_profile.assert_called_once_with("other", {"is_admin": False})
+
     # -- Finding 4: create_profile with an invalid role must error, not silently drop it --
 
     def test_create_profile_invalid_role_returns_error(self, tmp_path):
