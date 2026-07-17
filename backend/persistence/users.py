@@ -28,6 +28,9 @@ SENSITIVE_PROFILE_FIELDS: frozenset[str] = frozenset(
     {"password_hash", "password_salt", "failed_attempts", "locked_until"}
 )
 
+# Valid values for profile["role"]. Invariant: role == "admin" <=> is_admin is True.
+ROLES: tuple[str, ...] = ("admin", "adult", "kid")
+
 LOCKOUT_MAX_ATTEMPTS = 3
 LOCKOUT_DURATION_MINUTES = 15
 
@@ -66,6 +69,7 @@ class UsersStore:
     def __init__(self, path: Path = _DEFAULT_PATH) -> None:
         self._path = Path(path)
         self._users: list[dict] = self._load()
+        self._migrate_roles()
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -84,6 +88,16 @@ class UsersStore:
 
     def _save(self) -> None:
         atomic_json_write(self._path, self._users)
+
+    def _migrate_roles(self) -> None:
+        """Backfill `role` on legacy records loaded before roles existed."""
+        changed = False
+        for rec in self._users:
+            if "role" not in rec:
+                rec["role"] = "admin" if rec.get("is_admin") else "adult"
+                changed = True
+        if changed:
+            self._save()
 
     def _find_index(self, user_id: str) -> int:
         for i, u in enumerate(self._users):
@@ -147,8 +161,15 @@ class UsersStore:
         callsign: str = "",
         location: str = "",
         is_admin: bool = False,
+        role: str | None = None,
         prefs: dict | None = None,
     ) -> dict:
+        if role is not None:
+            if role not in ROLES:
+                raise ValueError(f"unknown role: {role}")
+            is_admin = role == "admin"
+        else:
+            role = "admin" if is_admin else "adult"
         user_id = self._make_id(display_name)
         salt_hex = secrets.token_hex(32)
         pw_hash = _hash_password(password, salt_hex)
@@ -163,6 +184,7 @@ class UsersStore:
             "password_hash": pw_hash,
             "password_salt": salt_hex,
             "is_admin": is_admin,
+            "role": role,
             "failed_attempts": 0,
             "locked_until": None,
             "created_at": now,
@@ -191,6 +213,19 @@ class UsersStore:
         self._users[i] = merged
         self._save()
         return dict(merged)
+
+    def set_role(self, user_id: str, role: str) -> dict | None:
+        """Set a user's role; keeps is_admin in sync (role == 'admin' <=> is_admin)."""
+        if role not in ROLES:
+            raise ValueError(f"unknown role: {role}")
+        try:
+            i = self._find_index(user_id)
+        except KeyError:
+            return None
+        self._users[i]["role"] = role
+        self._users[i]["is_admin"] = role == "admin"
+        self._save()
+        return dict(self._users[i])
 
     def change_password(self, user_id: str, new_password: str) -> None:
         i = self._find_index(user_id)
