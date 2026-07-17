@@ -537,11 +537,16 @@ export default function App() {
         ]);
         break;
 
-      case 'chat_history':
+      case 'chat_history': {
         // Backfill of the shared stream since the last clear. Replaces the
         // local log (sent once on connect, before any live messages).
-        setMessages(msg.messages.map(streamMsgToEntry));
+        const entries = msg.messages.map(streamMsgToEntry);
+        setMessages(entries);
+        // Treat backfilled history as already seen so the Home unread badge
+        // only counts messages that arrive after login, not the whole log.
+        homeSeenCountRef.current = entries.length;
         break;
+      }
 
       case 'chat_cleared':
         // An admin cleared the chat for everyone.

@@ -44,6 +44,21 @@ describe('HomeScreen', () => {
     expect(cards[1]).toHaveAttribute('tabindex', '0');
   });
 
+  it('keeps a tabbable card after cards shrink out from under a stale focus index', () => {
+    const { rerender } = render(<HomeScreen {...base} uiLevel="operator" />);
+    const grid = screen.getByRole('list', { name: /activities/i });
+    let cards = within(grid).getAllByRole('button');
+    cards[0].focus();
+    fireEvent.keyDown(cards[0], { key: 'ArrowRight' }); // focusIdx -> 1 (Net Control card)
+    expect(cards[1]).toHaveAttribute('tabindex', '0');
+
+    // uiLevel drops to simple — Net Control card disappears, only Chat remains.
+    rerender(<HomeScreen {...base} uiLevel="simple" />);
+    cards = within(grid).getAllByRole('button');
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toHaveAttribute('tabindex', '0');
+  });
+
   it('shows unread badge on Chat card', () => {
     render(<HomeScreen {...base} unreadCount={3} />);
     expect(screen.getByText(/3 new/i)).toBeInTheDocument();

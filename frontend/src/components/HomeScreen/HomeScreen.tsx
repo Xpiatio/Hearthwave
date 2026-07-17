@@ -44,6 +44,10 @@ export function HomeScreen(props: Props) {
   // Roving tabindex: one card is tabbable; arrows move focus.
   const [focusIdx, setFocusIdx] = useState(0);
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  // Clamp so a stale focusIdx (e.g. cards shrank because uiLevel/ncsEnabled
+  // changed) never points past the end — otherwise every card would land at
+  // tabIndex -1 and the grid would become unreachable by keyboard.
+  const effectiveFocusIdx = Math.min(focusIdx, cards.length - 1);
   function handleKeyDown(e: React.KeyboardEvent, idx: number) {
     let next = idx;
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (idx + 1) % cards.length;
@@ -95,7 +99,7 @@ export function HomeScreen(props: Props) {
               subtitle={c.subtitle}
               onClick={c.onClick}
               buttonRef={(el) => { refs.current[i] = el; }}
-              tabIndex={i === focusIdx ? 0 : -1}
+              tabIndex={i === effectiveFocusIdx ? 0 : -1}
               onKeyDown={(e) => handleKeyDown(e, i)}
               onFocus={() => setFocusIdx(i)}
             />

@@ -1,5 +1,6 @@
-import { useRef, useEffect } from 'react';
+import { useRef } from 'react';
 import { Box, Snackbar, Alert, Dialog } from '@mui/material';
+import { useEscapeToHome } from '../../hooks/useEscapeToHome';
 import { TopBar } from '../TopBar/TopBar';
 import { ChatDisplay } from '../ChatDisplay/ChatDisplay';
 import type { ChatEntry } from '../ChatDisplay/ChatDisplay';
@@ -271,17 +272,8 @@ export function DesktopApp({
 }: DesktopAppProps) {
   const messageInputRef = useRef<MessageInputHandle>(null);
 
-  // Escape returns to the home screen. MUI dialogs close themselves on Esc
-  // first (calling preventDefault), so a plain document listener guarded by
-  // defaultPrevented is enough to avoid double-handling.
-  useEffect(() => {
-    if (!onGoHome) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape' && !e.defaultPrevented) onGoHome!();
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onGoHome]);
+  // Escape returns to the home screen (no-ops when onGoHome is undefined).
+  useEscapeToHome(onGoHome);
 
   return (
     <Box
