@@ -202,7 +202,7 @@ export default function App() {
   // Interface tier ("simple" hides advanced controls) — persisted locally;
   // overridden by profile prefs on load
   const [uiLevel, setUiLevel] = useState<'simple' | 'operator'>(
-    () => (localStorage.getItem('radio_tty_ui_level') as 'simple' | 'operator' | null) ?? 'operator'
+    () => (localStorage.getItem('radio_tty_ui_level') as 'simple' | 'operator' | null) ?? 'simple'
   );
 
   // Text size scale — persisted locally; overridden by profile prefs on load
