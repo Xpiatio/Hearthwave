@@ -28,9 +28,13 @@ function isTextEntryElement(target: EventTarget | null): boolean {
  * an operator bail out of the desktop shell back to the HomeScreen.
  *
  * Skipped in two cases:
- *  - event.defaultPrevented: some other Escape handler (e.g. a MUI Dialog
- *    closing itself) already acted on this keypress, so we don't also
- *    navigate home on top of it.
+ *  - event.defaultPrevented: some other Escape handler already called
+ *    preventDefault() on this keypress, so we don't also navigate home on
+ *    top of it. Note this does NOT cover MUI Dialog/Modal's own
+ *    Escape-to-close: Modal stops the keydown via stopPropagation(), not
+ *    preventDefault(), so it never reaches this document-level listener at
+ *    all — the guard exists for other (non-MUI) handlers that do set
+ *    defaultPrevented.
  *  - the event target is a text-entry element (input/textarea/
  *    contenteditable): Escape there should blur/clear the field per that
  *    component's own behavior, not blow away an in-progress draft by
