@@ -1,12 +1,19 @@
 import { createTheme, type Theme } from '@mui/material/styles';
 
-export function makeTheme(dark: boolean) {
+export interface ThemeOptionsExtra {
+  fontScale?: number;
+  highContrast?: boolean;
+}
+
+export function makeTheme(dark: boolean, opts?: ThemeOptionsExtra) {
+  const s = opts?.fontScale ?? 1;
+  const hc = opts?.highContrast ?? false;
   return createTheme({
     palette: {
       mode: dark ? 'dark' : 'light',
       primary: {
-        main: dark ? '#60A5FA' : '#2563EB',
-        dark: dark ? '#2563EB' : '#1D4ED8',
+        main: hc ? (dark ? '#99CCFF' : '#003399') : dark ? '#60A5FA' : '#2563EB',
+        dark: hc ? (dark ? '#66B2FF' : '#002266') : dark ? '#2563EB' : '#1D4ED8',
       },
       info: {
         main: dark ? '#93C5FD' : '#1E4976',
@@ -15,26 +22,29 @@ export function makeTheme(dark: boolean) {
         main: dark ? '#FBBF24' : '#7a4a00',
       },
       error: {
-        main: dark ? '#F87171' : '#B91C1C',
+        main: hc ? (dark ? '#FF6666' : '#990000') : dark ? '#F87171' : '#B91C1C',
       },
       success: {
         main: dark ? '#4ADE80' : '#15803D',
       },
       background: {
-        default: dark ? '#0F2540' : '#E8EEF7',
-        paper: dark ? '#1A3A5C' : '#C8D8EC',
+        default: hc ? (dark ? '#000000' : '#FFFFFF') : dark ? '#0F2540' : '#E8EEF7',
+        paper: hc ? (dark ? '#0A0A0A' : '#F5F5F5') : dark ? '#1A3A5C' : '#C8D8EC',
       },
       text: {
-        primary: dark ? '#F9FAFB' : '#0F2540',
+        primary: hc ? (dark ? '#FFFFFF' : '#000000') : dark ? '#F9FAFB' : '#0F2540',
       },
-      divider: dark ? 'rgba(37,99,235,0.3)' : 'rgba(30,73,118,0.25)',
+      divider: hc
+        ? dark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.7)'
+        : dark ? 'rgba(37,99,235,0.3)' : 'rgba(30,73,118,0.25)',
     },
     typography: {
       htmlFontSize: 16,
+      fontSize: 14 * s,
       fontFamily:
         "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-      body1: { fontSize: '1.125rem' },
-      body2: { fontSize: '1rem' },
+      body1: { fontSize: `${1.125 * s}rem` },
+      body2: { fontSize: `${1 * s}rem` },
     },
     components: {
       MuiButton: {
@@ -58,10 +68,25 @@ export function makeTheme(dark: boolean) {
           },
         },
       },
+      MuiButtonBase: {
+        styleOverrides: {
+          root: {
+            '&:focus-visible': {
+              outline: '3px solid',
+              outlineOffset: '2px',
+              outlineColor: dark ? '#60A5FA' : '#2563EB',
+            },
+          },
+        },
+      },
       MuiOutlinedInput: {
         styleOverrides: {
           root: {
-            fontSize: '1.125rem',
+            fontSize: `${1.125 * s}rem`,
+            '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+              borderWidth: '2px',
+              borderColor: dark ? '#60A5FA' : '#2563EB',
+            },
           },
         },
       },
