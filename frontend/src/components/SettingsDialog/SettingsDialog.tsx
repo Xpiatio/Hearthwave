@@ -28,6 +28,9 @@ interface Props {
   spectroColormap: 'viridis' | 'grayscale';
   spectroFreqRange: 'voice' | 'full';
   spectroTimeWindowS: number;
+  uiLevel: 'simple' | 'operator';
+  fontScale: number;
+  highContrast: boolean;
   onToggleProfanity: () => void;
   onToggleAacMode: () => void;
   onToggleFuzzy: () => void;
@@ -37,6 +40,9 @@ interface Props {
   onSpectroColormapChange: (cm: 'viridis' | 'grayscale') => void;
   onSpectroFreqRangeChange: (range: 'voice' | 'full') => void;
   onSpectroTimeWindowChange: (s: number) => void;
+  onUiLevelChange: (v: 'simple' | 'operator') => void;
+  onFontScaleChange: (v: number) => void;
+  onToggleHighContrast: () => void;
 
   // Station tab (admin only)
   adminConfig: React.ComponentProps<typeof AdminPanel>['config'];
@@ -70,6 +76,7 @@ interface PrefsDraft {
   filterProfanity: boolean; aacMode: boolean; fuzzyCallsign: boolean; fuzzyCallsignRewrite: boolean; inputDevice: string | number;
   systemMonitorSink: string; outputDevice: number;
   spectroColormap: 'viridis' | 'grayscale'; spectroFreqRange: 'voice' | 'full'; spectroTimeWindowS: number;
+  uiLevel: 'simple' | 'operator'; fontScale: number; highContrast: boolean;
 }
 
 export function SettingsDialog(props: Props) {
@@ -102,6 +109,7 @@ export function SettingsDialog(props: Props) {
     inputDevice: props.inputDevice, systemMonitorSink: props.systemMonitorSink,
     outputDevice: props.outputDevice, spectroColormap: props.spectroColormap,
     spectroFreqRange: props.spectroFreqRange, spectroTimeWindowS: props.spectroTimeWindowS,
+    uiLevel: props.uiLevel, fontScale: props.fontScale, highContrast: props.highContrast,
   });
   const [draft, setDraft] = useState<PrefsDraft>(seedPrefs);
   const [prefsSeed, setPrefsSeed] = useState<PrefsDraft>(seedPrefs);
@@ -134,6 +142,9 @@ export function SettingsDialog(props: Props) {
     if (draft.spectroColormap !== prefsSeed.spectroColormap) props.onSpectroColormapChange(draft.spectroColormap);
     if (draft.spectroFreqRange !== prefsSeed.spectroFreqRange) props.onSpectroFreqRangeChange(draft.spectroFreqRange);
     if (draft.spectroTimeWindowS !== prefsSeed.spectroTimeWindowS) props.onSpectroTimeWindowChange(draft.spectroTimeWindowS);
+    if (draft.uiLevel !== prefsSeed.uiLevel) props.onUiLevelChange(draft.uiLevel);
+    if (draft.fontScale !== prefsSeed.fontScale) props.onFontScaleChange(draft.fontScale);
+    if (draft.highContrast !== prefsSeed.highContrast) props.onToggleHighContrast();
   }
 
   function handleSave() {
@@ -180,6 +191,9 @@ export function SettingsDialog(props: Props) {
             spectroColormap={draft.spectroColormap}
             spectroFreqRange={draft.spectroFreqRange}
             spectroTimeWindowS={draft.spectroTimeWindowS}
+            uiLevel={draft.uiLevel}
+            fontScale={draft.fontScale}
+            highContrast={draft.highContrast}
             onToggleProfanity={() => setDraft((d) => ({ ...d, filterProfanity: !d.filterProfanity }))}
             onToggleAacMode={() => setDraft((d) => ({ ...d, aacMode: !d.aacMode }))}
             onToggleFuzzy={() => setDraft((d) => ({ ...d, fuzzyCallsign: !d.fuzzyCallsign }))}
@@ -189,6 +203,9 @@ export function SettingsDialog(props: Props) {
             onSpectroColormapChange={(cm) => setDraft((d) => ({ ...d, spectroColormap: cm }))}
             onSpectroFreqRangeChange={(range) => setDraft((d) => ({ ...d, spectroFreqRange: range }))}
             onSpectroTimeWindowChange={(s) => setDraft((d) => ({ ...d, spectroTimeWindowS: s }))}
+            onUiLevelChange={(v) => setDraft((d) => ({ ...d, uiLevel: v }))}
+            onFontScaleChange={(v) => setDraft((d) => ({ ...d, fontScale: v }))}
+            onToggleHighContrast={() => setDraft((d) => ({ ...d, highContrast: !d.highContrast }))}
           />
         </Box>
 

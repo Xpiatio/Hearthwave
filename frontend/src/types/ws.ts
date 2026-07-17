@@ -395,6 +395,9 @@ export interface UserPrefs {
   tts_length_scale?: number;
   aac_mode?: boolean;
   aac_grid?: AACGrid | null; // null = client renders its built-in default grid
+  ui_level?: 'simple' | 'operator';
+  font_scale?: number;
+  high_contrast?: boolean;
 }
 
 export interface UserProfile {

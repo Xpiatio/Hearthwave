@@ -17,6 +17,7 @@ import {
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
+import HomeIcon from '@mui/icons-material/Home';
 import { AccountMenu } from '../AccountMenu/AccountMenu';
 import { VoicePTT } from '../VoicePTT/VoicePTT';
 import { Logo } from '../Logo/Logo';
@@ -28,6 +29,10 @@ interface Props {
   stationStatus: string;
   connected: boolean;
   isOnline: boolean | null;
+  /** Interface tier — gates advanced/operator-only controls when 'simple'. */
+  uiLevel: 'simple' | 'operator';
+  /** Returns to the HomeScreen shell; renders a Home button first when provided. */
+  onGoHome?: () => void;
   serviceMode: string;
   listenOnly: boolean;
   readAloud: boolean;
@@ -83,6 +88,8 @@ export function TopBar({
   stationStatus,
   connected,
   isOnline,
+  uiLevel,
+  onGoHome,
   serviceMode,
   listenOnly,
   readAloud,
@@ -133,6 +140,14 @@ export function TopBar({
       sx={{ borderBottom: 1, borderColor: 'divider' }}>
       <Toolbar sx={{ gap: 1, flexWrap: 'wrap', py: 0.5 }}>
 
+        {onGoHome && (
+          <Tooltip title="Home screen">
+            <IconButton aria-label="Home screen" onClick={onGoHome} size="small">
+              <HomeIcon />
+            </IconButton>
+          </Tooltip>
+        )}
+
         {/* Brand — click to open About */}
         <Tooltip title="About Hearthwave">
           <IconButton
@@ -164,28 +179,32 @@ export function TopBar({
 
         <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
 
-        {/* Group 2 — Panel toggles */}
-        <ToggleButton
-          value="attendance"
-          selected={showAttendance}
-          onClick={onToggleAttendance}
-          size="small"
-          color="primary"
-          aria-label="Toggle stations heard panel"
-        >
-          STATIONS
-        </ToggleButton>
+        {/* Group 2 — Panel toggles. Advanced panels are operator-tier only. */}
+        {uiLevel === 'operator' && (
+          <ToggleButton
+            value="attendance"
+            selected={showAttendance}
+            onClick={onToggleAttendance}
+            size="small"
+            color="primary"
+            aria-label="Toggle stations heard panel"
+          >
+            STATIONS
+          </ToggleButton>
+        )}
 
-        <ToggleButton
-          value="journal"
-          selected={showJournal}
-          onClick={onToggleJournal}
-          size="small"
-          color="primary"
-          aria-label="Toggle journal panel"
-        >
-          JOURNAL
-        </ToggleButton>
+        {uiLevel === 'operator' && (
+          <ToggleButton
+            value="journal"
+            selected={showJournal}
+            onClick={onToggleJournal}
+            size="small"
+            color="primary"
+            aria-label="Toggle journal panel"
+          >
+            JOURNAL
+          </ToggleButton>
+        )}
 
         <ToggleButton
           value="contacts"
@@ -198,29 +217,33 @@ export function TopBar({
           CONTACTS
         </ToggleButton>
 
-        <ToggleButton
-          value="waterfall"
-          selected={showWaterfall}
-          onClick={onToggleWaterfall}
-          size="small"
-          color="primary"
-          aria-label={showWaterfall ? 'Hide waterfall' : 'Show waterfall'}
-        >
-          WATERFALL
-        </ToggleButton>
+        {uiLevel === 'operator' && (
+          <ToggleButton
+            value="waterfall"
+            selected={showWaterfall}
+            onClick={onToggleWaterfall}
+            size="small"
+            color="primary"
+            aria-label={showWaterfall ? 'Hide waterfall' : 'Show waterfall'}
+          >
+            WATERFALL
+          </ToggleButton>
+        )}
 
-        <ToggleButton
-          value="levelmeter"
-          selected={showLevelMeter}
-          onClick={onToggleLevelMeter}
-          size="small"
-          color="primary"
-          aria-label={showLevelMeter ? 'Hide audio level meter' : 'Show audio level meter'}
-        >
-          LEVEL
-        </ToggleButton>
+        {uiLevel === 'operator' && (
+          <ToggleButton
+            value="levelmeter"
+            selected={showLevelMeter}
+            onClick={onToggleLevelMeter}
+            size="small"
+            color="primary"
+            aria-label={showLevelMeter ? 'Hide audio level meter' : 'Show audio level meter'}
+          >
+            LEVEL
+          </ToggleButton>
+        )}
 
-        {profile.is_admin && ncsEnabled && (
+        {uiLevel === 'operator' && profile.is_admin && ncsEnabled && (
           <Tooltip title={showNcs ? 'Hide Net Control Station panel' : 'Show Net Control Station panel'}>
             <ToggleButton
               value="ncs"
@@ -274,30 +297,34 @@ export function TopBar({
         </Box>
 
         {/* Group 3 — Radio operation controls */}
-        <Tooltip title={`Radio service: click to switch to ${serviceMode === 'GMRS' ? 'FRS' : 'GMRS'}`}>
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={onToggleServiceMode}
-            aria-label={`Service mode: ${serviceMode}. Click to switch.`}
-            sx={{ fontFamily: 'monospace', fontWeight: 700, minWidth: 56 }}
-          >
-            {serviceMode}
-          </Button>
-        </Tooltip>
+        {uiLevel === 'operator' && (
+          <Tooltip title={`Radio service: click to switch to ${serviceMode === 'GMRS' ? 'FRS' : 'GMRS'}`}>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={onToggleServiceMode}
+              aria-label={`Service mode: ${serviceMode}. Click to switch.`}
+              sx={{ fontFamily: 'monospace', fontWeight: 700, minWidth: 56 }}
+            >
+              {serviceMode}
+            </Button>
+          </Tooltip>
+        )}
 
-        <Tooltip title={sttListening ? 'STT active — click to stop listening' : 'STT stopped — click to start listening'}>
-          <Button
-            variant={sttListening ? 'contained' : 'outlined'}
-            color={sttListening ? 'success' : 'inherit'}
-            size="small"
-            onClick={onToggleSttListening}
-            aria-pressed={sttListening}
-            aria-label={sttListening ? 'Listening active — click to stop' : 'Listening stopped — click to start'}
-          >
-            {sttListening ? 'LISTENING' : 'LISTEN'}
-          </Button>
-        </Tooltip>
+        {uiLevel === 'operator' && (
+          <Tooltip title={sttListening ? 'STT active — click to stop listening' : 'STT stopped — click to start listening'}>
+            <Button
+              variant={sttListening ? 'contained' : 'outlined'}
+              color={sttListening ? 'success' : 'inherit'}
+              size="small"
+              onClick={onToggleSttListening}
+              aria-pressed={sttListening}
+              aria-label={sttListening ? 'Listening active — click to stop' : 'Listening stopped — click to start'}
+            >
+              {sttListening ? 'LISTENING' : 'LISTEN'}
+            </Button>
+          </Tooltip>
+        )}
 
         <Tooltip title={listenOnly ? 'Listen-only mode — click to enable TX' : 'TX enabled — click for listen-only'}>
           <Button
@@ -364,8 +391,8 @@ export function TopBar({
 
         <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
 
-        {/* Group 4 — UI utilities. Clearing the chat is admin-only and global. */}
-        {profile.is_admin && (
+        {/* Group 4 — UI utilities. Clearing the chat is admin-only, global, and operator-tier. */}
+        {uiLevel === 'operator' && profile.is_admin && (
           <Tooltip title="Clear chat log for everyone">
             <IconButton
               onClick={() => setConfirmClearOpen(true)}

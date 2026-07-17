@@ -35,6 +35,7 @@ import { SetupScreen } from './components/SetupScreen/SetupScreen';
 import { DesktopApp } from './components/DesktopApp/DesktopApp';
 import { MobileApp } from './components/MobileApp/MobileApp';
 import { AACApp } from './components/AACApp/AACApp';
+import { HomeScreen } from './components/HomeScreen/HomeScreen';
 import { makeDefaultGrid, sanitizeAacGrid } from './components/AACApp/defaultGrid';
 import { SettingsDialog } from './components/SettingsDialog/SettingsDialog';
 import { CalibrationDialog } from './components/CalibrationDialog/CalibrationDialog';
@@ -151,6 +152,11 @@ export default function App() {
   const [showContacts, setShowContacts] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showCalibration, setShowCalibration] = useState(false);
+
+  // Home-screen shell: which activity is in front (desktop only). Chat unread
+  // count is the simplest honest Phase 1 measure — messages received while on home.
+  const [activity, setActivity] = useState<'home' | 'station'>('home');
+  const homeSeenCountRef = useRef(0);
   const [serverConfig, setServerConfig] = useState<ServerConfig>({
     vadThreshold: 0.5,
     whisperModel: 'small.en',
@@ -199,10 +205,29 @@ export default function App() {
   // Stable fallback grid — regenerating per render would churn button ids.
   const defaultAacGrid = useMemo(() => makeDefaultGrid(), []);
 
+  // Interface tier ("simple" hides advanced controls) — persisted locally;
+  // overridden by profile prefs on load
+  const [uiLevel, setUiLevel] = useState<'simple' | 'operator'>(
+    () => (localStorage.getItem('radio_tty_ui_level') as 'simple' | 'operator' | null) ?? 'simple'
+  );
+
+  // Text size scale — persisted locally; overridden by profile prefs on load
+  const [fontScale, setFontScale] = useState(
+    () => Number(localStorage.getItem('radio_tty_font_scale')) || 1
+  );
+
+  // High contrast theme — persisted locally; overridden by profile prefs on load
+  const [highContrast, setHighContrast] = useState(
+    () => localStorage.getItem('radio_tty_high_contrast') === 'true'
+  );
+
   const deviceClass = useDeviceClass();
   const isMobile = deviceClass === 'phone';
 
-  const baseTheme = useMemo(() => makeTheme(darkMode), [darkMode]);
+  const baseTheme = useMemo(
+    () => makeTheme(darkMode, { fontScale, highContrast }),
+    [darkMode, fontScale, highContrast],
+  );
   const theme = useMemo(
     () => (deviceClass === 'tablet' || aacMode ? withTouchDensity(baseTheme) : baseTheme),
     [baseTheme, deviceClass, aacMode],
@@ -455,6 +480,18 @@ export default function App() {
         if (prefs.aac_grid !== undefined && prefs.aac_grid !== null) {
           setAacGrid(sanitizeAacGrid(prefs.aac_grid));
         }
+        if (prefs.ui_level) {
+          setUiLevel(prefs.ui_level);
+          localStorage.setItem('radio_tty_ui_level', prefs.ui_level);
+        }
+        if (prefs.font_scale) {
+          setFontScale(prefs.font_scale);
+          localStorage.setItem('radio_tty_font_scale', String(prefs.font_scale));
+        }
+        if (prefs.high_contrast !== undefined) {
+          setHighContrast(prefs.high_contrast);
+          localStorage.setItem('radio_tty_high_contrast', String(prefs.high_contrast));
+        }
         break;
       }
 
@@ -500,15 +537,26 @@ export default function App() {
         ]);
         break;
 
-      case 'chat_history':
+      case 'chat_history': {
         // Backfill of the shared stream since the last clear. Replaces the
         // local log (sent once on connect, before any live messages).
-        setMessages(msg.messages.map(streamMsgToEntry));
+        const entries = msg.messages.map(streamMsgToEntry);
+        setMessages(entries);
+        // Treat backfilled history as already seen so the Home unread badge
+        // only counts messages that arrive after login, not the whole log.
+        homeSeenCountRef.current = entries.length;
         break;
+      }
 
       case 'chat_cleared':
-        // An admin cleared the chat for everyone.
+        // An admin cleared the chat for everyone. Reset the seen-count
+        // ref alongside the message list — otherwise it stays ahead of
+        // the now-empty log and the Home unread badge math
+        // (messages.length - homeSeenCountRef.current) goes negative
+        // (clamped to 0, but stays wrong) until enough new messages
+        // arrive to catch back up.
         setMessages([]);
+        homeSeenCountRef.current = 0;
         break;
 
       case 'system_msg':
@@ -912,6 +960,25 @@ export default function App() {
     send({ type: 'save_user_prefs', prefs: { dark_mode: next } });
   }
 
+  function handleUiLevelChange(next: 'simple' | 'operator') {
+    setUiLevel(next);
+    localStorage.setItem('radio_tty_ui_level', next);
+    send({ type: 'save_user_prefs', prefs: { ui_level: next } });
+  }
+
+  function handleFontScaleChange(next: number) {
+    setFontScale(next);
+    localStorage.setItem('radio_tty_font_scale', String(next));
+    send({ type: 'save_user_prefs', prefs: { font_scale: next } });
+  }
+
+  function handleToggleHighContrast() {
+    const next = !highContrast;
+    setHighContrast(next);
+    localStorage.setItem('radio_tty_high_contrast', String(next));
+    send({ type: 'save_user_prefs', prefs: { high_contrast: next } });
+  }
+
   function handleToggleAacMode() {
     const next = !aacMode;
     setAacMode(next);
@@ -1075,6 +1142,16 @@ export default function App() {
   function handleCloseVocabSnack() { setVocabSnack(null); }
   function handleVerifyAllDismiss() { setVerifyAllComplete(false); }
 
+  function handleGoHome() {
+    homeSeenCountRef.current = messages.length;
+    setActivity('home');
+  }
+  function handleOpenActivity(a: 'station' | 'ncs') {
+    if (a === 'ncs') setShowNcs(true);
+    setActivity('station');
+  }
+  const unreadCount = Math.max(0, messages.length - homeSeenCountRef.current);
+
   // Show a blank screen while validating existing token on startup.
   if (authLoading) {
     return (
@@ -1165,6 +1242,7 @@ export default function App() {
     onToggleNotifications: handleToggleNotifications,
     onToggleSttListening: handleToggleSttListening,
     onToggleDark: handleToggleDark,
+    uiLevel,
     adminConfig,
     showSettings,
     onToggleSettings: handleToggleSettings,
@@ -1220,9 +1298,21 @@ export default function App() {
           {...sharedProps}
           effectiveCallsign={effectiveCallsign}
         />
+      ) : activity === 'home' ? (
+        <HomeScreen
+          profile={profile}
+          connected={connected}
+          uiLevel={uiLevel}
+          ncsEnabled={isPluginEnabled(plugins, 'ncs')}
+          unreadCount={unreadCount}
+          onOpenActivity={handleOpenActivity}
+          onOpenSettings={handleToggleSettings}
+          onLogout={handleLogout}
+        />
       ) : (
         <DesktopApp
           {...sharedProps}
+          onGoHome={handleGoHome}
           stationStatus={stationStatus}
           spectroColormap={spectroColormap}
           spectroTimeWindowS={spectroTimeWindowS}
@@ -1263,6 +1353,9 @@ export default function App() {
         spectroColormap={spectroColormap}
         spectroFreqRange={spectroFreqRange}
         spectroTimeWindowS={spectroTimeWindowS}
+        uiLevel={uiLevel}
+        fontScale={fontScale}
+        highContrast={highContrast}
         onToggleProfanity={handleToggleProfanity}
         onToggleFuzzy={handleToggleFuzzy}
         onToggleFuzzyRewrite={handleToggleFuzzyRewrite}
@@ -1271,6 +1364,9 @@ export default function App() {
         onSpectroColormapChange={handleSpectroColormapChange}
         onSpectroFreqRangeChange={handleSpectroFreqRangeChange}
         onSpectroTimeWindowChange={handleSpectroTimeWindowChange}
+        onUiLevelChange={handleUiLevelChange}
+        onFontScaleChange={handleFontScaleChange}
+        onToggleHighContrast={handleToggleHighContrast}
         adminConfig={adminConfig}
         voices={voices}
         voicePreviewBusy={voicePreviewBusy}

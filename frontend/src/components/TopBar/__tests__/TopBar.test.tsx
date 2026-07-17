@@ -49,6 +49,7 @@ function makeProps(overrides: Partial<Parameters<typeof TopBar>[0]> = {}) {
     stationStatus: 'READY',
     connected: true,
     isOnline: true,
+    uiLevel: 'operator' as const,
     serviceMode: 'GMRS',
     listenOnly: false,
     readAloud: false,
@@ -361,6 +362,32 @@ describe('TopBar', () => {
       const { container } = render(<TopBar {...makeProps()} />)
       const results = await axe(container)
       expect(results.violations).toHaveLength(0)
+    })
+  })
+
+  describe('simple tier gating', () => {
+    it('hides operator-only controls when uiLevel is simple', () => {
+      render(<TopBar {...makeProps({
+        uiLevel: 'simple',
+        profile: { ...mockProfile, is_admin: true },
+      })} />)
+
+      expect(screen.queryByRole('button', { name: /show waterfall/i })).not.toBeInTheDocument()
+      expect(screen.queryByLabelText(/audio level meter/i)).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /toggle journal panel/i })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /toggle stations heard panel/i })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /ncs/i })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /clear chat log/i })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /service mode:/i })).not.toBeInTheDocument()
+      expect(screen.queryByLabelText(/listening (stopped|active)/i)).not.toBeInTheDocument()
+    })
+
+    it('keeps dark-mode, notifications, and TX-abort visible when uiLevel is simple', () => {
+      render(<TopBar {...makeProps({ uiLevel: 'simple' })} />)
+
+      expect(screen.getByRole('button', { name: /switch to dark mode/i })).toBeInTheDocument()
+      expect(screen.getByText('NOTIFY')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /abort transmission/i })).toBeInTheDocument()
     })
   })
 })

@@ -308,6 +308,108 @@ class TestSaveUserPrefsAacGrid:
 
 
 # ---------------------------------------------------------------------------
+# save_user_prefs — ui_level / font_scale / high_contrast validation
+# ---------------------------------------------------------------------------
+
+class TestSaveUserPrefsUiLevelAndA11y:
+    def test_valid_values_saved_and_reflected(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()
+        mock_users.update_prefs.return_value = {
+            "id": "test-user",
+            "display_name": "Test Operator",
+            "is_admin": True,
+            "prefs": {"ui_level": "operator", "font_scale": 1.5, "high_contrast": True},
+        }
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "save_user_prefs",
+                                  "prefs": {"ui_level": "operator", "font_scale": 1.5, "high_contrast": True}})
+                    msg = _next_of_type(ws, "user_profile")
+        assert msg is not None
+        assert msg["profile"]["prefs"]["ui_level"] == "operator"
+        assert msg["profile"]["prefs"]["font_scale"] == 1.5
+        assert msg["profile"]["prefs"]["high_contrast"] is True
+        mock_users.update_prefs.assert_called_once_with(
+            "test-user",
+            {"ui_level": "operator", "font_scale": 1.5, "high_contrast": True},
+        )
+
+    def test_rejects_bad_values_but_valid_key_still_applied(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()
+        mock_users.update_prefs.return_value = {
+            "id": "test-user",
+            "display_name": "Test Operator",
+            "is_admin": True,
+            "prefs": {"ui_level": "operator", "font_scale": 1},
+        }
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    # Invalid values -> silently dropped; nothing valid left,
+                    # so this request produces no reply at all.
+                    ws.send_json({"type": "save_user_prefs",
+                                  "prefs": {"ui_level": "root", "font_scale": 9}})
+                    # A subsequent request with a valid value still goes through.
+                    ws.send_json({"type": "save_user_prefs", "prefs": {"ui_level": "operator"}})
+                    msg = _next_of_type(ws, "user_profile")
+        assert msg is not None
+        assert msg["profile"]["prefs"]["ui_level"] == "operator"
+        assert msg["profile"]["prefs"]["font_scale"] == 1  # unchanged default
+        # update_prefs is only ever called once, with the valid key alone —
+        # proving the invalid request never reached the store.
+        mock_users.update_prefs.assert_called_once_with("test-user", {"ui_level": "operator"})
+
+    def test_high_contrast_rejects_non_bool(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()
+        mock_users.update_prefs.return_value = {
+            "id": "test-user",
+            "display_name": "Test Operator",
+            "is_admin": True,
+            "prefs": {"dark_mode": True},
+        }
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "save_user_prefs",
+                                  "prefs": {"high_contrast": "yes", "dark_mode": True}})
+                    msg = _next_of_type(ws, "user_profile")
+        assert msg is not None
+        assert msg["profile"]["prefs"]["dark_mode"] is True
+        mock_users.update_prefs.assert_called_once_with("test-user", {"dark_mode": True})
+
+
+# ---------------------------------------------------------------------------
 # tx_message — happy path
 # ---------------------------------------------------------------------------
 

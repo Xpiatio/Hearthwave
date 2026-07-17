@@ -43,6 +43,9 @@ DEFAULT_PREFS: dict = {
     "tts_length_scale": 0,  # 0 = inherit station default
     "aac_mode": False,
     "aac_grid": None,  # None = client renders its built-in default grid
+    "ui_level": "simple",   # "simple" | "operator" — home-screen tier
+    "font_scale": 1,        # 1 | 1.25 | 1.5 | 2
+    "high_contrast": False,
 }
 
 

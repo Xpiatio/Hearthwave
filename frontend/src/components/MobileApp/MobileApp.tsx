@@ -39,6 +39,8 @@ export interface MobileAppProps {
   connected: boolean;
   isOnline: boolean | null;
   showCallsignChips: boolean;
+  /** Interface tier — gates operator-only tabs/panels (Stations, Journal). */
+  uiLevel: 'simple' | 'operator';
 
   // Core data
   messages: ChatEntry[];
@@ -146,6 +148,7 @@ export function MobileApp({
   effectiveCallsign,
   connected,
   showCallsignChips,
+  uiLevel,
   messages,
   contacts,
   transmitting,
@@ -215,8 +218,20 @@ export function MobileApp({
   onCloseJournalSavedSnack,
   onCloseVocabSnack,
 }: MobileAppProps) {
-  const [tab, setTab] = useState(0);
+  const [tab, setTab] = useState<'chat' | 'stations' | 'journal'>('chat');
   const messageInputRef = useRef<MessageInputHandle>(null);
+
+  // Stations (attendance) and Journal are operator-only surfaces — they
+  // must not render in simple tier, mirroring the isOperatorTier pattern in
+  // DesktopApp.tsx (commit 0b6f296). Mobile has no waterfall/spectrogram,
+  // RX level meter, or NCS panel, so there's nothing else to gate here.
+  const isOperatorTier = uiLevel === 'operator';
+
+  // If the tier flips to simple while parked on an operator-only tab, fall
+  // back to Chat rather than stranding the user on a hidden panel. `tab`
+  // itself is left untouched so the previous selection is restored if the
+  // tier flips back to operator.
+  const activeTab = isOperatorTier ? tab : 'chat';
 
   return (
     <Box
@@ -263,7 +278,7 @@ export function MobileApp({
       />
 
       {/* Chat tab */}
-      {tab === 0 && (
+      {activeTab === 'chat' && (
         <Box sx={{ flex: '1 1 auto', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <ChatDisplay
             entries={messages}
@@ -291,8 +306,8 @@ export function MobileApp({
         </Box>
       )}
 
-      {/* Stations tab */}
-      {tab === 1 && (
+      {/* Stations tab (operator-only) */}
+      {activeTab === 'stations' && (
         <Box sx={{ flex: '1 1 auto', overflowY: 'auto' }}>
           <AttendancePanel
             stations={attendanceStations}
@@ -301,8 +316,8 @@ export function MobileApp({
         </Box>
       )}
 
-      {/* Journal tab */}
-      {tab === 2 && (
+      {/* Journal tab (operator-only) */}
+      {activeTab === 'journal' && (
         <Box sx={{ flex: '1 1 auto', overflowY: 'auto' }}>
           <JournalPanel
             journals={journals}
@@ -323,15 +338,19 @@ export function MobileApp({
       )}
 
       <BottomNavigation
-        value={tab}
+        value={activeTab}
         onChange={(_, v) => setTab(v)}
         showLabels
         aria-label="Main tabs"
         sx={{ borderTop: 1, borderColor: 'divider', flexShrink: 0 }}
       >
-        <BottomNavigationAction label="Chat" icon={<ChatIcon />} />
-        <BottomNavigationAction label="Stations" icon={<PeopleIcon />} />
-        <BottomNavigationAction label="Journal" icon={<ArticleIcon />} />
+        <BottomNavigationAction label="Chat" value="chat" icon={<ChatIcon />} />
+        {isOperatorTier && (
+          <BottomNavigationAction label="Stations" value="stations" icon={<PeopleIcon />} />
+        )}
+        {isOperatorTier && (
+          <BottomNavigationAction label="Journal" value="journal" icon={<ArticleIcon />} />
+        )}
       </BottomNavigation>
 
       <ContactsDialog

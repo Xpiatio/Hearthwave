@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { Box, Snackbar, Alert, Dialog } from '@mui/material';
+import { useEscapeToHome } from '../../hooks/useEscapeToHome';
 import { TopBar } from '../TopBar/TopBar';
 import { ChatDisplay } from '../ChatDisplay/ChatDisplay';
 import type { ChatEntry } from '../ChatDisplay/ChatDisplay';
@@ -36,6 +37,11 @@ export interface DesktopAppProps {
   isOnline: boolean | null;
   stationStatus: string;
   showCallsignChips: boolean;
+  /** Interface tier — gates advanced/operator-only TopBar controls. */
+  uiLevel: 'simple' | 'operator';
+  /** Returns to the HomeScreen shell. Renders a Home button (and Escape
+   *  listener) when provided; the desktop-only home routing lives in App.tsx. */
+  onGoHome?: () => void;
 
   // Core data
   messages: ChatEntry[];
@@ -171,6 +177,8 @@ export function DesktopApp({
   isOnline,
   stationStatus,
   showCallsignChips,
+  uiLevel,
+  onGoHome,
   messages,
   contacts,
   radioStatus,
@@ -264,6 +272,16 @@ export function DesktopApp({
 }: DesktopAppProps) {
   const messageInputRef = useRef<MessageInputHandle>(null);
 
+  // Escape returns to the home screen (no-ops when onGoHome is undefined).
+  useEscapeToHome(onGoHome);
+
+  // Operator-only panels (waterfall, RX level meter, NCS, attendance,
+  // journal) must not render in simple tier even if their show-flags are
+  // still true from a prior operator-tier session — the flags persist
+  // independently of uiLevel in App.tsx state, so gate rendering here too,
+  // not just the TopBar toggle buttons that flip the flags.
+  const isOperatorTier = uiLevel === 'operator';
+
   return (
     <Box
       className="app-shell"
@@ -274,6 +292,8 @@ export function DesktopApp({
         stationStatus={stationStatus}
         connected={connected}
         isOnline={isOnline}
+        uiLevel={uiLevel}
+        onGoHome={onGoHome}
         serviceMode={serviceMode}
         listenOnly={listenOnly}
         readAloud={readAloud}
@@ -318,7 +338,7 @@ export function DesktopApp({
         onTxAbort={onTxAbort}
       />
 
-      {showNcs && ncsEnabled && (
+      {showNcs && ncsEnabled && isOperatorTier && (
         <NCSPanel send={send} lastMessage={lastMessage} contacts={contacts}
                   channelClear={channelClear} transmitting={transmitting} />
       )}
@@ -330,10 +350,10 @@ export function DesktopApp({
         onDismissAll={onDismissAllPending}
       />
 
-      {showLevelMeter && <AudioLevelMeter ref={levelMeterRef} />}
+      {showLevelMeter && isOperatorTier && <AudioLevelMeter ref={levelMeterRef} />}
 
       <Box sx={{ display: 'flex', flexDirection: 'row', flex: '1 1 auto', overflow: 'hidden' }}>
-        {showWaterfall && (
+        {showWaterfall && isOperatorTier && (
           <Spectrogram
             ref={spectroRef}
             colormap={spectroColormap}
@@ -370,23 +390,21 @@ export function DesktopApp({
       )}
 
       <Dialog
-        open={showAttendance}
+        open={showAttendance && isOperatorTier}
         onClose={onToggleAttendance}
         maxWidth="lg"
         fullWidth
-        slotProps={{ paper: { sx: { height: '80vh' } } }}
-        aria-label="Stations heard this session"
+        slotProps={{ paper: { sx: { height: '80vh' }, 'aria-label': 'Stations heard this session' } }}
       >
         <AttendancePanel stations={attendanceStations} onClear={onClearAttendance} fillHeight />
       </Dialog>
 
       <Dialog
-        open={showJournal}
+        open={showJournal && isOperatorTier}
         onClose={onToggleJournal}
         maxWidth="lg"
         fullWidth
-        slotProps={{ paper: { sx: { height: '80vh' } } }}
-        aria-label="Session journal"
+        slotProps={{ paper: { sx: { height: '80vh' }, 'aria-label': 'Session journal' } }}
       >
         <JournalPanel
           journals={journals} pendingResult={journalResult} generating={journalGenerating}

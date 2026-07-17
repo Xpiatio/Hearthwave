@@ -289,9 +289,13 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
             onChange={(e) => setCallsignInput(e.target.value.toUpperCase())}
             onKeyDown={(e) => { if (e.key === 'Enter') handleCheckIn(); }}
             disabled={!active}
-            slotProps={{ htmlInput: { style: { fontFamily: 'monospace', fontWeight: 700, width: 90 } } }}
+            slotProps={{
+              htmlInput: {
+                style: { fontFamily: 'monospace', fontWeight: 700, width: 90 },
+                'aria-label': 'Callsign to check in',
+              },
+            }}
             sx={{ width: 110 }}
-            aria-label="Callsign to check in"
           />
           <FormControl size="small" sx={{ minWidth: 120 }}>
             <InputLabel id="ncs-traffic-label">Traffic</InputLabel>
