@@ -320,6 +320,11 @@ class ServerConfig(dict):
         raw = self.get("tokens_file")
         return Path(raw) if raw else Path("/data/tokens.json")
 
+    @property
+    def presence_file(self) -> Path:
+        raw = self.get("presence_file")
+        return Path(raw) if raw else Path("/data/presence.json")
+
     # ---- NCS / Net Control Station --------------------------------------
     # NCS is a built-in plugin (id "ncs"); its master toggle lives in the plugin
     # namespace (see plugin_* helpers below). These are Station-tab settings it reads.
