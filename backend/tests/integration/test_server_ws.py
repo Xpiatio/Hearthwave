@@ -1985,3 +1985,30 @@ class TestRoleHandlers:
                     msg = _next_of_type(ws, "error")
         assert msg is not None
         assert "kid" in msg["detail"].lower()
+
+    # -- Finding 4: create_profile with an invalid role must error, not silently drop it --
+
+    def test_create_profile_invalid_role_returns_error(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()  # admin caller
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({
+                        "type": "create_profile",
+                        "display_name": "New Kid",
+                        "password": "pw12345678",
+                        "role": "superuser",
+                    })
+                    msg = _next_of_type(ws, "error")
+        assert msg is not None
+        mock_users.create.assert_not_called()

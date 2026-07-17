@@ -2871,7 +2871,8 @@ async def websocket_endpoint(
                     continue
                 role = data.get("role")
                 if role is not None and role not in ROLES:
-                    role = None
+                    await _manager.send_to(ws, {"type": "error", "detail": f"Unknown role: {role!r}."})
+                    continue
                 _users_store.create(
                     display_name=display_name,
                     password=password,
