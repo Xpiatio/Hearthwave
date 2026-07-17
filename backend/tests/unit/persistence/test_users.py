@@ -223,6 +223,49 @@ class TestGetPublic:
         result = store.get_public_one(bob["id"])
         assert result["display_name"] == "Bob"
 
+    # -- Phase 2 re-review Finding B: get_public/get_public_one must route
+    #    prefs through effective_prefs() so kid pref locks apply here too --
+
+    def test_get_public_applies_kid_pref_locks(self, store: UsersStore):
+        kid = store.create(display_name="Kid", password="pw12345678", role="kid")
+        store.update_prefs(kid["id"], {
+            "filter_profanity": False, "ui_level": "operator", "listen_only": True,
+        })
+        public = store.get_public()
+        kid_public = next(p for p in public if p["id"] == kid["id"])
+        assert kid_public["prefs"]["filter_profanity"] is True
+        assert kid_public["prefs"]["ui_level"] == "simple"
+        assert kid_public["prefs"]["listen_only"] is False
+
+    def test_get_public_one_applies_kid_pref_locks(self, store: UsersStore):
+        kid = store.create(display_name="Kid", password="pw12345678", role="kid")
+        store.update_prefs(kid["id"], {
+            "filter_profanity": False, "ui_level": "operator", "listen_only": True,
+        })
+        result = store.get_public_one(kid["id"])
+        assert result["prefs"]["filter_profanity"] is True
+        assert result["prefs"]["ui_level"] == "simple"
+        assert result["prefs"]["listen_only"] is False
+
+    def test_get_public_leaves_adult_prefs_unchanged(self, store: UsersStore, alice: dict):
+        store.update_prefs(alice["id"], {
+            "filter_profanity": False, "ui_level": "operator", "listen_only": True,
+        })
+        public = store.get_public()
+        alice_public = next(p for p in public if p["id"] == alice["id"])
+        assert alice_public["prefs"]["filter_profanity"] is False
+        assert alice_public["prefs"]["ui_level"] == "operator"
+        assert alice_public["prefs"]["listen_only"] is True
+
+    def test_get_public_one_leaves_adult_prefs_unchanged(self, store: UsersStore, alice: dict):
+        store.update_prefs(alice["id"], {
+            "filter_profanity": False, "ui_level": "operator", "listen_only": True,
+        })
+        result = store.get_public_one(alice["id"])
+        assert result["prefs"]["filter_profanity"] is False
+        assert result["prefs"]["ui_level"] == "operator"
+        assert result["prefs"]["listen_only"] is True
+
 
 # ---------------------------------------------------------------------------
 # Tests: verify_password

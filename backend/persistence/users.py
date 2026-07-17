@@ -143,8 +143,19 @@ class UsersStore:
         return list(self._users)
 
     def get_public(self) -> list[dict]:
-        """Strip sensitive fields for API responses."""
-        return [{k: v for k, v in u.items() if k not in SENSITIVE_PROFILE_FIELDS} for u in self._users]
+        """Strip sensitive fields for API responses.
+
+        Prefs are routed through effective_prefs() so kid pref locks
+        (filter_profanity/ui_level/listen_only) apply here too — this feeds
+        the "profiles" broadcast and the ungated list_profiles handler, so
+        raw stored prefs must never leak a kid's unlocked settings.
+        """
+        result = []
+        for u in self._users:
+            safe = {k: v for k, v in u.items() if k not in SENSITIVE_PROFILE_FIELDS}
+            safe["prefs"] = effective_prefs(u)
+            result.append(safe)
+        return result
 
     def get(self, user_id: str) -> dict | None:
         for u in self._users:
@@ -162,7 +173,9 @@ class UsersStore:
         u = self.get(user_id)
         if u is None:
             return None
-        return {k: v for k, v in u.items() if k not in SENSITIVE_PROFILE_FIELDS}
+        safe = {k: v for k, v in u.items() if k not in SENSITIVE_PROFILE_FIELDS}
+        safe["prefs"] = effective_prefs(u)
+        return safe
 
     def is_empty(self) -> bool:
         return len(self._users) == 0

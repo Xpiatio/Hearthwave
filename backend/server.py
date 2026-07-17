@@ -2929,6 +2929,10 @@ async def websocket_endpoint(
                     await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
 
             elif msg_type == "list_profiles":
+                # Intentionally ungated (no admin check): the roster is meant to be
+                # visible to every connected user, including the Family presence
+                # board. get_public() routes prefs through effective_prefs(), so
+                # kid pref locks still apply here.
                 if _users_store is not None:
                     await _manager.send_to(ws, {
                         "type": "profiles",
