@@ -33,4 +33,16 @@ describe('nextNetLabel', () => {
     expect(nextNetLabel('SAT', '00:00', new Date('2026-07-14T00:00:00'))).toBe('Net Sat 12:00 AM');
     expect(nextNetLabel('Sun', '12:30', new Date('2026-07-14T00:00:00'))).toBe('Net Sun 12:30 PM');
   });
+
+  it('accepts full weekday names as sent by the backend config (_NEIGHBORHOOD_NET_DAYS)', () => {
+    const now = new Date('2026-07-14T00:00:00');
+    expect(nextNetLabel('Saturday', '09:00', now)).toBe('Net Sat 9:00 AM');
+    expect(nextNetLabel('Tuesday', '19:00', now)).toBe('Net Tue 7:00 PM');
+  });
+
+  it('formats exact midnight and noon', () => {
+    const now = new Date('2026-07-14T00:00:00');
+    expect(nextNetLabel('Monday', '00:00', now)).toBe('Net Mon 12:00 AM');
+    expect(nextNetLabel('Monday', '12:00', now)).toBe('Net Mon 12:00 PM');
+  });
 });

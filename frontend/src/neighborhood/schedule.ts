@@ -17,7 +17,10 @@ const DAY_LABELS: Record<string, string> = {
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 export function nextNetLabel(day: string, time: string, _now: Date): string {
-  const dayLabel = DAY_LABELS[(day || '').trim().toLowerCase()];
+  // Accept both abbreviated keys ('tue') and full weekday names as sent by
+  // the backend's _NEIGHBORHOOD_NET_DAYS config ('Tuesday'), case-insensitively.
+  const dayKey = (day || '').trim().toLowerCase().slice(0, 3);
+  const dayLabel = DAY_LABELS[dayKey];
   if (!dayLabel) return '';
 
   const match = TIME_RE.exec((time || '').trim());
