@@ -3929,6 +3929,69 @@ class TestNeighborhoodNetHandlers:
 
 
 # ---------------------------------------------------------------------------
+# Phase 3 Task 6 review fix — set_admin_config must rebroadcast
+# neighborhood_state when it touches the net schedule, else already-connected
+# clients keep showing a stale next-net day/time until they reconnect.
+# ---------------------------------------------------------------------------
+
+class TestSetAdminConfigNeighborhoodBroadcast:
+    def test_net_schedule_change_reaches_second_client_without_reconnect(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, is_admin=True,
+        )
+        cfg.save = MagicMock()
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with (
+                    tc.websocket_connect(WS_URL) as ws1,
+                    tc.websocket_connect(WS_URL) as ws2,
+                ):
+                    _drain_initial(ws1)
+                    _drain_initial(ws2)
+                    ws1.send_json({
+                        "type": "set_admin_config",
+                        "neighborhood_net_day": "Wednesday",
+                        "neighborhood_net_time": "19:30",
+                    })
+                    msg = _next_of_type(ws2, "neighborhood_state")
+        assert msg is not None, "second client never got a neighborhood_state rebroadcast"
+        assert msg["net_day"] == "Wednesday"
+        assert msg["net_time"] == "19:30"
+
+    def test_unrelated_admin_config_save_does_not_broadcast_neighborhood_state(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, is_admin=True,
+        )
+        cfg.save = MagicMock()
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with (
+                    tc.websocket_connect(WS_URL) as ws1,
+                    tc.websocket_connect(WS_URL) as ws2,
+                ):
+                    _drain_initial(ws1)
+                    _drain_initial(ws2)
+                    ws1.send_json({"type": "set_admin_config", "name": "New Station Name"})
+                    # Only the status broadcast should follow — nothing neighborhood-related.
+                    msg = ws2.receive_json()
+        assert msg["type"] == "status"
+
+
+# ---------------------------------------------------------------------------
 # Phase 3 Task 3 — incident reports + street alert
 # ---------------------------------------------------------------------------
 

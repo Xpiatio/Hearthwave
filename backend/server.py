@@ -1960,6 +1960,8 @@ async def _ws_handle_set_admin_config(ws: WebSocket, data: dict, state: "Connect
             rx_mode_changed = True
     _config.save()
     await _manager.broadcast(_build_status())
+    if "neighborhood_net_day" in data or "neighborhood_net_time" in data:
+        await _manager.broadcast(_build_neighborhood_state_msg())
     if rx_mode_changed and _stt_worker is not None and _stt_listening:
         _stt_worker.stop()
         await _stt_worker.join()
