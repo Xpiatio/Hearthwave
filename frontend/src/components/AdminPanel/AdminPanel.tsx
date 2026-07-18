@@ -28,6 +28,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import MicIcon from '@mui/icons-material/Mic';
 import type { VoiceOption, DeviceTokenRecord } from '../../types/ws';
+import { ConfirmDialog } from '../ConfirmDialog';
 
 const SPEED_MARKS = [
   { value: 0.5, label: 'Fast' },
@@ -151,6 +152,7 @@ export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPane
   const [showKey, setShowKey] = useState(false);
   const [quickMessagesText, setQuickMessagesText] = useState('');
   const [newDisplayLabel, setNewDisplayLabel] = useState('');
+  const [tokenToRevoke, setTokenToRevoke] = useState<DeviceTokenRecord | null>(null);
 
   const seedRef = useRef<string>('');
 
@@ -483,7 +485,7 @@ export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPane
                       size="small"
                       color="error"
                       aria-label={`Revoke ${t.label}`}
-                      onClick={() => onRevokeDeviceToken(t.id)}
+                      onClick={() => setTokenToRevoke(t)}
                     >
                       Revoke
                     </Button>
@@ -560,6 +562,18 @@ export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPane
     <Button onClick={handleSave} variant="contained">Save</Button>
   );
 
+  const revokeConfirmDialog = (
+    <ConfirmDialog
+      open={tokenToRevoke !== null}
+      title="Revoke this display?"
+      body={tokenToRevoke ? `"${tokenToRevoke.label}" will stop working immediately.` : ''}
+      confirmLabel="Yes, revoke it"
+      destructive
+      onConfirm={() => { if (tokenToRevoke) onRevokeDeviceToken(tokenToRevoke.id); }}
+      onClose={() => setTokenToRevoke(null)}
+    />
+  );
+
   if (embedded) {
     return (
       <Box sx={{ pt: 1 }}>
@@ -567,18 +581,22 @@ export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPane
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
           {saveButton}
         </Box>
+        {revokeConfirmDialog}
       </Box>
     );
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ fontWeight: 700 }}>Admin Settings</DialogTitle>
-      <DialogContent dividers>{content}</DialogContent>
-      <DialogActions sx={{ px: 3, py: 2 }}>
-        <Button onClick={onClose} variant="outlined">Cancel</Button>
-        {saveButton}
-      </DialogActions>
-    </Dialog>
+    <>
+      <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Admin Settings</DialogTitle>
+        <DialogContent dividers>{content}</DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={onClose} variant="outlined">Cancel</Button>
+          {saveButton}
+        </DialogActions>
+      </Dialog>
+      {revokeConfirmDialog}
+    </>
   );
 });

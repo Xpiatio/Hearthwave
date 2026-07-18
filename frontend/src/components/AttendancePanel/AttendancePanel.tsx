@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   Box,
   Paper,
@@ -11,6 +12,7 @@ import {
   TableCell,
 } from '@mui/material';
 import type { AttendanceStation } from '../../types/ws';
+import { ConfirmDialog } from '../ConfirmDialog';
 
 interface Props {
   stations: AttendanceStation[];
@@ -20,7 +22,9 @@ interface Props {
 }
 
 export function AttendancePanel({ stations, onClear, fillHeight = false }: Props) {
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   return (
+    <>
     <Paper
       square
       elevation={0}
@@ -48,7 +52,7 @@ export function AttendancePanel({ stations, onClear, fillHeight = false }: Props
         <Button
           size="small"
           variant="outlined"
-          onClick={onClear}
+          onClick={() => setClearConfirmOpen(true)}
           disabled={stations.length === 0}
           sx={{ color: '#F9FAFB', borderColor: 'rgba(255,255,255,0.4)' }}
         >
@@ -89,5 +93,14 @@ export function AttendancePanel({ stations, onClear, fillHeight = false }: Props
         )}
       </Box>
     </Paper>
+    <ConfirmDialog
+      open={clearConfirmOpen}
+      title="Clear stations heard?"
+      confirmLabel="Yes, clear the list"
+      destructive
+      onConfirm={onClear}
+      onClose={() => setClearConfirmOpen(false)}
+    />
+    </>
   );
 }

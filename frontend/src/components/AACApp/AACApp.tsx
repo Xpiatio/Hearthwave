@@ -73,10 +73,11 @@ export function AACApp({
   const [catEditorTarget, setCatEditorTarget] = useState<AACCategory | null>(null);
   const [catDraftName, setCatDraftName] = useState('');
   const [catDraftEmoji, setCatDraftEmoji] = useState('');
+  const [catDeleteConfirmOpen, setCatDeleteConfirmOpen] = useState(false);
 
   const rootRef = useRef<HTMLDivElement | null>(null);
   const scanActive =
-    switchScan && !editMode && !editorOpen && !catEditorOpen && !exitConfirmOpen;
+    switchScan && !editMode && !editorOpen && !catEditorOpen && !exitConfirmOpen && !catDeleteConfirmOpen;
   useSwitchScan(scanActive, switchScanIntervalS * 1000, rootRef);
 
   // Keep the active tab valid when the grid changes (edits, server refresh).
@@ -155,10 +156,13 @@ export function AACApp({
     setCatEditorOpen(false);
   }
 
+  function requestDeleteCategory() {
+    if (!catEditorTarget || grid.categories.length <= 1) return;
+    setCatDeleteConfirmOpen(true);
+  }
+
   function handleDeleteCategory() {
     if (!catEditorTarget) return;
-    if (grid.categories.length <= 1) return;
-    if (!window.confirm(`Delete the "${catEditorTarget.name}" category and all its buttons?`)) return;
     mutateCategory(catEditorTarget.id, () => null);
     setCatEditorOpen(false);
   }
@@ -331,7 +335,7 @@ export function AACApp({
         </DialogContent>
         <DialogActions>
           {catEditorTarget && grid.categories.length > 1 && (
-            <Button color="error" onClick={handleDeleteCategory}>
+            <Button color="error" onClick={requestDeleteCategory}>
               DELETE
             </Button>
           )}
@@ -354,6 +358,19 @@ export function AACApp({
         switchScanIntervalS={switchScanIntervalS}
         onConfirm={onExitAac}
         onClose={() => setExitConfirmOpen(false)}
+      />
+
+      {/* Category delete confirmation */}
+      <ConfirmDialog
+        open={catDeleteConfirmOpen}
+        title="Delete this category?"
+        body={catEditorTarget ? `"${catEditorTarget.name}" and all its buttons will be removed.` : ''}
+        confirmLabel="Yes, delete it"
+        destructive
+        switchScan={switchScan}
+        switchScanIntervalS={switchScanIntervalS}
+        onConfirm={handleDeleteCategory}
+        onClose={() => setCatDeleteConfirmOpen(false)}
       />
     </Box>
   );

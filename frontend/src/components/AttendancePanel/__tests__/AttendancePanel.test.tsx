@@ -71,11 +71,21 @@ describe('AttendancePanel', () => {
       expect(screen.getByRole('button', { name: /clear/i })).toBeEnabled()
     })
 
-    it('calls onClear when CLEAR button is clicked', () => {
+    it('asks for confirmation before calling onClear', () => {
       const onClear = vi.fn()
       render(<AttendancePanel stations={STATIONS} onClear={onClear} />)
       fireEvent.click(screen.getByRole('button', { name: /clear/i }))
+      expect(onClear).not.toHaveBeenCalled()
+      fireEvent.click(screen.getByRole('button', { name: /yes, clear the list/i }))
       expect(onClear).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not call onClear when the confirmation is declined', () => {
+      const onClear = vi.fn()
+      render(<AttendancePanel stations={STATIONS} onClear={onClear} />)
+      fireEvent.click(screen.getByRole('button', { name: /clear/i }))
+      fireEvent.click(screen.getByRole('button', { name: /no, go back/i }))
+      expect(onClear).not.toHaveBeenCalled()
     })
 
     it('onClear is NOT called when button is disabled (empty list)', () => {

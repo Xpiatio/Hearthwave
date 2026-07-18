@@ -150,6 +150,7 @@ export function streamMsgToEntry(msg: StoredStreamMsg): ChatEntry {
 import type { JournalResultDraft, PendingStation, PromptState } from './types/appTypes';
 import type { AACGrid } from './types/aac';
 import { TokenPromptDialog } from './components/TokenPromptDialog/TokenPromptDialog';
+import { ConfirmDialog } from './components/ConfirmDialog';
 
 export default function App() {
   const { token, profile, setProfile, loading: authLoading, setupNeeded, setup, login, logout } = useAuth();
@@ -215,6 +216,7 @@ export default function App() {
   });
   const [plugins, setPlugins] = useState<PluginManifest[]>([]);
   const [pluginBusy, setPluginBusy] = useState(false);
+  const [pluginToUninstall, setPluginToUninstall] = useState<string | null>(null);
 
   // Kiosk wall-display device tokens (admin-managed via SettingsDialog/AdminPanel).
   const [deviceTokens, setDeviceTokens] = useState<DeviceTokenRecord[]>([]);
@@ -1098,8 +1100,13 @@ export default function App() {
     }
   }
 
-  async function handleUninstallPlugin(id: string) {
-    if (!window.confirm(`Uninstall plugin "${id}"? This removes its files.`)) return;
+  function handleUninstallPlugin(id: string) {
+    setPluginToUninstall(id);
+  }
+
+  async function confirmUninstallPlugin() {
+    const id = pluginToUninstall;
+    if (!id) return;
     setPluginBusy(true);
     try {
       await fetch(`/plugins/${encodeURIComponent(id)}`, { method: 'DELETE', headers: authHeaders() });
@@ -1606,6 +1613,17 @@ export default function App() {
         originalText={promptState?.originalText ?? ''}
         onSubmit={handleTokenSubmit}
         onCancel={handleTokenCancel}
+      />
+      <ConfirmDialog
+        open={pluginToUninstall !== null}
+        title="Uninstall plugin?"
+        body={pluginToUninstall ? `"${pluginToUninstall}" and its files will be removed.` : ''}
+        confirmLabel="Yes, uninstall"
+        destructive
+        switchScan={switchScan}
+        switchScanIntervalS={switchScanIntervalS}
+        onConfirm={confirmUninstallPlugin}
+        onClose={() => setPluginToUninstall(null)}
       />
       {aacMode ? (
         <AACApp

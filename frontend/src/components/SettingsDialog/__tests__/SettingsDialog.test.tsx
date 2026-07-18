@@ -73,36 +73,34 @@ describe('SettingsDialog', () => {
   })
 
   describe('discard-guard on Close', () => {
-    it('does NOT call window.confirm when closing a clean (unmodified) dialog', async () => {
-      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    it('does NOT show the discard-confirm dialog when closing a clean (unmodified) dialog', async () => {
       render(<SettingsDialog {...makeProps()} />)
       await userEvent.click(screen.getByRole('button', { name: /^close$/i }))
-      expect(confirm).not.toHaveBeenCalled()
+      expect(screen.queryByText('Discard unsaved changes?')).not.toBeInTheDocument()
     })
 
-    it('calls window.confirm when closing a dirty dialog', async () => {
-      vi.spyOn(window, 'confirm').mockReturnValue(false)
+    it('shows the discard-confirm dialog when closing a dirty dialog', async () => {
       render(<SettingsDialog {...makeProps()} />)
       await userEvent.click(screen.getByText('Profanity Filter'))
       await userEvent.click(screen.getByRole('button', { name: /^close$/i }))
-      expect(window.confirm).toHaveBeenCalledTimes(1)
+      expect(screen.getByText('Discard unsaved changes?')).toBeInTheDocument()
     })
 
-    it('does NOT call onClose when dirty and confirm returns false', async () => {
+    it('does NOT call onClose when dirty and "No, keep editing" is clicked', async () => {
       const onClose = vi.fn()
-      vi.spyOn(window, 'confirm').mockReturnValue(false)
       render(<SettingsDialog {...makeProps({ onClose })} />)
       await userEvent.click(screen.getByText('Profanity Filter'))
       await userEvent.click(screen.getByRole('button', { name: /^close$/i }))
+      await userEvent.click(screen.getByRole('button', { name: /no, keep editing/i }))
       expect(onClose).not.toHaveBeenCalled()
     })
 
-    it('DOES call onClose when dirty and confirm returns true', async () => {
+    it('DOES call onClose when dirty and "Yes, discard" is confirmed', async () => {
       const onClose = vi.fn()
-      vi.spyOn(window, 'confirm').mockReturnValue(true)
       render(<SettingsDialog {...makeProps({ onClose })} />)
       await userEvent.click(screen.getByText('Profanity Filter'))
       await userEvent.click(screen.getByRole('button', { name: /^close$/i }))
+      await userEvent.click(screen.getByRole('button', { name: /yes, discard/i }))
       expect(onClose).toHaveBeenCalledTimes(1)
     })
   })

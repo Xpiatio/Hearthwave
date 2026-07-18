@@ -7,6 +7,7 @@ import { ConfigPanel } from '../ConfigPanel/ConfigPanel';
 import { AdminPanel, type AdminPanelHandle } from '../AdminPanel/AdminPanel';
 import { ServerConfigPanel, type ServerConfigPanelHandle } from '../ServerConfigPanel/ServerConfigPanel';
 import { PluginsPanel, type PluginDraft } from '../PluginsPanel/PluginsPanel';
+import { ConfirmDialog } from '../ConfirmDialog';
 import type { InputDeviceOption, MonitorSinkOption, OutputDeviceOption, PluginManifest, DeviceTokenRecord } from '../../types/ws';
 
 interface Props {
@@ -96,6 +97,7 @@ export function SettingsDialog(props: Props) {
   const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
   const [tab, setTab] = useState(0);
   const [saved, setSaved] = useState(false);
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
 
   const adminRef = useRef<AdminPanelHandle>(null);
   const serverRef = useRef<ServerConfigPanelHandle>(null);
@@ -171,7 +173,10 @@ export function SettingsDialog(props: Props) {
   }
 
   function handleClose() {
-    if (dirty && !window.confirm('Discard unsaved changes?')) return;
+    if (dirty) {
+      setDiscardConfirmOpen(true);
+      return;
+    }
     onClose();
   }
 
@@ -278,6 +283,16 @@ export function SettingsDialog(props: Props) {
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
         <Alert severity="success" variant="filled" onClose={() => setSaved(false)}>Settings saved</Alert>
       </Snackbar>
+
+      <ConfirmDialog
+        open={discardConfirmOpen}
+        title="Discard unsaved changes?"
+        confirmLabel="Yes, discard"
+        cancelLabel="No, keep editing"
+        destructive
+        onConfirm={() => { setDiscardConfirmOpen(false); onClose(); }}
+        onClose={() => setDiscardConfirmOpen(false)}
+      />
     </Dialog>
   );
 }
