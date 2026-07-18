@@ -39,6 +39,7 @@ export function ActivityCard({
       onKeyDown={onKeyDown}
       onFocus={onFocus}
       ref={buttonRef}
+      data-scan="true"
       sx={{ borderRadius: 2, width: '100%', height: '100%', textAlign: 'left' }}
     >
       <Paper

@@ -1642,6 +1642,8 @@ export default function App() {
           onOpenActivity={handleOpenActivity}
           onOpenSettings={handleToggleSettings}
           onLogout={handleLogout}
+          switchScan={switchScan && !showSettings}
+          switchScanIntervalS={switchScanIntervalS}
         />
       ) : activity === 'family' ? (
         <FamilyPanel
