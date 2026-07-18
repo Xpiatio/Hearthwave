@@ -20,7 +20,7 @@ show how it's done.
 Hearthwave is a fork of GMRS-TTY that replaces the desktop PySide6 UI with a
 browser-based React frontend communicating over WebSocket.
 
-> **Latest release:** v2.16.0
+> **Latest release:** v2.17.0
 
 ## Who uses it
 
@@ -39,6 +39,11 @@ browser-based React frontend communicating over WebSocket.
 
 ## Features
 
+- **Hearthwave Home** — the app opens on a home screen of large activity cards
+  (Chat, Family, Neighborhood, Net Control) instead of dropping everyone into
+  the operator console; a per-user interface level (Simple / Operator) hides
+  radio-operator controls for family members, and new accessibility options add
+  adjustable text size, a high-contrast theme, and visible keyboard focus rings
 - **Neighborhood activity** — a dedicated home-screen card / mobile tab for
   watch groups: one-tap roster check-in (identity comes from your profile, and
   an early check-in survives the net actually starting), the next scheduled net
