@@ -148,6 +148,37 @@ describe('NeighborhoodPanel', () => {
     expect(within(dialog).getByText('Description is required.')).toBeInTheDocument();
   });
 
+  it('does not auto-open the incident dialog for a stale incidentError already set at mount', () => {
+    const props = makeProps({ incidentError: 'Description is required.' });
+    render(<NeighborhoodPanel {...props} />);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('does not show stale error text when the dialog is reopened manually after being dismissed', async () => {
+    const user = userEvent.setup();
+    const props = makeProps();
+    const { rerender } = render(<NeighborhoodPanel {...props} />);
+
+    rerender(
+      <ThemeProvider theme={makeTheme(false)}>
+        <NeighborhoodPanel {...props} incidentError="Description is required." />
+      </ThemeProvider>,
+    );
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('Description is required.')).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    // incidentError prop is still the stale value from App.tsx's perspective
+    // (nothing cleared it) — reopening manually must not resurface it.
+    await user.click(screen.getByRole('button', { name: 'Report an incident' }));
+    const reopened = screen.getByRole('dialog');
+    expect(within(reopened).queryByText('Description is required.')).not.toBeInTheDocument();
+  });
+
   it('incident log filter narrows the newest-first list to the selected category', async () => {
     const user = userEvent.setup();
     render(<NeighborhoodPanel {...makeProps()} />);

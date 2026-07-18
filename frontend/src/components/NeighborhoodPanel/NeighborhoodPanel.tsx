@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Box, Button, ButtonBase, Chip, IconButton, TextField, Tooltip, Typography } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import type { IncidentEntry, NeighborhoodAlertMsg, NeighborhoodRosterRow } from '../../types/ws';
@@ -48,14 +48,32 @@ export function NeighborhoodPanel(props: NeighborhoodPanelProps) {
   const [incidentOpen, setIncidentOpen] = useState(false);
   const [streetAlert, setStreetAlert] = useState('');
 
+  // Tracks the most recent incidentError the user has already seen and
+  // dismissed (via Cancel/backdrop close), so a stale error from a prior
+  // visit never auto-reopens or redisplays. App.tsx only clears
+  // incidentError on neighborhood_incident_sent — handleGoHome and
+  // handleOpenActivity never do — so without this, leaving the panel after
+  // a failed submit and coming back would auto-open a blank dialog showing
+  // the old error again. Initializing to the mount-time value guards
+  // against a stale error already present on first render.
+  const dismissedErrorRef = useRef<string | null>(props.incidentError);
+
   // No dedicated "incident accepted" ack reaches this component (unlike
   // NCSPanel's spot-report flow, which closes on ncs_spot_report_sent) —
   // only incidentError. Submitting closes the dialog optimistically; if the
   // server rejects it, this reopens the dialog so the report and the error
-  // are visible together.
+  // are visible together. Only a *new*, undismissed error reopens it.
   useEffect(() => {
-    if (props.incidentError) setIncidentOpen(true);
+    if (props.incidentError && props.incidentError !== dismissedErrorRef.current) {
+      setIncidentOpen(true);
+    }
   }, [props.incidentError]);
+
+  // The error is only worth showing while it hasn't been dismissed yet.
+  const visibleIncidentError =
+    props.incidentError !== null && props.incidentError !== dismissedErrorRef.current
+      ? props.incidentError
+      : null;
 
   const checkedIn = props.roster.some((r) => r.user_id === props.myUserId);
   const netLabel = nextNetLabel(props.netDay, props.netTime, new Date());
@@ -65,6 +83,16 @@ export function NeighborhoodPanel(props: NeighborhoodPanelProps) {
 
   function handleIncidentSubmit(payload: { category: string; description: string; location: string }) {
     props.onIncidentReport(payload);
+    setIncidentOpen(false);
+  }
+
+  // Cancel/backdrop close (as opposed to the optimistic close on submit):
+  // the user has now seen whatever error is currently showing, so record it
+  // as dismissed. If the resubmission that follows fails again — even with
+  // identical wording — a fresh submit-triggered close never touches this
+  // ref, so the effect above still reopens the dialog for it.
+  function handleIncidentDialogClose() {
+    dismissedErrorRef.current = props.incidentError;
     setIncidentOpen(false);
   }
 
@@ -190,8 +218,8 @@ export function NeighborhoodPanel(props: NeighborhoodPanelProps) {
 
       <IncidentDialog
         open={incidentOpen}
-        error={props.incidentError}
-        onClose={() => setIncidentOpen(false)}
+        error={visibleIncidentError}
+        onClose={handleIncidentDialogClose}
         onSubmit={handleIncidentSubmit}
       />
     </Box>
