@@ -1620,6 +1620,8 @@ export default function App() {
           onTxAbort={handleTxAbort}
           onSaveGrid={handleSaveAacGrid}
           onExitAac={handleToggleAacMode}
+          switchScan={switchScan}
+          switchScanIntervalS={switchScanIntervalS}
         />
       ) : isMobile ? (
         <MobileApp

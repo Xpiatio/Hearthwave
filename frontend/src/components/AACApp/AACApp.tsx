@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Box,
@@ -29,6 +29,7 @@ import { SentenceStrip } from './SentenceStrip';
 import { IncomingStrip } from './IncomingStrip';
 import { ButtonGrid } from './ButtonGrid';
 import { ButtonEditorDialog } from './ButtonEditorDialog';
+import { useSwitchScan } from '../../hooks/useSwitchScan';
 
 export interface AACAppProps {
   profile: UserProfile;
@@ -42,6 +43,8 @@ export interface AACAppProps {
   onTxAbort: () => void;
   onSaveGrid: (grid: AACGrid) => void;
   onExitAac: () => void;
+  switchScan: boolean;
+  switchScanIntervalS: number;
 }
 
 export function AACApp({
@@ -56,6 +59,8 @@ export function AACApp({
   onTxAbort,
   onSaveGrid,
   onExitAac,
+  switchScan,
+  switchScanIntervalS,
 }: AACAppProps) {
   const [chunks, setChunks] = useState<string[]>([]);
   const [activeCatId, setActiveCatId] = useState<string>(grid.categories[0]?.id ?? '');
@@ -67,6 +72,11 @@ export function AACApp({
   const [catEditorTarget, setCatEditorTarget] = useState<AACCategory | null>(null);
   const [catDraftName, setCatDraftName] = useState('');
   const [catDraftEmoji, setCatDraftEmoji] = useState('');
+
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const scanActive =
+    switchScan && !editMode && !editorOpen && !catEditorOpen && !exitConfirmOpen;
+  useSwitchScan(scanActive, switchScanIntervalS * 1000, rootRef);
 
   // Keep the active tab valid when the grid changes (edits, server refresh).
   useEffect(() => {
@@ -153,7 +163,7 @@ export function AACApp({
   }
 
   return (
-    <Box sx={{ height: '100vh', minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
+    <Box ref={rootRef} sx={{ height: '100vh', minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
       <Box
         sx={{
@@ -216,6 +226,7 @@ export function AACApp({
                   {c.name}
                 </span>
               }
+              data-scan="true"
               sx={{ fontSize: '1rem', minHeight: 56 }}
             />
           ))}
@@ -265,6 +276,7 @@ export function AACApp({
               color="error"
               onClick={onTxAbort}
               aria-label="Abort transmission"
+              data-scan="true"
               startIcon={<CancelIcon />}
               sx={{ minHeight: 72, px: 3 }}
             >
@@ -279,6 +291,7 @@ export function AACApp({
             onClick={handleSendClick}
             disabled={!canSend}
             aria-label="Send message over radio"
+            data-scan="true"
             startIcon={<SendIcon sx={{ fontSize: '2rem' }} />}
             sx={{ minHeight: 72, fontSize: '1.4rem' }}
           >

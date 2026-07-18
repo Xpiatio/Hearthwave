@@ -1,5 +1,5 @@
 import React from 'react'
-import { render as rtlRender, screen, within } from '@testing-library/react'
+import { render as rtlRender, screen, within, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ThemeProvider } from '@mui/material/styles'
 import { makeTheme } from '../../../theme'
@@ -44,6 +44,8 @@ function makeProps(overrides: Partial<AACAppProps> = {}): AACAppProps {
     onTxAbort: vi.fn(),
     onSaveGrid: vi.fn(),
     onExitAac: vi.fn(),
+    switchScan: false,
+    switchScanIntervalS: 1.5,
     ...overrides,
   }
 }
@@ -185,5 +187,40 @@ describe('AACApp', () => {
     expect(await axe(container)).toHaveNoViolations()
     await user.click(screen.getByRole('button', { name: 'Edit buttons' }))
     expect(await axe(container)).toHaveNoViolations()
+  })
+
+  it('arrow keys move focus between word buttons (roving tabindex)', () => {
+    render(<AACApp {...makeProps()} />)
+    const words = within(screen.getByRole('group')).getAllByRole('button')
+    words[0].focus()
+    fireEvent.keyDown(words[0], { key: 'ArrowRight' })
+    expect(words[1]).toHaveFocus()
+    expect(words[0]).toHaveAttribute('tabindex', '-1')
+    expect(words[1]).toHaveAttribute('tabindex', '0')
+    fireEvent.keyDown(words[1], { key: 'ArrowLeft' })
+    expect(words[0]).toHaveFocus()
+  })
+
+  it('switch scanning cycles tabs, word buttons, then SEND', () => {
+    vi.useFakeTimers()
+    render(<AACApp {...makeProps({ switchScan: true, switchScanIntervalS: 1 })} />)
+    fireEvent.click(within(screen.getByRole('group')).getAllByRole('button')[0])
+    act(() => { vi.advanceTimersByTime(1000) })
+    expect(screen.getAllByRole('tab')[0]).toHaveFocus()
+    // advance past all tabs and all word buttons of the active category
+    const tabs = screen.getAllByRole('tab').length
+    const words = within(screen.getByRole('group')).getAllByRole('button').length
+    act(() => { vi.advanceTimersByTime(1000 * (tabs + words)) })
+    expect(screen.getByRole('button', { name: 'Send message over radio' })).toHaveFocus()
+    vi.useRealTimers()
+  })
+
+  it('switch scanning pauses in edit mode', () => {
+    vi.useFakeTimers()
+    render(<AACApp {...makeProps({ switchScan: true, switchScanIntervalS: 1 })} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Edit buttons' }))
+    act(() => { vi.advanceTimersByTime(3000) })
+    expect(screen.getAllByRole('tab')[0]).not.toHaveFocus()
+    vi.useRealTimers()
   })
 })
