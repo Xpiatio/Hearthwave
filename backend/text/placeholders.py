@@ -35,3 +35,20 @@ def substitute_placeholders(text, values):
         return match.group(0)
 
     return _PLACEHOLDER_PATTERN.sub(_replace, text)
+
+
+_AAC_NAME_RE = re.compile(r"\{name\}", re.IGNORECASE)
+_AAC_CALLSIGN_RE = re.compile(r"\{callsign\}", re.IGNORECASE)
+_AAC_OTHER_RE = re.compile(r"\{[^}]*\}")
+_WS_RE = re.compile(r"\s{2,}")
+
+
+def resolve_aac_placeholders(text: str, operator_name: str, callsign: str) -> str:
+    """Mirror of the frontend resolveTokens (AACApp defaultGrid.ts): fill
+    {Name}/{callsign} case-insensitively, strip any other {...} token, and
+    collapse whitespace — so a kid AAC send never reaches the prompt_token
+    typing dialog, which a non-typing AAC user can't answer."""
+    text = _AAC_NAME_RE.sub(operator_name or "Operator", text)
+    text = _AAC_CALLSIGN_RE.sub(callsign or "my callsign", text)
+    text = _AAC_OTHER_RE.sub("", text)
+    return _WS_RE.sub(" ", text).strip()

@@ -3022,6 +3022,77 @@ class TestKidTxGate:
             frames = _drain_until_idle(ws)
         assert frames[0] == {"type": "tx_status", "status": "transmitting"}
 
+    def _kid_client_with_grid(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks(is_admin=False, role="kid")
+        mock_users.get.return_value["prefs"] = {"aac_grid": {
+            "version": 1,
+            "categories": [{"id": "c1", "name": "Core", "emoji": "⭐", "buttons": [
+                {"id": "b1", "emoji": "👍", "label": "Yes", "text": "Yes"},
+                {"id": "b2", "emoji": "📻", "label": "Check in", "text": "This is {callsign} checking in"},
+            ]}],
+        }}
+        return cfg, mock_stt, mock_tts, mock_users, mock_tokens
+
+    def test_kid_aac_chunks_from_grid_transmit(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = self._kid_client_with_grid(tmp_path)
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "tx_message", "callsign": "WRXB123",
+                                  "text": "ignored by server",
+                                  "aac_chunks": ["Yes", "This is {callsign} checking in"]})
+                    frames = _drain_until_idle(ws)
+        assert frames[0] == {"type": "tx_status", "status": "transmitting"}
+        # no prompt_token frame — placeholders resolved server-side
+        assert all(f["type"] != "prompt_token" for f in frames)
+
+    def test_kid_aac_chunk_not_in_grid_rejected(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = self._kid_client_with_grid(tmp_path)
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "tx_message", "callsign": "WRXB123",
+                                  "text": "x", "aac_chunks": ["Yes", "free text injection"]})
+                    msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert "not allowed" in msg["detail"].lower()
+
+    def test_kid_aac_chunks_without_stored_grid_rejected(self, kid_client):
+        """kid_client has quick_messages but no aac_grid — chunk sends must fail."""
+        with kid_client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "tx_message", "callsign": "WRXB123",
+                          "text": "x", "aac_chunks": ["Yes"]})
+            msg = _next_of_type(ws, "error")
+        assert msg is not None
+
+    def test_adult_tx_ignores_aac_chunks(self, client):
+        """Non-kid sends are validated as before; chunks are inert metadata."""
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "tx_message", "callsign": "W5TST", "text": "hello",
+                          "aac_chunks": ["whatever"]})
+            frames = _drain_until_idle(ws)
+        assert frames[0] == {"type": "tx_status", "status": "transmitting"}
+
 
 # ---------------------------------------------------------------------------
 # C1: voice PTT — a kid must not be able to transmit arbitrary recorded

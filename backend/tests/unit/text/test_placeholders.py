@@ -1,4 +1,4 @@
-from backend.text.placeholders import find_placeholders, substitute_placeholders
+from backend.text.placeholders import find_placeholders, resolve_aac_placeholders, substitute_placeholders
 
 
 class TestFindPlaceholders:
@@ -67,3 +67,15 @@ class TestSubstitutePlaceholders:
 
     def test_none_input(self):
         assert substitute_placeholders(None, {"N": "22"}) is None
+
+
+class TestResolveAacPlaceholders:
+    def test_fills_name_and_callsign_case_insensitive(self):
+        out = resolve_aac_placeholders("this is {callsign} checking in, {Name}", "Sam", "WRXB123")
+        assert out == "this is WRXB123 checking in, Sam"
+
+    def test_strips_unknown_tokens_and_collapses_whitespace(self):
+        assert resolve_aac_placeholders("hello {weird token} world", "Sam", "W1AW") == "hello world"
+
+    def test_fallbacks_match_frontend(self):
+        assert resolve_aac_placeholders("{Name} {callsign}", "", "") == "Operator my callsign"

@@ -197,7 +197,7 @@ from backend.text.callsigns import (
 from backend.text.metadata import extract_name_location
 from backend.text.shorthand import expand_tty_abbreviations
 from backend.text.profanity import mask_profanity
-from backend.text.placeholders import find_placeholders
+from backend.text.placeholders import find_placeholders, resolve_aac_placeholders
 from backend.text.primer import prepend_primer_word
 from backend.tts.synthesizer import TTSSynthesizer
 from backend.beacon.monitoring import format_monitoring_call, should_emit_beacon
@@ -2348,6 +2348,20 @@ def _is_kid(state: "ConnectionState") -> bool:
     return getattr(state, "role", "adult") == "kid"
 
 
+def _aac_grid_texts(grid) -> set[str]:
+    """All button texts in a stored aac_grid pref (empty set if absent/malformed)."""
+    texts: set[str] = set()
+    if not isinstance(grid, dict):
+        return texts
+    for cat in grid.get("categories") or []:
+        if not isinstance(cat, dict):
+            continue
+        for b in cat.get("buttons") or []:
+            if isinstance(b, dict) and isinstance(b.get("text"), str) and b["text"].strip():
+                texts.add(b["text"])
+    return texts
+
+
 # Wall-display (kiosk) connections are a hard-scoped identity class: no login,
 # no admin surface, no TX — just a small allowlist of self-serve messages
 # (handlers land in Task 3/4). Everything else gets rejected before it can
@@ -2561,10 +2575,30 @@ async def websocket_endpoint(
                     continue
 
                 if _is_kid(state):
-                    presets = state.prefs.get("quick_messages") or []
-                    if (data.get("text") or "").strip() not in presets:
-                        await _manager.send_to(ws, {"type": "error", "detail": "TX not allowed for this account"})
-                        continue
+                    chunks = data.get("aac_chunks")
+                    if isinstance(chunks, list) and chunks and all(isinstance(c, str) for c in chunks):
+                        # AAC path: every chunk must be a button text in the kid's
+                        # *stored* grid; the client-sent text is ignored and the
+                        # transmission is rebuilt server-side so button presses are
+                        # the only vocabulary a kid can put on the air.
+                        allowed_texts = _aac_grid_texts(state.prefs.get("aac_grid"))
+                        if not allowed_texts or any(c not in allowed_texts for c in chunks):
+                            await _manager.send_to(ws, {"type": "error", "detail": "TX not allowed for this account"})
+                            continue
+                        profile_pub = (_users_store.get_public_one(state.user_id) or {}) if _users_store else {}
+                        data["text"] = resolve_aac_placeholders(
+                            " ".join(c.strip() for c in chunks),
+                            (profile_pub.get("operator_name") or "").strip(),
+                            (profile_pub.get("callsign") or "").strip() or callsign,
+                        )
+                        if not data["text"]:
+                            await _manager.send_to(ws, {"type": "error", "detail": "TX not allowed for this account"})
+                            continue
+                    else:
+                        presets = state.prefs.get("quick_messages") or []
+                        if (data.get("text") or "").strip() not in presets:
+                            await _manager.send_to(ws, {"type": "error", "detail": "TX not allowed for this account"})
+                            continue
 
                 # If the message text contains unresolved {Token} placeholders,
                 # ask the client to fill them in before transmitting.
