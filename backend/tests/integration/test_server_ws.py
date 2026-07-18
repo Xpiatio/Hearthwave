@@ -36,6 +36,7 @@ def _minimal_cfg(tmp_path: Path, *, listen_only: bool = False) -> ServerConfig:
         "voice": "fake_voice",
         "contacts_file": str(contacts_file),
         "presence_file": str(tmp_path / "presence.json"),
+        "family_file": str(tmp_path / "family.json"),
         "listen_only": listen_only,
     })
 
@@ -2657,3 +2658,190 @@ class TestTxMessageTouchesPresence:
         assert presence is not None
         me = next(e for e in presence["entries"] if e["user_id"] == "test-user")
         assert me["last_heard"] is not None
+
+
+# ---------------------------------------------------------------------------
+# Check-in reminders: set_family_reminder / get_family_reminders
+# ---------------------------------------------------------------------------
+
+class TestFamilyReminders:
+    def test_admin_set_reminder_broadcasts_family_reminders(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _family_status_auth_mocks()
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({
+                        "type": "set_family_reminder",
+                        "user_id": "test-user",
+                        "time": "09:00",
+                        "enabled": True,
+                    })
+                    msg = _next_of_type(ws, "family_reminders")
+        assert msg is not None
+        assert msg["reminders"] == {"test-user": {"time": "09:00", "enabled": True}}
+
+    def test_non_admin_set_reminder_rejected(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _family_status_auth_mocks(is_admin=False, role="adult")
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({
+                        "type": "set_family_reminder",
+                        "user_id": "test-user",
+                        "time": "09:00",
+                        "enabled": True,
+                    })
+                    err = _next_of_type(ws, "error")
+        assert err is not None
+        assert err["detail"] == "Admin access required."
+
+    def test_set_reminder_bad_time_returns_error(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _family_status_auth_mocks()
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({
+                        "type": "set_family_reminder",
+                        "user_id": "test-user",
+                        "time": "25:99",
+                        "enabled": True,
+                    })
+                    err = _next_of_type(ws, "error")
+        assert err is not None
+
+    def test_set_reminder_none_time_deletes(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _family_status_auth_mocks()
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({
+                        "type": "set_family_reminder",
+                        "user_id": "test-user",
+                        "time": "09:00",
+                        "enabled": True,
+                    })
+                    _next_of_type(ws, "family_reminders")
+                    ws.send_json({
+                        "type": "set_family_reminder",
+                        "user_id": "test-user",
+                        "time": None,
+                        "enabled": True,
+                    })
+                    msg = _next_of_type(ws, "family_reminders")
+        assert msg["reminders"] == {}
+
+    def test_kid_get_reminders_rejected(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _family_status_auth_mocks(is_admin=False, role="kid")
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "get_family_reminders"})
+                    err = _next_of_type(ws, "error")
+        assert err is not None
+        assert err["detail"] == "Check-in reminders not available for this account."
+
+    def test_adult_get_reminders_returns_msg(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _family_status_auth_mocks(is_admin=False, role="adult")
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "get_family_reminders"})
+                    msg = _next_of_type(ws, "family_reminders")
+        assert msg is not None
+        assert msg["reminders"] == {}
+
+    def test_family_reminders_sent_on_connect_for_adult(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _family_status_auth_mocks(is_admin=False, role="adult")
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    frames = _drain_initial(ws)
+        reminder_frames = [f for f in frames if f["type"] == "family_reminders"]
+        assert len(reminder_frames) == 1
+
+    def test_family_reminders_not_sent_on_connect_for_kid(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _family_status_auth_mocks(is_admin=False, role="kid")
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    frames = _drain_initial(ws)
+        reminder_frames = [f for f in frames if f["type"] == "family_reminders"]
+        assert reminder_frames == []

@@ -142,6 +142,8 @@ from backend.persistence.contacts import (
 )
 from backend.persistence.audit import AuditLog
 from backend.auth_ratelimit import _extract_ip, get_client_ip
+from backend.family.reminders import is_checkin_missed
+from backend.persistence.family import FamilyStore
 from backend.persistence.journal import delete_journal, load_journals, load_published_manifest, publish_journal, save_journal, unpublish_journal
 from backend.persistence.presence import PresenceStore
 from backend.persistence.tokens import TokenStore
@@ -189,6 +191,7 @@ _contacts_store: ContactsStore | None = None
 _users_store: UsersStore | None = None
 _token_store: TokenStore | None = None
 _presence_store: PresenceStore | None = None
+_family_store: FamilyStore | None = None
 _audit_log: AuditLog | None = None
 _stt_worker: STTWorker | None = None
 _synthesizer: TTSSynthesizer | None = None
@@ -575,6 +578,11 @@ def _build_family_presence_msg() -> dict:
             "missed_checkin": e["missed_checkin"],
         })
     return {"type": "family_presence", "entries": entries}
+
+
+def _build_family_reminders_msg() -> dict:
+    reminders = _family_store.get_reminders() if _family_store else {}
+    return {"type": "family_reminders", "reminders": reminders}
 
 
 async def _on_auto_add_result(
@@ -1410,6 +1418,40 @@ async def _online_status_pump() -> None:
             _log.error("_online_status_pump error: %s", exc)
 
 
+async def _family_reminder_tick() -> None:
+    """One pass over configured check-in reminders vs. presence.
+
+    Extracted from _family_reminder_pump so tests can invoke a single pass
+    directly, without the sleep loop. Broadcasts family_presence only when
+    at least one user's missed_checkin flag actually flipped. Tolerates a
+    reminder for a user whose profile/presence record no longer exists —
+    PresenceStore.get()/set_missed() both handle unknown user_ids gracefully.
+    """
+    if _family_store is None or _presence_store is None:
+        return
+    changed = False
+    now_local = datetime.datetime.now().astimezone()
+    for uid, reminder in _family_store.get_reminders().items():
+        last_ok = _presence_store.get(uid)["last_ok"]
+        missed = is_checkin_missed(reminder, last_ok, now_local)
+        if _presence_store.set_missed(uid, missed):
+            changed = True
+    if changed:
+        await _manager.broadcast(_build_family_presence_msg())
+
+
+async def _family_reminder_pump() -> None:
+    """Recompute missed-checkin status for every reminder every 30 seconds."""
+    while True:
+        try:
+            await _family_reminder_tick()
+            await asyncio.sleep(30)
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            _log.error("_family_reminder_pump error: %s", exc)
+
+
 async def _voices_watcher_pump() -> None:
     """Detect changes to the voices directory and push voices_list to all clients.
 
@@ -1442,7 +1484,7 @@ async def _voices_watcher_pump() -> None:
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     """Startup / shutdown wiring."""
-    global _config, _contacts_store, _users_store, _token_store, _presence_store, _stt_worker, _synthesizer, _monitor, _plugin_ctx
+    global _config, _contacts_store, _users_store, _token_store, _presence_store, _family_store, _stt_worker, _synthesizer, _monitor, _plugin_ctx
     global _stt_out_queue, _tx_queue, _tts_event_queue, _background_tasks, _tx_abort_event
     global _audio_level, _radio_error, _channel_clear, _last_id_time, _has_transmitted, _last_beacon_time, _ncs_plugin
     global _level_window, _attendance, _spectro, _monitor_chunk_cb
@@ -1479,6 +1521,7 @@ async def _lifespan(app: FastAPI):
     _users_store = UsersStore(_config.users_file)
     _token_store = TokenStore(_config.tokens_file)
     _presence_store = PresenceStore(_config.presence_file)
+    _family_store = FamilyStore(_config.family_file)
     purged = _token_store.purge_expired()
     if purged:
         _log.info("Purged %d expired session tokens.", purged)
@@ -1623,6 +1666,7 @@ async def _lifespan(app: FastAPI):
         asyncio.create_task(_spectro.run(), name="spectro-pump"),
         asyncio.create_task(_online_status_pump(), name="online-status-pump"),
         asyncio.create_task(_voices_watcher_pump(), name="voices-watcher"),
+        asyncio.create_task(_family_reminder_pump(), name="family-reminder-pump"),
     }
     _log.info("Hearthwave server ready.")
 
@@ -2282,6 +2326,8 @@ async def websocket_endpoint(
     await _manager.send_to(ws, _build_attendance_payload())
     await _manager.send_to(ws, _build_pending_payload())
     await _manager.send_to(ws, _build_family_presence_msg())
+    if not _is_kid(state):
+        await _manager.send_to(ws, _build_family_reminders_msg())
     await _manager.send_to(ws, {"type": "voices_list", "voices": _list_voices()})
     # Backfill the shared message stream accumulated since the last clear
     # (snapshotted above, before this socket joined the broadcast set).
@@ -2416,6 +2462,31 @@ async def websocket_endpoint(
                 if _presence_store is not None:
                     _presence_store.mark_ok(state.user_id, utc_now_iso())
                     await _manager.broadcast(_build_family_presence_msg())
+
+            elif msg_type == "set_family_reminder":
+                if not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
+                    continue
+                if _family_store is None:
+                    continue
+                target_user_id = data.get("user_id", "")
+                if not target_user_id:
+                    await _manager.send_to(ws, {"type": "error", "detail": "user_id is required."})
+                    continue
+                try:
+                    _family_store.set_reminder(
+                        target_user_id, data.get("time"), bool(data.get("enabled", False))
+                    )
+                except ValueError as exc:
+                    await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
+                    continue
+                await _manager.broadcast(_build_family_reminders_msg())
+
+            elif msg_type == "get_family_reminders":
+                if _is_kid(state):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Check-in reminders not available for this account."})
+                    continue
+                await _manager.send_to(ws, _build_family_reminders_msg())
 
             elif msg_type == "add_contact":
                 if _contacts_store is None:
