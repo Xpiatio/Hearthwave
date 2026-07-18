@@ -262,6 +262,14 @@ export default function App() {
     () => localStorage.getItem('radio_tty_high_contrast') === 'true'
   );
 
+  // Switch scanning (single-switch a11y) — persisted locally; overridden by profile prefs on load
+  const [switchScan, setSwitchScan] = useState(localStorage.getItem('radio_tty_switch_scan') === 'true');
+  const [switchScanIntervalS, setSwitchScanIntervalS] = useState(() => {
+    const v = Number(localStorage.getItem('radio_tty_switch_scan_interval_s'));
+    return [1, 1.5, 2, 3].includes(v) ? v : 1.5;
+  });
+  const [visualAlerts, setVisualAlerts] = useState(localStorage.getItem('radio_tty_visual_alerts') === 'true');
+
   const deviceClass = useDeviceClass();
   const isMobile = deviceClass === 'phone';
 
@@ -308,6 +316,8 @@ export default function App() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const notificationsEnabledRef = useRef(false);
   notificationsEnabledRef.current = notificationsEnabled;
+  const visualAlertsRef = useRef(false);
+  visualAlertsRef.current = visualAlerts;
   const [filterProfanity, setFilterProfanity] = useState(true);
   const [spectroColormap, setSpectroColormap] = useState<'viridis' | 'grayscale'>('viridis');
   const [spectroTimeWindowS, setSpectroTimeWindowS] = useState(30);
@@ -534,6 +544,18 @@ export default function App() {
         if (prefs.high_contrast !== undefined) {
           setHighContrast(prefs.high_contrast);
           localStorage.setItem('radio_tty_high_contrast', String(prefs.high_contrast));
+        }
+        if (prefs.switch_scan !== undefined) {
+          setSwitchScan(prefs.switch_scan);
+          localStorage.setItem('radio_tty_switch_scan', String(prefs.switch_scan));
+        }
+        if (prefs.switch_scan_interval_s !== undefined) {
+          setSwitchScanIntervalS(prefs.switch_scan_interval_s);
+          localStorage.setItem('radio_tty_switch_scan_interval_s', String(prefs.switch_scan_interval_s));
+        }
+        if (prefs.visual_alerts !== undefined) {
+          setVisualAlerts(prefs.visual_alerts);
+          localStorage.setItem('radio_tty_visual_alerts', String(prefs.visual_alerts));
         }
         // One-time migration: the QuickMessages panel used to keep its presets
         // purely in localStorage. Once the server-side pref exists this is a
@@ -1199,6 +1221,26 @@ export default function App() {
     send({ type: 'save_user_prefs', prefs: { high_contrast: next } });
   }
 
+  function handleToggleSwitchScan() {
+    const next = !switchScan;
+    setSwitchScan(next);
+    localStorage.setItem('radio_tty_switch_scan', String(next));
+    send({ type: 'save_user_prefs', prefs: { switch_scan: next } });
+  }
+
+  function handleSwitchScanIntervalChange(next: number) {
+    setSwitchScanIntervalS(next);
+    localStorage.setItem('radio_tty_switch_scan_interval_s', String(next));
+    send({ type: 'save_user_prefs', prefs: { switch_scan_interval_s: next } });
+  }
+
+  function handleToggleVisualAlerts() {
+    const next = !visualAlerts;
+    setVisualAlerts(next);
+    localStorage.setItem('radio_tty_visual_alerts', String(next));
+    send({ type: 'save_user_prefs', prefs: { visual_alerts: next } });
+  }
+
   function handleToggleAacMode() {
     const next = !aacMode;
     setAacMode(next);
@@ -1694,6 +1736,12 @@ export default function App() {
         onUiLevelChange={handleUiLevelChange}
         onFontScaleChange={handleFontScaleChange}
         onToggleHighContrast={handleToggleHighContrast}
+        switchScan={switchScan}
+        switchScanIntervalS={switchScanIntervalS}
+        visualAlerts={visualAlerts}
+        onToggleSwitchScan={handleToggleSwitchScan}
+        onSwitchScanIntervalChange={handleSwitchScanIntervalChange}
+        onToggleVisualAlerts={handleToggleVisualAlerts}
         adminConfig={mergedAdminConfig}
         voices={voices}
         voicePreviewBusy={voicePreviewBusy}

@@ -31,6 +31,9 @@ interface Props {
   uiLevel: 'simple' | 'operator';
   fontScale: number;
   highContrast: boolean;
+  switchScan: boolean;
+  switchScanIntervalS: number;
+  visualAlerts: boolean;
   onToggleProfanity: () => void;
   onToggleAacMode: () => void;
   onToggleFuzzy: () => void;
@@ -43,6 +46,9 @@ interface Props {
   onUiLevelChange: (v: 'simple' | 'operator') => void;
   onFontScaleChange: (v: number) => void;
   onToggleHighContrast: () => void;
+  onToggleSwitchScan: () => void;
+  onSwitchScanIntervalChange: (v: number) => void;
+  onToggleVisualAlerts: () => void;
 
   // Station tab (admin only)
   adminConfig: React.ComponentProps<typeof AdminPanel>['config'];
@@ -81,6 +87,7 @@ interface PrefsDraft {
   systemMonitorSink: string; outputDevice: number;
   spectroColormap: 'viridis' | 'grayscale'; spectroFreqRange: 'voice' | 'full'; spectroTimeWindowS: number;
   uiLevel: 'simple' | 'operator'; fontScale: number; highContrast: boolean;
+  switchScan: boolean; switchScanIntervalS: number; visualAlerts: boolean;
 }
 
 export function SettingsDialog(props: Props) {
@@ -114,6 +121,7 @@ export function SettingsDialog(props: Props) {
     outputDevice: props.outputDevice, spectroColormap: props.spectroColormap,
     spectroFreqRange: props.spectroFreqRange, spectroTimeWindowS: props.spectroTimeWindowS,
     uiLevel: props.uiLevel, fontScale: props.fontScale, highContrast: props.highContrast,
+    switchScan: props.switchScan, switchScanIntervalS: props.switchScanIntervalS, visualAlerts: props.visualAlerts,
   });
   const [draft, setDraft] = useState<PrefsDraft>(seedPrefs);
   const [prefsSeed, setPrefsSeed] = useState<PrefsDraft>(seedPrefs);
@@ -149,6 +157,9 @@ export function SettingsDialog(props: Props) {
     if (draft.uiLevel !== prefsSeed.uiLevel) props.onUiLevelChange(draft.uiLevel);
     if (draft.fontScale !== prefsSeed.fontScale) props.onFontScaleChange(draft.fontScale);
     if (draft.highContrast !== prefsSeed.highContrast) props.onToggleHighContrast();
+    if (draft.switchScan !== prefsSeed.switchScan) props.onToggleSwitchScan();
+    if (draft.switchScanIntervalS !== prefsSeed.switchScanIntervalS) props.onSwitchScanIntervalChange(draft.switchScanIntervalS);
+    if (draft.visualAlerts !== prefsSeed.visualAlerts) props.onToggleVisualAlerts();
   }
 
   function handleSave() {
@@ -198,6 +209,9 @@ export function SettingsDialog(props: Props) {
             uiLevel={draft.uiLevel}
             fontScale={draft.fontScale}
             highContrast={draft.highContrast}
+            switchScan={draft.switchScan}
+            switchScanIntervalS={draft.switchScanIntervalS}
+            visualAlerts={draft.visualAlerts}
             onToggleProfanity={() => setDraft((d) => ({ ...d, filterProfanity: !d.filterProfanity }))}
             onToggleAacMode={() => setDraft((d) => ({ ...d, aacMode: !d.aacMode }))}
             onToggleFuzzy={() => setDraft((d) => ({ ...d, fuzzyCallsign: !d.fuzzyCallsign }))}
@@ -210,6 +224,9 @@ export function SettingsDialog(props: Props) {
             onUiLevelChange={(v) => setDraft((d) => ({ ...d, uiLevel: v }))}
             onFontScaleChange={(v) => setDraft((d) => ({ ...d, fontScale: v }))}
             onToggleHighContrast={() => setDraft((d) => ({ ...d, highContrast: !d.highContrast }))}
+            onToggleSwitchScan={() => setDraft((d) => ({ ...d, switchScan: !d.switchScan }))}
+            onSwitchScanIntervalChange={(v) => setDraft((d) => ({ ...d, switchScanIntervalS: v }))}
+            onToggleVisualAlerts={() => setDraft((d) => ({ ...d, visualAlerts: !d.visualAlerts }))}
           />
         </Box>
 

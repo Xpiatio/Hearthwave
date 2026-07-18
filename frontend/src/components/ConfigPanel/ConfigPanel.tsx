@@ -22,6 +22,9 @@ interface Props {
   uiLevel: 'simple' | 'operator';
   fontScale: number;
   highContrast: boolean;
+  switchScan: boolean;
+  switchScanIntervalS: number;
+  visualAlerts: boolean;
   onToggleProfanity: () => void;
   onToggleAacMode: () => void;
   onToggleFuzzy: () => void;
@@ -34,6 +37,9 @@ interface Props {
   onUiLevelChange: (v: 'simple' | 'operator') => void;
   onFontScaleChange: (v: number) => void;
   onToggleHighContrast: () => void;
+  onToggleSwitchScan: () => void;
+  onSwitchScanIntervalChange: (v: number) => void;
+  onToggleVisualAlerts: () => void;
   hideHeader?: boolean;
 }
 
@@ -54,6 +60,9 @@ export function ConfigPanel({
   uiLevel,
   fontScale,
   highContrast,
+  switchScan,
+  switchScanIntervalS,
+  visualAlerts,
   onToggleProfanity,
   onToggleAacMode,
   onToggleFuzzy,
@@ -66,6 +75,9 @@ export function ConfigPanel({
   onUiLevelChange,
   onFontScaleChange,
   onToggleHighContrast,
+  onToggleSwitchScan,
+  onSwitchScanIntervalChange,
+  onToggleVisualAlerts,
   hideHeader = false,
 }: Props) {
   const isLoopback = inputDevice === 'system_monitor';
@@ -112,6 +124,26 @@ export function ConfigPanel({
           <FormControlLabel
             control={<Switch checked={highContrast} onChange={onToggleHighContrast} size="small" />}
             label="High Contrast"
+          />
+          <FormControlLabel
+            control={<Switch checked={switchScan} onChange={onToggleSwitchScan} size="small" />}
+            label="Switch Scanning"
+          />
+          {switchScan && (
+            <ToggleButtonGroup
+              size="small" exclusive value={switchScanIntervalS}
+              onChange={(_, v) => v != null && onSwitchScanIntervalChange(v)}
+              aria-label="Scan speed"
+            >
+              <ToggleButton value={1} aria-label="Scan every 1 second">1s</ToggleButton>
+              <ToggleButton value={1.5} aria-label="Scan every 1.5 seconds">1.5s</ToggleButton>
+              <ToggleButton value={2} aria-label="Scan every 2 seconds">2s</ToggleButton>
+              <ToggleButton value={3} aria-label="Scan every 3 seconds">3s</ToggleButton>
+            </ToggleButtonGroup>
+          )}
+          <FormControlLabel
+            control={<Switch checked={visualAlerts} onChange={onToggleVisualAlerts} size="small" />}
+            label="Visual Alerts (flash + vibrate)"
           />
         </Box>
 

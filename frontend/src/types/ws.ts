@@ -400,6 +400,9 @@ export interface UserPrefs {
   ui_level?: 'simple' | 'operator';
   font_scale?: number;
   high_contrast?: boolean;
+  switch_scan?: boolean;
+  switch_scan_interval_s?: number; // 1 | 1.5 | 2 | 3
+  visual_alerts?: boolean;
   quick_messages?: string[];
   neighborhood_coordinator?: boolean;
 }

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi } from 'vitest'
 import { SettingsDialog } from '../SettingsDialog'
@@ -10,10 +10,12 @@ function makeProps(overrides = {}) {
     inputDevices: [], monitorSinks: [], outputDevice: -1, outputDevices: [],
     spectroColormap: 'viridis' as const, spectroFreqRange: 'full' as const, spectroTimeWindowS: 30,
     uiLevel: 'operator' as const, fontScale: 1, highContrast: false,
+    switchScan: false, switchScanIntervalS: 1.5, visualAlerts: false,
     onToggleProfanity: vi.fn(), onToggleFuzzy: vi.fn(), onInputDeviceChange: vi.fn(),
     onOutputDeviceChange: vi.fn(), onSpectroColormapChange: vi.fn(),
     onSpectroFreqRangeChange: vi.fn(), onSpectroTimeWindowChange: vi.fn(),
     onUiLevelChange: vi.fn(), onFontScaleChange: vi.fn(), onToggleHighContrast: vi.fn(),
+    onToggleSwitchScan: vi.fn(), onSwitchScanIntervalChange: vi.fn(), onToggleVisualAlerts: vi.fn(),
     adminConfig: {
       stationCallsign: 'N0CALL', stationName: '', stationLocation: '', stationVoice: '',
       stationLengthScale: 1, geminiApiKeySet: false, journalsDir: '', ncsZone: '', rxMode: 'voice',
@@ -103,6 +105,30 @@ describe('SettingsDialog', () => {
       await userEvent.click(screen.getByRole('button', { name: /^close$/i }))
       expect(onClose).toHaveBeenCalledTimes(1)
     })
+  })
+
+  it('renders switch scanning and visual alerts controls and applies them on Save', () => {
+    const onToggleSwitchScan = vi.fn()
+    const onSwitchScanIntervalChange = vi.fn()
+    const onToggleVisualAlerts = vi.fn()
+    render(<SettingsDialog {...makeProps({
+      switchScan: false, switchScanIntervalS: 1.5, visualAlerts: false,
+      onToggleSwitchScan, onSwitchScanIntervalChange, onToggleVisualAlerts,
+    })} />)
+    fireEvent.click(screen.getByLabelText('Switch Scanning'))
+    fireEvent.click(screen.getByLabelText('Visual Alerts (flash + vibrate)'))
+    fireEvent.click(screen.getByRole('button', { name: /save/i }))
+    expect(onToggleSwitchScan).toHaveBeenCalledTimes(1)
+    expect(onToggleVisualAlerts).toHaveBeenCalledTimes(1)
+    expect(onSwitchScanIntervalChange).not.toHaveBeenCalled()
+  })
+
+  it('interval toggles only visible when switch scanning enabled in draft', () => {
+    render(<SettingsDialog {...makeProps({
+      switchScan: true, switchScanIntervalS: 1.5, visualAlerts: false,
+      onToggleSwitchScan: vi.fn(), onSwitchScanIntervalChange: vi.fn(), onToggleVisualAlerts: vi.fn(),
+    })} />)
+    expect(screen.getByRole('button', { name: 'Scan every 2 seconds' })).toBeInTheDocument()
   })
 
   it('footer Save commits a dirty Station tab (via admin ref) without closing', async () => {
