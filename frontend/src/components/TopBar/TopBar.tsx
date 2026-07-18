@@ -33,6 +33,8 @@ interface Props {
   uiLevel: 'simple' | 'operator';
   /** Returns to the HomeScreen shell; renders a Home button first when provided. */
   onGoHome?: () => void;
+  /** Kid accounts have no settings surface — hides the Settings menu item. */
+  isKid: boolean;
   serviceMode: string;
   listenOnly: boolean;
   readAloud: boolean;
@@ -90,6 +92,7 @@ export function TopBar({
   isOnline,
   uiLevel,
   onGoHome,
+  isKid,
   serviceMode,
   listenOnly,
   readAloud,
@@ -175,6 +178,7 @@ export function TopBar({
           onSaveTtsPrefs={onSaveTtsPrefs}
           showSettings={showSettings}
           onToggleSettings={onToggleSettings}
+          isKid={isKid}
         />
 
         <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />

@@ -1499,6 +1499,7 @@ export default function App() {
             onCreateProfile={(data) => send({ type: 'create_profile', ...data })}
             onDeleteProfile={(userId) => send({ type: 'delete_profile', user_id: userId })}
             onResetLockout={(userId) => send({ type: 'reset_lockout', user_id: userId })}
+            onSetRole={sendSetRole}
           />
         )}
       />

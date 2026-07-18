@@ -32,6 +32,8 @@ interface MobileTopBarProps {
   voicePreviewBusy: boolean;
   stationLengthScale: number;
   showSettings: boolean;
+  /** Kid accounts have no settings surface — hides the Settings menu item. */
+  isKid: boolean;
   onToggleSttListening: () => void;
   onToggleReadAloud: () => void;
   onToggleNotifications: () => void;
@@ -69,6 +71,7 @@ export function MobileTopBar({
   voicePreviewBusy,
   stationLengthScale,
   showSettings,
+  isKid,
   onToggleSttListening,
   onToggleReadAloud,
   onToggleNotifications,
@@ -177,6 +180,7 @@ export function MobileTopBar({
               onSaveTtsPrefs={onSaveTtsPrefs}
               showSettings={showSettings}
               onToggleSettings={onToggleSettings}
+              isKid={isKid}
             />
           </Box>
         </Box>

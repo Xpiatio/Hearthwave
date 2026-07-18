@@ -52,11 +52,13 @@ interface Props {
   onSaveTtsPrefs: (prefs: { voice: string; length_scale: number }) => void;
   showSettings: boolean;
   onToggleSettings: () => void;
+  /** Kid accounts have no settings surface — hides the Settings menu item. */
+  isKid?: boolean;
 }
 
 const EMOJI_OPTIONS = ['👤', '👨', '👩', '👦', '👧', '🧑', '👴', '👵', '🧔', '👮'];
 
-export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogout, voices, voicePreviewBusy, onPreviewVoice, stationLengthScale, onSaveTtsPrefs, showSettings, onToggleSettings }: Props) {
+export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogout, voices, voicePreviewBusy, onPreviewVoice, stationLengthScale, onSaveTtsPrefs, showSettings, onToggleSettings, isKid = false }: Props) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
@@ -167,10 +169,12 @@ export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogo
           Change Password
         </MenuItem>
         <Divider />
-        <MenuItem selected={showSettings} onClick={() => { onToggleSettings(); handleClose(); }}>
-          <ListItemIcon><SettingsIcon fontSize="small" /></ListItemIcon>
-          Settings
-        </MenuItem>
+        {!isKid && (
+          <MenuItem selected={showSettings} onClick={() => { onToggleSettings(); handleClose(); }}>
+            <ListItemIcon><SettingsIcon fontSize="small" /></ListItemIcon>
+            Settings
+          </MenuItem>
+        )}
         <Divider />
         <MenuItem onClick={() => { setAboutOpen(true); handleClose(); }}>
           <ListItemIcon><InfoOutlinedIcon fontSize="small" /></ListItemIcon>

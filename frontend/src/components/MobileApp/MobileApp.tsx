@@ -9,6 +9,7 @@ import {
 import ChatIcon from '@mui/icons-material/Chat';
 import PeopleIcon from '@mui/icons-material/People';
 import ArticleIcon from '@mui/icons-material/Article';
+import FamilyRestroomIcon from '@mui/icons-material/FamilyRestroom';
 import { MobileTopBar } from './MobileTopBar';
 import { ChatDisplay } from '../ChatDisplay/ChatDisplay';
 import type { ChatEntry } from '../ChatDisplay/ChatDisplay';
@@ -17,6 +18,8 @@ import type { MessageInputHandle } from '../MessageInput/MessageInput';
 import { QuickMessages } from '../QuickMessages/QuickMessages';
 import { AttendancePanel } from '../AttendancePanel/AttendancePanel';
 import { JournalPanel } from '../JournalPanel/JournalPanel';
+import { FamilyPanel } from '../FamilyPanel/FamilyPanel';
+import { PresetComposer } from '../FamilyPanel/PresetComposer';
 import { PendingStationsBar } from '../PendingStationsBar/PendingStationsBar';
 import { ContactsDialog } from '../ContactsDialog/ContactsDialog';
 import type { TxComposition } from '../../plugins';
@@ -25,6 +28,7 @@ import type {
   Contact,
   AttendanceStation,
   JournalEntry,
+  FamilyPresenceEntry,
   FccLookupResultMsg,
   UserProfile,
   VoiceOption,
@@ -41,6 +45,17 @@ export interface MobileAppProps {
   showCallsignChips: boolean;
   /** Interface tier — gates operator-only tabs/panels (Stations, Journal). */
   uiLevel: 'simple' | 'operator';
+  /** Kid accounts: no Settings entry point, free-text composer is replaced
+   *  by a PresetComposer, and the Family panel hides reminder editors. */
+  isKid: boolean;
+  quickMessages: string[];
+
+  // Family activity — names match App.tsx's sharedProps so the spread at
+  // the call site (`<MobileApp {...sharedProps} .../>`) wires them up.
+  familyPresence: FamilyPresenceEntry[];
+  familyReminders: Record<string, { time: string; enabled: boolean }>;
+  sendImOk: () => void;
+  sendSetReminder: (userId: string, time: string | null, enabled: boolean) => void;
 
   // Core data
   messages: ChatEntry[];
@@ -149,6 +164,12 @@ export function MobileApp({
   connected,
   showCallsignChips,
   uiLevel,
+  isKid,
+  quickMessages,
+  familyPresence,
+  familyReminders,
+  sendImOk,
+  sendSetReminder,
   messages,
   contacts,
   transmitting,
@@ -218,20 +239,21 @@ export function MobileApp({
   onCloseJournalSavedSnack,
   onCloseVocabSnack,
 }: MobileAppProps) {
-  const [tab, setTab] = useState<'chat' | 'stations' | 'journal'>('chat');
+  const [tab, setTab] = useState<'chat' | 'stations' | 'journal' | 'family'>('chat');
   const messageInputRef = useRef<MessageInputHandle>(null);
 
   // Stations (attendance) and Journal are operator-only surfaces — they
   // must not render in simple tier, mirroring the isOperatorTier pattern in
   // DesktopApp.tsx (commit 0b6f296). Mobile has no waterfall/spectrogram,
   // RX level meter, or NCS panel, so there's nothing else to gate here.
+  // Family is available in both tiers.
   const isOperatorTier = uiLevel === 'operator';
 
   // If the tier flips to simple while parked on an operator-only tab, fall
   // back to Chat rather than stranding the user on a hidden panel. `tab`
   // itself is left untouched so the previous selection is restored if the
-  // tier flips back to operator.
-  const activeTab = isOperatorTier ? tab : 'chat';
+  // tier flips back to operator. Family survives the clamp in either tier.
+  const activeTab = isOperatorTier ? tab : tab === 'family' ? 'family' : 'chat';
 
   return (
     <Box
@@ -252,6 +274,7 @@ export function MobileApp({
         voicePreviewBusy={voicePreviewBusy}
         stationLengthScale={adminConfig.stationLengthScale}
         showSettings={showSettings}
+        isKid={isKid}
         onToggleSttListening={onToggleSttListening}
         onToggleReadAloud={onToggleReadAloud}
         onToggleNotifications={onToggleNotifications}
@@ -285,13 +308,16 @@ export function MobileApp({
             contacts={contacts}
             showCallsignChips={showCallsignChips}
           />
-          {!listenOnly && (
+          {!listenOnly && isKid && (
+            <PresetComposer quickMessages={quickMessages} onSend={onSend} />
+          )}
+          {!listenOnly && !isKid && (
             <QuickMessages
               operatorName={profile.operator_name}
               onSelect={(text) => messageInputRef.current?.setText(text)}
             />
           )}
-          {!listenOnly && (
+          {!listenOnly && !isKid && (
             <MessageInput
               ref={messageInputRef}
               transmitting={transmitting}
@@ -303,6 +329,26 @@ export function MobileApp({
               composeHint={txComposition?.hint}
             />
           )}
+        </Box>
+      )}
+
+      {/* Family tab — must be a truly conditional mount (not just hidden):
+          FamilyPanel's useEscapeToHome hook attaches a document-level
+          keydown listener, which would leak/steal Escape if kept alive
+          off-screen while another tab is active. */}
+      {activeTab === 'family' && (
+        <Box sx={{ flex: '1 1 auto', overflowY: 'auto' }}>
+          <FamilyPanel
+            entries={familyPresence}
+            reminders={familyReminders}
+            isKid={isKid}
+            isAdmin={!!profile.is_admin}
+            quickMessages={quickMessages}
+            onImOk={sendImOk}
+            onQuickMessage={(text) => onSend(text, '', '')}
+            onSetReminder={sendSetReminder}
+            onGoHome={() => setTab('chat')}
+          />
         </Box>
       )}
 
@@ -345,6 +391,7 @@ export function MobileApp({
         sx={{ borderTop: 1, borderColor: 'divider', flexShrink: 0 }}
       >
         <BottomNavigationAction label="Chat" value="chat" icon={<ChatIcon />} />
+        <BottomNavigationAction label="Family" value="family" icon={<FamilyRestroomIcon />} />
         {isOperatorTier && (
           <BottomNavigationAction label="Stations" value="stations" icon={<PeopleIcon />} />
         )}

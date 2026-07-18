@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { ThemeProvider } from '@mui/material/styles'
 import { makeTheme } from '../../../theme'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { axe } from 'jest-axe'
 import { AccountMenu } from '../AccountMenu'
 import type { UserProfile, VoiceOption } from '../../../types/ws'
 
@@ -114,6 +115,24 @@ describe('AccountMenu', () => {
       await waitFor(() => {
         expect(screen.queryByText('Admin Settings')).not.toBeInTheDocument()
       })
+    })
+
+    it('hides the Settings menu item for kid accounts', async () => {
+      render(<AccountMenu {...makeProps({ isKid: true })} />)
+      fireEvent.click(screen.getByRole('button', { name: /account menu/i }))
+      await waitFor(() => {
+        expect(screen.getByText('Edit Profile')).toBeInTheDocument()
+      })
+      expect(screen.queryByText('Settings')).not.toBeInTheDocument()
+    })
+
+    it('has no axe violations for a kid account with the menu open', async () => {
+      const { container } = render(<AccountMenu {...makeProps({ isKid: true })} />)
+      fireEvent.click(screen.getByRole('button', { name: /account menu/i }))
+      await waitFor(() => {
+        expect(screen.getByText('Edit Profile')).toBeInTheDocument()
+      })
+      expect(await axe(container)).toHaveNoViolations()
     })
   })
 

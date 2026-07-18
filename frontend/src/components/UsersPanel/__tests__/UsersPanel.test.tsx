@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { ThemeProvider } from '@mui/material/styles'
 import { makeTheme } from '../../../theme'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { axe } from 'jest-axe'
 import { UsersPanel } from '../UsersPanel'
 import type { UserProfile } from '../../../types/ws'
 
@@ -60,6 +61,7 @@ function makeDefaultProps() {
     onCreateProfile: vi.fn(),
     onDeleteProfile: vi.fn(),
     onResetLockout: vi.fn(),
+    onSetRole: vi.fn(),
   }
 }
 
@@ -104,17 +106,30 @@ describe('UsersPanel', () => {
     expect(screen.getByText('W2BOB')).toBeInTheDocument()
   })
 
-  it('renders Admin chip for admin profiles', () => {
+  it('renders a role Select for each profile showing its current role', () => {
     render(<UsersPanel {...makeDefaultProps()} />)
-    // ADMIN_PROFILE has is_admin=true, so a Chip with label "Admin" is rendered.
-    // The display_name is also "Admin", so "Admin" appears in at least two nodes.
-    const adminTexts = screen.getAllByText('Admin')
-    expect(adminTexts.length).toBeGreaterThanOrEqual(2)
-    // Verify a MUI Chip span carries the "Admin" label
-    const chipLabel = adminTexts.find(
-      (el) => el.tagName === 'SPAN' && el.className.includes('Chip')
-    )
-    expect(chipLabel).toBeTruthy()
+    // ADMIN_PROFILE (id admin-1) is an admin, USER_PROFILE (id user-2) is an adult.
+    expect(screen.getByRole('combobox', { name: 'Role for Admin' })).toHaveTextContent('Admin')
+    expect(screen.getByRole('combobox', { name: 'Role for Bob' })).toHaveTextContent('Adult')
+  })
+
+  it('disables the role Select for the current user’s own row', () => {
+    // currentUserId defaults to 'admin-1' — its own row's Select must be disabled
+    // so the client mirrors the server's self-demotion rejection.
+    render(<UsersPanel {...makeDefaultProps()} />)
+    expect(screen.getByRole('combobox', { name: 'Role for Admin' })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('combobox', { name: 'Role for Bob' })).not.toHaveAttribute('aria-disabled', 'true')
+  })
+
+  it('calls onSetRole with the new role when another user’s role Select is changed', async () => {
+    const user = userEvent.setup()
+    const props = makeDefaultProps()
+    render(<UsersPanel {...props} />)
+
+    await user.click(screen.getByRole('combobox', { name: 'Role for Bob' }))
+    await user.click(await screen.findByRole('option', { name: 'Kid' }))
+
+    expect(props.onSetRole).toHaveBeenCalledWith('user-2', 'kid')
   })
 
   it('renders em-dash for profiles without a callsign', () => {
@@ -251,8 +266,8 @@ describe('UsersPanel', () => {
     // Password fields
     expect(within(dialog).getByLabelText(/^password \*/i)).toBeInTheDocument()
     expect(within(dialog).getByLabelText(/confirm password/i)).toBeInTheDocument()
-    // Admin checkbox
-    expect(within(dialog).getByLabelText(/admin/i)).toBeInTheDocument()
+    // Role select, defaulting to Adult
+    expect(within(dialog).getByRole('combobox', { name: /^role$/i })).toHaveTextContent('Adult')
   })
 
   it('renders emoji avatar picker in the create dialog', async () => {
@@ -326,7 +341,7 @@ describe('UsersPanel', () => {
       operator_name: 'Charlie Brown',
       callsign: 'W3CCC', // uppercased
       location: 'Detroit, MI',
-      is_admin: false,
+      role: 'adult',
     })
   }, 20000)
 
@@ -363,7 +378,7 @@ describe('UsersPanel', () => {
     )
   }, 15000)
 
-  it('creates an admin user when the Admin checkbox is checked', async () => {
+  it('creates an admin user when the Role select is changed to Admin', async () => {
     const user = userEvent.setup()
     const props = makeDefaultProps()
     render(<UsersPanel {...props} />)
@@ -372,11 +387,12 @@ describe('UsersPanel', () => {
     await user.type(screen.getByLabelText(/display name/i), 'Frank')
     await user.type(screen.getByLabelText(/^password \*/i), 'password123')
     await user.type(screen.getByLabelText(/confirm password/i), 'password123')
-    await user.click(within(screen.getByRole('dialog')).getByLabelText(/admin/i))
+    await user.click(within(screen.getByRole('dialog')).getByRole('combobox', { name: /^role$/i }))
+    await user.click(await screen.findByRole('option', { name: 'Admin' }))
     await user.click(screen.getByRole('button', { name: /^create$/i }))
 
     expect(props.onCreateProfile).toHaveBeenCalledWith(
-      expect.objectContaining({ is_admin: true })
+      expect.objectContaining({ role: 'admin' })
     )
   }, 15000)
 
@@ -449,5 +465,10 @@ describe('UsersPanel', () => {
     // Table should still render but have no data rows (only header row)
     const rows = screen.getAllByRole('row')
     expect(rows).toHaveLength(1) // header only
+  })
+
+  it('has no axe violations', async () => {
+    const { container } = render(<UsersPanel {...makeDefaultProps()} />)
+    expect(await axe(container)).toHaveNoViolations()
   })
 })
