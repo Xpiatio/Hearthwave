@@ -50,6 +50,11 @@ WebSocket message types (client → server):
     neighborhood_end  — {"type": "neighborhood_end"}  (coordinator-only)
     neighborhood_call_next — {"type": "neighborhood_call_next"}  (coordinator-only)
     neighborhood_call_reset — {"type": "neighborhood_call_reset"}  (coordinator-only)
+    neighborhood_incident_report — {"type": "neighborhood_incident_report", "category": str,
+                          "description": str, "location": str}  (kid → error)
+    neighborhood_list_incidents — {"type": "neighborhood_list_incidents"}  (any role)
+    neighborhood_street_alert — {"type": "neighborhood_street_alert", "message": str}
+                          (coordinator-only)
 
 WebSocket message types (server → client):
     status            — {"type": "status", "radio_connected": bool,
@@ -85,6 +90,12 @@ WebSocket message types (server → client):
     neighborhood_state — {"type": "neighborhood_state", "active": bool, "roster": [...],
                           "current_call": str|None, "net_day": str, "net_time": str}
     neighborhood_journal_saved — {"type": "neighborhood_journal_saved", "path": str}
+    neighborhood_incidents — {"type": "neighborhood_incidents", "incidents": [...]}  (sent on
+                          connect and after every incident_report)
+    neighborhood_incident_error — {"type": "neighborhood_incident_error", "detail": str}
+    neighborhood_incident_sent — {"type": "neighborhood_incident_sent", "text": str, "ts": str}
+    neighborhood_alert — {"type": "neighborhood_alert", "id": str, "message": str,
+                          "issued_by": str, "ts": str}  (broadcast to all roles)
     spectrogram_row   — {"type": "spectrogram_row", "row": [int, ...],
                           "vad": bool, "squelch": bool}
     voice_preview_audio — {"type": "voice_preview_audio", "data": str (base64 int16 PCM),
@@ -108,6 +119,7 @@ import json
 import logging
 import os
 import re
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -139,6 +151,7 @@ from backend.fcc.id_rule import (
     format_tail_id,
 )
 from backend.hw_detect import detect as detect_compute
+from backend.neighborhood.incidents import CATEGORIES, format_incident, validate_incident
 from backend.neighborhood.net import NeighborhoodNet
 from backend.net.online import invalidate as _invalidate_online
 from backend.net.online import is_online, is_online_cached
@@ -619,6 +632,13 @@ def _build_neighborhood_state_msg() -> dict:
         "current_call": _neighborhood.current_call if _neighborhood else None,
         "net_day": _config.neighborhood_net_day if _config else "",
         "net_time": _config.neighborhood_net_time if _config else "",
+    }
+
+
+def _build_neighborhood_incidents_msg() -> dict:
+    return {
+        "type": "neighborhood_incidents",
+        "incidents": _incidents_store.list() if _incidents_store else [],
     }
 
 
@@ -2424,6 +2444,7 @@ async def websocket_endpoint(
     if not _is_kid(state):
         await _manager.send_to(ws, _build_family_reminders_msg())
     await _manager.send_to(ws, _build_neighborhood_state_msg())
+    await _manager.send_to(ws, _build_neighborhood_incidents_msg())
     await _manager.send_to(ws, {"type": "voices_list", "voices": _list_voices()})
     # Backfill the shared message stream accumulated since the last clear
     # (snapshotted above, before this socket joined the broadcast set).
@@ -3518,6 +3539,102 @@ async def websocket_endpoint(
                 if _neighborhood is not None:
                     _neighborhood.call_reset()
                 await _manager.broadcast(_build_neighborhood_state_msg())
+
+            elif msg_type == "neighborhood_incident_report":
+                # Reporting an incident keys the radio, so it follows the
+                # same "TX not allowed" gate as free-text tx_message for kid
+                # accounts (see the tx_message _is_kid branch above).
+                if _is_kid(state):
+                    await _manager.send_to(ws, {"type": "error", "detail": "TX not allowed for this account"})
+                    continue
+                err = validate_incident(data)
+                if err:
+                    await _manager.send_to(ws, {"type": "neighborhood_incident_error", "detail": err})
+                    continue
+                category = data.get("category")
+                description = (data.get("description") or "").strip()
+                location = (data.get("location") or "").strip()
+                profile_rec = (
+                    (_users_store.get_public_one(state.user_id) or {}) if _users_store else {}
+                )
+                display_name = profile_rec.get("display_name") or ""
+                callsign = (
+                    profile_rec.get("callsign") or (_config.callsign if _config else "") or ""
+                ).strip()
+                hhmm_local = datetime.datetime.now().strftime("%H:%M")
+                text = format_incident(CATEGORIES[category], description, location, hhmm_local, callsign)
+                # Safety report so it still logs/broadcasts in listen-only mode
+                # (family_status precedent) — listen-only only skips the TX leg.
+                if not state.prefs.get("listen_only", False):
+                    await _tx_queue.put(
+                        {"text": text, "_pre_formatted": True, "_operator_initiated": True}
+                    )
+                ts = utc_now_iso()
+                await _manager.broadcast({
+                    "type": "tx_echo",
+                    "ts": ts,
+                    "callsign": callsign,
+                    "operator": "",
+                    "display_name": "NEIGHBORHOOD",
+                    "text": text,
+                    "target_call": "ALL",
+                    "target_name": "",
+                })
+                if _incidents_store is not None:
+                    _incidents_store.add({
+                        "category": category,
+                        "description": description,
+                        "location": location,
+                        "reporter": display_name,
+                        "ts": ts,
+                    })
+                await _manager.broadcast(_build_neighborhood_incidents_msg())
+                await _manager.send_to(ws, {"type": "neighborhood_incident_sent", "text": text, "ts": ts})
+
+            elif msg_type == "neighborhood_list_incidents":
+                await _manager.send_to(ws, _build_neighborhood_incidents_msg())
+
+            elif msg_type == "neighborhood_street_alert":
+                if not _is_coordinator(state):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Coordinator access required"})
+                    continue
+                message = (data.get("message") or "").strip()
+                if not (1 <= len(message) <= 200):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Alert message must be 1-200 characters."})
+                    continue
+                callsign = _config.callsign if _config else ""
+                profile_rec = (
+                    (_users_store.get_public_one(state.user_id) or {}) if _users_store else {}
+                )
+                display_name = profile_rec.get("display_name") or ""
+                text = f"NEIGHBORHOOD ALERT. {message}. {callsign}."
+                # Safety broadcast — listen-only only skips the TX leg (same
+                # precedent as neighborhood_incident_report/family_status).
+                if not state.prefs.get("listen_only", False):
+                    await _tx_queue.put(
+                        {"text": text, "_pre_formatted": True, "_operator_initiated": True}
+                    )
+                ts = utc_now_iso()
+                await _manager.broadcast({
+                    "type": "tx_echo",
+                    "ts": ts,
+                    "callsign": callsign,
+                    "operator": "",
+                    "display_name": "NEIGHBORHOOD",
+                    "text": text,
+                    "target_call": "ALL",
+                    "target_name": "",
+                })
+                # Broadcast reaches every connection, kids included — this is
+                # safety information, not a TX permission (see coordinator
+                # gate above), so _manager.broadcast is used unfiltered.
+                await _manager.broadcast({
+                    "type": "neighborhood_alert",
+                    "id": uuid.uuid4().hex,
+                    "message": message,
+                    "issued_by": display_name,
+                    "ts": ts,
+                })
 
             elif msg_type == "tx_abort":
                 _tx_abort_event.set()

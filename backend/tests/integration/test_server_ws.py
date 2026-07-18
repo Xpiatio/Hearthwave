@@ -206,13 +206,14 @@ def kid_client(tmp_path):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _drain_initial(ws, limit: int = 10) -> list[dict]:
+def _drain_initial(ws, limit: int = 12) -> list[dict]:
     """Drain the burst of initial frames every new connection receives.
 
     The server sends: status, user_profile, contacts, session_attendance,
-    pending_stations, family_presence, voices_list, chat_history (and
-    optionally online_status). Stop when chat_history is seen so tests start
-    from a clean slate.
+    pending_stations, family_presence, family_reminders (non-kid),
+    neighborhood_state, neighborhood_incidents, voices_list, chat_history
+    (and optionally online_status). Stop when chat_history is seen so tests
+    start from a clean slate.
     """
     frames = []
     for _ in range(limit):
@@ -3586,14 +3587,16 @@ class TestDeleteProfileCleansUpFamilyData:
 
 def _neighborhood_server(tmp_path, *, role: str = "adult", is_admin: bool = False,
                           coordinator: bool = False, mock_tts=None, profile: dict | None = None,
-                          journals: bool = False):
+                          journals: bool = False, listen_only: bool = False):
     """Context manager yielding (TestClient, cfg) wired for neighborhood-net tests."""
-    cfg = _minimal_cfg(tmp_path)
+    cfg = _minimal_cfg(tmp_path, listen_only=listen_only)
     if journals:
         cfg["journals_dir"] = str(tmp_path / "journals")
     mock_stt, default_tts = _make_mocks()
     tts = mock_tts if mock_tts is not None else default_tts
-    mock_users, mock_tokens = _make_auth_mocks(is_admin=is_admin, role=role, coordinator=coordinator)
+    mock_users, mock_tokens = _make_auth_mocks(
+        is_admin=is_admin, role=role, coordinator=coordinator, listen_only=listen_only,
+    )
     if profile is not None:
         mock_users.get_public_one.return_value = profile
     return cfg, mock_stt, tts, mock_users, mock_tokens
@@ -3923,5 +3926,293 @@ class TestNeighborhoodNetHandlers:
                     ws.send_json({"type": "neighborhood_end"})
                     msg = _next_of_type(ws, "neighborhood_state")
         assert msg is not None and msg["active"] is False
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 Task 3 — incident reports + street alert
+# ---------------------------------------------------------------------------
+
+def _valid_incident_payload(**overrides) -> dict:
+    payload = {
+        "type": "neighborhood_incident_report",
+        "category": "hazard",
+        "description": "Tree down blocking the road",
+        "location": "5th and Main",
+    }
+    payload.update(overrides)
+    return payload
+
+
+class TestNeighborhoodIncidentReport:
+    def test_kid_report_rejected(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(tmp_path, role="kid")
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json(_valid_incident_payload())
+                    msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert msg["detail"] == "TX not allowed for this account"
+
+    def test_invalid_payload_returns_incident_error(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(tmp_path)
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json(_valid_incident_payload(category="not-a-category"))
+                    msg = _next_of_type(ws, "neighborhood_incident_error")
+        assert msg is not None
+        assert msg["detail"]
+
+    def test_valid_report_transmits_logs_and_broadcasts(self, tmp_path):
+        captured: dict[str, str] = {}
+
+        async def _capture_synth(_voice, text, *_args, **_kwargs):
+            captured["text"] = text
+            return None, None
+
+        mock_stt, mock_tts = _make_mocks()
+        mock_tts.synthesize_to_buffer = _capture_synth
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, mock_tts=mock_tts,
+            profile={"display_name": "Ann Adult", "callsign": "W5ANN", "location": "Home"},
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch("piper.PiperVoice"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json(_valid_incident_payload())
+                    frames = _drain_until_idle(ws)
+        tx_echo = next(f for f in frames if f.get("type") == "tx_echo")
+        incidents_msgs = [f for f in frames if f.get("type") == "neighborhood_incidents"]
+        sent_msg = next(f for f in frames if f.get("type") == "neighborhood_incident_sent")
+        assert incidents_msgs, "expected a neighborhood_incidents broadcast"
+        assert tx_echo["display_name"] == "NEIGHBORHOOD"
+        assert tx_echo["callsign"] == "W5ANN"
+        assert tx_echo["text"].startswith("NEIGHBORHOOD HAZARD. TREE DOWN BLOCKING THE ROAD. ")
+        assert captured["text"] == tx_echo["text"] == sent_msg["text"]
+        assert sent_msg["ts"]
+        entries = incidents_msgs[-1]["incidents"]
+        assert len(entries) == 1
+        assert entries[0]["category"] == "hazard"
+        assert entries[0]["reporter"] == "Ann Adult"
+        assert entries[0]["location"] == "5th and Main"
+
+    def test_incidents_sent_on_connect(self, tmp_path):
+        (tmp_path / "incidents.json").write_text(json.dumps([
+            {"id": "abc123", "category": "hazard", "description": "x", "location": "y",
+             "reporter": "Ann", "ts": "2026-07-17T09:00:00Z"},
+        ]))
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(tmp_path)
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    frames = _drain_initial(ws)
+        incidents_msgs = [f for f in frames if f.get("type") == "neighborhood_incidents"]
+        assert len(incidents_msgs) == 1
+        assert incidents_msgs[0]["incidents"][0]["id"] == "abc123"
+
+    def test_list_incidents_any_role_returns_current_list(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(tmp_path, role="kid")
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_list_incidents"})
+                    msg = _next_of_type(ws, "neighborhood_incidents")
+        assert msg is not None
+        assert msg["incidents"] == []
+
+
+def _neighborhood_alert_two_user_server(tmp_path):
+    """A coordinator adult ('coord-1') and a kid ('kid-1') on one TestClient,
+    mirroring _two_user_server, so a test can prove a street alert broadcast
+    reaches an already-connected kid socket."""
+    cfg = _minimal_cfg(tmp_path)
+    mock_stt, mock_tts = _make_mocks()
+    mock_users = MagicMock()
+    mock_users.is_empty.return_value = False
+    profiles = {
+        "coord-1": {"id": "coord-1", "display_name": "Coord Op", "is_admin": False,
+                    "role": "adult", "prefs": {"neighborhood_coordinator": True}},
+        "kid-1": {"id": "kid-1", "display_name": "Kiddo", "is_admin": False,
+                  "role": "kid", "prefs": {}},
+    }
+    mock_users.get.side_effect = lambda uid: profiles.get(uid)
+    mock_users.get_public_one.side_effect = lambda uid: (
+        None if profiles.get(uid) is None
+        else {k: v for k, v in profiles[uid].items() if k != "prefs"}
+    )
+    mock_tokens = MagicMock()
+    mock_tokens.validate.side_effect = {"coord-token": "coord-1", "kid-token": "kid-1"}.get
+    mock_tokens.purge_expired.return_value = 0
+    return cfg, mock_stt, mock_tts, mock_users, mock_tokens
+
+
+class TestNeighborhoodStreetAlert:
+    def test_non_coordinator_rejected(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(tmp_path)
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_street_alert", "message": "Water main break on Elm"})
+                    msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert msg["detail"] == "Coordinator access required"
+
+    def test_empty_message_rejected(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(tmp_path, coordinator=True)
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_street_alert", "message": "   "})
+                    msg = _next_of_type(ws, "error")
+        assert msg is not None
+
+    def test_coordinator_alert_transmits_and_broadcasts(self, tmp_path):
+        captured: dict[str, str] = {}
+
+        async def _capture_synth(_voice, text, *_args, **_kwargs):
+            captured["text"] = text
+            return None, None
+
+        mock_stt, mock_tts = _make_mocks()
+        mock_tts.synthesize_to_buffer = _capture_synth
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, coordinator=True, mock_tts=mock_tts,
+            profile={"display_name": "Coord Op", "callsign": "W5CRD", "location": ""},
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch("piper.PiperVoice"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_street_alert", "message": "  Water main break on Elm  "})
+                    frames = _drain_until_idle(ws)
+        alert_msg = next(f for f in frames if f.get("type") == "neighborhood_alert")
+        tx_echo = next(f for f in frames if f.get("type") == "tx_echo")
+        assert alert_msg["message"] == "Water main break on Elm"
+        assert alert_msg["issued_by"] == "Coord Op"
+        assert alert_msg["id"]
+        assert alert_msg["ts"]
+        assert captured["text"] == "NEIGHBORHOOD ALERT. Water main break on Elm. W5TST."
+        assert tx_echo["text"] == captured["text"]
+        assert tx_echo["display_name"] == "NEIGHBORHOOD"
+
+    def test_alert_reaches_kid_client(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_alert_two_user_server(tmp_path)
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch("piper.PiperVoice"),
+        ):
+            with TestClient(app) as tc:
+                with (
+                    tc.websocket_connect("/ws?token=kid-token") as ws_kid,
+                    tc.websocket_connect("/ws?token=coord-token") as ws_coord,
+                ):
+                    _drain_initial(ws_kid)
+                    _drain_initial(ws_coord)
+                    ws_coord.send_json({"type": "neighborhood_street_alert", "message": "Boil water advisory"})
+                    _drain_until_idle(ws_coord)
+                    msg = _next_of_type(ws_kid, "neighborhood_alert")
+        assert msg is not None
+        assert msg["message"] == "Boil water advisory"
+
+    def test_listen_only_coordinator_alert_skips_tts_but_broadcasts(self, tmp_path):
+        captured: dict[str, str] = {}
+
+        async def _capture_synth(_voice, text, *_args, **_kwargs):
+            captured["text"] = text
+            return None, None
+
+        mock_stt, mock_tts = _make_mocks()
+        mock_tts.synthesize_to_buffer = _capture_synth
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, coordinator=True, mock_tts=mock_tts, listen_only=True,
+            profile={"display_name": "Coord Op", "callsign": "W5CRD", "location": ""},
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch("piper.PiperVoice"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_street_alert", "message": "Boil water advisory"})
+                    msg = _next_of_type(ws, "neighborhood_alert")
+        assert msg is not None
+        assert msg["message"] == "Boil water advisory"
+        assert "text" not in captured
         journals_dir = tmp_path / "journals"
         assert not journals_dir.exists() or not list(journals_dir.glob("*.json"))
