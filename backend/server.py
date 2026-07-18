@@ -2665,6 +2665,9 @@ async def websocket_endpoint(
                 # tablet has no user identity, so the tapped member is named
                 # explicitly. Household trust model — any member tile can be
                 # tapped; server only validates the user exists.
+                if not _is_display(state):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Only available on wall display"})
+                    continue
                 target_id = data.get("user_id") or ""
                 profile_rec = _users_store.get_public_one(target_id) if _users_store else None
                 if not profile_rec:
@@ -2680,6 +2683,9 @@ async def websocket_endpoint(
                 await _manager.send_to(ws, {"type": "display_ack", "action": "im_ok"})
 
             elif msg_type == "display_quick_message":
+                if not _is_display(state):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Only available on wall display"})
+                    continue
                 text = (data.get("text") or "").strip()
                 allowed = _config.display_quick_messages if _config else []
                 if text not in allowed:

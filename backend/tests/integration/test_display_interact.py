@@ -255,3 +255,38 @@ class TestDisplayQuickMessage:
             msg = _next_of_type(ws, "chat_echo")
             assert msg is not None
             assert msg["display_name"] == "Kitchen"  # fixture label
+
+
+# ---------------------------------------------------------------------------
+# Both handlers must reject non-display connections
+# ---------------------------------------------------------------------------
+
+class TestDisplayHandlersRequireDisplayConnection:
+    """A regular authenticated (session-token) connection is not a wall
+    display and must be rejected by both handlers — otherwise a listen-only
+    user could key TTS, a kid could bypass their per-user TX allowlist via
+    the global quick-message list, and any member could mark someone ELSE
+    'OK' (presence spoofing)."""
+
+    def test_im_ok_rejected_from_regular_connection(self, client, admin_ws, seeded_user):
+        admin_ws.send_json({"type": "display_im_ok", "user_id": seeded_user["id"]})
+        msg = _next_of_type(admin_ws, "error")
+        assert msg is not None
+        assert "wall display" in msg["detail"].lower()
+
+        # Target's presence must NOT have been marked OK by the rejected call.
+        with client.websocket_connect(WS_URL) as ws2:
+            frames = _drain_initial(ws2)
+        presence_msg = next(f for f in frames if f.get("type") == "family_presence")
+        entry = next(e for e in presence_msg["entries"] if e["user_id"] == seeded_user["id"])
+        assert entry["last_ok"] is None
+
+    def test_quick_message_rejected_from_regular_connection(self, client, admin_ws):
+        admin_ws.send_json({"type": "set_admin_config",
+                            "display_quick_messages": ["Dinner is ready"]})
+        _next_of_type(admin_ws, "status")
+
+        admin_ws.send_json({"type": "display_quick_message", "text": "Dinner is ready"})
+        msg = _next_of_type(admin_ws, "error")
+        assert msg is not None
+        assert "wall display" in msg["detail"].lower()
