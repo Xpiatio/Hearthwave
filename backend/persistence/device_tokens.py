@@ -70,7 +70,7 @@ class DeviceTokenStore:
 
     def validate(self, token: str) -> dict | None:
         for rec in self._tokens:
-            if secrets.compare_digest(rec["token"], token):
+            if secrets.compare_digest(rec["token"].encode(), token.encode()):
                 rec["last_seen"] = utc_now_iso()
                 self._save()
                 return dict(rec)

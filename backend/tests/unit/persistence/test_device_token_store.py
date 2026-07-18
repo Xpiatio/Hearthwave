@@ -50,6 +50,14 @@ class TestValidate:
     def test_validate_unknown_token_returns_none(self, tmp_path):
         assert _store(tmp_path).validate("nope") is None
 
+    def test_validate_non_ascii_token_returns_none_without_raising(self, tmp_path):
+        """secrets.compare_digest raises TypeError on non-ASCII str input;
+        validate() must encode both sides to bytes first so a hostile/garbled
+        token from the WS handshake can't crash the connection before accept."""
+        s = _store(tmp_path)
+        s.create("Kitchen tablet")
+        assert s.validate("ü" * 8) is None
+
     def test_validate_survives_reload(self, tmp_path):
         s = _store(tmp_path)
         rec = s.create("Kitchen tablet")
