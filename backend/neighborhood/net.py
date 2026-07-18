@@ -9,13 +9,19 @@ from __future__ import annotations
 import time
 from typing import Optional
 
+from backend.constants import utc_now_iso
+
 
 class NeighborhoodNet:
     """Tracks the roster and call order for an in-progress (or just-ended) net.
 
     Roster rows are keyed by user_id and shaped:
-        {"user_id", "callsign", "name", "location", "status", "called"}
+        {"user_id", "callsign", "name", "location", "status", "checkin_time", "called"}
     status is "checked_in" (default) or "standby".
+
+    Check-ins are accepted whether or not the net is active — a "tap" before
+    `start()` is an early check-in (a spot reserved ahead of the net), and it
+    must survive into the started net rather than being wiped by it.
     """
 
     def __init__(self) -> None:
@@ -25,30 +31,46 @@ class NeighborhoodNet:
         self._started_at: float | None = None
 
     def start(self) -> None:
-        """Begin a new net: open check-ins and clear any previous roster."""
+        """Begin a new net: open check-ins.
+
+        Does NOT clear the roster — check-ins made before `start()` (early
+        check-ins) are preserved. Only the round-table progress (called
+        flags and the current call) is reset so a prior round doesn't leak
+        into the new net.
+        """
         self.active = True
         self.current_call = None
-        self._roster = {}
+        for row in self._roster.values():
+            row["called"] = False
         self._started_at = time.time()
 
     def end(self) -> dict:
-        """Close the net and return a summary for journaling.
+        """Close the net, snapshot the roster for journaling, then clear it.
 
-        The roster is left intact (not cleared) so `roster()` /
-        `neighborhood_state` continue to reflect the just-ended net until
-        the next `start()` resets it.
+        The summary's roster reflects the full just-ended roster. The live
+        roster is cleared afterward so `roster()` / `neighborhood_state`
+        go empty immediately, and the next `start()` begins from a clean
+        slate (aside from any new early check-ins that land before it).
         """
         self.active = False
         self.current_call = None
         duration_seconds = (time.time() - self._started_at) if self._started_at else 0.0
-        return {
+        summary = {
             "roster": self.roster(),
             "duration_seconds": round(duration_seconds),
         }
+        self._roster = {}
+        return summary
 
     def checkin(self, user_id: str, callsign: str, name: str, location: str) -> dict:
-        """Add or update the check-in row for user_id (idempotent per user_id)."""
+        """Add or update the check-in row for user_id (idempotent per user_id).
+
+        Works regardless of `active` — this is how early check-ins happen.
+        `checkin_time` is updated to now on every call (re-checking in is
+        the honest, latest signal of presence).
+        """
         row = self._roster.get(user_id)
+        now = utc_now_iso()
         if row is None:
             row = {
                 "user_id": user_id,
@@ -56,6 +78,7 @@ class NeighborhoodNet:
                 "name": name,
                 "location": location,
                 "status": "checked_in",
+                "checkin_time": now,
                 "called": False,
             }
             self._roster[user_id] = row
@@ -63,6 +86,7 @@ class NeighborhoodNet:
             row["callsign"] = callsign
             row["name"] = name
             row["location"] = location
+            row["checkin_time"] = now
         return row
 
     def set_status(self, user_id: str, status: str) -> None:

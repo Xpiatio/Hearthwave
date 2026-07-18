@@ -1,6 +1,8 @@
 """Unit tests for backend.neighborhood.net.NeighborhoodNet (pure state machine)."""
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from backend.neighborhood.net import NeighborhoodNet
 
 
@@ -11,15 +13,47 @@ def test_starts_inactive_with_no_current_call():
     assert n.roster() == []
 
 
-def test_start_activates_and_clears_prior_roster():
+def test_start_activates_and_does_not_clear_roster():
+    n = NeighborhoodNet()
+    n.start()
+    n.checkin("u1", "A", "Ann", "5th St")
+    n.start()  # a re-start while active must not wipe existing check-ins
+    assert n.active is True
+    assert n.current_call is None
+    assert len(n.roster()) == 1
+    assert n.roster()[0]["user_id"] == "u1"
+
+
+def test_checkin_while_inactive_survives_into_started_net():
+    """An early check-in (before start()) is a 'tap' that reserves a spot;
+    starting the net must not wipe it."""
+    n = NeighborhoodNet()
+    n.checkin("u1", "A", "Ann", "5th St")
+    assert n.active is False
+    n.start()
+    assert n.active is True
+    assert len(n.roster()) == 1
+    row = n.roster()[0]
+    assert row["user_id"] == "u1"
+    assert row["called"] is False
+
+
+def test_end_clears_roster():
     n = NeighborhoodNet()
     n.start()
     n.checkin("u1", "A", "Ann", "5th St")
     n.end()
-    n.start()
-    assert n.active is True
-    assert n.current_call is None
     assert n.roster() == []
+
+
+def test_end_summary_still_contains_pre_clear_roster():
+    n = NeighborhoodNet()
+    n.start()
+    n.checkin("u1", "A", "Ann", "5th St")
+    summary = n.end()
+    assert len(summary["roster"]) == 1
+    assert summary["roster"][0]["callsign"] == "A"
+    assert n.roster() == []  # live roster is empty even though summary kept it
 
 
 def test_end_returns_roster_snapshot_and_deactivates():
@@ -46,6 +80,20 @@ def test_checkin_defaults_to_checked_in_status():
     row = n.checkin("u1", "A", "Ann", "")
     assert row["status"] == "checked_in"
     assert row["called"] is False
+    assert row["checkin_time"]  # non-empty ISO timestamp
+
+
+def test_checkin_time_updates_on_idempotent_re_checkin():
+    """Re-checking in updates checkin_time to the latest check-in — the
+    honest presence signal — rather than preserving the original."""
+    n = NeighborhoodNet()
+    n.start()
+    first = n.checkin("u1", "A", "Ann", "5th St")
+    first_time = first["checkin_time"]
+    with patch("backend.neighborhood.net.utc_now_iso", return_value="2099-01-01T00:00:00Z"):
+        second = n.checkin("u1", "A", "Ann", "Oak Ave")
+    assert second["checkin_time"] == "2099-01-01T00:00:00Z"
+    assert second["checkin_time"] != first_time
 
 
 def test_call_next_round():
