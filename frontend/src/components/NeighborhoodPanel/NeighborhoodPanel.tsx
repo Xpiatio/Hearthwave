@@ -82,15 +82,17 @@ export function NeighborhoodPanel(props: NeighborhoodPanelProps) {
   const showCoordinatorSection = props.isCoordinator && !props.isKid;
 
   function handleIncidentSubmit(payload: { category: string; description: string; location: string }) {
+    // A new attempt supersedes any dismissed error: App resets incidentError
+    // to null on send, and clearing the ref here lets the rejection reopen
+    // the dialog even when its text matches a previously dismissed error.
+    dismissedErrorRef.current = null;
     props.onIncidentReport(payload);
     setIncidentOpen(false);
   }
 
   // Cancel/backdrop close (as opposed to the optimistic close on submit):
   // the user has now seen whatever error is currently showing, so record it
-  // as dismissed. If the resubmission that follows fails again — even with
-  // identical wording — a fresh submit-triggered close never touches this
-  // ref, so the effect above still reopens the dialog for it.
+  // as dismissed until the next submit attempt resets the ref.
   function handleIncidentDialogClose() {
     dismissedErrorRef.current = props.incidentError;
     setIncidentOpen(false);

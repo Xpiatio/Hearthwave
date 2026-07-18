@@ -1107,6 +1107,10 @@ export default function App() {
   }
 
   function sendIncidentReport(category: string, description: string, location: string) {
+    // Reset before each attempt so a rejection always arrives as a
+    // null -> string transition, even when the error text is identical
+    // to a previous attempt's.
+    setIncidentError(null);
     send({
       type: 'neighborhood_incident_report',
       category,
