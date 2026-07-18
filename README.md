@@ -39,6 +39,16 @@ browser-based React frontend communicating over WebSocket.
 
 ## Features
 
+- **Neighborhood activity** — a dedicated home-screen card / mobile tab for
+  watch groups: one-tap roster check-in (identity comes from your profile, and
+  an early check-in survives the net actually starting), the next scheduled net
+  at a glance, standardized incident reporting (suspicious activity, hazard,
+  medical, lost pet or person, utility outage) that's spoken on air and logged
+  to a filterable, capped incident log, and street alerts that banner and send
+  a browser notification to everyone. Admins grant a **Neighborhood coordinator**
+  per user in Settings → Users, who gets Start/End net, round-table calling,
+  and street alerts; Kid accounts can check in and read the log but can't file
+  reports or coordinate
 - **AAC interface** — a per-user toggle swaps the entire UI for a full-screen
   AAC (Augmentative and Alternative Communication) screen, like the
   symbol-button speech devices used by non-speaking people: category tabs of

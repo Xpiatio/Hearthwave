@@ -44,6 +44,7 @@ This manual covers day-to-day operation of Hearthwave as a GMRS family hub or ne
 28. [Home screen & interface levels](#28-home-screen--interface-levels)
 29. [Accessibility options](#29-accessibility-options)
 30. [Family activity](#30-family-activity)
+31. [Neighborhood activity](#31-neighborhood-activity)
 
 ---
 
@@ -162,7 +163,7 @@ On phones Hearthwave shows a single-column mobile view (tablets and larger scree
 │                                                      │
 └──────────────────────────────────────────────────────┘
 ┌────────── Bottom Navigation ─────────────────────────┐
-│  Chat  │  Family  │  Stations*  │  Journal*           │
+│  Chat  │  Family  │  Neighborhood │  Stations*  │  Journal* │
 └──────────────────────────────────────────────────────┘
   * Stations and Journal only appear for Operator-level accounts.
 ```
@@ -170,11 +171,12 @@ On phones Hearthwave shows a single-column mobile view (tablets and larger scree
 - Tap **[≡]** (top-left) to open the settings drawer: dark mode, listen-only,
   STT, read-aloud, notifications.
 - The **PTT** button and **ABORT TX** button are always visible in the top bar.
-- **Chat** and **Family** are available at both interface levels; **Stations**
-  and **Journal** need the **Operator** level (see
+- **Chat**, **Family**, and **Neighborhood** are available at both interface
+  levels; **Stations** and **Journal** need the **Operator** level (see
   [section 28](#28-home-screen--interface-levels)). NCS mode is desktop/tablet
   only and does not appear on the phone layout.
-- See [section 30](#30-family-activity) for what the Family tab does.
+- See [section 30](#30-family-activity) for what the Family tab does, and
+  [section 31](#31-neighborhood-activity) for the Neighborhood tab.
 - The account menu is accessible from the settings drawer.
 
 ---
@@ -463,6 +465,8 @@ The **callsign**, **name**, **location**, **default TTS voice**, **Gemini API ke
 
 The **Default TTS Voice** dropdown sets which Piper voice the station uses when a user has not chosen a personal voice. Click the **mic icon** next to the dropdown to preview the selected voice without keying the radio.
 
+The same Station tab has a **Neighborhood** area, below NCS/SKYWARN, where an admin sets the weekly **Net Day** and **Net Time** for the neighborhood watch net. This schedule is shown on the Neighborhood home card and inside the Neighborhood activity, and updates live for every connected user the moment it's saved — see [section 31](#31-neighborhood-activity).
+
 ### Dark / Light mode
 
 Toggle between dark mode (navy backgrounds, light text) and light mode
@@ -519,6 +523,8 @@ The **User Accounts** table lists all family member accounts, with a **Role** co
 
 **Deleting an account:** Click the **delete icon** (🗑) next to a user. You cannot delete your own account.
 
+**Neighborhood coordinator:** A **Coordinator** switch in the same table grants or revokes the Neighborhood-net controls described in [section 31](#31-neighborhood-activity) (Start/End net, round-table calling, street alerts) for that user. It saves immediately, like the Role dropdown. The switch is disabled for **Kid** accounts — a kid account can never be a coordinator — and demoting an Admin or Adult to Kid automatically clears any coordinator grant they held.
+
 > **Security note:** For public internet access, put a TLS reverse proxy (nginx, Caddy) in front of the app. Passwords are hashed with PBKDF2-SHA256 (260,000 iterations, per-user salt) but session tokens travel in plaintext over HTTP without TLS.
 
 #### Roles
@@ -535,6 +541,7 @@ The **User Accounts** table lists all family member accounts, with a **Role** co
 - Interface level is locked to **Simple** (no Operator-level controls, ever).
 - No access to the Settings dialog at all — the gear icon is hidden on the Home screen and settings drawer.
 - Can still send the **I'm OK** check-in — see [section 30](#30-family-activity) — since that is treated as a safety action available to every role.
+- Can still check in to the Neighborhood net and view the incident log and street alerts — see [section 31](#31-neighborhood-activity) — but cannot file an incident report (it keys the radio) and can never be a Neighborhood coordinator.
 - AAC Interface (symbol buttons, [section 27](#27-aac-interface-symbol-button-communication)) is not yet supported for Kid accounts.
 
 ### NCS / SKYWARN (admin only)
@@ -1160,12 +1167,14 @@ On desktop and tablet, signing in lands you on a **Home screen** — a small gri
 |---|---|
 | **💬 Chat** | Always. Subtitle shows a new-message count if there's unread chat since you last left Home. |
 | **🏠 Family** | Always, for every role including Kid accounts. Subtitle shows "Everyone OK" or a missed-check-in count; the card turns amber if anyone has missed a check-in. See [section 30](#30-family-activity). |
+| **🏘 Neighborhood** | Always, for every role including Kid accounts. Subtitle shows "Net running now" or the next scheduled net; a banner appears on the card when a street alert was issued in the last 30 minutes. See [section 31](#31-neighborhood-activity). |
 | **🎙 Net Control** | Only for accounts on the **Operator** interface level, and only when the NCS plugin is enabled (see [section 22](#22-plugins)). |
 
 Click a card (or focus it and press **Enter**) to open it:
 
 - **Chat** opens the full station console — chat display, spectrogram, quick messages, message box, and whichever panels you have toggled on.
 - **Family** opens the full-screen presence board (see [section 30](#30-family-activity)).
+- **Neighborhood** opens the full-screen watch activity (see [section 31](#31-neighborhood-activity)).
 - **Net Control** opens the same station console with the NCS panel already showing.
 
 ### Returning to Home
@@ -1282,5 +1291,77 @@ Every change saves immediately; there is no separate save step. Only one daily t
 Roles (**Admin** / **Adult** / **Kid**) are set from **Settings → Users**, described in [section 15](#15-admin--managing-users). An admin can also edit any account's quick-message preset list (the one described above) from that same screen: click the **speech-bubble icon** next to a user's row to open the **Quick Messages** editor, add or remove phrases (up to 20, 1–200 characters each), and click **Save**.
 
 For a **Kid** account, the list can never be saved empty — a kid account needs at least one preset to have anything to transmit — and none of its presets may contain `{` or `}` (placeholders like `{Name}` are a Chat-quick-messages-bar feature only; the server rejects them here). Adult and Admin accounts have no placeholder restriction.
+
+---
+
+## 31. Neighborhood activity
+
+The Neighborhood activity is the base station for a neighborhood watch net: a roster of who's checked in, the next scheduled net, a place to report incidents on the air, a running log of everything that's been reported, and station-wide street alerts. Like the Family activity, it is available to **every account, including Kid accounts**, at **both interface levels** (Simple and Operator) — it is not an Operator-only feature.
+
+### Opening the Neighborhood activity
+
+- **Desktop / tablet:** click the **🏘 Neighborhood** card on the [Home screen](#28-home-screen--interface-levels). The subtitle shows "Net running now" or the day/time of the next scheduled net, and a recent street alert (see below) appears on the card for about 30 minutes after it's issued.
+- **Mobile:** tap the **Neighborhood** tab in the bottom navigation (see [section 2a](#2a-mobile-interface)) — it's there for both interface levels, not just Operator.
+- Click the **back arrow** (top-left) or press **Escape** to return to Home (or to Chat, on mobile).
+
+### Net status and schedule
+
+The top of the panel shows whether a net is active right now, and if not, when the next one is — computed from the weekly **Net Day** and **Net Time** an admin sets on the Station tab of Settings (see [section 13](#13-settings)). If an admin changes the schedule while you're connected, the card and panel update immediately — no refresh needed.
+
+### Checking in
+
+A single **check-in** button adds you to the roster. There's no form to fill out — your name, callsign, and location come straight from your account profile.
+
+You can check in at any time, not just after a coordinator has started the net: an **early check-in** (before the net officially starts) reserves your spot on the roster and survives into the started net rather than being cleared. Checking in again later (for example, to signal you're still around) just updates your check-in time.
+
+### Reporting an incident
+
+The **Report an incident** button opens a short form with three fields:
+
+- **Category** — one of five: **Suspicious activity**, **Hazard**, **Medical**, **Lost pet or person**, or **Utility outage**.
+- **What happened?** — a required description.
+- **Location** — a required location (e.g. "corner of 5th and Main").
+
+Sending the report:
+1. Speaks a standardized announcement over the air — category, description, location, time, and your callsign — unless your account is in [Listen-only mode](#13-settings), in which case the on-air announcement is skipped but the next two steps still happen.
+2. Posts the same announcement to the shared chat log for every connected user to see.
+3. Adds it to the incident log (below).
+
+If the server rejects a report (for example, a missing location), the form reopens showing what to fix.
+
+**Incident reports are not available to Kid accounts** — like any other on-air transmission, filing one keys the radio, and that's outside what a Kid account is allowed to do. Kid accounts can still check in and read the incident log and street alerts.
+
+### Incident log
+
+Every report ever sent appears in the **Incident log**, newest first, with a **Filter by category** dropdown (or "All"). Each entry shows the category, the time, the description, the location, and who reported it. The log is shared by every connected user and kept on the server — it's capped at the 500 most recent reports, so the oldest entries roll off automatically rather than growing the file forever.
+
+### Street alerts
+
+A **coordinator** (see below) can send a **street alert** — a short message (1–200 characters) meant for everyone, such as a road closure or a suspicious vehicle sighting. Sending one:
+
+- Speaks "NEIGHBORHOOD ALERT" plus the message over the air (again skipped only in Listen-only mode) and posts it to chat.
+- Shows a banner on every connected user's Neighborhood card/panel for about 30 minutes.
+- Fires a [browser notification](#17-browser-notifications) for any user who has notifications enabled, even if their tab is in the background.
+
+Street alerts reach **every connected user, including Kid accounts** — this is safety information for the whole household or watch group, not a transmit permission, so it isn't restricted the way sending an incident report is.
+
+### Net status and round-table (coordinator only)
+
+Coordinators additionally see:
+
+- **Start net** / **End net** buttons.
+- **Call next neighbor** — advances a simple round-table through the checked-in roster, one at a time.
+- **New round** — clears who's been called so the round-table can start over.
+
+**Ending a net saves a journal entry** — the checked-in roster and the net's duration are written to a session journal automatically, the same as ending an NCS net. It appears in the Journals panel ([section 11](#11-journals)) and can be published to the public family journal ([section 12](#12-family-journal-public-page)) like any other journal.
+
+### Coordinator setup (admin)
+
+Being a coordinator is a per-user grant, separate from the Admin/Adult/Kid role — an Admin account does **not** automatically get coordinator controls, and a non-admin Adult can be made a coordinator.
+
+An admin turns this on from **Settings → Users** (see [section 15](#15-admin--managing-users)): a **Coordinator** switch in the Users table, next to the Role dropdown. It saves immediately, like everything else in that table.
+
+- **Kid accounts can never be coordinators** — the switch is disabled on a Kid account's row, and demoting an existing coordinator to Kid automatically clears the grant.
+- An admin can grant the coordinator switch to their own account (it isn't disabled on your own row the way the Role dropdown is).
 
 ---
