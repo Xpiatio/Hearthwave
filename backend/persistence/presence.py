@@ -79,10 +79,17 @@ class PresenceStore:
         self._save()
 
     def set_missed(self, user_id: str, missed: bool) -> bool:
-        """Set the missed_checkin flag. Returns True if it changed."""
-        e = self._entry(user_id)
-        if e["missed_checkin"] == missed:
+        """Set the missed_checkin flag. Returns True if it changed.
+
+        Peeks at the existing entry (if any) rather than calling _entry(),
+        which would setdefault-insert a phantom entry for a user we've never
+        seen before an early return would fire. Only creates an entry when
+        the flag is actually flipping to a different value.
+        """
+        existing = self._data.get(user_id)
+        current = existing["missed_checkin"] if existing is not None else _EMPTY["missed_checkin"]
+        if current == missed:
             return False
-        e["missed_checkin"] = missed
+        self._entry(user_id)["missed_checkin"] = missed
         self._save()
         return True

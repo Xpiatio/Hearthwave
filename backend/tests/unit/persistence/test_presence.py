@@ -108,6 +108,11 @@ class TestSetMissed:
         store.set_missed("alice", True)
         assert store.set_missed("alice", False) is True
 
+    def test_unknown_user_false_leaves_store_empty(self, store: PresenceStore):
+        """set_missed(unknown, False) must not phantom-insert an entry."""
+        assert store.set_missed("nobody", False) is False
+        assert store.all() == {}
+
 
 class TestAll:
     def test_returns_all_entries(self, store: PresenceStore):
