@@ -1435,8 +1435,9 @@ As you navigate the app, available items light up one at a time: activity cards 
 - **Home screen:** activity cards (Chat, Family, Neighborhood, Net Control) cycle one at a time.
 - **AAC Interface:** category tabs cycle, then word buttons within a category, then the SEND button.
 - **Confirmation dialogs:** the two large buttons (e.g., **Yes** and **No**, or **Confirm** and **Cancel**) cycle, so you can select which one to press.
+- **During transmission:** the **ABORT TX** button is scanned so you can cancel an ongoing transmission.
 
-The focus ring also works throughout the rest of the app without scanning — you can always use **Tab** to move focus manually (see [Keyboard navigation](#keyboard-navigation) below).
+Scanning pauses while you are editing AAC buttons, or while a dialog other than a confirmation dialog is open. The focus ring also works throughout the rest of the app without scanning — you can always use **Tab** to move focus manually (see [Keyboard navigation](#keyboard-navigation) below).
 
 ### Visual alerts
 
@@ -1456,7 +1457,7 @@ Incoming messages and important events flash the screen edges in different color
 | **Amber** | A weather alert or family check-in reminder is overdue. |
 | **Red** | A neighborhood street alert (urgent situation in your watch area). |
 
-If you're on a phone or tablet, the device also vibrates when an alert flashes.
+On devices that support vibration (most Android phones and tablets — iPhones and iPads don't allow web vibration), the device also vibrates when an alert flashes.
 
 ### Keyboard shortcuts
 
@@ -1471,19 +1472,19 @@ The whole app is keyboard-operable: you can navigate, send messages, and run alm
 | **Tab** | Move focus to the next control in a dialog, quick-message row, or other form. Focus appears as a colored outline. |
 | **↑ ↓ ← →** | Move focus between activity cards on the Home screen or between AAC category tabs and buttons. |
 | **Enter** or **Space** | Activate the focused control — open a card, select an AAC button, press a dialog button, etc. |
-| **Hold Space** | Push-to-talk (hold to transmit voice via your browser microphone; see [section 19](#19-voice-ptt-browser-microphone)). |
+| **Hold Space** | Push-to-talk — while the PTT button is focused, hold Space to transmit voice via your browser microphone (see [section 19](#19-voice-ptt-browser-microphone)). |
 
 Combined with [Switch Scanning](#switch-scanning) (above), these keys let you use the whole app with just keyboard input.
 
 ### Confirmation dialogs for destructive actions
 
-Some actions — like clearing the chat log, deleting an account, or ending a net — now show a confirmation dialog with two large buttons instead of asking a yes-or-no question in a small popup. The buttons are large and clearly labeled so you can confirm or cancel decisively, especially on touch screens where a small button is hard to hit.
+Several actions show a confirmation dialog with two large buttons instead of asking a yes-or-no question in a small popup. The buttons are large and clearly labeled so you can confirm or cancel decisively, especially on touch screens where a small button is hard to hit.
 
 Examples include:
 
-- **Clear chat log** → asks "Delete all chat?" with **Clear** and **Cancel** buttons.
-- **Exit AAC Interface** → asks "Yes, exit" and a **Cancel** button (see [section 27](#27-aac-interface-symbol-button-communication)).
-- **Delete a contact** → asks "Delete {name}?" with **Delete** and **Cancel** buttons.
+- **Exit AAC mode** — title **"Exit AAC mode?"** with buttons **"✅ Yes, exit"** and **"↩️ No, stay here"** (see [section 27](#27-aac-interface-symbol-button-communication)).
+- **Delete an AAC category** — title **"Delete this category?"** with buttons **"✅ Yes, delete it"** and **"↩️ No, go back"**.
+- **Discard unsaved settings** — title **"Discard unsaved changes?"** with buttons **"✅ Yes, discard"** and **"↩️ No, keep editing"**.
 
 These dialogs work with keyboard, mouse, touch, and switch scanning — focus the button you want and press **Enter** or **Space**, or click / tap / press your switch.
 
