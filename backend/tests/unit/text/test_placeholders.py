@@ -79,3 +79,21 @@ class TestResolveAacPlaceholders:
 
     def test_fallbacks_match_frontend(self):
         assert resolve_aac_placeholders("{Name} {callsign}", "", "") == "Operator my callsign"
+
+    def test_backslash_group_ref_in_name_passes_through_literally(self):
+        # A replacement value containing a regex backslash-group reference
+        # (e.g. "\1") must not be interpreted by re.sub — it previously
+        # raised re.error: invalid group reference and crashed the socket.
+        out = resolve_aac_placeholders("hi {Name}", r"\1", "WRXB123")
+        assert out == r"hi \1"
+
+    def test_backslash_group_ref_in_callsign_passes_through_literally(self):
+        out = resolve_aac_placeholders("this is {callsign}", "Sam", r"\1")
+        assert out == r"this is \1"
+
+    def test_dollar_amp_in_name_passes_through_literally(self):
+        # "$&" has no special meaning in Python re.sub replacement strings,
+        # but is included as a defensive regression check for replacement
+        # metacharacter handling generally.
+        out = resolve_aac_placeholders("hi {Name}", "$&", "WRXB123")
+        assert out == "hi $&"

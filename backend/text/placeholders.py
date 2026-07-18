@@ -48,7 +48,7 @@ def resolve_aac_placeholders(text: str, operator_name: str, callsign: str) -> st
     {Name}/{callsign} case-insensitively, strip any other {...} token, and
     collapse whitespace — so a kid AAC send never reaches the prompt_token
     typing dialog, which a non-typing AAC user can't answer."""
-    text = _AAC_NAME_RE.sub(operator_name or "Operator", text)
-    text = _AAC_CALLSIGN_RE.sub(callsign or "my callsign", text)
+    text = _AAC_NAME_RE.sub(lambda _m: operator_name or "Operator", text)
+    text = _AAC_CALLSIGN_RE.sub(lambda _m: callsign or "my callsign", text)
     text = _AAC_OTHER_RE.sub("", text)
     return _WS_RE.sub(" ", text).strip()

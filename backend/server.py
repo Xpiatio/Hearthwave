@@ -2581,15 +2581,22 @@ async def websocket_endpoint(
                         # *stored* grid; the client-sent text is ignored and the
                         # transmission is rebuilt server-side so button presses are
                         # the only vocabulary a kid can put on the air.
+                        chunks = [c.strip() for c in chunks]
                         allowed_texts = _aac_grid_texts(state.prefs.get("aac_grid"))
                         if not allowed_texts or any(c not in allowed_texts for c in chunks):
                             await _manager.send_to(ws, {"type": "error", "detail": "TX not allowed for this account"})
                             continue
                         profile_pub = (_users_store.get_public_one(state.user_id) or {}) if _users_store else {}
+                        # Never fall back to the client-supplied `callsign`
+                        # payload field here — a kid with no stored callsign
+                        # could otherwise put arbitrary text on air via any
+                        # {callsign} button. Fall back to the station's own
+                        # callsign from server config instead.
+                        station_callsign = _config.callsign if _config else ""
                         data["text"] = resolve_aac_placeholders(
-                            " ".join(c.strip() for c in chunks),
+                            " ".join(chunks),
                             (profile_pub.get("operator_name") or "").strip(),
-                            (profile_pub.get("callsign") or "").strip() or callsign,
+                            (profile_pub.get("callsign") or "").strip() or station_callsign,
                         )
                         if not data["text"]:
                             await _manager.send_to(ws, {"type": "error", "detail": "TX not allowed for this account"})

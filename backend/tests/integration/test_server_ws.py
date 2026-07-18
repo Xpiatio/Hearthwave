@@ -3056,6 +3056,60 @@ class TestKidTxGate:
         # no prompt_token frame — placeholders resolved server-side
         assert all(f["type"] != "prompt_token" for f in frames)
 
+    def test_kid_aac_callsign_payload_backslash_does_not_crash_or_leak(self, tmp_path):
+        """A kid with no stored callsign sends a {callsign} button while the
+        client payload's `callsign` field is a regex backslash-group ref.
+        This must not crash the socket (re.sub literal-replacement fix) and
+        must not use the payload value at all (no client-payload fallback) —
+        the resolved text should fall back to the station's own callsign."""
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = self._kid_client_with_grid(tmp_path)
+        # No callsign on the stored profile — falls through to station config.
+        mock_users.get_public_one.return_value = {"display_name": "Test Operator"}
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "tx_message", "callsign": "\\1",
+                                  "text": "ignored by server",
+                                  "aac_chunks": ["This is {callsign} checking in"]})
+                    frames = _drain_until_idle(ws)
+        assert frames[0] == {"type": "tx_status", "status": "transmitting"}
+        assert frames[-1] == {"type": "tx_status", "status": "idle"}
+        tx_echo = next(f for f in frames if f.get("type") == "tx_echo")
+        assert "\\1" not in tx_echo["text"]
+        # cfg's station callsign (see _minimal_cfg) is the fallback.
+        assert tx_echo["text"] == "This is W5TST checking in"
+
+    def test_kid_aac_callsign_uses_stored_profile_callsign_when_present(self, tmp_path):
+        """When the kid's stored profile has a callsign, {callsign} resolves
+        to that value — never the client-payload `callsign` field."""
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = self._kid_client_with_grid(tmp_path)
+        mock_users.get_public_one.return_value = {"display_name": "Test Operator", "callsign": "KE8ABC"}
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "tx_message", "callsign": "WRXB123",
+                                  "text": "ignored by server",
+                                  "aac_chunks": ["This is {callsign} checking in"]})
+                    frames = _drain_until_idle(ws)
+        tx_echo = next(f for f in frames if f.get("type") == "tx_echo")
+        assert tx_echo["text"] == "This is KE8ABC checking in"
+
     def test_kid_aac_chunk_not_in_grid_rejected(self, tmp_path):
         cfg, mock_stt, mock_tts, mock_users, mock_tokens = self._kid_client_with_grid(tmp_path)
         with (
