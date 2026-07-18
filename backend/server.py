@@ -626,6 +626,16 @@ def _build_family_reminders_msg() -> dict:
     return {"type": "family_reminders", "reminders": reminders}
 
 
+def _build_device_tokens_msg() -> dict:
+    """Admin-facing device token roster — never includes the full token
+    (that's shown once, at creation, in the device_token_created reply)."""
+    tokens = _device_token_store.list_all() if _device_token_store else []
+    return {
+        "type": "device_tokens",
+        "tokens": [{k: r[k] for k in ("id", "label", "created_at", "last_seen")} for r in tokens],
+    }
+
+
 def _build_neighborhood_state_msg() -> dict:
     return {
         "type": "neighborhood_state",
@@ -1370,6 +1380,7 @@ def _build_status() -> dict:
         "monitor_passthrough": bool(_config.monitor_passthrough) if _config else False,
         "attendance_enabled": bool(_config.attendance_enabled) if _config else False,
         "saved_phrases": _config.saved_phrases if _config else [],
+        "display_quick_messages": _config.display_quick_messages if _config else [],
         # Installed-plugin manifests — id, name, version, enabled, conflicts_with,
         # config_schema + current config values, tx_composition, and any load error.
         # Drives the admin Plugins manager (list, enable/disable, settings form).
@@ -1955,6 +1966,17 @@ async def _ws_handle_set_admin_config(ws: WebSocket, data: dict, state: "Connect
         time_str = str(data["neighborhood_net_time"]).strip()
         if time_str == "" or _HHMM_RE.match(time_str):
             _config["neighborhood_net_time"] = time_str
+    if "display_quick_messages" in data:
+        raw = data["display_quick_messages"]
+        if raw == []:
+            cleaned = []
+        else:
+            cleaned = _validate_quick_messages(raw)
+            if cleaned is None:
+                await _manager.send_to(ws, {"type": "error",
+                    "detail": "Invalid display quick messages (1-20 entries, each 1-200 chars)."})
+                return
+        _config["display_quick_messages"] = cleaned
     rx_mode_changed = False
     if "rx_mode" in data:
         new_mode = str(data["rx_mode"]).strip().lower()
@@ -2658,6 +2680,39 @@ async def websocket_endpoint(
                     await _manager.send_to(ws, {"type": "error", "detail": "Check-in reminders not available for this account."})
                     continue
                 await _manager.send_to(ws, _build_family_reminders_msg())
+
+            elif msg_type == "device_token_create":
+                if not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
+                    continue
+                if _device_token_store is None:
+                    continue
+                try:
+                    rec = _device_token_store.create(data.get("label") or "")
+                except ValueError as exc:
+                    await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
+                    continue
+                await _manager.send_to(ws, {"type": "device_token_created", "record": rec})
+                await _manager.send_to(ws, _build_device_tokens_msg())
+
+            elif msg_type == "device_token_list":
+                if not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
+                    continue
+                if _device_token_store is None:
+                    continue
+                await _manager.send_to(ws, _build_device_tokens_msg())
+
+            elif msg_type == "device_token_revoke":
+                if not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
+                    continue
+                if _device_token_store is None:
+                    continue
+                token_id = data.get("id") or ""
+                if _device_token_store.revoke(token_id):
+                    await _manager.disconnect_user(f"display:{token_id}")
+                await _manager.send_to(ws, _build_device_tokens_msg())
 
             elif msg_type == "add_contact":
                 if _contacts_store is None:

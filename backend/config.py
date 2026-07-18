@@ -375,6 +375,15 @@ class ServerConfig(dict):
         """24h HH:MM local start time for the recurring neighborhood net. Empty = unset."""
         return self.get("neighborhood_net_time", "") or ""
 
+    # ---- display / kiosk (wall device quick messages) --------------------
+
+    @property
+    def display_quick_messages(self) -> list[str]:
+        """Preset quick-message buttons shown on the family wall display/kiosk.
+        Empty list = feature off (buttons hidden)."""
+        v = self.get("display_quick_messages", [])
+        return v if isinstance(v, list) else []
+
     # ---- plugins (namespaced config for installed plugins) --------------
     # Each plugin's state lives under config["plugins"][id]: the master toggle at
     # "enabled" plus one key per ConfigField. Built-in and 3rd-party plugins alike
