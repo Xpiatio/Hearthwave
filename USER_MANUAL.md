@@ -1406,6 +1406,6 @@ The buttons on the wall display come from a **Household Quick Messages** list, c
 
 ### What a display can't do
 
-A wall display is a read-and-tap glance screen, not a client login. It has no access to Settings, cannot transmit outside its quick-message allowlist, and can't see user accounts or any other part of the app. When a display does send something — a Mark-OK or a quick message — it shows up in chat under the display's own name (e.g. "Kitchen"), not as any household member.
+A wall display is a read-and-tap glance screen, not a client login. It has no access to Settings, cannot transmit outside its quick-message allowlist, and can't see user accounts or any other part of the app. A quick message shows up in chat under the display's own name (e.g. "Kitchen"). A Mark-OK is different: it proxies that household member's own check-in, so it posts under the member's name, not the display's.
 
 ---
