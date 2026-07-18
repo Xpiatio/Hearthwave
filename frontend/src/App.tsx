@@ -1586,6 +1586,7 @@ export default function App() {
           isKid={isKid}
           myUserId={profile.id}
           onCheckin={sendNeighborhoodCheckin}
+          onStatusChange={(status) => sendNeighborhoodStatus(status)}
           onIncidentReport={({ category, description, location }) => sendIncidentReport(category, description, location)}
           incidentError={incidentError}
           onStreetAlert={sendStreetAlert}

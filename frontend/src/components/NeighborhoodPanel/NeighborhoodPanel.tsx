@@ -6,6 +6,7 @@ import { useEscapeToHome } from '../../hooks/useEscapeToHome';
 import { nextNetLabel } from '../../neighborhood/schedule';
 import { IncidentDialog } from './IncidentDialog';
 import { IncidentLog } from './IncidentLog';
+import { RosterList } from './RosterList';
 
 export interface NeighborhoodPanelProps {
   roster: NeighborhoodRosterRow[];
@@ -19,6 +20,7 @@ export interface NeighborhoodPanelProps {
   isKid: boolean;
   myUserId: string;
   onCheckin: () => void;
+  onStatusChange: (status: 'checked_in' | 'standby') => void;
   onIncidentReport: (p: { category: string; description: string; location: string }) => void;
   incidentError: string | null;
   onStreetAlert: (message: string) => void;
@@ -33,6 +35,16 @@ const STREET_ALERT_MAX = 200;
 
 function formatAlertTime(iso: string): string {
   return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+/** Resolve a raw current_call user_id (what the backend actually sends —
+ *  see backend/neighborhood/net.py's call_next) to something a human can
+ *  read: display name, falling back to callsign, falling back to nothing
+ *  (never the raw user_id — "Current turn: dana-3f2a" is the bug this
+ *  fixes) if the roster row can't be found or is missing both fields. */
+function currentCallLabel(userId: string, roster: NeighborhoodRosterRow[]): string {
+  const row = roster.find((r) => r.user_id === userId);
+  return row?.name || row?.callsign || '';
 }
 
 /** Full-screen neighborhood activity: net status, a giant check-in button,
@@ -168,6 +180,13 @@ export function NeighborhoodPanel(props: NeighborhoodPanelProps) {
         </Button>
       )}
 
+      <RosterList
+        roster={props.roster}
+        currentCall={props.currentCall}
+        myUserId={props.myUserId}
+        onStatusChange={props.onStatusChange}
+      />
+
       <IncidentLog incidents={props.incidents} />
 
       {showCoordinatorSection && (
@@ -177,7 +196,9 @@ export function NeighborhoodPanel(props: NeighborhoodPanelProps) {
           </Typography>
 
           <Typography variant="body2" color="text.secondary">
-            {props.currentCall ? `Current turn: ${props.currentCall}` : 'No one called yet this round.'}
+            {props.currentCall
+              ? `Current turn: ${currentCallLabel(props.currentCall, props.roster)}`
+              : 'No one called yet this round.'}
           </Typography>
 
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>

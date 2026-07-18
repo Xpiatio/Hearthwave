@@ -69,6 +69,7 @@ export interface MobileAppProps {
   neighborhoodAlerts: NeighborhoodAlertMsg[];
   incidentError: string | null;
   sendNeighborhoodCheckin: () => void;
+  sendNeighborhoodStatus: (status: 'checked_in' | 'standby', userId?: string) => void;
   sendIncidentReport: (category: string, description: string, location: string) => void;
   sendStreetAlert: (message: string) => void;
   sendNeighborhoodStart: () => void;
@@ -195,6 +196,7 @@ export function MobileApp({
   neighborhoodAlerts,
   incidentError,
   sendNeighborhoodCheckin,
+  sendNeighborhoodStatus,
   sendIncidentReport,
   sendStreetAlert,
   sendNeighborhoodStart,
@@ -401,6 +403,7 @@ export function MobileApp({
             isKid={isKid}
             myUserId={profile.id}
             onCheckin={sendNeighborhoodCheckin}
+            onStatusChange={(status) => sendNeighborhoodStatus(status)}
             onIncidentReport={({ category, description, location }) => sendIncidentReport(category, description, location)}
             incidentError={incidentError}
             onStreetAlert={sendStreetAlert}

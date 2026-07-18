@@ -17,6 +17,10 @@ const roster: NeighborhoodRosterRow[] = [
     user_id: 'u1', callsign: 'W1ABC', name: 'Alice', location: 'Elm St',
     status: 'checked_in', checkin_time: new Date().toISOString(), called: false,
   },
+  {
+    user_id: 'u3', callsign: 'W2XYZ', name: 'Bob', location: 'Oak Ave',
+    status: 'standby', checkin_time: new Date().toISOString(), called: true,
+  },
 ];
 
 const incidents: IncidentEntry[] = [
@@ -41,6 +45,7 @@ function makeProps(overrides: Partial<NeighborhoodPanelProps> = {}): Neighborhoo
     isKid: false,
     myUserId: 'u2',
     onCheckin: vi.fn(),
+    onStatusChange: vi.fn(),
     onIncidentReport: vi.fn(),
     incidentError: null,
     onStreetAlert: vi.fn(),
@@ -229,9 +234,31 @@ describe('NeighborhoodPanel', () => {
     expect(props.onNewRound).toHaveBeenCalledOnce();
   });
 
-  it('shows the current round-table call in the coordinator section', () => {
-    render(<NeighborhoodPanel {...makeProps({ isCoordinator: true, currentCall: 'W1ABC' })} />);
-    expect(screen.getByText('Current turn: W1ABC')).toBeInTheDocument();
+  it('shows the current round-table call in the coordinator section, resolved to a display name', () => {
+    // I2: the backend sends current_call as a user_id (see
+    // backend/neighborhood/net.py's call_next), never a callsign — this
+    // must resolve through the roster, not render the raw id.
+    render(<NeighborhoodPanel {...makeProps({ isCoordinator: true, currentCall: 'u1' })} />);
+    expect(screen.getByText('Current turn: Alice')).toBeInTheDocument();
+    expect(screen.queryByText(/u1/)).not.toBeInTheDocument();
+  });
+
+  it('falls back to callsign, then to nothing, when resolving current_call to a display name', () => {
+    const noNameRoster: NeighborhoodRosterRow[] = [
+      { user_id: 'u9', callsign: 'W9NAM', name: '', location: 'Pine St', status: 'checked_in', checkin_time: new Date().toISOString(), called: false },
+    ];
+    const { rerender } = render(
+      <NeighborhoodPanel {...makeProps({ isCoordinator: true, roster: noNameRoster, currentCall: 'u9' })} />,
+    );
+    expect(screen.getByText('Current turn: W9NAM')).toBeInTheDocument();
+
+    rerender(
+      <ThemeProvider theme={makeTheme(false)}>
+        <NeighborhoodPanel {...makeProps({ isCoordinator: true, roster: [], currentCall: 'unknown-user' })} />
+      </ThemeProvider>,
+    );
+    expect(screen.getByText('Current turn:')).toBeInTheDocument();
+    expect(screen.queryByText(/unknown-user/)).not.toBeInTheDocument();
   });
 
   describe('street alert', () => {
@@ -264,6 +291,74 @@ describe('NeighborhoodPanel', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Send street alert' }));
 
       expect(props.onStreetAlert).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('roster list', () => {
+    it('renders a row per roster entry with name, callsign, location, and status', () => {
+      render(<NeighborhoodPanel {...makeProps()} />);
+      const list = screen.getByRole('list', { name: 'Checked-in neighbors' });
+      const rows = within(list).getAllByRole('listitem');
+      expect(rows).toHaveLength(2);
+
+      expect(within(rows[0]).getByText('Alice')).toBeInTheDocument();
+      expect(within(rows[0]).getByText('W1ABC')).toBeInTheDocument();
+      expect(within(rows[0]).getByText('Elm St')).toBeInTheDocument();
+      expect(within(rows[0]).getByText('Checked in')).toBeInTheDocument();
+
+      expect(within(rows[1]).getByText('Bob')).toBeInTheDocument();
+      expect(within(rows[1]).getByText('W2XYZ')).toBeInTheDocument();
+      expect(within(rows[1]).getByText('Oak Ave')).toBeInTheDocument();
+      expect(within(rows[1]).getByText('Standby')).toBeInTheDocument();
+    });
+
+    it('marks a called row with a "Called ✓" label', () => {
+      render(<NeighborhoodPanel {...makeProps()} />);
+      const list = screen.getByRole('list', { name: 'Checked-in neighbors' });
+      const rows = within(list).getAllByRole('listitem');
+      expect(within(rows[0]).queryByText('Called ✓')).not.toBeInTheDocument();
+      expect(within(rows[1]).getByText('Called ✓')).toBeInTheDocument();
+    });
+
+    it('highlights the current_call row with a text "Current turn" label', () => {
+      render(<NeighborhoodPanel {...makeProps({ currentCall: 'u1' })} />);
+      const list = screen.getByRole('list', { name: 'Checked-in neighbors' });
+      const rows = within(list).getAllByRole('listitem');
+      expect(within(rows[0]).getByText('Current turn')).toBeInTheDocument();
+      expect(within(rows[1]).queryByText('Current turn')).not.toBeInTheDocument();
+    });
+
+    it('shows "No one checked in yet." when the roster is empty', () => {
+      render(<NeighborhoodPanel {...makeProps({ roster: [] })} />);
+      expect(screen.getByText('No one checked in yet.')).toBeInTheDocument();
+      expect(screen.queryByRole('list', { name: 'Checked-in neighbors' })).not.toBeInTheDocument();
+    });
+
+    it('shows a self-toggle button only on the viewer\'s own row, and it fires onStatusChange', () => {
+      const props = makeProps({ myUserId: 'u1' });
+      render(<NeighborhoodPanel {...props} />);
+      const list = screen.getByRole('list', { name: 'Checked-in neighbors' });
+      const rows = within(list).getAllByRole('listitem');
+
+      // Own row (u1, checked_in): a "Step away" button, toggling to standby.
+      const stepAway = within(rows[0]).getByRole('button', { name: 'Step away' });
+      fireEvent.click(stepAway);
+      expect(props.onStatusChange).toHaveBeenCalledWith('standby');
+
+      // Other row (u3, standby): no self-toggle button at all.
+      expect(within(rows[1]).queryByRole('button')).not.toBeInTheDocument();
+    });
+
+    it('shows "I\'m back" on the viewer\'s own row when currently on standby', () => {
+      const props = makeProps({ myUserId: 'u3' });
+      render(<NeighborhoodPanel {...props} />);
+      const list = screen.getByRole('list', { name: 'Checked-in neighbors' });
+      const rows = within(list).getAllByRole('listitem');
+
+      const imBack = within(rows[1]).getByRole('button', { name: "I'm back" });
+      fireEvent.click(imBack);
+      expect(props.onStatusChange).toHaveBeenCalledWith('checked_in');
+      expect(within(rows[0]).queryByRole('button')).not.toBeInTheDocument();
     });
   });
 

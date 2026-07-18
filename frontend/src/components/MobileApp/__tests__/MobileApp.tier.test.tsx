@@ -137,6 +137,7 @@ function makeProps(overrides: Partial<MobileAppProps> = {}): MobileAppProps {
     neighborhoodAlerts: [],
     incidentError: null,
     sendNeighborhoodCheckin: vi.fn(),
+    sendNeighborhoodStatus: vi.fn(),
     sendIncidentReport: vi.fn(),
     sendStreetAlert: vi.fn(),
     sendNeighborhoodStart: vi.fn(),
