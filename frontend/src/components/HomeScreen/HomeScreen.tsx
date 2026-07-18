@@ -26,7 +26,7 @@ interface Props {
 function familySummary(entries: FamilyPresenceEntry[]): string {
   if (entries.length === 0) return '';
   const missed = entries.filter((e) => e.missed_checkin).length;
-  if (missed > 0) return `${missed} missed check-in`;
+  if (missed > 0) return `${missed} missed check-in${missed === 1 ? '' : 's'}`;
   const now = new Date();
   const allOk = entries.every((e) => deriveStatus(e, now) === 'ok');
   return allOk ? 'Everyone OK' : '';
@@ -41,6 +41,9 @@ interface CardDef {
    *  accessible name — see ActivityCard for why the subtitle text alone
    *  isn't enough. */
   unreadCount?: number;
+  /** Same idea as unreadCount, for alerts that aren't a plain "N new"
+   *  count (e.g. missed check-ins). */
+  alertText?: string;
   onClick: () => void;
 }
 
@@ -56,6 +59,9 @@ export function HomeScreen(props: Props) {
     {
       key: 'family', emoji: '🏠', title: 'Family',
       subtitle: familySummary(props.familyEntries),
+      alertText: props.familyEntries.some((e) => e.missed_checkin)
+        ? familySummary(props.familyEntries)
+        : undefined,
       onClick: () => props.onOpenActivity('family'),
     },
   ];
@@ -125,6 +131,7 @@ export function HomeScreen(props: Props) {
               title={c.title}
               subtitle={c.subtitle}
               unreadCount={c.unreadCount}
+              alertText={c.alertText}
               onClick={c.onClick}
               buttonRef={(el) => { refs.current[i] = el; }}
               tabIndex={i === effectiveFocusIdx ? 0 : -1}

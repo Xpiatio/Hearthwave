@@ -19,7 +19,7 @@ export function ReminderEditor({ userId, name, time, enabled, onSetReminder }: P
         size="small"
         label={`Check-in reminder for ${name}`}
         value={time}
-        onChange={(e) => onSetReminder(userId, e.target.value, enabled)}
+        onChange={(e) => onSetReminder(userId, e.target.value || null, enabled)}
         slotProps={{ inputLabel: { shrink: true } }}
       />
       <Switch

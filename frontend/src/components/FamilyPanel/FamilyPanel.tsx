@@ -1,12 +1,11 @@
 import { Box, Button, ButtonBase, IconButton, Tooltip, Typography } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import type { FamilyPresenceEntry, UserProfile } from '../../types/ws';
+import type { FamilyPresenceEntry } from '../../types/ws';
 import { MemberCard } from './MemberCard';
 import { ReminderEditor } from './ReminderEditor';
 import { useEscapeToHome } from '../../hooks/useEscapeToHome';
 
 export interface FamilyPanelProps {
-  profile: UserProfile;
   entries: FamilyPresenceEntry[];
   reminders: Record<string, { time: string; enabled: boolean }>;
   isKid: boolean;

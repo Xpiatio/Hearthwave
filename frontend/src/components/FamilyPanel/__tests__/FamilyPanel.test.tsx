@@ -5,24 +5,11 @@ import { describe, it, expect, vi } from 'vitest';
 import { axe } from 'jest-axe';
 import { FamilyPanel } from '../FamilyPanel';
 import type { FamilyPanelProps } from '../FamilyPanel';
-import type { FamilyPresenceEntry, UserProfile } from '../../../types/ws';
+import type { FamilyPresenceEntry } from '../../../types/ws';
 
 function render(ui: React.ReactElement) {
   return rtlRender(<ThemeProvider theme={makeTheme(false)}>{ui}</ThemeProvider>);
 }
-
-const profile: UserProfile = {
-  id: 'u1',
-  display_name: 'U1',
-  avatar_emoji: '🙂',
-  operator_name: 'U1',
-  callsign: 'W1AAA',
-  location: 'Home',
-  is_admin: true,
-  role: 'admin',
-  created_at: '2024-01-01T00:00:00Z',
-  prefs: {} as never,
-};
 
 const entries: FamilyPresenceEntry[] = [
   {
@@ -45,7 +32,6 @@ const entries: FamilyPresenceEntry[] = [
 
 function makeProps(overrides: Partial<FamilyPanelProps> = {}): FamilyPanelProps {
   return {
-    profile,
     entries,
     reminders: { u2: { time: '08:00', enabled: true } },
     isKid: false,
@@ -93,6 +79,13 @@ describe('FamilyPanel', () => {
     render(<FamilyPanel {...admin} />);
     fireEvent.change(screen.getByLabelText('Check-in reminder for U2'), { target: { value: '09:00' } });
     expect(admin.onSetReminder).toHaveBeenCalledWith('u2', '09:00', true);
+  });
+
+  it('normalizes an emptied time field to null rather than an empty string', () => {
+    const props = makeProps();
+    render(<FamilyPanel {...props} />);
+    fireEvent.change(screen.getByLabelText('Check-in reminder for U2'), { target: { value: '' } });
+    expect(props.onSetReminder).toHaveBeenCalledWith('u2', null, true);
   });
 
   it("kid mode hides reminder editor and shows only I'm OK + quick messages", () => {

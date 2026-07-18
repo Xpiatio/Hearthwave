@@ -1409,7 +1409,6 @@ export default function App() {
         />
       ) : activity === 'family' ? (
         <FamilyPanel
-          profile={profile}
           entries={familyPresence}
           reminders={familyReminders}
           isKid={isKid}

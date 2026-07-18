@@ -114,6 +114,25 @@ describe('HomeScreen', () => {
     expect(screen.getByText('1 missed check-in')).toBeInTheDocument();
   });
 
+  it('pluralizes multiple missed check-ins on the Family card', () => {
+    const missedEntry2: FamilyPresenceEntry = {
+      user_id: 'u4', display_name: 'Deb', avatar_emoji: '🙂',
+      last_heard: null, last_ok: null, missed_checkin: true,
+    };
+    render(<HomeScreen {...base} familyEntries={[missedEntry, missedEntry2]} />);
+    expect(screen.getByText('2 missed check-ins')).toBeInTheDocument();
+  });
+
+  it('folds a missed check-in into the Family card accessible name', () => {
+    render(<HomeScreen {...base} familyEntries={[okEntry, missedEntry]} />);
+    expect(screen.getByRole('button', { name: 'Family, 1 missed check-in' })).toBeInTheDocument();
+  });
+
+  it('does not fold "Everyone OK" into the Family card accessible name', () => {
+    render(<HomeScreen {...base} familyEntries={[okEntry]} />);
+    expect(screen.getByRole('button', { name: 'Family' })).toBeInTheDocument();
+  });
+
   it('clicking Family opens the family activity', () => {
     const onOpenActivity = vi.fn();
     render(<HomeScreen {...base} onOpenActivity={onOpenActivity} />);
