@@ -147,7 +147,7 @@ export function HomeScreen(props: Props) {
         }}
       >
         {cards.map((c, i) => (
-          <Box role="listitem" key={c.key}>
+          <Box role="listitem" key={c.key} sx={{ display: 'flex' }}>
             <ActivityCard
               emoji={c.emoji}
               title={c.title}

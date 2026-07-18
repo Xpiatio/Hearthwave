@@ -39,11 +39,11 @@ export function ActivityCard({
       onKeyDown={onKeyDown}
       onFocus={onFocus}
       ref={buttonRef}
-      sx={{ borderRadius: 2, width: '100%', textAlign: 'left' }}
+      sx={{ borderRadius: 2, width: '100%', height: '100%', textAlign: 'left' }}
     >
       <Paper
         sx={{
-          p: 3, width: '100%', minHeight: 140, display: 'flex',
+          p: 3, width: '100%', height: '100%', minHeight: 140, display: 'flex',
           flexDirection: 'column', gap: 1, justifyContent: 'center',
         }}
       >
