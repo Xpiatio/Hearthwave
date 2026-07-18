@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, Box, Button, Chip, Paper, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Chip, Paper, Snackbar, TextField, Typography } from '@mui/material';
 import { ThemeProvider } from '@mui/material/styles';
 import { useDisplaySocket } from '../../hooks/useDisplaySocket';
 import type { UseDisplaySocketResult } from '../../hooks/useDisplaySocket';
@@ -7,11 +7,16 @@ import { isDuskDark } from '../../display/autoDark';
 import { makeTheme } from '../../theme';
 import { nextNetLabel } from '../../neighborhood/schedule';
 import { PresenceTile } from './PresenceTile';
+import { ConfirmOkDialog } from './ConfirmOkDialog';
+import type { DisplayImOkPayload, DisplayQuickMessagePayload, FamilyPresenceEntry } from '../../types/ws';
 
 const DEVICE_TOKEN_KEY = 'radio_tty_device_token';
 
 const CLOCK_TICK_MS = 30_000;
 const DRIFT_TICK_MS = 60_000;
+// Tap-to-wake: how long the kiosk stays in interactive mode after a tap
+// before reverting to the passive wall-display layout.
+const WAKE_WINDOW_MS = 45_000;
 
 // Burn-in mitigation: cycle the whole layout through 9 small offsets so no
 // pixel sits under the same content for hours on end.
@@ -111,9 +116,46 @@ export function DisplayApp() {
 }
 
 function ConnectedDisplay({ socket }: { socket: UseDisplaySocketResult }) {
-  const { connected, presence, neighborhood, messages, alert } = socket;
+  const { connected, presence, neighborhood, messages, alert, status, lastAck, send } = socket;
   const [now, setNow] = useState(() => new Date());
   const [driftIndex, setDriftIndex] = useState(0);
+
+  // Tap-to-wake: awakeUntil is the epoch ms the interactive window expires.
+  // 0 means passive/asleep. nowMs only ticks (once a second) while awake, so
+  // the wall display isn't re-rendering every second forever.
+  const [awakeUntil, setAwakeUntil] = useState(0);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [confirmEntry, setConfirmEntry] = useState<FamilyPresenceEntry | null>(null);
+  const [sentSnackOpen, setSentSnackOpen] = useState(false);
+
+  const interactive = awakeUntil > nowMs;
+
+  function wake() {
+    setAwakeUntil(Date.now() + WAKE_WINDOW_MS);
+  }
+
+  // Only tick while a wake window is active; the tick itself is what
+  // notices expiry and clears awakeUntil, which stops the interval again.
+  useEffect(() => {
+    if (awakeUntil <= 0) return undefined;
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [awakeUntil]);
+
+  useEffect(() => {
+    if (awakeUntil > 0 && nowMs >= awakeUntil) {
+      setAwakeUntil(0);
+    }
+  }, [nowMs, awakeUntil]);
+
+  // Quick-message "Sent" snackbar is driven entirely by the server ack, not
+  // by the local send — the kiosk shouldn't claim success before the
+  // backend actually accepted it.
+  useEffect(() => {
+    if (lastAck?.action === 'quick_message') {
+      setSentSnackOpen(true);
+    }
+  }, [lastAck]);
 
   // Clock ticks every 30s; theme (auto-dark) is re-evaluated on the same
   // tick since it only needs hour-granularity, not a live second-hand.
@@ -131,13 +173,29 @@ function ConnectedDisplay({ socket }: { socket: UseDisplaySocketResult }) {
     return () => clearInterval(id);
   }, []);
 
+  function handleImOk(entry: FamilyPresenceEntry) {
+    setConfirmEntry(entry);
+  }
+
+  function handleConfirmOk(entry: FamilyPresenceEntry) {
+    const payload: DisplayImOkPayload = { type: 'display_im_ok', user_id: entry.user_id };
+    send(payload);
+  }
+
+  function handleQuickMessage(text: string) {
+    const payload: DisplayQuickMessagePayload = { type: 'display_quick_message', text };
+    send(payload);
+  }
+
   const theme = makeTheme(isDuskDark(now), { fontScale: 1.25 });
   const drift = DRIFT_OFFSETS[driftIndex];
+  const quickMessages = status?.display_quick_messages ?? [];
 
   return (
     <ThemeProvider theme={theme}>
       <Box
         data-testid="display-shell"
+        onClick={wake}
         sx={{
           height: '100vh',
           display: 'flex',
@@ -178,10 +236,25 @@ function ConnectedDisplay({ socket }: { socket: UseDisplaySocketResult }) {
         >
           {presence.map((e) => (
             <Box role="listitem" key={e.user_id}>
-              <PresenceTile entry={e} now={now} interactive={false} />
+              <PresenceTile entry={e} now={now} interactive={interactive} onImOk={handleImOk} />
             </Box>
           ))}
         </Box>
+
+        {interactive && quickMessages.length > 0 && (
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+            {quickMessages.map((text) => (
+              <Button
+                key={text}
+                variant="contained"
+                onClick={() => handleQuickMessage(text)}
+                sx={{ minHeight: 72, fontSize: '1.3rem' }}
+              >
+                {text}
+              </Button>
+            ))}
+          </Box>
+        )}
 
         <Box component="footer" sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
           <Box role="group" aria-label="Recent messages">
@@ -200,6 +273,19 @@ function ConnectedDisplay({ socket }: { socket: UseDisplaySocketResult }) {
                 : ''}
           </Typography>
         </Box>
+
+        <ConfirmOkDialog
+          entry={confirmEntry}
+          onConfirm={handleConfirmOk}
+          onClose={() => setConfirmEntry(null)}
+        />
+
+        <Snackbar
+          open={sentSnackOpen}
+          autoHideDuration={3000}
+          onClose={() => setSentSnackOpen(false)}
+          message="Sent"
+        />
       </Box>
     </ThemeProvider>
   );

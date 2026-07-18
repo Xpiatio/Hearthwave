@@ -18,6 +18,7 @@ type FakeWSInstance = {
   onerror: ((e: Event) => void) | null;
   close: (code?: number) => void;
   send: (data: string) => void;
+  _sentMessages: string[];
 };
 
 let instances: FakeWSInstance[] = [];
@@ -40,6 +41,8 @@ class FakeWebSocket {
     instances.push(this as unknown as FakeWSInstance);
   }
 
+  _sentMessages: string[] = [];
+
   close(code?: number) {
     this.readyState = FakeWebSocket.CLOSED;
     if (this.onclose) {
@@ -47,8 +50,8 @@ class FakeWebSocket {
     }
   }
 
-  send() {
-    // no-op for these tests
+  send(data: string) {
+    this._sentMessages.push(data);
   }
 }
 
@@ -64,15 +67,29 @@ function mockServerClose(code?: number): void {
 function mockServerSend(payload: object): void {
   const inst = instances.at(-1);
   if (!inst) throw new Error('no socket instance to send to');
+  // Flip to OPEN on first use so send() (which guards on readyState) can
+  // actually forward client-originated messages in tests that check them.
+  if (inst.readyState !== FakeWebSocket.OPEN) {
+    inst.readyState = FakeWebSocket.OPEN;
+    if (inst.onopen) inst.onopen(new Event('open'));
+  }
   if (inst.onmessage) {
     inst.onmessage(new MessageEvent('message', { data: JSON.stringify(payload) }));
   }
 }
 
+// Returns the last payload the component sent over the socket (parsed), or
+// null if nothing has been sent yet.
+function lastSent(): unknown {
+  const inst = instances.at(-1);
+  const raw = inst?._sentMessages.at(-1);
+  return raw ? JSON.parse(raw) : null;
+}
+
 let entrySeq = 0;
-function okEntry(name: string): FamilyPresenceEntry {
+function okEntry(name: string, userId?: string): FamilyPresenceEntry {
   return {
-    user_id: `u-${++entrySeq}`,
+    user_id: userId ?? `u-${++entrySeq}`,
     display_name: name,
     avatar_emoji: '🙂',
     last_heard: null,
@@ -189,6 +206,72 @@ describe('DisplayApp passive layout', () => {
     act(() => mockServerSend({ type: 'family_presence', entries: [okEntry('Grandma')] }));
     // jest-axe's internal async work relies on real timers; fake timers
     // (set up in beforeEach for the clock/drift assertions) would hang it.
+    vi.useRealTimers();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+});
+
+describe('DisplayApp wake interaction', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    instances = [];
+    vi.stubGlobal('WebSocket', FakeWebSocket);
+    localStorage.setItem('radio_tty_device_token', 'tok123');
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  function renderAwake() {
+    const rendered = render(<DisplayApp />);
+    act(() => {
+      mockServerSend({ type: 'status', display_quick_messages: ['Dinner is ready'] });
+      mockServerSend({ type: 'family_presence', entries: [okEntry('Grandma', 'u1')] });
+    });
+    fireEvent.click(screen.getByTestId('display-shell'));
+    return rendered;
+  }
+
+  it('tap wakes interactive mode; quick messages appear', () => {
+    renderAwake();
+    expect(screen.getByRole('button', { name: 'Dinner is ready' })).toBeInTheDocument();
+  });
+
+  it('reverts to passive after 45s idle', () => {
+    renderAwake();
+    act(() => vi.advanceTimersByTime(45_000));
+    expect(screen.queryByRole('button', { name: 'Dinner is ready' })).not.toBeInTheDocument();
+  });
+
+  it('tile tap opens confirm; Yes sends display_im_ok', () => {
+    renderAwake();
+    fireEvent.click(screen.getByRole('button', { name: /grandma/i }));
+    fireEvent.click(screen.getByRole('button', { name: /yes/i }));
+    expect(lastSent()).toEqual({ type: 'display_im_ok', user_id: 'u1' });
+  });
+
+  it('confirm No sends nothing', () => {
+    renderAwake();
+    fireEvent.click(screen.getByRole('button', { name: /grandma/i }));
+    fireEvent.click(screen.getByRole('button', { name: /no/i }));
+    expect(lastSent()).toBeNull();
+  });
+
+  it('quick message tap sends display_quick_message and shows Sent on ack', () => {
+    renderAwake();
+    fireEvent.click(screen.getByRole('button', { name: 'Dinner is ready' }));
+    expect(lastSent()).toEqual({ type: 'display_quick_message', text: 'Dinner is ready' });
+    act(() => mockServerSend({ type: 'display_ack', action: 'quick_message' }));
+    expect(screen.getByText(/sent/i)).toBeInTheDocument();
+  });
+
+  it('interactive mode passes axe', async () => {
+    const { container } = renderAwake();
+    // jest-axe's internal async work relies on real timers; fake timers
+    // (set up in beforeEach for the 45s wake-window assertions) would hang it.
     vi.useRealTimers();
     expect(await axe(container)).toHaveNoViolations();
   });

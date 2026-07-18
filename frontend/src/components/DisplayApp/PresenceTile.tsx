@@ -1,4 +1,4 @@
-import { Box, Chip, Paper, Typography } from '@mui/material';
+import { Box, ButtonBase, Chip, Paper, Typography } from '@mui/material';
 import type { ChipProps } from '@mui/material';
 import type { FamilyPresenceEntry } from '../../types/ws';
 import { deriveStatus } from '../../family/presence';
@@ -6,11 +6,10 @@ import { deriveStatus } from '../../family/presence';
 export interface PresenceTileProps {
   entry: FamilyPresenceEntry;
   now: Date;
-  // Wired in Task 7 (kiosk "I'm OK" tap-to-check-in). This task renders
-  // passively only — both props are accepted so callers can pass them
-  // ahead of time, but they're ignored until interactive is true.
+  // Kiosk "I'm OK" tap-to-check-in (Task 7). When interactive, the tile
+  // becomes a tap target that calls onImOk(entry) to open the confirm dialog.
   interactive?: boolean;
-  onImOk?: () => void;
+  onImOk?: (entry: FamilyPresenceEntry) => void;
 }
 
 // Status label/color mapping: missed_checkin takes priority over
@@ -24,13 +23,13 @@ function statusChip(entry: FamilyPresenceEntry, now: Date): { label: string; col
   return { label: 'No word', color: 'default' };
 }
 
-/** Passive presence tile for the kiosk display: avatar emoji, name, and a
- *  status chip. `interactive`/`onImOk` are accepted for forward-compat with
- *  Task 7's tap-to-check-in wiring but are ignored here. */
-export function PresenceTile({ entry, now }: PresenceTileProps) {
+/** Presence tile for the kiosk display: avatar emoji, name, and a status
+ *  chip. In interactive mode (Task 7's tap-to-wake window), the tile becomes
+ *  a tap target that opens the "Mark OK?" confirm dialog for this member. */
+export function PresenceTile({ entry, now, interactive, onImOk }: PresenceTileProps) {
   const chip = statusChip(entry, now);
 
-  return (
+  const card = (
     <Paper
       elevation={2}
       sx={{
@@ -51,5 +50,17 @@ export function PresenceTile({ entry, now }: PresenceTileProps) {
       </Typography>
       <Chip label={chip.label} color={chip.color} size="medium" />
     </Paper>
+  );
+
+  if (!interactive) return card;
+
+  return (
+    <ButtonBase
+      aria-label={entry.display_name}
+      onClick={() => onImOk?.(entry)}
+      sx={{ display: 'block', width: '100%', textAlign: 'inherit', borderRadius: 1 }}
+    >
+      {card}
+    </ButtonBase>
   );
 }

@@ -5,6 +5,7 @@ import type {
   FamilyPresenceEntry,
   NeighborhoodStateMsg,
   StoredStreamMsg,
+  DisplayAckMsg,
 } from '../types/ws';
 import type { ChatEntry } from '../components/ChatDisplay/ChatDisplay';
 
@@ -20,6 +21,14 @@ export interface DisplayAlert {
   ts: string;
 }
 
+// A display_ack, tagged with a monotonic seq so consumers can react to it
+// via useEffect even when the same action fires twice in a row (a plain
+// `{action}` object would look identical to React's dependency comparison).
+export interface DisplayAckEvent {
+  action: DisplayAckMsg['action'];
+  seq: number;
+}
+
 export interface UseDisplaySocketResult {
   connected: boolean;
   authFailed: boolean;
@@ -28,6 +37,7 @@ export interface UseDisplaySocketResult {
   neighborhood: NeighborhoodStateMsg | null;
   messages: ChatEntry[];
   alert: DisplayAlert | null;
+  lastAck: DisplayAckEvent | null;
   send: (msg: object) => void;
 }
 
@@ -96,8 +106,10 @@ export function useDisplaySocket(token: string | null): UseDisplaySocketResult {
   const [neighborhood, setNeighborhood] = useState<NeighborhoodStateMsg | null>(null);
   const [messages, setMessages] = useState<ChatEntry[]>([]);
   const [alert, setAlert] = useState<DisplayAlert | null>(null);
+  const [lastAck, setLastAck] = useState<DisplayAckEvent | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
+  const ackSeqRef = useRef(0);
   const backoffRef = useRef(MIN_BACKOFF_MS);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const unmountedRef = useRef(false);
@@ -132,6 +144,10 @@ export function useDisplaySocket(token: string | null): UseDisplaySocketResult {
         break;
       case 'neighborhood_alert':
         setAlert({ kind: 'street', message: msg.message, ts: msg.ts });
+        break;
+      case 'display_ack':
+        ackSeqRef.current += 1;
+        setLastAck({ action: msg.action, seq: ackSeqRef.current });
         break;
       default:
         break;
@@ -217,5 +233,5 @@ export function useDisplaySocket(token: string | null): UseDisplaySocketResult {
     }
   }, []);
 
-  return { connected, authFailed, status, presence, neighborhood, messages, alert, send };
+  return { connected, authFailed, status, presence, neighborhood, messages, alert, lastAck, send };
 }
