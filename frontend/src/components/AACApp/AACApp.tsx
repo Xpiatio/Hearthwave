@@ -29,6 +29,7 @@ import { SentenceStrip } from './SentenceStrip';
 import { IncomingStrip } from './IncomingStrip';
 import { ButtonGrid } from './ButtonGrid';
 import { ButtonEditorDialog } from './ButtonEditorDialog';
+import { ConfirmDialog } from '../ConfirmDialog';
 import { useSwitchScan } from '../../hooks/useSwitchScan';
 
 export interface AACAppProps {
@@ -342,34 +343,18 @@ export function AACApp({
         </DialogActions>
       </Dialog>
 
-      {/* Exit confirmation — the only path back to the normal UI */}
-      <Dialog open={exitConfirmOpen} onClose={() => setExitConfirmOpen(false)} fullWidth maxWidth="xs">
-        <DialogTitle>Exit AAC mode?</DialogTitle>
-        <DialogContent>
-          <Typography>This switches back to the standard Hearthwave screen.</Typography>
-        </DialogContent>
-        <DialogActions sx={{ flexDirection: 'column', gap: 1, p: 2 }}>
-          <Button
-            fullWidth
-            variant="contained"
-            onClick={() => {
-              setExitConfirmOpen(false);
-              onExitAac();
-            }}
-            sx={{ minHeight: 64, fontSize: '1.2rem' }}
-          >
-            ✅ Yes, exit
-          </Button>
-          <Button
-            fullWidth
-            variant="outlined"
-            onClick={() => setExitConfirmOpen(false)}
-            sx={{ minHeight: 64, fontSize: '1.2rem' }}
-          >
-            ↩️ No, stay here
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {/* Exit confirmation — only path back to normal UI */}
+      <ConfirmDialog
+        open={exitConfirmOpen}
+        title="Exit AAC mode?"
+        body="This switches back to the standard Hearthwave screen."
+        confirmLabel="Yes, exit"
+        cancelLabel="No, stay here"
+        switchScan={switchScan}
+        switchScanIntervalS={switchScanIntervalS}
+        onConfirm={onExitAac}
+        onClose={() => setExitConfirmOpen(false)}
+      />
     </Box>
   );
 }
