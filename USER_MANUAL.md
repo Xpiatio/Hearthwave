@@ -46,6 +46,7 @@ This manual covers day-to-day operation of Hearthwave as a GMRS family hub or ne
 30. [Family activity](#30-family-activity)
 31. [Neighborhood activity](#31-neighborhood-activity)
 32. [Wall display (kiosk)](#32-wall-display-kiosk)
+33. [Accessibility: switch scanning, visual alerts, and shortcuts](#33-accessibility-switch-scanning-visual-alerts-and-shortcuts)
 
 ---
 
@@ -1407,5 +1408,83 @@ The buttons on the wall display come from a **Household Quick Messages** list, c
 ### What a display can't do
 
 A wall display is a read-and-tap glance screen, not a client login. It has no access to Settings, cannot transmit outside its quick-message allowlist, and can't see user accounts or any other part of the app. A quick message shows up in chat under the display's own name (e.g. "Kitchen"). A Mark-OK is different: it proxies that household member's own check-in, so it posts under the member's name, not the display's.
+
+---
+
+## 33. Accessibility: switch scanning, visual alerts, and shortcuts
+
+This section covers four features that expand Hearthwave to people who use alternative input methods, depend on visual signaling, or prefer keyboard control: **switch scanning** (one-switch input), **visual alerts** (screen flashes for incoming messages), **keyboard shortcuts** (press **?** to see them), and **confirmation dialogs** (big buttons for important actions).
+
+### Switch scanning
+
+Switch scanning lets you control Hearthwave by pressing a single button — handy if you use an eye gaze, head-switch, button-based, or other adaptive input device.
+
+**How it works**
+
+As you navigate the app, available items light up one at a time: activity cards on the Home screen, message buttons in AAC mode, buttons in dialogs, etc. A colored outline (the "focus ring") shows which item is highlighted. You press your switch — typically the **Enter** or **Space** key — when the highlight reaches the item you want, and it activates.
+
+**Turning it on**
+
+1. Click your account chip → **Settings → Preferences**.
+2. Switch on **Switch Scanning** and pick a scan speed: **1 second**, **1.5 seconds**, **2 seconds**, or **3 seconds** (how long the highlight stays on each item before moving to the next).
+3. Click **Save**.
+4. Switch scanning is now active. The focus ring shows you where you are; press your switch to select.
+
+**What gets scanned**
+
+- **Home screen:** activity cards (Chat, Family, Neighborhood, Net Control) cycle one at a time.
+- **AAC Interface:** category tabs cycle, then word buttons within a category, then the SEND button.
+- **Confirmation dialogs:** the two large buttons (e.g., **Yes** and **No**, or **Confirm** and **Cancel**) cycle, so you can select which one to press.
+
+The focus ring also works throughout the rest of the app without scanning — you can always use **Tab** to move focus manually (see [Keyboard navigation](#keyboard-navigation) below).
+
+### Visual alerts
+
+Incoming messages and important events flash the screen edges in different colors, so you can notice them even if your volume is off or the tab is in the background.
+
+**Turning it on**
+
+1. Click your account chip → **Settings → Preferences**.
+2. Switch on **Visual Alerts (flash + vibrate)**.
+3. Click **Save**.
+
+**What the colors mean**
+
+| Flash color | What it is |
+|---|---|
+| **Blue** | A radio message arrived (RX) — someone transmitted. |
+| **Amber** | A weather alert or family check-in reminder is overdue. |
+| **Red** | A neighborhood street alert (urgent situation in your watch area). |
+
+If you're on a phone or tablet, the device also vibrates when an alert flashes.
+
+### Keyboard shortcuts
+
+The whole app is keyboard-operable: you can navigate, send messages, and run almost every command without using the mouse or touch screen.
+
+**Press `?` anywhere** to see an on-screen shortcut list and dismiss it the same way.
+
+| Key(s) | What it does |
+|---|---|
+| **?** | Show this shortcut list. |
+| **Escape** | Return to Home screen from the station console. |
+| **Tab** | Move focus to the next control in a dialog, quick-message row, or other form. Focus appears as a colored outline. |
+| **↑ ↓ ← →** | Move focus between activity cards on the Home screen or between AAC category tabs and buttons. |
+| **Enter** or **Space** | Activate the focused control — open a card, select an AAC button, press a dialog button, etc. |
+| **Hold Space** | Push-to-talk (hold to transmit voice via your browser microphone; see [section 19](#19-voice-ptt-browser-microphone)). |
+
+Combined with [Switch Scanning](#switch-scanning) (above), these keys let you use the whole app with just keyboard input.
+
+### Confirmation dialogs for destructive actions
+
+Some actions — like clearing the chat log, deleting an account, or ending a net — now show a confirmation dialog with two large buttons instead of asking a yes-or-no question in a small popup. The buttons are large and clearly labeled so you can confirm or cancel decisively, especially on touch screens where a small button is hard to hit.
+
+Examples include:
+
+- **Clear chat log** → asks "Delete all chat?" with **Clear** and **Cancel** buttons.
+- **Exit AAC Interface** → asks "Yes, exit" and a **Cancel** button (see [section 27](#27-aac-interface-symbol-button-communication)).
+- **Delete a contact** → asks "Delete {name}?" with **Delete** and **Cancel** buttons.
+
+These dialogs work with keyboard, mouse, touch, and switch scanning — focus the button you want and press **Enter** or **Space**, or click / tap / press your switch.
 
 ---
