@@ -10,6 +10,9 @@ import {
   FormControl,
   IconButton,
   InputLabel,
+  List,
+  ListItem,
+  ListItemText,
   MenuItem,
   Paper,
   Select,
@@ -24,9 +27,12 @@ import {
 } from '@mui/material';
 import type { SelectChangeEvent } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutlined';
 import DeleteIcon from '@mui/icons-material/Delete';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
 import type { UserProfile } from '../../types/ws';
+
+const MAX_PRESETS = 20;
 
 type Role = 'admin' | 'adult' | 'kid';
 
@@ -51,6 +57,7 @@ interface Props {
   onDeleteProfile: (userId: string) => void;
   onResetLockout: (userId: string) => void;
   onSetRole: (userId: string, role: Role) => void;
+  onSetUserQuickMessages: (userId: string, quickMessages: string[]) => void;
 }
 
 const EMOJI_OPTIONS = ['👤', '👨', '👩', '👦', '👧', '🧑', '👴', '👵', '🧔', '👮'];
@@ -62,6 +69,7 @@ export function UsersPanel({
   onDeleteProfile,
   onResetLockout,
   onSetRole,
+  onSetUserQuickMessages,
 }: Props) {
   const [createOpen, setCreateOpen] = useState(false);
   const [displayName, setDisplayName] = useState('');
@@ -73,6 +81,46 @@ export function UsersPanel({
   const [avatarEmoji, setAvatarEmoji] = useState('👤');
   const [role, setRole] = useState<Role>('adult');
   const [formError, setFormError] = useState('');
+
+  const [presetUser, setPresetUser] = useState<UserProfile | null>(null);
+  const [presetDraftList, setPresetDraftList] = useState<string[]>([]);
+  const [presetDraft, setPresetDraft] = useState('');
+
+  function openPresets(p: UserProfile) {
+    setPresetUser(p);
+    setPresetDraftList(p.prefs?.quick_messages ?? []);
+    setPresetDraft('');
+  }
+
+  function closePresets() {
+    setPresetUser(null);
+    setPresetDraftList([]);
+    setPresetDraft('');
+  }
+
+  function handleAddPreset() {
+    const trimmed = presetDraft.trim();
+    if (!trimmed || presetDraftList.length >= MAX_PRESETS) return;
+    setPresetDraftList((prev) => [...prev, trimmed]);
+    setPresetDraft('');
+  }
+
+  function handleRemovePreset(idx: number) {
+    setPresetDraftList((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function handleSavePresets() {
+    if (!presetUser) return;
+    onSetUserQuickMessages(presetUser.id, presetDraftList);
+    closePresets();
+  }
+
+  const presetIsKid = presetUser?.role === 'kid';
+  const presetHasBraces = presetDraftList.some((m) => m.includes('{') || m.includes('}'));
+  // The server requires at least one preset for every role (min 1), so an empty
+  // list is never savable — for a kid row this is also the safety-critical case
+  // (no presets = nothing to transmit), hence the more specific helper text below.
+  const presetSaveDisabled = presetDraftList.length === 0;
 
   function openCreate() {
     setDisplayName('');
@@ -156,6 +204,11 @@ export function UsersPanel({
                 </Tooltip>
               </TableCell>
               <TableCell align="right">
+                <Tooltip title={`Edit quick messages for ${p.display_name}`}>
+                  <IconButton size="small" aria-label={`Edit quick messages for ${p.display_name}`} onClick={() => openPresets(p)}>
+                    <ChatBubbleOutlineIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
                 <Tooltip title={`Reset lockout for ${p.display_name}`}>
                   <IconButton size="small" aria-label={`Reset lockout for ${p.display_name}`} onClick={() => onResetLockout(p.id)}>
                     <LockOpenIcon fontSize="small" />
@@ -267,6 +320,92 @@ export function UsersPanel({
         <DialogActions>
           <Button onClick={() => setCreateOpen(false)}>Cancel</Button>
           <Button variant="contained" onClick={handleCreate}>Create</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit quick-message presets dialog */}
+      <Dialog open={presetUser !== null} onClose={closePresets} fullWidth maxWidth="sm">
+        <DialogTitle>
+          {presetUser ? `Quick Messages — ${presetUser.display_name}` : 'Quick Messages'}
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              These are the presets shown on this account's Family activity quick-message row.
+              {presetIsKid && ' Kid accounts can only transmit these presets, and cannot use placeholders.'}
+            </Typography>
+
+            <List dense disablePadding>
+              {presetDraftList.map((m, i) => (
+                <ListItem
+                  key={i}
+                  disablePadding
+                  sx={{ gap: 0.5 }}
+                  secondaryAction={
+                    <IconButton
+                      size="small"
+                      color="error"
+                      aria-label={`Remove preset ${i + 1}`}
+                      onClick={() => handleRemovePreset(i)}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  }
+                >
+                  <ListItemText primary={m} slotProps={{ primary: { variant: 'body2' } }} sx={{ pr: 5 }} />
+                </ListItem>
+              ))}
+              {presetDraftList.length === 0 && (
+                <Typography variant="body2" sx={{ color: 'text.secondary', py: 1 }}>
+                  No presets yet.
+                </Typography>
+              )}
+            </List>
+
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <TextField
+                size="small"
+                fullWidth
+                label="Add preset"
+                value={presetDraft}
+                onChange={(e) => setPresetDraft(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddPreset())}
+                placeholder="New preset phrase…"
+                disabled={presetDraftList.length >= MAX_PRESETS}
+              />
+              <Button
+                variant="outlined"
+                onClick={handleAddPreset}
+                disabled={!presetDraft.trim() || presetDraftList.length >= MAX_PRESETS}
+              >
+                ADD
+              </Button>
+            </Box>
+
+            {presetDraftList.length >= MAX_PRESETS && (
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                Maximum of {MAX_PRESETS} presets.
+              </Typography>
+            )}
+
+            {presetIsKid && presetHasBraces && (
+              <Typography variant="caption" color="error">
+                Kid presets cannot contain placeholders ({'{'} or {'}'}).
+              </Typography>
+            )}
+
+            {presetIsKid && presetDraftList.length === 0 && (
+              <Typography variant="caption" color="error">
+                Kid accounts need at least one preset to transmit.
+              </Typography>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closePresets}>Cancel</Button>
+          <Button variant="contained" onClick={handleSavePresets} disabled={presetSaveDisabled}>
+            Save
+          </Button>
         </DialogActions>
       </Dialog>
     </Paper>

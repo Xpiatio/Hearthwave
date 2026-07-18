@@ -62,6 +62,7 @@ function makeDefaultProps() {
     onDeleteProfile: vi.fn(),
     onResetLockout: vi.fn(),
     onSetRole: vi.fn(),
+    onSetUserQuickMessages: vi.fn(),
   }
 }
 
@@ -454,6 +455,137 @@ describe('UsersPanel', () => {
 
     await user.type(screen.getByLabelText(/^password \*/i), 'extra')
     expect(screen.queryByText(/at least 8 characters/i)).not.toBeInTheDocument()
+  })
+
+  // -------------------------------------------------------------------------
+  // Quick-message preset editor
+  // -------------------------------------------------------------------------
+
+  it('opens the preset dialog prefilled with the profile\'s quick_messages', async () => {
+    const user = userEvent.setup()
+    const withPresets = makeProfile({
+      id: 'user-2',
+      display_name: 'Bob',
+      operator_name: 'Bob Jones',
+      callsign: 'W2BOB',
+      is_admin: false,
+      prefs: { ...USER_PROFILE.prefs, quick_messages: ['Standing by', 'QSL'] },
+    })
+    const props = { ...makeDefaultProps(), profiles: [ADMIN_PROFILE, withPresets] }
+    render(<UsersPanel {...props} />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit quick messages for Bob' }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText('Standing by')).toBeInTheDocument()
+    expect(within(dialog).getByText('QSL')).toBeInTheDocument()
+  })
+
+  it('opens the preset dialog with an empty list when the profile has no quick_messages', async () => {
+    const user = userEvent.setup()
+    render(<UsersPanel {...makeDefaultProps()} />)
+    await user.click(screen.getByRole('button', { name: 'Edit quick messages for Bob' }))
+    expect(screen.getByText('No presets yet.')).toBeInTheDocument()
+  })
+
+  it('calls onSetUserQuickMessages with the edited list when Save is clicked', async () => {
+    const user = userEvent.setup()
+    const withPresets = makeProfile({
+      id: 'user-2',
+      display_name: 'Bob',
+      is_admin: false,
+      prefs: { ...USER_PROFILE.prefs, quick_messages: ['Standing by'] },
+    })
+    const props = { ...makeDefaultProps(), profiles: [ADMIN_PROFILE, withPresets] }
+    render(<UsersPanel {...props} />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit quick messages for Bob' }))
+    await user.type(screen.getByLabelText(/add preset/i), 'QSY to channel {{N}')
+    await user.click(screen.getByRole('button', { name: /^add$/i }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(props.onSetUserQuickMessages).toHaveBeenCalledWith('user-2', ['Standing by', 'QSY to channel {N}'])
+  })
+
+  it('closes the preset dialog when Cancel is clicked', async () => {
+    const user = userEvent.setup()
+    render(<UsersPanel {...makeDefaultProps()} />)
+    await user.click(screen.getByRole('button', { name: 'Edit quick messages for Bob' }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^cancel$/i }))
+    await waitFor(() =>
+      expect(screen.queryByText('Quick Messages — Bob')).not.toBeInTheDocument()
+    )
+  })
+
+  it('disables Save and shows a helper message for a kid row with an empty preset list', async () => {
+    const user = userEvent.setup()
+    const kidProfile = makeProfile({
+      id: 'user-3',
+      display_name: 'Casey',
+      is_admin: false,
+      role: 'kid',
+      prefs: { ...USER_PROFILE.prefs, quick_messages: [] },
+    })
+    const props = { ...makeDefaultProps(), profiles: [ADMIN_PROFILE, kidProfile] }
+    render(<UsersPanel {...props} />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit quick messages for Casey' }))
+
+    expect(screen.getByText(/kid accounts need at least one preset to transmit/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
+  })
+
+  it('shows a placeholder hint for a kid row whose preset contains braces', async () => {
+    const user = userEvent.setup()
+    const kidProfile = makeProfile({
+      id: 'user-3',
+      display_name: 'Casey',
+      is_admin: false,
+      role: 'kid',
+      prefs: { ...USER_PROFILE.prefs, quick_messages: ['I am OK'] },
+    })
+    const props = { ...makeDefaultProps(), profiles: [ADMIN_PROFILE, kidProfile] }
+    render(<UsersPanel {...props} />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit quick messages for Casey' }))
+    await user.type(screen.getByLabelText(/add preset/i), 'QSY to channel {{N}')
+    await user.click(screen.getByRole('button', { name: /^add$/i }))
+
+    expect(screen.getByText(/kid presets cannot contain placeholders/i)).toBeInTheDocument()
+    // Save remains enabled — the client hint mirrors the server check but the
+    // server is the authority on rejecting the save.
+    expect(screen.getByRole('button', { name: /^save$/i })).not.toBeDisabled()
+  })
+
+  it('allows braces in a preset for an adult row without any hint', async () => {
+    const user = userEvent.setup()
+    render(<UsersPanel {...makeDefaultProps()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit quick messages for Bob' }))
+    await user.type(screen.getByLabelText(/add preset/i), 'QSY to channel {{N}')
+    await user.click(screen.getByRole('button', { name: /^add$/i }))
+
+    expect(screen.queryByText(/cannot contain placeholders/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^save$/i })).not.toBeDisabled()
+  })
+
+  it('removes a preset from the list when its delete icon is clicked', async () => {
+    const user = userEvent.setup()
+    const withPresets = makeProfile({
+      id: 'user-2',
+      display_name: 'Bob',
+      is_admin: false,
+      prefs: { ...USER_PROFILE.prefs, quick_messages: ['Standing by', 'QSL'] },
+    })
+    const props = { ...makeDefaultProps(), profiles: [ADMIN_PROFILE, withPresets] }
+    render(<UsersPanel {...props} />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit quick messages for Bob' }))
+    await user.click(screen.getByRole('button', { name: 'Remove preset 1' }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(props.onSetUserQuickMessages).toHaveBeenCalledWith('user-2', ['QSL'])
   })
 
   // -------------------------------------------------------------------------

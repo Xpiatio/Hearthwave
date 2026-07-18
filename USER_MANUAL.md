@@ -1278,6 +1278,8 @@ Every change saves immediately; there is no separate save step. Only one daily t
 
 #### Roles and Kid account presets
 
-Roles (**Admin** / **Adult** / **Kid**) are set from **Settings → Users**, described in [section 15](#15-admin--managing-users). A Kid account's quick-message preset list (the one described above) can be changed on the server, but as of this writing **there is no button in the Settings → Users screen to edit it** — a kid's presets come from the same migration/default described above. If you need a kid's presets customized, ask your system administrator.
+Roles (**Admin** / **Adult** / **Kid**) are set from **Settings → Users**, described in [section 15](#15-admin--managing-users). An admin can also edit any account's quick-message preset list (the one described above) from that same screen: click the **speech-bubble icon** next to a user's row to open the **Quick Messages** editor, add or remove phrases (up to 20, 1–200 characters each), and click **Save**.
+
+For a **Kid** account, the list can never be saved empty — a kid account needs at least one preset to have anything to transmit — and none of its presets may contain `{` or `}` (placeholders like `{Name}` are a Chat-quick-messages-bar feature only; the server rejects them here). Adult and Admin accounts have no placeholder restriction.
 
 ---

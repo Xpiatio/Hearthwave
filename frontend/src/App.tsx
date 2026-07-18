@@ -1500,6 +1500,7 @@ export default function App() {
             onDeleteProfile={(userId) => send({ type: 'delete_profile', user_id: userId })}
             onResetLockout={(userId) => send({ type: 'reset_lockout', user_id: userId })}
             onSetRole={sendSetRole}
+            onSetUserQuickMessages={sendSetUserQuickMessages}
           />
         )}
       />
