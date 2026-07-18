@@ -372,6 +372,7 @@ export function UsersPanel({
                 onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddPreset())}
                 placeholder="New preset phrase…"
                 disabled={presetDraftList.length >= MAX_PRESETS}
+                slotProps={{ htmlInput: { maxLength: 200 } }}
               />
               <Button
                 variant="outlined"

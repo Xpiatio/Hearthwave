@@ -600,7 +600,10 @@ describe('UsersPanel', () => {
   })
 
   it('has no axe violations', async () => {
+    const user = userEvent.setup()
     const { container } = render(<UsersPanel {...makeDefaultProps()} />)
+    expect(await axe(container)).toHaveNoViolations()
+    await user.click(screen.getByRole('button', { name: 'Edit quick messages for Bob' }))
     expect(await axe(container)).toHaveNoViolations()
   })
 })
