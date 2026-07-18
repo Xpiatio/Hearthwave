@@ -2336,10 +2336,12 @@ async def _check_listen_only(ws: WebSocket, state: "ConnectionState") -> bool:
 
 
 # Kid-role connections may only self-serve cosmetic prefs (+ AAC mode/grid,
-# so a kid can exit AAC mode and an adult can configure their grid) via
-# save_user_prefs; filter_profanity/ui_level/listen_only are server-enforced
-# (see _effective_prefs). Full kid+AAC send support is deferred (Phase 5).
-KID_ALLOWED_PREF_KEYS = {"dark_mode", "font_scale", "high_contrast", "aac_mode", "aac_grid", "switch_scan", "visual_alerts"}
+# so a kid can exit AAC mode and an adult can configure their grid), and
+# accessibility prefs (switch scanning, visual alerts) via save_user_prefs;
+# filter_profanity/ui_level/listen_only are server-enforced (see _effective_prefs).
+# Full kid+AAC send support is deferred (Phase 5).
+KID_ALLOWED_PREF_KEYS = {"dark_mode", "font_scale", "high_contrast", "aac_mode", "aac_grid",
+                         "switch_scan", "switch_scan_interval_s", "visual_alerts"}
 
 
 def _is_kid(state: "ConnectionState") -> bool:

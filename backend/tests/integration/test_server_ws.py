@@ -527,7 +527,7 @@ class TestSaveUserPrefsUiLevelAndA11y:
             "display_name": "Test Operator",
             "is_admin": False,
             "role": "kid",
-            "prefs": {"switch_scan": True, "visual_alerts": True},
+            "prefs": {"switch_scan": True, "visual_alerts": True, "switch_scan_interval_s": 2},
         }
         with (
             patch("backend.server.ServerConfig.load", return_value=cfg),
@@ -541,12 +541,47 @@ class TestSaveUserPrefsUiLevelAndA11y:
                 with tc.websocket_connect(WS_URL) as ws:
                     _drain_initial(ws)
                     ws.send_json({"type": "save_user_prefs",
-                                  "prefs": {"switch_scan": True, "visual_alerts": True, "listen_only": True}})
+                                  "prefs": {"switch_scan": True, "visual_alerts": True, "switch_scan_interval_s": 2, "listen_only": True}})
                     msg = _next_of_type(ws, "user_profile")
         assert msg is not None
         # listen_only NOT kid-allowed must be filtered out
         mock_users.update_prefs.assert_called_once_with(
-            "test-user", {"switch_scan": True, "visual_alerts": True},
+            "test-user", {"switch_scan": True, "visual_alerts": True, "switch_scan_interval_s": 2},
+        )
+
+    def test_kid_pref_bad_values_filtered(self, tmp_path):
+        """Bad-typed pref values (non-bool for bool prefs, invalid values)
+        must be filtered out before kid pref save."""
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks(is_admin=False, role="kid")
+        mock_users.update_prefs.return_value = {
+            "id": "test-user",
+            "display_name": "Test Operator",
+            "is_admin": False,
+            "role": "kid",
+            "prefs": {"dark_mode": True},  # only valid pref survives
+        }
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    # Send bad values: switch_scan_interval_s=True (bool), switch_scan="yes" (str), visual_alerts=1 (int)
+                    ws.send_json({"type": "save_user_prefs",
+                                  "prefs": {"dark_mode": True, "switch_scan_interval_s": True,
+                                           "switch_scan": "yes", "visual_alerts": 1}})
+                    msg = _next_of_type(ws, "user_profile")
+        assert msg is not None
+        # Bad-typed values filtered out, only dark_mode (valid) should be passed to update_prefs
+        mock_users.update_prefs.assert_called_once_with(
+            "test-user", {"dark_mode": True},
         )
 
 
