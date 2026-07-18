@@ -71,3 +71,14 @@ class FamilyStore:
             self._data[user_id] = {"time": time_hhmm, "enabled": bool(enabled)}
         self._save()
         return self.get_reminders()
+
+    def delete(self, user_id: str) -> dict:
+        """Remove *user_id*'s check-in reminder entirely, if any.
+
+        No-op (not an error) if the user has no reminder set. Used when a
+        profile is deleted, so a removed user doesn't leave an orphaned
+        reminder entry behind. Returns the full reminders dict post-delete.
+        """
+        self._data.pop(user_id, None)
+        self._save()
+        return self.get_reminders()

@@ -114,6 +114,34 @@ class TestSetMissed:
         assert store.all() == {}
 
 
+class TestRemove:
+    def test_removes_entry(self, store: PresenceStore):
+        store.touch_heard("alice", "2026-07-17T10:00:00+00:00")
+        store.remove("alice")
+        assert store.get("alice") == {
+            "last_heard": None, "last_ok": None, "missed_checkin": False,
+        }
+        assert "alice" not in store.all()
+
+    def test_unknown_user_is_noop(self, store: PresenceStore):
+        store.touch_heard("alice", "2026-07-17T10:00:00+00:00")
+        store.remove("nobody")
+        assert set(store.all()) == {"alice"}
+
+    def test_only_removes_target_user(self, store: PresenceStore):
+        store.touch_heard("alice", "2026-07-17T10:00:00+00:00")
+        store.touch_heard("bob", "2026-07-17T11:00:00+00:00")
+        store.remove("alice")
+        assert set(store.all()) == {"bob"}
+
+    def test_persists(self, store_path: Path):
+        s1 = PresenceStore(path=store_path)
+        s1.touch_heard("alice", "2026-07-17T10:00:00+00:00")
+        s1.remove("alice")
+        s2 = PresenceStore(path=store_path)
+        assert s2.all() == {}
+
+
 class TestAll:
     def test_returns_all_entries(self, store: PresenceStore):
         store.touch_heard("alice", "2026-07-17T10:00:00+00:00")

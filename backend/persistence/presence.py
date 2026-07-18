@@ -93,3 +93,13 @@ class PresenceStore:
         self._entry(user_id)["missed_checkin"] = missed
         self._save()
         return True
+
+    def remove(self, user_id: str) -> None:
+        """Remove *user_id*'s presence entry entirely, if any.
+
+        No-op (not an error) if the user has no entry. Used when a profile
+        is deleted, so a removed user doesn't leave a stale presence row on
+        the Family board.
+        """
+        self._data.pop(user_id, None)
+        self._save()

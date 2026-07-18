@@ -10,6 +10,7 @@ Running:
 """
 from __future__ import annotations
 
+import json
 import threading
 from contextlib import contextmanager
 from pathlib import Path
@@ -1836,6 +1837,13 @@ class TestRoleHandlers:
         mock_stt, mock_tts = _make_mocks()
         mock_users, mock_tokens = _make_auth_mocks()
         mock_users.set_role.return_value = {"id": "other", "role": "kid", "is_admin": False}
+        # Demoting "other" into kid clears their quick_messages (I2 fix) —
+        # give update_prefs a well-formed return so _sync_live_state_for_user
+        # (which re-derives effective_prefs from it) doesn't choke on a bare
+        # MagicMock.
+        mock_users.update_prefs.return_value = {
+            "id": "other", "role": "kid", "is_admin": False, "prefs": {"quick_messages": []},
+        }
         mock_users.get_public.return_value = [
             {"id": "test-user", "role": "admin", "is_admin": True},
             {"id": "other", "role": "kid", "is_admin": False},
@@ -2401,6 +2409,130 @@ class TestSetUserQuickMessages:
 
 
 # ---------------------------------------------------------------------------
+# I2: role/preset admin actions must reach an already-connected target's
+# *live* ConnectionState immediately — not only on their next reconnect.
+# ---------------------------------------------------------------------------
+
+@contextmanager
+def _two_user_server(tmp_path, *, target_id: str = "target-1",
+                      target_role: str = "adult", target_prefs: dict | None = None):
+    """Two distinct authenticated identities on one TestClient: an admin
+    (token "admin-token", user_id "test-user") and a second user (token
+    "target-token", user_id target_id) — so a test can hold both sockets
+    open at once and prove an admin action reaches the target's socket
+    without a reconnect."""
+    cfg = _minimal_cfg(tmp_path)
+    mock_stt, mock_tts = _make_mocks()
+    mock_users = MagicMock()
+    mock_users.is_empty.return_value = False
+    profiles = {
+        "test-user": {"id": "test-user", "display_name": "Admin", "is_admin": True,
+                       "role": "admin", "prefs": {}},
+        target_id: {"id": target_id, "display_name": "Target", "is_admin": False,
+                    "role": target_role, "prefs": dict(target_prefs or {})},
+    }
+    mock_users.get.side_effect = lambda uid: profiles.get(uid)
+    mock_users.get_public_one.side_effect = lambda uid: (
+        None if profiles.get(uid) is None
+        else {k: v for k, v in profiles[uid].items() if k != "prefs"}
+    )
+    mock_users.get_public.return_value = list(profiles.values())
+    mock_tokens = MagicMock()
+    mock_tokens.validate.side_effect = {
+        "admin-token": "test-user", "target-token": target_id,
+    }.get
+    mock_tokens.purge_expired.return_value = 0
+    with (
+        patch("backend.server.ServerConfig.load", return_value=cfg),
+        patch("backend.server.STTWorker", return_value=mock_stt),
+        patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+        patch("backend.server.UsersStore", return_value=mock_users),
+        patch("backend.server.TokenStore", return_value=mock_tokens),
+        patch("backend.auth_routes.init"),
+    ):
+        with TestClient(app) as tc:
+            yield tc, mock_users
+
+
+class TestLiveRoleAndPresetSync:
+    def test_demote_to_kid_gates_tx_on_the_open_socket(self, tmp_path):
+        target_id = "target-1"
+        with _two_user_server(tmp_path, target_id=target_id, target_role="adult") as (tc, mock_users):
+            mock_users.set_role.return_value = {"id": target_id, "role": "kid", "is_admin": False}
+            mock_users.update_prefs.return_value = {
+                "id": target_id, "role": "kid", "is_admin": False, "prefs": {"quick_messages": []},
+            }
+            with (
+                tc.websocket_connect("/ws?token=target-token") as ws_target,
+                tc.websocket_connect("/ws?token=admin-token") as ws_admin,
+            ):
+                _drain_initial(ws_target)
+                _drain_initial(ws_admin)
+
+                # Sanity: still an adult — free text transmits fine.
+                ws_target.send_json({"type": "tx_message", "callsign": "W5TST", "text": "arbitrary words"})
+                frames = _drain_until_idle(ws_target)
+                assert frames[0] == {"type": "tx_status", "status": "transmitting"}
+
+                # Admin demotes the target to kid.
+                ws_admin.send_json({"type": "set_role", "user_id": target_id, "role": "kid"})
+                assert _next_of_type(ws_admin, "profiles") is not None
+
+                # Same socket, no reconnect: free text is now rejected.
+                ws_target.send_json({"type": "tx_message", "callsign": "W5TST", "text": "arbitrary words"})
+                msg = _next_of_type(ws_target, "error")
+        assert msg is not None
+        assert "not allowed" in msg["detail"].lower()
+
+    def test_preset_edit_reaches_open_socket_and_notifies_target(self, tmp_path):
+        target_id = "kid-1"
+        with _two_user_server(
+            tmp_path, target_id=target_id, target_role="kid",
+            target_prefs={"quick_messages": ["Old preset"]},
+        ) as (tc, mock_users):
+            mock_users.update_prefs.return_value = {
+                "id": target_id, "role": "kid", "is_admin": False,
+                "prefs": {"quick_messages": ["New preset"]},
+            }
+            with (
+                tc.websocket_connect("/ws?token=target-token") as ws_target,
+                tc.websocket_connect("/ws?token=admin-token") as ws_admin,
+            ):
+                _drain_initial(ws_target)
+                _drain_initial(ws_admin)
+
+                # Sanity: the old preset transmits before the edit.
+                ws_target.send_json({"type": "tx_message", "callsign": "W5TST", "text": "Old preset"})
+                frames = _drain_until_idle(ws_target)
+                assert frames[0] == {"type": "tx_status", "status": "transmitting"}
+
+                # Admin replaces the target's preset list.
+                ws_admin.send_json({"type": "set_user_quick_messages", "user_id": target_id,
+                                     "quick_messages": ["New preset"]})
+                assert _next_of_type(ws_admin, "profiles") is not None
+
+                # Target's already-open socket gets the update pushed to it...
+                profile_msg = _next_of_type(ws_target, "user_profile")
+                assert profile_msg is not None
+                assert profile_msg["profile"]["prefs"]["quick_messages"] == ["New preset"]
+                # ...followed by the target's own copy of the final "profiles"
+                # broadcast (it's a connected client too) — drain it before
+                # moving on so it doesn't get mistaken for the next tx_status.
+                assert _next_of_type(ws_target, "profiles") is not None
+
+                # ...the new preset transmits, no reconnect required...
+                ws_target.send_json({"type": "tx_message", "callsign": "W5TST", "text": "New preset"})
+                frames = _drain_until_idle(ws_target)
+                assert frames[0] == {"type": "tx_status", "status": "transmitting"}
+
+                # ...and the removed preset is now rejected.
+                ws_target.send_json({"type": "tx_message", "callsign": "W5TST", "text": "Old preset"})
+                msg = _next_of_type(ws_target, "error")
+        assert msg is not None
+        assert "not allowed" in msg["detail"].lower()
+
+
+# ---------------------------------------------------------------------------
 # Kid TX allowlist gate — kids may only transmit an admin-curated preset
 # ---------------------------------------------------------------------------
 
@@ -2473,6 +2605,180 @@ class TestKidTxGate:
             ws.send_json({"type": "tx_message", "callsign": "W5TST", "text": "arbitrary words"})
             frames = _drain_until_idle(ws)
         assert frames[0] == {"type": "tx_status", "status": "transmitting"}
+
+
+# ---------------------------------------------------------------------------
+# C1: voice PTT — a kid must not be able to transmit arbitrary recorded
+# speech (only text presets are gated by TestKidTxGate above).
+# ---------------------------------------------------------------------------
+
+class TestKidVoiceTxGate:
+    def test_kid_voice_tx_start_rejected(self, kid_client):
+        with kid_client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "voice_tx_start", "callsign": "WRXB123"})
+            msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert "not allowed" in msg["detail"].lower()
+
+    def test_kid_voice_tx_end_rejected(self, kid_client):
+        """Belt-and-suspenders: even sent alone (no prior voice_tx_start),
+        voice_tx_end must reject a kid rather than fall through."""
+        with kid_client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "voice_tx_end"})
+            msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert "not allowed" in msg["detail"].lower()
+
+    def test_adult_voice_tx_start_unaffected(self, client):
+        """Sanity check: the kid gate must not affect non-kid roles."""
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "voice_tx_start", "callsign": "W5TST"})
+            msg = ws.receive_json()
+        assert msg == {"type": "voice_tx_ack"}
+
+
+# ---------------------------------------------------------------------------
+# I1a: standalone_id ("This is") speaks client-supplied operator/location on
+# air — must be gated like any other TX, not just listen-only.
+# ---------------------------------------------------------------------------
+
+class TestKidStandaloneIdGate:
+    def test_kid_standalone_id_rejected(self, kid_client):
+        with kid_client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "standalone_id", "operator": "Kid", "callsign": "WRXB123"})
+            msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert "not allowed" in msg["detail"].lower()
+
+    def test_adult_standalone_id_unaffected(self, client):
+        """Sanity check: the kid gate must not affect non-kid roles."""
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "standalone_id", "operator": "Test Op", "callsign": "W5TST"})
+            frames = _drain_until_idle(ws)
+        assert frames[0] == {"type": "tx_status", "status": "transmitting"}
+
+
+# ---------------------------------------------------------------------------
+# I5: set_listen_only ungated let a kid defeat the server-enforced
+# listen_only lock by simply flipping it back off themselves.
+# ---------------------------------------------------------------------------
+
+class TestKidListenOnlyGate:
+    def test_kid_set_listen_only_rejected(self, kid_client):
+        with kid_client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "set_listen_only", "listen_only": True})
+            msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert "adult" in msg["detail"].lower()
+
+    def test_adult_set_listen_only_unaffected(self, tmp_path):
+        """Sanity check: the kid gate must not affect non-kid roles."""
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()  # admin, id="test-user"
+        mock_users.update_prefs.return_value = {
+            "id": "test-user", "display_name": "Test Operator", "is_admin": True,
+            "role": "admin", "prefs": {"listen_only": True},
+        }
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "set_listen_only", "listen_only": True})
+                    msg = _next_of_type(ws, "user_profile")
+        assert msg is not None
+        assert msg["profile"]["prefs"]["listen_only"] is True
+
+
+# ---------------------------------------------------------------------------
+# I6: a kid could self-rename (display_name/operator_name/callsign) and then
+# use family_status ("I'm OK") — which speaks operator_name on air ungated —
+# to transmit arbitrary text under the new identity.
+# ---------------------------------------------------------------------------
+
+class TestKidProfileIdentityGate:
+    def test_kid_self_edit_of_identity_field_rejected(self, kid_client):
+        with kid_client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "update_profile", "operator_name": "New Name"})
+            msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert "ask an adult" in msg["detail"].lower()
+
+    def test_kid_self_edit_of_callsign_rejected(self, kid_client):
+        with kid_client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "update_profile", "callsign": "W1AW"})
+            msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert "ask an adult" in msg["detail"].lower()
+
+    def test_kid_self_edit_of_non_identity_field_allowed(self, tmp_path):
+        """Sanity check: the identity-field gate must not block a kid editing
+        their other own profile fields (e.g. avatar_emoji)."""
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks(is_admin=False, role="kid")
+        mock_users.update_profile.return_value = {
+            "id": "test-user", "display_name": "Test Operator", "avatar_emoji": "🐸",
+            "is_admin": False, "role": "kid", "prefs": {},
+        }
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "update_profile", "avatar_emoji": "🐸"})
+                    msg = _next_of_type(ws, "user_profile")
+        assert msg is not None
+
+    def test_admin_can_still_edit_a_kids_identity_fields(self, tmp_path):
+        """Sanity check: the gate only restricts a kid's SELF-edit — an admin
+        editing another user's (including a kid's) identity fields via the
+        admin path (target_id != state.user_id) must be unaffected."""
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()  # admin, id="test-user"
+        mock_users.update_profile.return_value = {
+            "id": "kid-1", "display_name": "Kid", "operator_name": "New Name",
+            "is_admin": False, "role": "kid", "prefs": {},
+        }
+        mock_users.get_public.return_value = []
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "update_profile", "user_id": "kid-1",
+                                  "operator_name": "New Name"})
+                    msg = _next_of_type(ws, "profiles")
+        assert msg is not None
+        mock_users.update_profile.assert_called_once_with("kid-1", {"operator_name": "New Name"})
 
 
 # ---------------------------------------------------------------------------
@@ -2634,6 +2940,45 @@ class TestFamilyStatus:
             "last_ok": None,
             "missed_checkin": False,
         }
+
+
+class TestFamilyStatusVoice:
+    """M4: family_status ("I'm OK") TTS must speak in the sender's own
+    configured voice, mirroring tx_message's voice resolution — not just
+    whatever the station default happens to be."""
+
+    def test_im_ok_uses_senders_voice_prefs(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        loaded: list[str] = []
+        captured: dict = {}
+
+        async def _capture_synth(_voice, text, *args, **kwargs):
+            captured["length_scale"] = kwargs.get("length_scale")
+            return None, None
+
+        mock_tts.synthesize_to_buffer = _capture_synth
+        mock_users, mock_tokens = _family_status_auth_mocks()
+        mock_users.get.return_value["prefs"] = {
+            "tts_voice": "grandpa.onnx", "tts_length_scale": 1.3,
+        }
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch("backend.server._load_voice",
+                  side_effect=lambda v: loaded.append(v) or MagicMock()),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "family_status", "status": "ok"})
+                    _drain_until_idle(ws)
+        assert "grandpa.onnx" in loaded
+        assert captured.get("length_scale") == 1.3
 
 
 class TestTxMessageTouchesPresence:
@@ -2845,3 +3190,41 @@ class TestFamilyReminders:
                     frames = _drain_initial(ws)
         reminder_frames = [f for f in frames if f["type"] == "family_reminders"]
         assert reminder_frames == []
+
+
+class TestDeleteProfileCleansUpFamilyData:
+    """M2: delete_profile must not orphan the deleted user's check-in
+    reminder or presence entry — both would otherwise linger forever on
+    the Family board for a user_id that no longer exists."""
+
+    def test_delete_profile_removes_reminder_and_presence(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        Path(cfg.family_file).write_text(
+            json.dumps({"other": {"time": "09:00", "enabled": True}}), encoding="utf-8"
+        )
+        Path(cfg.presence_file).write_text(
+            json.dumps({"other": {"last_heard": "2026-07-17T10:00:00+00:00",
+                                   "last_ok": None, "missed_checkin": False}}),
+            encoding="utf-8",
+        )
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _family_status_auth_mocks()  # admin, id="test-user"
+        mock_users.get_public.return_value = []
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "delete_profile", "user_id": "other"})
+                    reminders_msg = _next_of_type(ws, "family_reminders")
+                    presence_msg = _next_of_type(ws, "family_presence")
+        assert reminders_msg is not None
+        assert "other" not in reminders_msg["reminders"]
+        assert presence_msg is not None
+        assert all(e["user_id"] != "other" for e in presence_msg["entries"])

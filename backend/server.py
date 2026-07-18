@@ -298,6 +298,15 @@ class ConnectionManager:
     def get_state(self, ws: WebSocket) -> ConnectionState | None:
         return self._clients.get(ws)
 
+    def states_for_user(self, user_id: str) -> list["ConnectionState"]:
+        """Return the live ConnectionState for every socket belonging to user_id.
+
+        Lets an admin action (role change, profile edit, preset edit) update
+        an already-connected target's in-memory gates immediately, rather
+        than only on their next reconnect.
+        """
+        return [state for state in self._clients.values() if state.user_id == user_id]
+
     async def broadcast(self, msg: dict) -> None:
         """Send msg to every connected client. Silently drops dead sockets."""
         dead: list[WebSocket] = []
@@ -1328,6 +1337,25 @@ def _build_user_profile_msg(profile: dict) -> dict:
     return {"type": "user_profile", "profile": _safe_profile(profile)}
 
 
+def _sync_live_state_for_user(user_id: str, updated_profile: dict) -> None:
+    """Refresh every already-connected socket's in-memory ConnectionState to
+    match a just-persisted profile change (role, is_admin, prefs).
+
+    Without this, an admin's role change / profile edit / preset edit only
+    updates the store — the target's *live* connection (which is what
+    server-side gates like the kid TX allowlist and pref locks actually
+    check) stays stale until they reconnect. `prefs` is re-derived through
+    effective_prefs so a demotion to "kid" immediately re-applies the
+    server-enforced 3-key lock (filter_profanity/ui_level/listen_only).
+    """
+    new_role = updated_profile.get("role") or ("admin" if updated_profile.get("is_admin") else "adult")
+    new_prefs = _effective_prefs(updated_profile)
+    for live_state in _manager.states_for_user(user_id):
+        live_state.role = new_role
+        live_state.is_admin = bool(updated_profile.get("is_admin", False))
+        live_state.prefs = new_prefs
+
+
 async def _status_pump() -> None:
     """Broadcast live signal-quality status to all clients every 5 seconds."""
     while True:
@@ -2219,22 +2247,33 @@ async def _check_listen_only(ws: WebSocket, state: "ConnectionState") -> bool:
     return False
 
 
-# Kid-role connections may only self-serve cosmetic prefs via save_user_prefs;
-# filter_profanity/ui_level/listen_only are server-enforced (see _effective_prefs).
-KID_ALLOWED_PREF_KEYS = {"dark_mode", "font_scale", "high_contrast"}
+# Kid-role connections may only self-serve cosmetic prefs (+ AAC mode/grid,
+# so a kid can exit AAC mode and an adult can configure their grid) via
+# save_user_prefs; filter_profanity/ui_level/listen_only are server-enforced
+# (see _effective_prefs). Full kid+AAC send support is deferred (Phase 5).
+KID_ALLOWED_PREF_KEYS = {"dark_mode", "font_scale", "high_contrast", "aac_mode", "aac_grid"}
 
 
 def _is_kid(state: "ConnectionState") -> bool:
     return getattr(state, "role", "adult") == "kid"
 
 
-async def _enqueue_family_tts(text: str) -> None:
+async def _enqueue_family_tts(text: str, state: "ConnectionState") -> None:
     """Enqueue a pre-formatted family_status phrase for TTS/PTT.
 
     Mirrors the NCS spot-report/net-script enqueue idiom: operator-initiated
     (keys even over a busy channel), pre-formatted (no further TTS templating).
+    Also mirrors tx_message's voice resolution (state.prefs tts_voice/
+    tts_length_scale) so "I'm OK" speaks in the sender's own configured
+    voice rather than the station default.
     """
-    await _tx_queue.put({"text": text, "_pre_formatted": True, "_operator_initiated": True})
+    await _tx_queue.put({
+        "text": text,
+        "_pre_formatted": True,
+        "_operator_initiated": True,
+        "_voice_name": state.prefs.get("tts_voice") or None,
+        "_length_scale": state.prefs.get("tts_length_scale") or None,
+    })
 
 
 async def _broadcast_family_chat(text: str, display_name: str) -> None:
@@ -2457,7 +2496,7 @@ async def websocket_endpoint(
                 name = (profile_rec.get("operator_name") or profile_rec.get("display_name") or "Operator").strip()
                 text = f"Family status: {name} is okay."
                 if not state.prefs.get("listen_only", False):
-                    await _enqueue_family_tts(text)
+                    await _enqueue_family_tts(text, state)
                 await _broadcast_family_chat(text, profile_rec.get("display_name") or "")
                 if _presence_store is not None:
                     _presence_store.mark_ok(state.user_id, utc_now_iso())
@@ -2675,6 +2714,9 @@ async def websocket_endpoint(
 
             elif msg_type == "standalone_id":
                 # "This is" button — transmit a NATO-phonetic station ID.
+                if _is_kid(state):
+                    await _manager.send_to(ws, {"type": "error", "detail": "TX not allowed for this account"})
+                    continue
                 if await _check_listen_only(ws, state):
                     continue
                 await _manager.broadcast({"type": "tx_status", "status": "transmitting"})
@@ -2806,6 +2848,9 @@ async def websocket_endpoint(
                 await _manager.broadcast(_build_status())
 
             elif msg_type == "set_listen_only":
+                if _is_kid(state):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Listen-only is set by an adult for this account."})
+                    continue
                 listen_only = bool(data.get("listen_only", False))
                 state.prefs["listen_only"] = listen_only
                 if _users_store is not None:
@@ -3011,6 +3056,20 @@ async def websocket_endpoint(
                 if target_id != state.user_id and not state.is_admin:
                     await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
                     continue
+                # A kid editing their own profile may not touch identity fields
+                # that get spoken on-air (display_name feeds chat, operator_name
+                # is spoken by family_status "I'm OK", callsign is spoken on
+                # every TX) — that would let a kid transmit arbitrary text under
+                # a new name. Admins still edit kid profiles via the admin path
+                # above (target_id != state.user_id).
+                identity_fields = ("display_name", "operator_name", "callsign")
+                if (
+                    target_id == state.user_id
+                    and _is_kid(state)
+                    and any(f in data for f in identity_fields)
+                ):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Ask an adult to change your name."})
+                    continue
                 allowed = {"display_name", "avatar_emoji", "operator_name", "callsign", "location"}
                 if state.is_admin:
                     allowed.add("is_admin")
@@ -3024,6 +3083,9 @@ async def websocket_endpoint(
                     if new_password:
                         _users_store.change_password(target_id, str(new_password))
                         updated = _users_store.get(target_id)
+                    # update_profile can flip is_admin (which syncs role too) —
+                    # push that to the target's live connection(s) immediately.
+                    _sync_live_state_for_user(target_id, updated)
                     msg_out = _build_user_profile_msg(updated)
                     await _manager.broadcast_to_user(target_id, msg_out)
                     await _manager.broadcast({
@@ -3073,6 +3135,8 @@ async def websocket_endpoint(
                 if target_role_id == state.user_id and data.get("role") != "admin":
                     await _manager.send_to(ws, {"type": "error", "detail": "Cannot change your own role away from admin."})
                     continue
+                prior_profile = _users_store.get(target_role_id)
+                prior_role = prior_profile.get("role") if prior_profile else None
                 try:
                     updated = _users_store.set_role(target_role_id, data.get("role"))
                 except ValueError:
@@ -3080,6 +3144,17 @@ async def websocket_endpoint(
                 if updated is None:
                     await _manager.send_to(ws, {"type": "error", "detail": "Unknown user or role."})
                     continue
+                if updated.get("role") == "kid" and prior_role != "kid":
+                    # Newly demoted to kid: any quick_messages already on the
+                    # profile were self-set while adult (not admin-curated) —
+                    # clear them rather than let them silently become the
+                    # kid's approved on-air TX allowlist.
+                    try:
+                        updated = _users_store.update_prefs(target_role_id, {"quick_messages": []})
+                    except KeyError:
+                        pass
+                _sync_live_state_for_user(target_role_id, updated)
+                await _manager.broadcast_to_user(target_role_id, _build_user_profile_msg(updated))
                 await _manager.broadcast({
                     "type": "profiles",
                     "profiles": _users_store.get_public(),
@@ -3111,6 +3186,8 @@ async def websocket_endpoint(
                 if updated is None:
                     await _manager.send_to(ws, {"type": "error", "detail": "Unknown user."})
                     continue
+                _sync_live_state_for_user(target_user_id, updated)
+                await _manager.broadcast_to_user(target_user_id, _build_user_profile_msg(updated))
                 await _manager.broadcast({
                     "type": "profiles",
                     "profiles": _users_store.get_public(),
@@ -3128,6 +3205,15 @@ async def websocket_endpoint(
                     continue
                 try:
                     _users_store.delete(target_id)
+                    # Don't orphan a deleted user's check-in reminder or
+                    # presence row — they'd otherwise linger forever on the
+                    # Family board for a user_id that no longer exists.
+                    if _family_store is not None:
+                        _family_store.delete(target_id)
+                        await _manager.broadcast(_build_family_reminders_msg())
+                    if _presence_store is not None:
+                        _presence_store.remove(target_id)
+                        await _manager.broadcast(_build_family_presence_msg())
                     await _manager.broadcast({
                         "type": "profiles",
                         "profiles": _users_store.get_public(),
@@ -3163,6 +3249,9 @@ async def websocket_endpoint(
                     await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
 
             elif msg_type == "voice_tx_start":
+                if _is_kid(state):
+                    await _manager.send_to(ws, {"type": "error", "detail": "TX not allowed for this account"})
+                    continue
                 if await _check_listen_only(ws, state):
                     continue
                 callsign = (data.get("callsign") or "").strip()
@@ -3195,6 +3284,12 @@ async def websocket_endpoint(
                     await _manager.send_to(ws, {"type": "voice_tx_error", "detail": "Recording too long (120 s max)."})
 
             elif msg_type == "voice_tx_end":
+                if _is_kid(state):
+                    # Belt-and-suspenders: voice_tx_start already rejects kids,
+                    # so voice_tx_active can never be True for one — but reject
+                    # explicitly rather than relying on that invariant holding.
+                    await _manager.send_to(ws, {"type": "error", "detail": "TX not allowed for this account"})
+                    continue
                 if not state.voice_tx_active:
                     continue
                 chunks   = state.voice_tx_chunks

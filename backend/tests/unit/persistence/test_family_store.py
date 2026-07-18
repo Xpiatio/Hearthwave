@@ -66,3 +66,33 @@ def test_set_reminder_updates_existing(tmp_path):
     s.set_reminder("u1", "09:00", True)
     s.set_reminder("u1", "10:00", False)
     assert s.get_reminders() == {"u1": {"time": "10:00", "enabled": False}}
+
+
+def test_delete_removes_reminder(tmp_path):
+    s = FamilyStore(str(tmp_path / "family.json"))
+    s.set_reminder("u1", "09:00", True)
+    s.delete("u1")
+    assert s.get_reminders() == {}
+
+
+def test_delete_method_on_unknown_user_is_noop(tmp_path):
+    s = FamilyStore(str(tmp_path / "family.json"))
+    s.set_reminder("u1", "09:00", True)
+    s.delete("nobody")
+    assert s.get_reminders() == {"u1": {"time": "09:00", "enabled": True}}
+
+
+def test_delete_only_removes_target_user(tmp_path):
+    s = FamilyStore(str(tmp_path / "family.json"))
+    s.set_reminder("u1", "09:00", True)
+    s.set_reminder("u2", "21:00", True)
+    s.delete("u1")
+    assert s.get_reminders() == {"u2": {"time": "21:00", "enabled": True}}
+
+
+def test_delete_persists(tmp_path):
+    path = str(tmp_path / "family.json")
+    s = FamilyStore(path)
+    s.set_reminder("u1", "09:00", True)
+    s.delete("u1")
+    assert FamilyStore(path).get_reminders() == {}
