@@ -92,6 +92,7 @@ export function StatusRow({ status }: Props) {
           aria-label={tile.ariaLabel}
           sx={{
             flex: 1,
+            minWidth: 0,
             display: 'flex',
             alignItems: 'center',
             gap: 1,
@@ -105,7 +106,7 @@ export function StatusRow({ status }: Props) {
           <tile.Icon fontSize="small" color={iconColor[tile.state]} aria-hidden="true" />
           <Typography
             variant="body2"
-            sx={{ fontWeight: 600, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
+            sx={{ fontWeight: 600, overflowWrap: 'anywhere' }}
           >
             {tile.label}
           </Typography>
