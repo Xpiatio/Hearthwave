@@ -6,7 +6,7 @@ import type { UserProfile } from '../../../types/ws';
 
 const profile = {
   id: 'u1', display_name: 'Ann', avatar_emoji: '🙂', operator_name: 'Ann',
-  callsign: 'WABC123', location: 'Home', is_admin: false, prefs: {} as never,
+  callsign: 'WABC123', location: 'Home', is_admin: false, role: 'adult', prefs: {} as never,
 } as UserProfile;
 
 const base = {

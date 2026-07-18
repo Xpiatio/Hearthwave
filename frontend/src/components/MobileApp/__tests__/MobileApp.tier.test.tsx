@@ -38,6 +38,7 @@ const profile: UserProfile = {
   callsign: 'WRXB123',
   location: 'Test City',
   is_admin: true,
+  role: 'admin',
   created_at: '2026-01-01T00:00:00Z',
   prefs: {
     dark_mode: false,

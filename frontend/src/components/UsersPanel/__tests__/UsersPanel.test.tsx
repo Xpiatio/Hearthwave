@@ -13,6 +13,7 @@ function render(ui: React.ReactElement) {
 }
 
 function makeProfile(overrides: Partial<UserProfile> = {}): UserProfile {
+  const is_admin = overrides.is_admin ?? false
   return {
     id: 'user-1',
     display_name: 'Alice',
@@ -20,7 +21,8 @@ function makeProfile(overrides: Partial<UserProfile> = {}): UserProfile {
     operator_name: 'Alice Smith',
     callsign: 'W1AAA',
     location: 'Grand Rapids, MI',
-    is_admin: false,
+    is_admin,
+    role: is_admin ? 'admin' : 'adult',
     created_at: '2024-01-01T00:00:00Z',
     prefs: {
       dark_mode: false,
