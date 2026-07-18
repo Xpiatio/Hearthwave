@@ -54,6 +54,7 @@ import { MobileApp } from './components/MobileApp/MobileApp';
 import { AACApp } from './components/AACApp/AACApp';
 import { HomeScreen } from './components/HomeScreen/HomeScreen';
 import { FamilyPanel } from './components/FamilyPanel/FamilyPanel';
+import { NeighborhoodPanel } from './components/NeighborhoodPanel/NeighborhoodPanel';
 import { makeDefaultGrid, sanitizeAacGrid } from './components/AACApp/defaultGrid';
 import { SettingsDialog } from './components/SettingsDialog/SettingsDialog';
 import { CalibrationDialog } from './components/CalibrationDialog/CalibrationDialog';
@@ -1537,6 +1538,10 @@ export default function App() {
           ncsEnabled={isPluginEnabled(plugins, 'ncs')}
           unreadCount={unreadCount}
           familyEntries={familyPresence}
+          neighborhoodActive={neighborhoodState?.active ?? false}
+          netDay={neighborhoodState?.net_day ?? ''}
+          netTime={neighborhoodState?.net_time ?? ''}
+          neighborhoodAlerts={neighborhoodAlerts}
           isKid={isKid}
           onOpenActivity={handleOpenActivity}
           onOpenSettings={handleToggleSettings}
@@ -1552,6 +1557,28 @@ export default function App() {
           onImOk={sendImOk}
           onQuickMessage={(text) => handleSend(text, '', '')}
           onSetReminder={sendSetReminder}
+          onGoHome={handleGoHome}
+        />
+      ) : activity === 'neighborhood' ? (
+        <NeighborhoodPanel
+          roster={neighborhoodState?.roster ?? []}
+          netActive={neighborhoodState?.active ?? false}
+          currentCall={neighborhoodState?.current_call ?? null}
+          incidents={incidents}
+          alerts={neighborhoodAlerts}
+          netDay={neighborhoodState?.net_day ?? ''}
+          netTime={neighborhoodState?.net_time ?? ''}
+          isCoordinator={isCoordinator}
+          isKid={isKid}
+          myUserId={profile.id}
+          onCheckin={sendNeighborhoodCheckin}
+          onIncidentReport={({ category, description, location }) => sendIncidentReport(category, description, location)}
+          incidentError={incidentError}
+          onStreetAlert={sendStreetAlert}
+          onStartNet={sendNeighborhoodStart}
+          onEndNet={sendNeighborhoodEnd}
+          onCallNext={sendNeighborhoodCallNext}
+          onNewRound={sendNeighborhoodCallReset}
           onGoHome={handleGoHome}
         />
       ) : (
