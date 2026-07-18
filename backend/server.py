@@ -168,6 +168,7 @@ from backend.persistence.contacts import (
     ordered_callsigns,
 )
 from backend.persistence.audit import AuditLog
+from backend.persistence.device_tokens import DeviceTokenStore
 from backend.auth_ratelimit import _extract_ip, get_client_ip
 from backend.family.reminders import is_checkin_missed
 from backend.persistence.family import FamilyStore
@@ -218,6 +219,7 @@ _plugin_ctx = None
 _contacts_store: ContactsStore | None = None
 _users_store: UsersStore | None = None
 _token_store: TokenStore | None = None
+_device_token_store: DeviceTokenStore | None = None
 _presence_store: PresenceStore | None = None
 _family_store: FamilyStore | None = None
 _incidents_store: IncidentsStore | None = None
@@ -1560,7 +1562,7 @@ async def _voices_watcher_pump() -> None:
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     """Startup / shutdown wiring."""
-    global _config, _contacts_store, _users_store, _token_store, _presence_store, _family_store, _incidents_store, _neighborhood, _stt_worker, _synthesizer, _monitor, _plugin_ctx
+    global _config, _contacts_store, _users_store, _token_store, _device_token_store, _presence_store, _family_store, _incidents_store, _neighborhood, _stt_worker, _synthesizer, _monitor, _plugin_ctx
     global _stt_out_queue, _tx_queue, _tts_event_queue, _background_tasks, _tx_abort_event
     global _audio_level, _radio_error, _channel_clear, _last_id_time, _has_transmitted, _last_beacon_time, _ncs_plugin
     global _level_window, _attendance, _spectro, _monitor_chunk_cb
@@ -1596,6 +1598,7 @@ async def _lifespan(app: FastAPI):
 
     _users_store = UsersStore(_config.users_file)
     _token_store = TokenStore(_config.tokens_file)
+    _device_token_store = DeviceTokenStore()
     _presence_store = PresenceStore(_config.presence_file)
     _family_store = FamilyStore(_config.family_file)
     _incidents_store = IncidentsStore(_config.incidents_file)
@@ -2318,6 +2321,17 @@ def _is_kid(state: "ConnectionState") -> bool:
     return getattr(state, "role", "adult") == "kid"
 
 
+# Wall-display (kiosk) connections are a hard-scoped identity class: no login,
+# no admin surface, no TX — just a small allowlist of self-serve messages
+# (handlers land in Task 3/4). Everything else gets rejected before it can
+# reach plugin dispatch or the generic message handlers below.
+_DISPLAY_ALLOWED_MSGS = {"display_im_ok", "display_quick_message"}
+
+
+def _is_display(state: "ConnectionState") -> bool:
+    return state.role == "display"
+
+
 def _is_coordinator(state: "ConnectionState") -> bool:
     """True if this connection's live prefs mark it a neighborhood coordinator.
 
@@ -2391,75 +2405,112 @@ async def websocket_endpoint(
     ws: WebSocket,
     ticket: str | None = Query(default=None),
     token:  str | None = Query(default=None),
+    device_token: str | None = Query(default=None),
 ) -> None:
     global _stt_worker, _stt_listening
 
-    # Prefer a one-time ticket (keeps long-lived token out of access logs).
-    # Fall back to raw token for backward compatibility during rolling deploys.
-    if _token_store and ticket:
-        user_id = _token_store.validate_ticket(ticket)
-    elif _token_store and token:
-        user_id = _token_store.validate(token)
-    else:
-        user_id = None
+    # Device tokens (wall display) are a separate identity class: no user
+    # profile, hard-scoped message allowlist, role="display". Checked first
+    # so a device_token never falls through to the session-token auth block.
+    display_rec = None
+    if _device_token_store and device_token:
+        display_rec = _device_token_store.validate(device_token)
+        if not display_rec:
+            await ws.accept()
+            await ws.close(code=4001)
+            return
 
-    profile = _users_store.get(user_id) if (_users_store and user_id) else None
-    if not user_id or not profile:
-        await ws.accept()
-        await ws.close(code=4001)
-        return
+    if display_rec is None:
+        # Prefer a one-time ticket (keeps long-lived token out of access logs).
+        # Fall back to raw token for backward compatibility during rolling deploys.
+        if _token_store and ticket:
+            user_id = _token_store.validate_ticket(ticket)
+        elif _token_store and token:
+            user_id = _token_store.validate(token)
+        else:
+            user_id = None
+
+        profile = _users_store.get(user_id) if (_users_store and user_id) else None
+        if not user_id or not profile:
+            await ws.accept()
+            await ws.close(code=4001)
+            return
 
     await ws.accept()
-    role = profile.get("role") or ("admin" if profile.get("is_admin") else "adult")
-    # _effective_prefs applies all 4 kid pref locks (filter_profanity/ui_level/
-    # listen_only/neighborhood_coordinator) — the inline block this replaced
-    # only covered the first 3, so a kid connecting with a stale
-    # neighborhood_coordinator=True in stored prefs would pass _is_coordinator
-    # (which reads state.prefs) for the life of the connection.
-    conn_prefs = _effective_prefs(profile)
-    state = ConnectionState(
-        user_id=user_id,
-        is_admin=bool(profile.get("is_admin", False)),
-        prefs=conn_prefs,
-        role=role,
-    )
-    # Snapshot the stream backfill *before* registering the socket (no await in
-    # between, so no interleaving): anything broadcast after `add` reaches this
-    # client live only, anything before is in the snapshot only — never both.
-    history_msgs = _stream_history.render_for(state.prefs.get("filter_profanity", True))
-    _manager.add(ws, state)
     client_ip = _extract_ip(ws.headers, str(ws.client.host) if ws.client else "unknown")
-    _log.info("Client connected: %s (user=%s)", ws.client, user_id)
-    if _audit_log:
-        _audit_log.log("ws_connect", user_id=user_id, ip=client_ip)
 
-    # Send initial state to the newly connected client.
-    await _manager.send_to(ws, _build_status())
-    await _manager.send_to(ws, _build_user_profile_msg(profile))
-    if _contacts_store is not None:
-        await _manager.send_to(ws, {
-            "type": "contacts",
-            "contacts": _contacts_store.get_all(),
-        })
-    await _manager.send_to(ws, _build_attendance_payload())
-    await _manager.send_to(ws, _build_pending_payload())
-    await _manager.send_to(ws, _build_family_presence_msg())
-    if not _is_kid(state):
-        await _manager.send_to(ws, _build_family_reminders_msg())
-    await _manager.send_to(ws, _build_neighborhood_state_msg())
-    await _manager.send_to(ws, _build_neighborhood_incidents_msg())
-    await _manager.send_to(ws, {"type": "voices_list", "voices": _list_voices()})
-    # Backfill the shared message stream accumulated since the last clear
-    # (snapshotted above, before this socket joined the broadcast set).
-    await _manager.send_to(ws, {"type": "chat_history", "messages": history_msgs})
-    cached_online = is_online_cached()
-    if cached_online is not None:
-        await _manager.send_to(ws, {"type": "online_status", "online": cached_online})
+    if display_rec is not None:
+        state = ConnectionState(
+            user_id=f"display:{display_rec['id']}",
+            is_admin=False,
+            prefs=dict(DEFAULT_PREFS),
+            role="display",
+        )
+        # Always profanity-filtered — a wall display has no per-user pref.
+        history_msgs = _stream_history.render_for(True)
+        _manager.add(ws, state)
+        _log.info("Display connected: %s (%s)", ws.client, display_rec["label"])
+        if _audit_log:
+            _audit_log.log("display_connect", user_id=state.user_id, ip=client_ip)
+
+        await _manager.send_to(ws, _build_status())
+        await _manager.send_to(ws, _build_family_presence_msg())
+        await _manager.send_to(ws, _build_neighborhood_state_msg())
+        await _manager.send_to(ws, {"type": "chat_history", "messages": history_msgs})
+    else:
+        role = profile.get("role") or ("admin" if profile.get("is_admin") else "adult")
+        # _effective_prefs applies all 4 kid pref locks (filter_profanity/ui_level/
+        # listen_only/neighborhood_coordinator) — the inline block this replaced
+        # only covered the first 3, so a kid connecting with a stale
+        # neighborhood_coordinator=True in stored prefs would pass _is_coordinator
+        # (which reads state.prefs) for the life of the connection.
+        conn_prefs = _effective_prefs(profile)
+        state = ConnectionState(
+            user_id=user_id,
+            is_admin=bool(profile.get("is_admin", False)),
+            prefs=conn_prefs,
+            role=role,
+        )
+        # Snapshot the stream backfill *before* registering the socket (no await in
+        # between, so no interleaving): anything broadcast after `add` reaches this
+        # client live only, anything before is in the snapshot only — never both.
+        history_msgs = _stream_history.render_for(state.prefs.get("filter_profanity", True))
+        _manager.add(ws, state)
+        _log.info("Client connected: %s (user=%s)", ws.client, user_id)
+        if _audit_log:
+            _audit_log.log("ws_connect", user_id=user_id, ip=client_ip)
+
+        # Send initial state to the newly connected client.
+        await _manager.send_to(ws, _build_status())
+        await _manager.send_to(ws, _build_user_profile_msg(profile))
+        if _contacts_store is not None:
+            await _manager.send_to(ws, {
+                "type": "contacts",
+                "contacts": _contacts_store.get_all(),
+            })
+        await _manager.send_to(ws, _build_attendance_payload())
+        await _manager.send_to(ws, _build_pending_payload())
+        await _manager.send_to(ws, _build_family_presence_msg())
+        if not _is_kid(state):
+            await _manager.send_to(ws, _build_family_reminders_msg())
+        await _manager.send_to(ws, _build_neighborhood_state_msg())
+        await _manager.send_to(ws, _build_neighborhood_incidents_msg())
+        await _manager.send_to(ws, {"type": "voices_list", "voices": _list_voices()})
+        # Backfill the shared message stream accumulated since the last clear
+        # (snapshotted above, before this socket joined the broadcast set).
+        await _manager.send_to(ws, {"type": "chat_history", "messages": history_msgs})
+        cached_online = is_online_cached()
+        if cached_online is not None:
+            await _manager.send_to(ws, {"type": "online_status", "online": cached_online})
 
     try:
         while True:
             data: Any = await ws.receive_json()
             msg_type = data.get("type")
+
+            if _is_display(state) and msg_type not in _DISPLAY_ALLOWED_MSGS:
+                await _manager.send_to(ws, {"type": "error", "detail": "Not available on wall display"})
+                continue
 
             asyncio.create_task(
                 plugin_registry.dispatch_client_message(
@@ -3678,4 +3729,4 @@ async def websocket_endpoint(
     finally:
         _manager.remove(ws)
         if _audit_log:
-            _audit_log.log("ws_disconnect", user_id=user_id, ip=client_ip)
+            _audit_log.log("ws_disconnect", user_id=state.user_id, ip=client_ip)
