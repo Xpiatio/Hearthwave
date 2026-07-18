@@ -15,6 +15,7 @@ import type { SpectrogramHandle } from '../Spectrogram/Spectrogram';
 import { AudioLevelMeter } from '../AudioLevelMeter/AudioLevelMeter';
 import type { AudioLevelMeterHandle } from '../AudioLevelMeter/AudioLevelMeter';
 import { QuickMessages } from '../QuickMessages/QuickMessages';
+import { PresetComposer } from '../FamilyPanel/PresetComposer';
 import { ContactsDialog } from '../ContactsDialog/ContactsDialog';
 import { PendingStationsBar } from '../PendingStationsBar/PendingStationsBar';
 import type { TxComposition } from '../../plugins';
@@ -42,6 +43,10 @@ export interface DesktopAppProps {
   /** Returns to the HomeScreen shell. Renders a Home button (and Escape
    *  listener) when provided; the desktop-only home routing lives in App.tsx. */
   onGoHome?: () => void;
+  /** Kid accounts: no Settings entry point, and the free-text composer is
+   *  replaced by a PresetComposer built from quickMessages. */
+  isKid: boolean;
+  quickMessages: string[];
 
   // Core data
   messages: ChatEntry[];
@@ -179,6 +184,8 @@ export function DesktopApp({
   showCallsignChips,
   uiLevel,
   onGoHome,
+  isKid,
+  quickMessages,
   messages,
   contacts,
   radioStatus,
@@ -336,6 +343,7 @@ export function DesktopApp({
         onVoicePttEnd={onVoicePttEnd}
         onVoicePttCancel={onVoicePttCancel}
         onTxAbort={onTxAbort}
+        isKid={isKid}
       />
 
       {showNcs && ncsEnabled && isOperatorTier && (
@@ -369,14 +377,18 @@ export function DesktopApp({
 
       <StatusRow status={radioStatus} />
 
-      {!listenOnly && (
+      {!listenOnly && isKid && (
+        <PresetComposer quickMessages={quickMessages} onSend={onSend} />
+      )}
+
+      {!listenOnly && !isKid && (
         <QuickMessages
           operatorName={profile.operator_name}
           onSelect={(text) => messageInputRef.current?.setText(text)}
         />
       )}
 
-      {!listenOnly && (
+      {!listenOnly && !isKid && (
         <MessageInput
           ref={messageInputRef}
           transmitting={transmitting}

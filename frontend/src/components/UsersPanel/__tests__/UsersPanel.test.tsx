@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { ThemeProvider } from '@mui/material/styles'
 import { makeTheme } from '../../../theme'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { axe } from 'jest-axe'
 import { UsersPanel } from '../UsersPanel'
 import type { UserProfile } from '../../../types/ws'
 
@@ -13,6 +14,7 @@ function render(ui: React.ReactElement) {
 }
 
 function makeProfile(overrides: Partial<UserProfile> = {}): UserProfile {
+  const is_admin = overrides.is_admin ?? false
   return {
     id: 'user-1',
     display_name: 'Alice',
@@ -20,7 +22,8 @@ function makeProfile(overrides: Partial<UserProfile> = {}): UserProfile {
     operator_name: 'Alice Smith',
     callsign: 'W1AAA',
     location: 'Grand Rapids, MI',
-    is_admin: false,
+    is_admin,
+    role: is_admin ? 'admin' : 'adult',
     created_at: '2024-01-01T00:00:00Z',
     prefs: {
       dark_mode: false,
@@ -58,6 +61,8 @@ function makeDefaultProps() {
     onCreateProfile: vi.fn(),
     onDeleteProfile: vi.fn(),
     onResetLockout: vi.fn(),
+    onSetRole: vi.fn(),
+    onSetUserQuickMessages: vi.fn(),
   }
 }
 
@@ -102,17 +107,30 @@ describe('UsersPanel', () => {
     expect(screen.getByText('W2BOB')).toBeInTheDocument()
   })
 
-  it('renders Admin chip for admin profiles', () => {
+  it('renders a role Select for each profile showing its current role', () => {
     render(<UsersPanel {...makeDefaultProps()} />)
-    // ADMIN_PROFILE has is_admin=true, so a Chip with label "Admin" is rendered.
-    // The display_name is also "Admin", so "Admin" appears in at least two nodes.
-    const adminTexts = screen.getAllByText('Admin')
-    expect(adminTexts.length).toBeGreaterThanOrEqual(2)
-    // Verify a MUI Chip span carries the "Admin" label
-    const chipLabel = adminTexts.find(
-      (el) => el.tagName === 'SPAN' && el.className.includes('Chip')
-    )
-    expect(chipLabel).toBeTruthy()
+    // ADMIN_PROFILE (id admin-1) is an admin, USER_PROFILE (id user-2) is an adult.
+    expect(screen.getByRole('combobox', { name: 'Role for Admin' })).toHaveTextContent('Admin')
+    expect(screen.getByRole('combobox', { name: 'Role for Bob' })).toHaveTextContent('Adult')
+  })
+
+  it('disables the role Select for the current user’s own row', () => {
+    // currentUserId defaults to 'admin-1' — its own row's Select must be disabled
+    // so the client mirrors the server's self-demotion rejection.
+    render(<UsersPanel {...makeDefaultProps()} />)
+    expect(screen.getByRole('combobox', { name: 'Role for Admin' })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('combobox', { name: 'Role for Bob' })).not.toHaveAttribute('aria-disabled', 'true')
+  })
+
+  it('calls onSetRole with the new role when another user’s role Select is changed', async () => {
+    const user = userEvent.setup()
+    const props = makeDefaultProps()
+    render(<UsersPanel {...props} />)
+
+    await user.click(screen.getByRole('combobox', { name: 'Role for Bob' }))
+    await user.click(await screen.findByRole('option', { name: 'Kid' }))
+
+    expect(props.onSetRole).toHaveBeenCalledWith('user-2', 'kid')
   })
 
   it('renders em-dash for profiles without a callsign', () => {
@@ -249,8 +267,8 @@ describe('UsersPanel', () => {
     // Password fields
     expect(within(dialog).getByLabelText(/^password \*/i)).toBeInTheDocument()
     expect(within(dialog).getByLabelText(/confirm password/i)).toBeInTheDocument()
-    // Admin checkbox
-    expect(within(dialog).getByLabelText(/admin/i)).toBeInTheDocument()
+    // Role select, defaulting to Adult
+    expect(within(dialog).getByRole('combobox', { name: /^role$/i })).toHaveTextContent('Adult')
   })
 
   it('renders emoji avatar picker in the create dialog', async () => {
@@ -324,7 +342,7 @@ describe('UsersPanel', () => {
       operator_name: 'Charlie Brown',
       callsign: 'W3CCC', // uppercased
       location: 'Detroit, MI',
-      is_admin: false,
+      role: 'adult',
     })
   }, 20000)
 
@@ -361,7 +379,7 @@ describe('UsersPanel', () => {
     )
   }, 15000)
 
-  it('creates an admin user when the Admin checkbox is checked', async () => {
+  it('creates an admin user when the Role select is changed to Admin', async () => {
     const user = userEvent.setup()
     const props = makeDefaultProps()
     render(<UsersPanel {...props} />)
@@ -370,11 +388,12 @@ describe('UsersPanel', () => {
     await user.type(screen.getByLabelText(/display name/i), 'Frank')
     await user.type(screen.getByLabelText(/^password \*/i), 'password123')
     await user.type(screen.getByLabelText(/confirm password/i), 'password123')
-    await user.click(within(screen.getByRole('dialog')).getByLabelText(/admin/i))
+    await user.click(within(screen.getByRole('dialog')).getByRole('combobox', { name: /^role$/i }))
+    await user.click(await screen.findByRole('option', { name: 'Admin' }))
     await user.click(screen.getByRole('button', { name: /^create$/i }))
 
     expect(props.onCreateProfile).toHaveBeenCalledWith(
-      expect.objectContaining({ is_admin: true })
+      expect.objectContaining({ role: 'admin' })
     )
   }, 15000)
 
@@ -439,6 +458,137 @@ describe('UsersPanel', () => {
   })
 
   // -------------------------------------------------------------------------
+  // Quick-message preset editor
+  // -------------------------------------------------------------------------
+
+  it('opens the preset dialog prefilled with the profile\'s quick_messages', async () => {
+    const user = userEvent.setup()
+    const withPresets = makeProfile({
+      id: 'user-2',
+      display_name: 'Bob',
+      operator_name: 'Bob Jones',
+      callsign: 'W2BOB',
+      is_admin: false,
+      prefs: { ...USER_PROFILE.prefs, quick_messages: ['Standing by', 'QSL'] },
+    })
+    const props = { ...makeDefaultProps(), profiles: [ADMIN_PROFILE, withPresets] }
+    render(<UsersPanel {...props} />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit quick messages for Bob' }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText('Standing by')).toBeInTheDocument()
+    expect(within(dialog).getByText('QSL')).toBeInTheDocument()
+  })
+
+  it('opens the preset dialog with an empty list when the profile has no quick_messages', async () => {
+    const user = userEvent.setup()
+    render(<UsersPanel {...makeDefaultProps()} />)
+    await user.click(screen.getByRole('button', { name: 'Edit quick messages for Bob' }))
+    expect(screen.getByText('No presets yet.')).toBeInTheDocument()
+  })
+
+  it('calls onSetUserQuickMessages with the edited list when Save is clicked', async () => {
+    const user = userEvent.setup()
+    const withPresets = makeProfile({
+      id: 'user-2',
+      display_name: 'Bob',
+      is_admin: false,
+      prefs: { ...USER_PROFILE.prefs, quick_messages: ['Standing by'] },
+    })
+    const props = { ...makeDefaultProps(), profiles: [ADMIN_PROFILE, withPresets] }
+    render(<UsersPanel {...props} />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit quick messages for Bob' }))
+    await user.type(screen.getByLabelText(/add preset/i), 'QSY to channel {{N}')
+    await user.click(screen.getByRole('button', { name: /^add$/i }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(props.onSetUserQuickMessages).toHaveBeenCalledWith('user-2', ['Standing by', 'QSY to channel {N}'])
+  })
+
+  it('closes the preset dialog when Cancel is clicked', async () => {
+    const user = userEvent.setup()
+    render(<UsersPanel {...makeDefaultProps()} />)
+    await user.click(screen.getByRole('button', { name: 'Edit quick messages for Bob' }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^cancel$/i }))
+    await waitFor(() =>
+      expect(screen.queryByText('Quick Messages — Bob')).not.toBeInTheDocument()
+    )
+  })
+
+  it('disables Save and shows a helper message for a kid row with an empty preset list', async () => {
+    const user = userEvent.setup()
+    const kidProfile = makeProfile({
+      id: 'user-3',
+      display_name: 'Casey',
+      is_admin: false,
+      role: 'kid',
+      prefs: { ...USER_PROFILE.prefs, quick_messages: [] },
+    })
+    const props = { ...makeDefaultProps(), profiles: [ADMIN_PROFILE, kidProfile] }
+    render(<UsersPanel {...props} />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit quick messages for Casey' }))
+
+    expect(screen.getByText(/kid accounts need at least one preset to transmit/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
+  })
+
+  it('shows a placeholder hint for a kid row whose preset contains braces', async () => {
+    const user = userEvent.setup()
+    const kidProfile = makeProfile({
+      id: 'user-3',
+      display_name: 'Casey',
+      is_admin: false,
+      role: 'kid',
+      prefs: { ...USER_PROFILE.prefs, quick_messages: ['I am OK'] },
+    })
+    const props = { ...makeDefaultProps(), profiles: [ADMIN_PROFILE, kidProfile] }
+    render(<UsersPanel {...props} />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit quick messages for Casey' }))
+    await user.type(screen.getByLabelText(/add preset/i), 'QSY to channel {{N}')
+    await user.click(screen.getByRole('button', { name: /^add$/i }))
+
+    expect(screen.getByText(/kid presets cannot contain placeholders/i)).toBeInTheDocument()
+    // Save remains enabled — the client hint mirrors the server check but the
+    // server is the authority on rejecting the save.
+    expect(screen.getByRole('button', { name: /^save$/i })).not.toBeDisabled()
+  })
+
+  it('allows braces in a preset for an adult row without any hint', async () => {
+    const user = userEvent.setup()
+    render(<UsersPanel {...makeDefaultProps()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit quick messages for Bob' }))
+    await user.type(screen.getByLabelText(/add preset/i), 'QSY to channel {{N}')
+    await user.click(screen.getByRole('button', { name: /^add$/i }))
+
+    expect(screen.queryByText(/cannot contain placeholders/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^save$/i })).not.toBeDisabled()
+  })
+
+  it('removes a preset from the list when its delete icon is clicked', async () => {
+    const user = userEvent.setup()
+    const withPresets = makeProfile({
+      id: 'user-2',
+      display_name: 'Bob',
+      is_admin: false,
+      prefs: { ...USER_PROFILE.prefs, quick_messages: ['Standing by', 'QSL'] },
+    })
+    const props = { ...makeDefaultProps(), profiles: [ADMIN_PROFILE, withPresets] }
+    render(<UsersPanel {...props} />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit quick messages for Bob' }))
+    await user.click(screen.getByRole('button', { name: 'Remove preset 1' }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(props.onSetUserQuickMessages).toHaveBeenCalledWith('user-2', ['QSL'])
+  })
+
+  // -------------------------------------------------------------------------
   // Empty profiles list
   // -------------------------------------------------------------------------
 
@@ -447,5 +597,13 @@ describe('UsersPanel', () => {
     // Table should still render but have no data rows (only header row)
     const rows = screen.getAllByRole('row')
     expect(rows).toHaveLength(1) // header only
+  })
+
+  it('has no axe violations', async () => {
+    const user = userEvent.setup()
+    const { container } = render(<UsersPanel {...makeDefaultProps()} />)
+    expect(await axe(container)).toHaveNoViolations()
+    await user.click(screen.getByRole('button', { name: 'Edit quick messages for Bob' }))
+    expect(await axe(container)).toHaveNoViolations()
   })
 })

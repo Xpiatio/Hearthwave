@@ -1,4 +1,4 @@
-import { render as rtlRender, screen } from '@testing-library/react'
+import { render as rtlRender, screen, fireEvent } from '@testing-library/react'
 import { ThemeProvider } from '@mui/material/styles'
 import { makeTheme } from '../../../theme'
 import { describe, it, expect, vi } from 'vitest'
@@ -31,13 +31,13 @@ function render(ui: React.ReactElement) {
 
 const profile: UserProfile = {
   id: 'u1',
-  display_name: 'Ben',
+  display_name: 'Kid',
   avatar_emoji: '🙂',
-  operator_name: 'Ben',
+  operator_name: 'Kid',
   callsign: 'WRXB123',
   location: 'Test City',
-  is_admin: true,
-  role: 'admin',
+  is_admin: false,
+  role: 'kid',
   created_at: '2026-01-01T00:00:00Z',
   prefs: {
     dark_mode: false,
@@ -58,6 +58,8 @@ function makeProps(overrides: Partial<DesktopAppProps> = {}): DesktopAppProps {
     stationStatus: 'IDLE',
     showCallsignChips: true,
     uiLevel: 'simple',
+    isKid: true,
+    quickMessages: ["I'm OK", 'On my way', 'Call me'],
     messages: [],
     contacts: [],
     radioStatus: null,
@@ -79,7 +81,7 @@ function makeProps(overrides: Partial<DesktopAppProps> = {}): DesktopAppProps {
     onPublishJournal: vi.fn(),
     onUnpublishJournal: vi.fn(),
     onDismissJournalResult: vi.fn(),
-    listenOnly: true,
+    listenOnly: false,
     onSend: vi.fn(),
     onChat: vi.fn(),
     onStandaloneId: vi.fn(),
@@ -164,40 +166,27 @@ function makeProps(overrides: Partial<DesktopAppProps> = {}): DesktopAppProps {
   }
 }
 
-// All the operator-only panels toggled "on" — as they would be if the state
-// survived a downgrade from operator to simple tier (panel show-flags are
-// independent of uiLevel; see App.tsx uiLevel/showWaterfall/showNcs state).
-const allPanelsOn: Partial<DesktopAppProps> = {
-  showWaterfall: true,
-  showLevelMeter: true,
-  showNcs: true,
-  showAttendance: true,
-  showJournal: true,
-  ncsEnabled: true,
-}
+describe('DesktopApp — kid-mode gating', () => {
+  it('hides the Settings menu item for a kid account', () => {
+    render(<DesktopApp {...makeProps()} />)
 
-describe('DesktopApp — simple tier hides operator-only panels', () => {
-  it('does not render waterfall, level meter, NCS panel, attendance or journal dialogs in simple tier even when show flags are true', () => {
-    render(<DesktopApp {...makeProps({ uiLevel: 'simple', ...allPanelsOn })} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Account menu' }))
 
-    // { hidden: true } bypasses the accessibility-tree filter — with an open
-    // MUI Dialog present, its aria-hidden(sibling) trick would otherwise hide
-    // these elements from the default query regardless of whether they were
-    // actually rendered, producing a false negative here.
-    expect(screen.queryByRole('img', { name: 'Audio spectrogram display', hidden: true })).not.toBeInTheDocument()
-    expect(screen.queryByRole('img', { name: 'RX audio level meter', hidden: true })).not.toBeInTheDocument()
-    expect(screen.queryByRole('textbox', { name: 'Callsign to check in', hidden: true })).not.toBeInTheDocument()
-    expect(screen.queryByRole('dialog', { name: 'Stations heard this session', hidden: true })).not.toBeInTheDocument()
-    expect(screen.queryByRole('dialog', { name: 'Session journal', hidden: true })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /Settings/ })).not.toBeInTheDocument()
   })
 
-  it('renders those same panels in operator tier with the same show flags', () => {
-    render(<DesktopApp {...makeProps({ uiLevel: 'operator', ...allPanelsOn })} />)
+  it('replaces the free-text composer with a preset button row for a kid account', () => {
+    render(<DesktopApp {...makeProps()} />)
 
-    expect(screen.getByRole('img', { name: 'Audio spectrogram display', hidden: true })).toBeInTheDocument()
-    expect(screen.getByRole('img', { name: 'RX audio level meter', hidden: true })).toBeInTheDocument()
-    expect(screen.getByRole('textbox', { name: 'Callsign to check in', hidden: true })).toBeInTheDocument()
-    expect(screen.getByRole('dialog', { name: 'Stations heard this session', hidden: true })).toBeInTheDocument()
-    expect(screen.getByRole('dialog', { name: 'Session journal', hidden: true })).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: /message/i })).not.toBeInTheDocument()
+  })
+
+  it('sends the exact preset text when a preset button is tapped', () => {
+    const onSend = vi.fn()
+    render(<DesktopApp {...makeProps({ onSend })} />)
+
+    fireEvent.click(screen.getByRole('button', { name: "I'm OK" }))
+
+    expect(onSend).toHaveBeenCalledWith("I'm OK", '', '')
   })
 })

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { ThemeProvider } from '@mui/material/styles'
 import { makeTheme } from '../../../theme'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { axe } from 'jest-axe'
 import { AccountMenu } from '../AccountMenu'
 import type { UserProfile, VoiceOption } from '../../../types/ws'
 
@@ -20,6 +21,7 @@ const mockProfile: UserProfile = {
   callsign: 'W1AAA',
   location: 'Grand Rapids, MI',
   is_admin: true,
+  role: 'admin',
   created_at: '2024-01-01T00:00:00Z',
   prefs: {
     dark_mode: false,
@@ -113,6 +115,24 @@ describe('AccountMenu', () => {
       await waitFor(() => {
         expect(screen.queryByText('Admin Settings')).not.toBeInTheDocument()
       })
+    })
+
+    it('hides the Settings menu item for kid accounts', async () => {
+      render(<AccountMenu {...makeProps({ isKid: true })} />)
+      fireEvent.click(screen.getByRole('button', { name: /account menu/i }))
+      await waitFor(() => {
+        expect(screen.getByText('Edit Profile')).toBeInTheDocument()
+      })
+      expect(screen.queryByText('Settings')).not.toBeInTheDocument()
+    })
+
+    it('has no axe violations for a kid account with the menu open', async () => {
+      const { container } = render(<AccountMenu {...makeProps({ isKid: true })} />)
+      fireEvent.click(screen.getByRole('button', { name: /account menu/i }))
+      await waitFor(() => {
+        expect(screen.getByText('Edit Profile')).toBeInTheDocument()
+      })
+      expect(await axe(container)).toHaveNoViolations()
     })
   })
 
@@ -219,6 +239,49 @@ describe('AccountMenu', () => {
       await user.clear(callsignField)
       await user.type(callsignField, 'kd9abc')
       expect(screen.getByDisplayValue('KD9ABC')).toBeInTheDocument()
+    })
+  })
+
+  describe('Edit Profile dialog kid gating', () => {
+    async function openEditDialog(props: ReturnType<typeof makeProps>) {
+      render(<AccountMenu {...props} />)
+      fireEvent.click(screen.getByRole('button', { name: /account menu/i }))
+      await waitFor(() => screen.getByText('Edit Profile'))
+      fireEvent.click(screen.getByText('Edit Profile'))
+      await waitFor(() => screen.getByRole('dialog'))
+    }
+
+    it('hides Operator Name and Call Sign fields for kid accounts', async () => {
+      await openEditDialog(makeProps({ isKid: true }))
+      expect(screen.queryByLabelText('Operator Name')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Call Sign')).not.toBeInTheDocument()
+      expect(screen.getByDisplayValue('Grand Rapids, MI')).toBeInTheDocument()
+    })
+
+    it('shows Operator Name and Call Sign fields for non-kid accounts', async () => {
+      await openEditDialog(makeProps({ isKid: false }))
+      expect(screen.getByLabelText('Operator Name')).toBeInTheDocument()
+      expect(screen.getByLabelText('Call Sign')).toBeInTheDocument()
+    })
+
+    it('omits operator_name and callsign from onUpdateProfile for kid accounts', async () => {
+      const onUpdateProfile = vi.fn()
+      await openEditDialog(makeProps({ isKid: true, onUpdateProfile }))
+      fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+      expect(onUpdateProfile).toHaveBeenCalledOnce()
+      const payload = onUpdateProfile.mock.calls[0][0]
+      expect(payload).not.toHaveProperty('operator_name')
+      expect(payload).not.toHaveProperty('callsign')
+      expect(payload.location).toBe('Grand Rapids, MI')
+    })
+
+    it('includes operator_name and callsign in onUpdateProfile for non-kid accounts', async () => {
+      const onUpdateProfile = vi.fn()
+      await openEditDialog(makeProps({ isKid: false, onUpdateProfile }))
+      fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+      const payload = onUpdateProfile.mock.calls[0][0]
+      expect(payload.operator_name).toBe('Alice Smith')
+      expect(payload.callsign).toBe('W1AAA')
     })
   })
 

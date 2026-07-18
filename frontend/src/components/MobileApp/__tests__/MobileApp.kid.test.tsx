@@ -32,13 +32,13 @@ function render(ui: React.ReactElement) {
 
 const profile: UserProfile = {
   id: 'u1',
-  display_name: 'Ben',
+  display_name: 'Kid',
   avatar_emoji: '🙂',
-  operator_name: 'Ben',
+  operator_name: 'Kid',
   callsign: 'WRXB123',
   location: 'Test City',
-  is_admin: true,
-  role: 'admin',
+  is_admin: false,
+  role: 'kid',
   created_at: '2026-01-01T00:00:00Z',
   prefs: {
     dark_mode: false,
@@ -59,7 +59,7 @@ function makeProps(overrides: Partial<MobileAppProps> = {}): MobileAppProps {
     isOnline: true,
     showCallsignChips: true,
     uiLevel: 'simple',
-    isKid: false,
+    isKid: true,
     quickMessages: ["I'm OK", 'On my way', 'Call me'],
     familyPresence: [],
     familyReminders: {},
@@ -71,9 +71,7 @@ function makeProps(overrides: Partial<MobileAppProps> = {}): MobileAppProps {
     transmitting: false,
     lastMessage: null,
     channelClear: true,
-    attendanceStations: [
-      { callsign: 'W1AW', name: 'Test Station', location: 'Test City', gmrs: '', ham: '' },
-    ],
+    attendanceStations: [],
     onClearAttendance: vi.fn(),
     journals: [],
     journalResult: null,
@@ -88,7 +86,7 @@ function makeProps(overrides: Partial<MobileAppProps> = {}): MobileAppProps {
     onPublishJournal: vi.fn(),
     onUnpublishJournal: vi.fn(),
     onDismissJournalResult: vi.fn(),
-    listenOnly: true,
+    listenOnly: false,
     onSend: vi.fn(),
     onChat: vi.fn(),
     onStandaloneId: vi.fn(),
@@ -156,69 +154,52 @@ function makeProps(overrides: Partial<MobileAppProps> = {}): MobileAppProps {
   }
 }
 
-describe('MobileApp — simple tier hides operator-only tabs/panels', () => {
-  it('does not render the Stations/Journal bottom-nav tabs or their panels in simple tier', () => {
-    render(<MobileApp {...makeProps({ uiLevel: 'simple' })} />)
+describe('MobileApp — kid-mode gating', () => {
+  it('hides the Settings menu item for a kid account', () => {
+    render(<MobileApp {...makeProps()} />)
 
-    expect(screen.queryByRole('button', { name: 'Stations' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Journal' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('table', { name: 'Stations heard this session' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('list', { name: 'Journal entries' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'open menu' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Account menu' }))
 
-    // Chat is still available in simple tier.
-    expect(screen.getByRole('button', { name: 'Chat' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /Settings/ })).not.toBeInTheDocument()
   })
 
-  it('renders the Stations/Journal tabs in operator tier', () => {
-    render(<MobileApp {...makeProps({ uiLevel: 'operator' })} />)
+  it('replaces the free-text composer with a preset button row for a kid account', () => {
+    render(<MobileApp {...makeProps()} />)
 
-    expect(screen.getByRole('button', { name: 'Stations' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Journal' })).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: /message/i })).not.toBeInTheDocument()
   })
 
-  it('falls back to the Chat tab when the tier flips to simple while parked on an operator-only tab', () => {
-    const { rerender } = render(<MobileApp {...makeProps({ uiLevel: 'operator' })} />)
+  it('sends the exact preset text when a preset button is tapped', () => {
+    const onSend = vi.fn()
+    render(<MobileApp {...makeProps({ onSend })} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Stations' }))
-    expect(screen.getByRole('table', { name: 'Stations heard this session' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: "I'm OK" }))
 
-    rerender(
-      <ThemeProvider theme={makeTheme(false)}>
-        <MobileApp {...makeProps({ uiLevel: 'simple' })} />
-      </ThemeProvider>
-    )
+    expect(onSend).toHaveBeenCalledWith("I'm OK", '', '')
+  })
 
-    expect(screen.queryByRole('table', { name: 'Stations heard this session' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Chat' })).toBeInTheDocument()
+  it('hides the Voice PTT button for a kid account (C1)', () => {
+    render(<MobileApp {...makeProps()} />)
+    expect(screen.queryByRole('button', { name: 'Push to talk' })).not.toBeInTheDocument()
+  })
+
+  it('hides the Listen-only switch in the drawer for a kid account (I5)', () => {
+    render(<MobileApp {...makeProps()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'open menu' }))
+    expect(screen.queryByLabelText('Listen only')).not.toBeInTheDocument()
   })
 })
 
-describe('MobileApp — Family tab', () => {
-  it('shows the Family bottom-nav tab in simple tier', () => {
-    render(<MobileApp {...makeProps({ uiLevel: 'simple' })} />)
-    expect(screen.getByRole('button', { name: 'Family' })).toBeInTheDocument()
+describe('MobileApp — non-kid mode', () => {
+  it('shows the Voice PTT button for a non-kid account', () => {
+    render(<MobileApp {...makeProps({ isKid: false })} />)
+    expect(screen.getByRole('button', { name: 'Push to talk' })).toBeInTheDocument()
   })
 
-  it('shows the Family bottom-nav tab in operator tier', () => {
-    render(<MobileApp {...makeProps({ uiLevel: 'operator' })} />)
-    expect(screen.getByRole('button', { name: 'Family' })).toBeInTheDocument()
-  })
-
-  it('renders the FamilyPanel when the Family tab is tapped', () => {
-    render(<MobileApp {...makeProps({ uiLevel: 'simple' })} />)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Family' }))
-
-    expect(screen.getByRole('list', { name: 'Family members' })).toBeInTheDocument()
-  })
-
-  it('unmounts the FamilyPanel when switching away to another tab', () => {
-    render(<MobileApp {...makeProps({ uiLevel: 'operator' })} />)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Family' }))
-    expect(screen.getByRole('list', { name: 'Family members' })).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Chat' }))
-    expect(screen.queryByRole('list', { name: 'Family members' })).not.toBeInTheDocument()
+  it('shows the Listen-only switch in the drawer for a non-kid account', () => {
+    render(<MobileApp {...makeProps({ isKid: false })} />)
+    fireEvent.click(screen.getByRole('button', { name: 'open menu' }))
+    expect(screen.getByLabelText('Listen only')).toBeInTheDocument()
   })
 })

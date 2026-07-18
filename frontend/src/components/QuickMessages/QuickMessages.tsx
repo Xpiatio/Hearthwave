@@ -18,7 +18,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import CheckIcon from '@mui/icons-material/Check';
 
 const STORAGE_KEY = 'radio_tty_quick_messages';
-const DEFAULTS = ['Standing by', 'QSL', 'Copy that', 'QSY to channel {N}', 'Good signal'];
+export const DEFAULTS = ['Standing by', 'QSL', 'Copy that', 'QSY to channel {N}', 'Good signal'];
 
 function load(): string[] {
   try {

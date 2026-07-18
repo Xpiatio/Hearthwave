@@ -398,6 +398,7 @@ export interface UserPrefs {
   ui_level?: 'simple' | 'operator';
   font_scale?: number;
   high_contrast?: boolean;
+  quick_messages?: string[];
 }
 
 export interface UserProfile {
@@ -409,6 +410,7 @@ export interface UserProfile {
   location: string;
   is_admin: boolean;
   created_at: string;
+  role: 'admin' | 'adult' | 'kid';
   prefs: UserPrefs;
 }
 
@@ -541,6 +543,26 @@ export interface NCSRoundCompleteMsg {
   type: 'ncs_round_complete';
 }
 
+// Family activity — presence roster + check-in reminders (server → client)
+export interface FamilyPresenceEntry {
+  user_id: string;
+  display_name: string;
+  avatar_emoji: string;
+  last_heard: string | null;
+  last_ok: string | null;
+  missed_checkin: boolean;
+}
+
+export interface FamilyPresenceMsg {
+  type: 'family_presence';
+  entries: FamilyPresenceEntry[];
+}
+
+export interface FamilyRemindersMsg {
+  type: 'family_reminders';
+  reminders: Record<string, { time: string; enabled: boolean }>;
+}
+
 export type WsMessage =
   | RxMessageMsg
   | RxMessagePatchMsg
@@ -592,6 +614,8 @@ export type WsMessage =
   | NCSScriptSentMsg
   | NCSScriptErrorMsg
   | NCSRoundCompleteMsg
+  | FamilyPresenceMsg
+  | FamilyRemindersMsg
   | VoiceTxAckMsg
   | VoiceTxErrorMsg
   | { type: 'voice_preview_done' }
@@ -642,6 +666,31 @@ export interface VoiceTxCancelPayload {
 
 export interface TxAbortPayload {
   type: 'tx_abort';
+}
+
+// Family activity — Client → Server payloads (sent via send(), NOT part of WsMessage union)
+export interface FamilyStatusPayload {
+  type: 'family_status';
+  status: 'ok';
+}
+
+export interface SetFamilyReminderPayload {
+  type: 'set_family_reminder';
+  user_id: string;
+  time: string | null;
+  enabled: boolean;
+}
+
+export interface SetRolePayload {
+  type: 'set_role';
+  user_id: string;
+  role: 'admin' | 'adult' | 'kid';
+}
+
+export interface SetUserQuickMessagesPayload {
+  type: 'set_user_quick_messages';
+  user_id: string;
+  quick_messages: string[];
 }
 
 // Voice PTT — Server → Client messages (part of WsMessage union)

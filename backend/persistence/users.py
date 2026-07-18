@@ -28,6 +28,9 @@ SENSITIVE_PROFILE_FIELDS: frozenset[str] = frozenset(
     {"password_hash", "password_salt", "failed_attempts", "locked_until"}
 )
 
+# Valid values for profile["role"]. Invariant: role == "admin" <=> is_admin is True.
+ROLES: tuple[str, ...] = ("admin", "adult", "kid")
+
 LOCKOUT_MAX_ATTEMPTS = 3
 LOCKOUT_DURATION_MINUTES = 15
 
@@ -49,6 +52,22 @@ DEFAULT_PREFS: dict = {
 }
 
 
+def effective_prefs(profile: dict) -> dict:
+    """Merge profile prefs with defaults, forcing server-enforced kid locks.
+
+    Shared by the WS server and the REST auth routes so both surfaces apply
+    the same kid pref locks (filter_profanity/ui_level/listen_only) — a
+    profile's *stored* prefs must never be handed back to the client as-is
+    when role == "kid".
+    """
+    prefs = {**DEFAULT_PREFS, **profile.get("prefs", {})}
+    if profile.get("role") == "kid":
+        prefs["filter_profanity"] = True
+        prefs["ui_level"] = "simple"
+        prefs["listen_only"] = False
+    return prefs
+
+
 def _hash_password(password: str, salt_hex: str) -> str:
     """Return PBKDF2-SHA256 hex digest for *password* using *salt_hex*."""
     salt = bytes.fromhex(salt_hex)
@@ -66,6 +85,7 @@ class UsersStore:
     def __init__(self, path: Path = _DEFAULT_PATH) -> None:
         self._path = Path(path)
         self._users: list[dict] = self._load()
+        self._migrate_roles()
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -84,6 +104,16 @@ class UsersStore:
 
     def _save(self) -> None:
         atomic_json_write(self._path, self._users)
+
+    def _migrate_roles(self) -> None:
+        """Backfill `role` on legacy records loaded before roles existed."""
+        changed = False
+        for rec in self._users:
+            if "role" not in rec:
+                rec["role"] = "admin" if rec.get("is_admin") else "adult"
+                changed = True
+        if changed:
+            self._save()
 
     def _find_index(self, user_id: str) -> int:
         for i, u in enumerate(self._users):
@@ -113,8 +143,19 @@ class UsersStore:
         return list(self._users)
 
     def get_public(self) -> list[dict]:
-        """Strip sensitive fields for API responses."""
-        return [{k: v for k, v in u.items() if k not in SENSITIVE_PROFILE_FIELDS} for u in self._users]
+        """Strip sensitive fields for API responses.
+
+        Prefs are routed through effective_prefs() so kid pref locks
+        (filter_profanity/ui_level/listen_only) apply here too — this feeds
+        the "profiles" broadcast and the ungated list_profiles handler, so
+        raw stored prefs must never leak a kid's unlocked settings.
+        """
+        result = []
+        for u in self._users:
+            safe = {k: v for k, v in u.items() if k not in SENSITIVE_PROFILE_FIELDS}
+            safe["prefs"] = effective_prefs(u)
+            result.append(safe)
+        return result
 
     def get(self, user_id: str) -> dict | None:
         for u in self._users:
@@ -132,7 +173,9 @@ class UsersStore:
         u = self.get(user_id)
         if u is None:
             return None
-        return {k: v for k, v in u.items() if k not in SENSITIVE_PROFILE_FIELDS}
+        safe = {k: v for k, v in u.items() if k not in SENSITIVE_PROFILE_FIELDS}
+        safe["prefs"] = effective_prefs(u)
+        return safe
 
     def is_empty(self) -> bool:
         return len(self._users) == 0
@@ -147,8 +190,15 @@ class UsersStore:
         callsign: str = "",
         location: str = "",
         is_admin: bool = False,
+        role: str | None = None,
         prefs: dict | None = None,
     ) -> dict:
+        if role is not None:
+            if role not in ROLES:
+                raise ValueError(f"unknown role: {role}")
+            is_admin = role == "admin"
+        else:
+            role = "admin" if is_admin else "adult"
         user_id = self._make_id(display_name)
         salt_hex = secrets.token_hex(32)
         pw_hash = _hash_password(password, salt_hex)
@@ -163,6 +213,7 @@ class UsersStore:
             "password_hash": pw_hash,
             "password_salt": salt_hex,
             "is_admin": is_admin,
+            "role": role,
             "failed_attempts": 0,
             "locked_until": None,
             "created_at": now,
@@ -181,16 +232,50 @@ class UsersStore:
         return dict(self._users[i])
 
     def update_profile(self, user_id: str, updates: dict) -> dict:
-        """Update identity fields on a profile (not password — use change_password)."""
-        allowed = {"display_name", "avatar_emoji", "operator_name", "callsign", "location", "is_admin"}
+        """Update identity fields on a profile (not password — use change_password).
+
+        Keeps the role invariant (role == "admin" <=> is_admin) in sync when
+        *updates* changes is_admin:
+          - is_admin -> True syncs role to "admin".
+          - is_admin -> False on a currently-admin profile syncs role to "adult".
+          - Granting is_admin to a role="kid" profile is rejected outright —
+            a kid must first be promoted off "kid" via set_role, which applies
+            the deliberate, explicit role transition instead of a side-effect
+            of an identity-field edit.
+        """
+        allowed = {"display_name", "avatar_emoji", "operator_name", "callsign", "location"}
         i = self._find_index(user_id)
         merged = dict(self._users[i])
+        if "is_admin" in updates:
+            new_is_admin = bool(updates["is_admin"])
+            if new_is_admin and merged.get("role") == "kid":
+                raise ValueError(
+                    "Cannot grant admin to a kid profile directly; promote via set_role."
+                )
+            merged["is_admin"] = new_is_admin
+            if new_is_admin:
+                merged["role"] = "admin"
+            elif merged.get("role") == "admin":
+                merged["role"] = "adult"
         for k in allowed:
             if k in updates:
                 merged[k] = updates[k]
         self._users[i] = merged
         self._save()
         return dict(merged)
+
+    def set_role(self, user_id: str, role: str) -> dict | None:
+        """Set a user's role; keeps is_admin in sync (role == 'admin' <=> is_admin)."""
+        if role not in ROLES:
+            raise ValueError(f"unknown role: {role}")
+        try:
+            i = self._find_index(user_id)
+        except KeyError:
+            return None
+        self._users[i]["role"] = role
+        self._users[i]["is_admin"] = role == "admin"
+        self._save()
+        return dict(self._users[i])
 
     def change_password(self, user_id: str, new_password: str) -> None:
         i = self._find_index(user_id)

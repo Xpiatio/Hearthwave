@@ -142,9 +142,18 @@ from backend.persistence.contacts import (
 )
 from backend.persistence.audit import AuditLog
 from backend.auth_ratelimit import _extract_ip, get_client_ip
+from backend.family.reminders import is_checkin_missed
+from backend.persistence.family import FamilyStore
 from backend.persistence.journal import delete_journal, load_journals, load_published_manifest, publish_journal, save_journal, unpublish_journal
+from backend.persistence.presence import PresenceStore
 from backend.persistence.tokens import TokenStore
-from backend.persistence.users import DEFAULT_PREFS, SENSITIVE_PROFILE_FIELDS, UsersStore
+from backend.persistence.users import (
+    DEFAULT_PREFS,
+    ROLES,
+    SENSITIVE_PROFILE_FIELDS,
+    UsersStore,
+    effective_prefs as _effective_prefs,
+)
 from backend.ptt.factory import make_ptt
 from backend.stt.calibration import CalibrationCapture, PREAMBLE_TEXT, run_sweep
 from backend.stt.transcriber import WhisperTranscriber
@@ -181,6 +190,8 @@ _plugin_ctx = None
 _contacts_store: ContactsStore | None = None
 _users_store: UsersStore | None = None
 _token_store: TokenStore | None = None
+_presence_store: PresenceStore | None = None
+_family_store: FamilyStore | None = None
 _audit_log: AuditLog | None = None
 _stt_worker: STTWorker | None = None
 _synthesizer: TTSSynthesizer | None = None
@@ -263,6 +274,7 @@ class ConnectionState:
     user_id: str
     is_admin: bool
     prefs: dict = dataclasses.field(default_factory=lambda: dict(DEFAULT_PREFS))
+    role: str = "adult"
     # Voice PTT session
     voice_tx_active:   bool = False
     voice_tx_chunks:   list = dataclasses.field(default_factory=list)  # list[bytes]
@@ -285,6 +297,15 @@ class ConnectionManager:
 
     def get_state(self, ws: WebSocket) -> ConnectionState | None:
         return self._clients.get(ws)
+
+    def states_for_user(self, user_id: str) -> list["ConnectionState"]:
+        """Return the live ConnectionState for every socket belonging to user_id.
+
+        Lets an admin action (role change, profile edit, preset edit) update
+        an already-connected target's in-memory gates immediately, rather
+        than only on their next reconnect.
+        """
+        return [state for state in self._clients.values() if state.user_id == user_id]
 
     async def broadcast(self, msg: dict) -> None:
         """Send msg to every connected client. Silently drops dead sockets."""
@@ -541,6 +562,36 @@ def _build_pending_payload() -> dict:
         for cs, info in _pending_stations.items()
     ]
     return {"type": "pending_stations", "stations": stations}
+
+
+_NO_PRESENCE_RECORD: dict = {"last_heard": None, "last_ok": None, "missed_checkin": False}
+
+
+def _build_family_presence_msg() -> dict:
+    """Join presence records onto every known user profile.
+
+    Users with no presence record yet (never transmitted or checked in) still
+    get an entry, with null last_heard/last_ok and missed_checkin=False, so
+    the client can render the full family roster.
+    """
+    entries = []
+    profiles = _users_store.get_public() if _users_store else []
+    for prof in profiles:
+        e = _presence_store.get(prof["id"]) if _presence_store else dict(_NO_PRESENCE_RECORD)
+        entries.append({
+            "user_id": prof["id"],
+            "display_name": prof.get("display_name"),
+            "avatar_emoji": prof.get("avatar_emoji"),
+            "last_heard": e["last_heard"],
+            "last_ok": e["last_ok"],
+            "missed_checkin": e["missed_checkin"],
+        })
+    return {"type": "family_presence", "entries": entries}
+
+
+def _build_family_reminders_msg() -> dict:
+    reminders = _family_store.get_reminders() if _family_store else {}
+    return {"type": "family_reminders", "reminders": reminders}
 
 
 async def _on_auto_add_result(
@@ -1277,11 +1328,32 @@ def _build_status() -> dict:
 
 
 def _safe_profile(profile: dict) -> dict:
-    return {k: v for k, v in profile.items() if k not in SENSITIVE_PROFILE_FIELDS}
+    safe = {k: v for k, v in profile.items() if k not in SENSITIVE_PROFILE_FIELDS}
+    safe["prefs"] = _effective_prefs(profile)
+    return safe
 
 
 def _build_user_profile_msg(profile: dict) -> dict:
     return {"type": "user_profile", "profile": _safe_profile(profile)}
+
+
+def _sync_live_state_for_user(user_id: str, updated_profile: dict) -> None:
+    """Refresh every already-connected socket's in-memory ConnectionState to
+    match a just-persisted profile change (role, is_admin, prefs).
+
+    Without this, an admin's role change / profile edit / preset edit only
+    updates the store — the target's *live* connection (which is what
+    server-side gates like the kid TX allowlist and pref locks actually
+    check) stays stale until they reconnect. `prefs` is re-derived through
+    effective_prefs so a demotion to "kid" immediately re-applies the
+    server-enforced 3-key lock (filter_profanity/ui_level/listen_only).
+    """
+    new_role = updated_profile.get("role") or ("admin" if updated_profile.get("is_admin") else "adult")
+    new_prefs = _effective_prefs(updated_profile)
+    for live_state in _manager.states_for_user(user_id):
+        live_state.role = new_role
+        live_state.is_admin = bool(updated_profile.get("is_admin", False))
+        live_state.prefs = new_prefs
 
 
 async def _status_pump() -> None:
@@ -1374,6 +1446,40 @@ async def _online_status_pump() -> None:
             _log.error("_online_status_pump error: %s", exc)
 
 
+async def _family_reminder_tick() -> None:
+    """One pass over configured check-in reminders vs. presence.
+
+    Extracted from _family_reminder_pump so tests can invoke a single pass
+    directly, without the sleep loop. Broadcasts family_presence only when
+    at least one user's missed_checkin flag actually flipped. Tolerates a
+    reminder for a user whose profile/presence record no longer exists —
+    PresenceStore.get()/set_missed() both handle unknown user_ids gracefully.
+    """
+    if _family_store is None or _presence_store is None:
+        return
+    changed = False
+    now_local = datetime.datetime.now().astimezone()
+    for uid, reminder in _family_store.get_reminders().items():
+        last_ok = _presence_store.get(uid)["last_ok"]
+        missed = is_checkin_missed(reminder, last_ok, now_local)
+        if _presence_store.set_missed(uid, missed):
+            changed = True
+    if changed:
+        await _manager.broadcast(_build_family_presence_msg())
+
+
+async def _family_reminder_pump() -> None:
+    """Recompute missed-checkin status for every reminder every 30 seconds."""
+    while True:
+        try:
+            await _family_reminder_tick()
+            await asyncio.sleep(30)
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            _log.error("_family_reminder_pump error: %s", exc)
+
+
 async def _voices_watcher_pump() -> None:
     """Detect changes to the voices directory and push voices_list to all clients.
 
@@ -1406,7 +1512,7 @@ async def _voices_watcher_pump() -> None:
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     """Startup / shutdown wiring."""
-    global _config, _contacts_store, _users_store, _token_store, _stt_worker, _synthesizer, _monitor, _plugin_ctx
+    global _config, _contacts_store, _users_store, _token_store, _presence_store, _family_store, _stt_worker, _synthesizer, _monitor, _plugin_ctx
     global _stt_out_queue, _tx_queue, _tts_event_queue, _background_tasks, _tx_abort_event
     global _audio_level, _radio_error, _channel_clear, _last_id_time, _has_transmitted, _last_beacon_time, _ncs_plugin
     global _level_window, _attendance, _spectro, _monitor_chunk_cb
@@ -1442,6 +1548,8 @@ async def _lifespan(app: FastAPI):
 
     _users_store = UsersStore(_config.users_file)
     _token_store = TokenStore(_config.tokens_file)
+    _presence_store = PresenceStore(_config.presence_file)
+    _family_store = FamilyStore(_config.family_file)
     purged = _token_store.purge_expired()
     if purged:
         _log.info("Purged %d expired session tokens.", purged)
@@ -1586,6 +1694,7 @@ async def _lifespan(app: FastAPI):
         asyncio.create_task(_spectro.run(), name="spectro-pump"),
         asyncio.create_task(_online_status_pump(), name="online-status-pump"),
         asyncio.create_task(_voices_watcher_pump(), name="voices-watcher"),
+        asyncio.create_task(_family_reminder_pump(), name="family-reminder-pump"),
     }
     _log.info("Hearthwave server ready.")
 
@@ -2138,6 +2247,67 @@ async def _check_listen_only(ws: WebSocket, state: "ConnectionState") -> bool:
     return False
 
 
+# Kid-role connections may only self-serve cosmetic prefs (+ AAC mode/grid,
+# so a kid can exit AAC mode and an adult can configure their grid) via
+# save_user_prefs; filter_profanity/ui_level/listen_only are server-enforced
+# (see _effective_prefs). Full kid+AAC send support is deferred (Phase 5).
+KID_ALLOWED_PREF_KEYS = {"dark_mode", "font_scale", "high_contrast", "aac_mode", "aac_grid"}
+
+
+def _is_kid(state: "ConnectionState") -> bool:
+    return getattr(state, "role", "adult") == "kid"
+
+
+async def _enqueue_family_tts(text: str, state: "ConnectionState") -> None:
+    """Enqueue a pre-formatted family_status phrase for TTS/PTT.
+
+    Mirrors the NCS spot-report/net-script enqueue idiom: operator-initiated
+    (keys even over a busy channel), pre-formatted (no further TTS templating).
+    Also mirrors tx_message's voice resolution (state.prefs tts_voice/
+    tts_length_scale) so "I'm OK" speaks in the sender's own configured
+    voice rather than the station default.
+    """
+    await _tx_queue.put({
+        "text": text,
+        "_pre_formatted": True,
+        "_operator_initiated": True,
+        "_voice_name": state.prefs.get("tts_voice") or None,
+        "_length_scale": state.prefs.get("tts_length_scale") or None,
+    })
+
+
+async def _broadcast_family_chat(text: str, display_name: str) -> None:
+    """Broadcast a family_status phrase to the shared chat log.
+
+    Mirrors the chat_message idiom: broadcast_rx + StreamHistory.record_rx
+    raw/filtered split, so each client's own filter_profanity pref applies.
+    """
+    chat_echo_base = {
+        "type": "chat_echo",
+        "ts": utc_now_iso(),
+        "display_name": display_name,
+        "operator": "",
+        "callsign": "",
+    }
+    await _manager.broadcast_rx(chat_echo_base, text, mask_profanity(text))
+    _stream_history.record_rx(chat_echo_base, text, mask_profanity(text))
+
+
+def _validate_quick_messages(value) -> list[str] | None:
+    """Return sanitized list or None if invalid."""
+    if not isinstance(value, list) or not (1 <= len(value) <= 20):
+        return None
+    out = []
+    for item in value:
+        if not isinstance(item, str):
+            return None
+        item = item.strip()
+        if not (1 <= len(item) <= 200) or any(ord(c) < 32 for c in item):
+            return None
+        out.append(item)
+    return out
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(
     ws: WebSocket,
@@ -2162,10 +2332,17 @@ async def websocket_endpoint(
         return
 
     await ws.accept()
+    role = profile.get("role") or ("admin" if profile.get("is_admin") else "adult")
+    conn_prefs = {**DEFAULT_PREFS, **profile.get("prefs", {})}
+    if role == "kid":
+        conn_prefs["filter_profanity"] = True
+        conn_prefs["ui_level"] = "simple"
+        conn_prefs["listen_only"] = False
     state = ConnectionState(
         user_id=user_id,
         is_admin=bool(profile.get("is_admin", False)),
-        prefs={**DEFAULT_PREFS, **profile.get("prefs", {})},
+        prefs=conn_prefs,
+        role=role,
     )
     # Snapshot the stream backfill *before* registering the socket (no await in
     # between, so no interleaving): anything broadcast after `add` reaches this
@@ -2187,6 +2364,9 @@ async def websocket_endpoint(
         })
     await _manager.send_to(ws, _build_attendance_payload())
     await _manager.send_to(ws, _build_pending_payload())
+    await _manager.send_to(ws, _build_family_presence_msg())
+    if not _is_kid(state):
+        await _manager.send_to(ws, _build_family_reminders_msg())
     await _manager.send_to(ws, {"type": "voices_list", "voices": _list_voices()})
     # Backfill the shared message stream accumulated since the last clear
     # (snapshotted above, before this socket joined the broadcast set).
@@ -2219,6 +2399,12 @@ async def websocket_endpoint(
 
                 if await _check_listen_only(ws, state):
                     continue
+
+                if _is_kid(state):
+                    presets = state.prefs.get("quick_messages") or []
+                    if (data.get("text") or "").strip() not in presets:
+                        await _manager.send_to(ws, {"type": "error", "detail": "TX not allowed for this account"})
+                        continue
 
                 # If the message text contains unresolved {Token} placeholders,
                 # ask the client to fill them in before transmitting.
@@ -2265,6 +2451,9 @@ async def websocket_endpoint(
                     continue  # TX blocked by a plugin
                 await _tx_queue.put(tx_payload)
                 await _manager.broadcast({"type": "tx_status", "status": "transmitting"})
+                if _presence_store is not None:
+                    _presence_store.touch_heard(state.user_id, utc_now_iso())
+                    await _manager.broadcast(_build_family_presence_msg())
 
             elif msg_type == "chat_message":
                 # Chat-only: shared to all operators in the log but never keyed
@@ -2292,6 +2481,51 @@ async def websocket_endpoint(
                     mask_profanity(text),
                 )
                 _stream_history.record_rx(chat_echo_base, text, mask_profanity(text))
+
+            elif msg_type == "family_status":
+                # "I'm OK" check-in — a safety feature, so kids CAN send this
+                # (no _is_kid gate) and listen-only users still get recorded;
+                # listen-only only skips the TTS/PTT leg, not the chat entry,
+                # the presence update, or the broadcast.
+                if data.get("status") != "ok":
+                    await _manager.send_to(ws, {"type": "error", "detail": "Unknown family status"})
+                    continue
+                profile_rec = (
+                    (_users_store.get_public_one(state.user_id) or {}) if _users_store else {}
+                )
+                name = (profile_rec.get("operator_name") or profile_rec.get("display_name") or "Operator").strip()
+                text = f"Family status: {name} is okay."
+                if not state.prefs.get("listen_only", False):
+                    await _enqueue_family_tts(text, state)
+                await _broadcast_family_chat(text, profile_rec.get("display_name") or "")
+                if _presence_store is not None:
+                    _presence_store.mark_ok(state.user_id, utc_now_iso())
+                    await _manager.broadcast(_build_family_presence_msg())
+
+            elif msg_type == "set_family_reminder":
+                if not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
+                    continue
+                if _family_store is None:
+                    continue
+                target_user_id = data.get("user_id", "")
+                if not target_user_id:
+                    await _manager.send_to(ws, {"type": "error", "detail": "user_id is required."})
+                    continue
+                try:
+                    _family_store.set_reminder(
+                        target_user_id, data.get("time"), bool(data.get("enabled", False))
+                    )
+                except ValueError as exc:
+                    await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
+                    continue
+                await _manager.broadcast(_build_family_reminders_msg())
+
+            elif msg_type == "get_family_reminders":
+                if _is_kid(state):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Check-in reminders not available for this account."})
+                    continue
+                await _manager.send_to(ws, _build_family_reminders_msg())
 
             elif msg_type == "add_contact":
                 if _contacts_store is None:
@@ -2480,6 +2714,9 @@ async def websocket_endpoint(
 
             elif msg_type == "standalone_id":
                 # "This is" button — transmit a NATO-phonetic station ID.
+                if _is_kid(state):
+                    await _manager.send_to(ws, {"type": "error", "detail": "TX not allowed for this account"})
+                    continue
                 if await _check_listen_only(ws, state):
                     continue
                 await _manager.broadcast({"type": "tx_status", "status": "transmitting"})
@@ -2611,6 +2848,9 @@ async def websocket_endpoint(
                 await _manager.broadcast(_build_status())
 
             elif msg_type == "set_listen_only":
+                if _is_kid(state):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Listen-only is set by an adult for this account."})
+                    continue
                 listen_only = bool(data.get("listen_only", False))
                 state.prefs["listen_only"] = listen_only
                 if _users_store is not None:
@@ -2696,14 +2936,17 @@ async def websocket_endpoint(
                     continue
                 # filter_profanity is now per-user; fuzzy_callsign remains station-wide.
                 if "filter_profanity" in data:
-                    fp = bool(data["filter_profanity"])
-                    state.prefs["filter_profanity"] = fp
-                    if _users_store is not None:
-                        try:
-                            updated = _users_store.update_prefs(state.user_id, {"filter_profanity": fp})
-                            await _manager.send_to(ws, _build_user_profile_msg(updated))
-                        except KeyError:
-                            pass
+                    if _is_kid(state):
+                        await _manager.send_to(ws, {"type": "error", "detail": "Profanity filter is set by an adult for this account."})
+                    else:
+                        fp = bool(data["filter_profanity"])
+                        state.prefs["filter_profanity"] = fp
+                        if _users_store is not None:
+                            try:
+                                updated = _users_store.update_prefs(state.user_id, {"filter_profanity": fp})
+                                await _manager.send_to(ws, _build_user_profile_msg(updated))
+                            except KeyError:
+                                pass
                 if "fuzzy_callsign" in data:
                     _config["fuzzy_callsign"] = bool(data["fuzzy_callsign"])
                 if "fuzzy_callsign_rewrite" in data:
@@ -2779,8 +3022,10 @@ async def websocket_endpoint(
                 allowed = {"dark_mode", "filter_profanity", "listen_only",
                            "read_aloud", "notifications_enabled", "spectro_colormap", "spectro_time_window_s",
                            "tts_voice", "tts_length_scale", "aac_mode", "aac_grid",
-                           "ui_level", "font_scale", "high_contrast"}
+                           "ui_level", "font_scale", "high_contrast", "quick_messages"}
                 updates = {k: v for k, v in data.get("prefs", data).items() if k in allowed}
+                if _is_kid(state):
+                    updates = {k: v for k, v in updates.items() if k in KID_ALLOWED_PREF_KEYS}
                 grid = updates.get("aac_grid")
                 if grid is not None and (
                     not isinstance(grid, dict) or len(json.dumps(grid)) > 65536
@@ -2793,6 +3038,12 @@ async def websocket_endpoint(
                     updates.pop("font_scale")
                 if "high_contrast" in updates and not isinstance(updates["high_contrast"], bool):
                     updates.pop("high_contrast")
+                if "quick_messages" in updates:
+                    qm = _validate_quick_messages(updates["quick_messages"])
+                    if qm is None:
+                        updates.pop("quick_messages")
+                    else:
+                        updates["quick_messages"] = qm
                 if updates:
                     state.prefs.update(updates)
                     try:
@@ -2808,23 +3059,43 @@ async def websocket_endpoint(
                 if target_id != state.user_id and not state.is_admin:
                     await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
                     continue
+                # A kid editing their own profile may not touch identity fields
+                # that get spoken on-air (display_name feeds chat, operator_name
+                # is spoken by family_status "I'm OK", callsign is spoken on
+                # every TX) — that would let a kid transmit arbitrary text under
+                # a new name. Admins still edit kid profiles via the admin path
+                # above (target_id != state.user_id).
+                identity_fields = ("display_name", "operator_name", "callsign")
+                if (
+                    target_id == state.user_id
+                    and _is_kid(state)
+                    and any(f in data for f in identity_fields)
+                ):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Ask an adult to change your name."})
+                    continue
                 allowed = {"display_name", "avatar_emoji", "operator_name", "callsign", "location"}
                 if state.is_admin:
                     allowed.add("is_admin")
                 updates = {k: v for k, v in data.items() if k in allowed}
+                if target_id == state.user_id and "is_admin" in updates and not updates["is_admin"]:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Cannot remove your own admin access."})
+                    continue
                 new_password = data.get("new_password")
                 try:
                     updated = _users_store.update_profile(target_id, updates)
                     if new_password:
                         _users_store.change_password(target_id, str(new_password))
                         updated = _users_store.get(target_id)
+                    # update_profile can flip is_admin (which syncs role too) —
+                    # push that to the target's live connection(s) immediately.
+                    _sync_live_state_for_user(target_id, updated)
                     msg_out = _build_user_profile_msg(updated)
                     await _manager.broadcast_to_user(target_id, msg_out)
                     await _manager.broadcast({
                         "type": "profiles",
                         "profiles": _users_store.get_public(),
                     })
-                except KeyError as exc:
+                except (KeyError, ValueError) as exc:
                     await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
 
             elif msg_type == "create_profile":
@@ -2838,6 +3109,10 @@ async def websocket_endpoint(
                 if not display_name or not password:
                     await _manager.send_to(ws, {"type": "error", "detail": "display_name and password are required."})
                     continue
+                role = data.get("role")
+                if role is not None and role not in ROLES:
+                    await _manager.send_to(ws, {"type": "error", "detail": f"Unknown role: {role!r}."})
+                    continue
                 _users_store.create(
                     display_name=display_name,
                     password=password,
@@ -2846,7 +3121,76 @@ async def websocket_endpoint(
                     callsign=(data.get("callsign") or ""),
                     location=(data.get("location") or ""),
                     is_admin=bool(data.get("is_admin", False)),
+                    role=role,
                 )
+                await _manager.broadcast({
+                    "type": "profiles",
+                    "profiles": _users_store.get_public(),
+                })
+
+            elif msg_type == "set_role":
+                if not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
+                    continue
+                if _users_store is None:
+                    continue
+                target_role_id = data.get("user_id", "")
+                if target_role_id == state.user_id and data.get("role") != "admin":
+                    await _manager.send_to(ws, {"type": "error", "detail": "Cannot change your own role away from admin."})
+                    continue
+                prior_profile = _users_store.get(target_role_id)
+                prior_role = prior_profile.get("role") if prior_profile else None
+                try:
+                    updated = _users_store.set_role(target_role_id, data.get("role"))
+                except ValueError:
+                    updated = None
+                if updated is None:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Unknown user or role."})
+                    continue
+                if updated.get("role") == "kid" and prior_role != "kid":
+                    # Newly demoted to kid: any quick_messages already on the
+                    # profile were self-set while adult (not admin-curated) —
+                    # clear them rather than let them silently become the
+                    # kid's approved on-air TX allowlist.
+                    try:
+                        updated = _users_store.update_prefs(target_role_id, {"quick_messages": []})
+                    except KeyError:
+                        pass
+                _sync_live_state_for_user(target_role_id, updated)
+                await _manager.broadcast_to_user(target_role_id, _build_user_profile_msg(updated))
+                await _manager.broadcast({
+                    "type": "profiles",
+                    "profiles": _users_store.get_public(),
+                })
+
+            elif msg_type == "set_user_quick_messages":
+                if not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
+                    continue
+                if _users_store is None:
+                    continue
+                qm = _validate_quick_messages(data.get("quick_messages"))
+                if qm is None:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Invalid quick_messages (must be 1-20 non-empty strings, each 1-200 chars)."})
+                    continue
+                target_user_id = data.get("user_id", "")
+                target_profile = _users_store.get(target_user_id)
+                if (
+                    target_profile is not None
+                    and target_profile.get("role") == "kid"
+                    and any("{" in msg or "}" in msg for msg in qm)
+                ):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Kid presets cannot contain placeholders"})
+                    continue
+                try:
+                    updated = _users_store.update_prefs(target_user_id, {"quick_messages": qm})
+                except KeyError:
+                    updated = None
+                if updated is None:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Unknown user."})
+                    continue
+                _sync_live_state_for_user(target_user_id, updated)
+                await _manager.broadcast_to_user(target_user_id, _build_user_profile_msg(updated))
                 await _manager.broadcast({
                     "type": "profiles",
                     "profiles": _users_store.get_public(),
@@ -2864,6 +3208,15 @@ async def websocket_endpoint(
                     continue
                 try:
                     _users_store.delete(target_id)
+                    # Don't orphan a deleted user's check-in reminder or
+                    # presence row — they'd otherwise linger forever on the
+                    # Family board for a user_id that no longer exists.
+                    if _family_store is not None:
+                        _family_store.delete(target_id)
+                        await _manager.broadcast(_build_family_reminders_msg())
+                    if _presence_store is not None:
+                        _presence_store.remove(target_id)
+                        await _manager.broadcast(_build_family_presence_msg())
                     await _manager.broadcast({
                         "type": "profiles",
                         "profiles": _users_store.get_public(),
@@ -2872,6 +3225,10 @@ async def websocket_endpoint(
                     await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
 
             elif msg_type == "list_profiles":
+                # Intentionally ungated (no admin check): the roster is meant to be
+                # visible to every connected user, including the Family presence
+                # board. get_public() routes prefs through effective_prefs(), so
+                # kid pref locks still apply here.
                 if _users_store is not None:
                     await _manager.send_to(ws, {
                         "type": "profiles",
@@ -2895,6 +3252,9 @@ async def websocket_endpoint(
                     await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
 
             elif msg_type == "voice_tx_start":
+                if _is_kid(state):
+                    await _manager.send_to(ws, {"type": "error", "detail": "TX not allowed for this account"})
+                    continue
                 if await _check_listen_only(ws, state):
                     continue
                 callsign = (data.get("callsign") or "").strip()
@@ -2927,6 +3287,12 @@ async def websocket_endpoint(
                     await _manager.send_to(ws, {"type": "voice_tx_error", "detail": "Recording too long (120 s max)."})
 
             elif msg_type == "voice_tx_end":
+                if _is_kid(state):
+                    # Belt-and-suspenders: voice_tx_start already rejects kids,
+                    # so voice_tx_active can never be True for one — but reject
+                    # explicitly rather than relying on that invariant holding.
+                    await _manager.send_to(ws, {"type": "error", "detail": "TX not allowed for this account"})
+                    continue
                 if not state.voice_tx_active:
                     continue
                 chunks   = state.voice_tx_chunks

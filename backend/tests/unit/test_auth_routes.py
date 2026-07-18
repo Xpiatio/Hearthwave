@@ -36,10 +36,12 @@ def _mock_user(
     user_id="user-1",
     display_name="Alice",
     is_admin=False,
+    role="adult",
     password_hash="hash",
     password_salt="salt",
     failed_attempts=0,
     locked_until=None,
+    prefs=None,
 ) -> dict:
     return {
         "id": user_id,
@@ -51,10 +53,11 @@ def _mock_user(
         "password_hash": password_hash,
         "password_salt": password_salt,
         "is_admin": is_admin,
+        "role": role,
         "failed_attempts": failed_attempts,
         "locked_until": locked_until,
         "created_at": "2024-01-01T00:00:00+00:00",
-        "prefs": {},
+        "prefs": prefs if prefs is not None else {},
     }
 
 
@@ -578,3 +581,70 @@ class TestAdminAudit:
         m._audit_log = None
         r = client.get("/auth/admin/audit", headers={"Authorization": "Bearer tok"})
         assert r.status_code == 503
+
+
+# ---------------------------------------------------------------------------
+# Finding 3: kid server-enforced pref locks must apply to REST responses too
+# (previously /auth/login and /auth/me returned raw stored prefs).
+# ---------------------------------------------------------------------------
+
+class TestKidPrefsLockedOverRest:
+    _SUBVERTED_PREFS = {
+        "filter_profanity": False,
+        "ui_level": "operator",
+        "listen_only": True,
+    }
+
+    def test_login_locks_kid_prefs(self):
+        user = _mock_user(display_name="Kiddo", role="kid", prefs=dict(self._SUBVERTED_PREFS))
+        users = MagicMock()
+        users.get_all.return_value = [user]
+        users.is_locked.return_value = False
+        users.verify_password.return_value = True
+        users.get.return_value = user
+        tokens = MagicMock()
+        tokens.create.return_value = "tok"
+        client = _make_app(users_store=users, token_store=tokens)
+
+        r = client.post("/auth/login", json={"display_name": "Kiddo", "password": "correct"})
+
+        assert r.status_code == 200
+        prefs = r.json()["profile"]["prefs"]
+        assert prefs["filter_profanity"] is True
+        assert prefs["ui_level"] == "simple"
+        assert prefs["listen_only"] is False
+
+    def test_me_locks_kid_prefs(self):
+        user = _mock_user(display_name="Kiddo", role="kid", prefs=dict(self._SUBVERTED_PREFS))
+        tokens = MagicMock()
+        tokens.validate.return_value = user["id"]
+        users = MagicMock()
+        users.get.return_value = user
+        client = _make_app(users_store=users, token_store=tokens)
+
+        r = client.get("/auth/me", headers={"Authorization": "Bearer good-token"})
+
+        assert r.status_code == 200
+        prefs = r.json()["prefs"]
+        assert prefs["filter_profanity"] is True
+        assert prefs["ui_level"] == "simple"
+        assert prefs["listen_only"] is False
+
+    def test_login_does_not_lock_adult_prefs(self):
+        """Non-kid roles are unaffected — sanity check against over-broad locking."""
+        user = _mock_user(display_name="Grownup", role="adult",
+                           prefs={"filter_profanity": False, "ui_level": "operator"})
+        users = MagicMock()
+        users.get_all.return_value = [user]
+        users.is_locked.return_value = False
+        users.verify_password.return_value = True
+        users.get.return_value = user
+        tokens = MagicMock()
+        tokens.create.return_value = "tok"
+        client = _make_app(users_store=users, token_store=tokens)
+
+        r = client.post("/auth/login", json={"display_name": "Grownup", "password": "correct"})
+
+        prefs = r.json()["profile"]["prefs"]
+        assert prefs["filter_profanity"] is False
+        assert prefs["ui_level"] == "operator"

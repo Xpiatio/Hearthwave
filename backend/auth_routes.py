@@ -17,7 +17,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel
 
 from backend.auth_ratelimit import LoginRateLimiter, get_client_ip
-from backend.persistence.users import SENSITIVE_PROFILE_FIELDS
+from backend.persistence.users import SENSITIVE_PROFILE_FIELDS, effective_prefs
 
 router = APIRouter()
 
@@ -66,7 +66,14 @@ def _require_admin(authorization: str | None) -> str:
 
 
 def _safe(u: dict) -> dict:
-    return {k: v for k, v in u.items() if k not in SENSITIVE_PROFILE_FIELDS}
+    """Strip sensitive fields and apply server-enforced kid pref locks.
+
+    Mirrors backend.server._safe_profile — REST responses must never hand a
+    kid profile's raw stored prefs back to the client (see effective_prefs).
+    """
+    safe = {k: v for k, v in u.items() if k not in SENSITIVE_PROFILE_FIELDS}
+    safe["prefs"] = effective_prefs(u)
+    return safe
 
 
 def _audit(event: str, *, user_id: str = "", ip: str = "", detail: str = "") -> None:

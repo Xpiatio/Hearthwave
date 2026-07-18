@@ -24,6 +24,11 @@ import type {
   TxAbortPayload,
   StoredStreamMsg,
   PluginManifest,
+  FamilyPresenceEntry,
+  FamilyStatusPayload,
+  SetFamilyReminderPayload,
+  SetRolePayload,
+  SetUserQuickMessagesPayload,
 } from './types/ws';
 import type { ChatEntry } from './components/ChatDisplay/ChatDisplay';
 import type { SpectrogramHandle } from './components/Spectrogram/Spectrogram';
@@ -36,10 +41,13 @@ import { DesktopApp } from './components/DesktopApp/DesktopApp';
 import { MobileApp } from './components/MobileApp/MobileApp';
 import { AACApp } from './components/AACApp/AACApp';
 import { HomeScreen } from './components/HomeScreen/HomeScreen';
+import { FamilyPanel } from './components/FamilyPanel/FamilyPanel';
 import { makeDefaultGrid, sanitizeAacGrid } from './components/AACApp/defaultGrid';
 import { SettingsDialog } from './components/SettingsDialog/SettingsDialog';
 import { CalibrationDialog } from './components/CalibrationDialog/CalibrationDialog';
 import { UsersPanel } from './components/UsersPanel/UsersPanel';
+import { DEFAULTS as QUICK_DEFAULTS } from './components/QuickMessages/QuickMessages';
+import { newlyMissed } from './family/presence';
 import { useDeviceClass } from './hooks/useDeviceClass';
 import './App.css';
 
@@ -155,8 +163,13 @@ export default function App() {
 
   // Home-screen shell: which activity is in front (desktop only). Chat unread
   // count is the simplest honest Phase 1 measure — messages received while on home.
-  const [activity, setActivity] = useState<'home' | 'station'>('home');
+  const [activity, setActivity] = useState<'home' | 'station' | 'family'>('home');
   const homeSeenCountRef = useRef(0);
+
+  // Family activity: presence roster (last_heard/last_ok/missed_checkin per
+  // family member) and check-in reminders (admin-configured, hidden from kids).
+  const [familyPresence, setFamilyPresence] = useState<FamilyPresenceEntry[]>([]);
+  const [familyReminders, setFamilyReminders] = useState<Record<string, { time: string; enabled: boolean }>>({});
   const [serverConfig, setServerConfig] = useState<ServerConfig>({
     vadThreshold: 0.5,
     whisperModel: 'small.en',
@@ -492,6 +505,27 @@ export default function App() {
           setHighContrast(prefs.high_contrast);
           localStorage.setItem('radio_tty_high_contrast', String(prefs.high_contrast));
         }
+        // One-time migration: the QuickMessages panel used to keep its presets
+        // purely in localStorage. Once the server-side pref exists this is a
+        // no-op forever (prefs.quick_messages stops being undefined once the
+        // save below round-trips) — so no extra "have we migrated" flag needed.
+        if (prefs.quick_messages === undefined) {
+          const raw = localStorage.getItem('radio_tty_quick_messages');
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw);
+              if (
+                Array.isArray(parsed) &&
+                parsed.length > 0 &&
+                JSON.stringify(parsed) !== JSON.stringify(QUICK_DEFAULTS)
+              ) {
+                sendRef.current({ type: 'save_user_prefs', prefs: { quick_messages: parsed } });
+              }
+            } catch {
+              // malformed localStorage — nothing to migrate
+            }
+          }
+        }
         break;
       }
 
@@ -698,6 +732,31 @@ export default function App() {
             silent: false,
           });
         }
+        break;
+
+      case 'family_presence': {
+        const entries = msg.entries;
+        setFamilyPresence((prev) => {
+          if (
+            notificationsEnabledRef.current &&
+            Notification.permission === 'granted' &&
+            document.visibilityState === 'hidden'
+          ) {
+            for (const member of newlyMissed(prev, entries)) {
+              new Notification(`⚠️ ${member.display_name}`, {
+                body: 'Missed check-in',
+                tag: `family-missed-${member.user_id}`,
+                silent: false,
+              });
+            }
+          }
+          return entries;
+        });
+        break;
+      }
+
+      case 'family_reminders':
+        setFamilyReminders(msg.reminders);
         break;
 
       case 'voice_preview_done':
@@ -953,6 +1012,27 @@ export default function App() {
     send({ type: 'rescan_vocabulary' });
   }
 
+  // Family activity — "I'm OK" check-in and admin management sends.
+  function sendImOk() {
+    send({ type: 'family_status', status: 'ok' } satisfies FamilyStatusPayload);
+  }
+
+  function sendSetReminder(userId: string, time: string | null, enabled: boolean) {
+    send({ type: 'set_family_reminder', user_id: userId, time, enabled } satisfies SetFamilyReminderPayload);
+  }
+
+  function sendSetRole(userId: string, role: 'admin' | 'adult' | 'kid') {
+    send({ type: 'set_role', user_id: userId, role } satisfies SetRolePayload);
+  }
+
+  function sendSetUserQuickMessages(userId: string, list: string[]) {
+    send({
+      type: 'set_user_quick_messages',
+      user_id: userId,
+      quick_messages: list,
+    } satisfies SetUserQuickMessagesPayload);
+  }
+
   function handleToggleDark() {
     const next = !darkMode;
     setDarkMode(next);
@@ -1146,7 +1226,11 @@ export default function App() {
     homeSeenCountRef.current = messages.length;
     setActivity('home');
   }
-  function handleOpenActivity(a: 'station' | 'ncs') {
+  function handleOpenActivity(a: 'station' | 'ncs' | 'family') {
+    if (a === 'family') {
+      setActivity('family');
+      return;
+    }
     if (a === 'ncs') setShowNcs(true);
     setActivity('station');
   }
@@ -1188,8 +1272,24 @@ export default function App() {
   // the message length so the prefixed packet fits one mesh frame).
   const txComposition = resolveTxComposition(plugins, profile);
 
+  // Kid gating: hide Settings entry points and other adult-only affordances.
+  const isKid = profile?.role === 'kid';
+  // Kids only ever see an admin-curated preset list (server-enforced TX
+  // allowlist) — falling back to QUICK_DEFAULTS for a kid with an empty
+  // allowlist would show buttons that error on every tap. Adults keep the
+  // QUICK_DEFAULTS fallback since their tx_message isn't allowlist-gated.
+  const quickMessages = profile?.prefs?.quick_messages ?? (isKid ? [] : QUICK_DEFAULTS);
+
   const sharedProps = {
     txComposition,
+    familyPresence,
+    familyReminders,
+    isKid,
+    quickMessages,
+    sendImOk,
+    sendSetReminder,
+    sendSetRole,
+    sendSetUserQuickMessages,
     profile: profile!,
     connected,
     isOnline,
@@ -1305,9 +1405,23 @@ export default function App() {
           uiLevel={uiLevel}
           ncsEnabled={isPluginEnabled(plugins, 'ncs')}
           unreadCount={unreadCount}
+          familyEntries={familyPresence}
+          isKid={isKid}
           onOpenActivity={handleOpenActivity}
           onOpenSettings={handleToggleSettings}
           onLogout={handleLogout}
+        />
+      ) : activity === 'family' ? (
+        <FamilyPanel
+          entries={familyPresence}
+          reminders={familyReminders}
+          isKid={isKid}
+          isAdmin={!!profile.is_admin}
+          quickMessages={quickMessages}
+          onImOk={sendImOk}
+          onQuickMessage={(text) => handleSend(text, '', '')}
+          onSetReminder={sendSetReminder}
+          onGoHome={handleGoHome}
         />
       ) : (
         <DesktopApp
@@ -1389,6 +1503,8 @@ export default function App() {
             onCreateProfile={(data) => send({ type: 'create_profile', ...data })}
             onDeleteProfile={(userId) => send({ type: 'delete_profile', user_id: userId })}
             onResetLockout={(userId) => send({ type: 'reset_lockout', user_id: userId })}
+            onSetRole={sendSetRole}
+            onSetUserQuickMessages={sendSetUserQuickMessages}
           />
         )}
       />

@@ -32,6 +32,8 @@ interface MobileTopBarProps {
   voicePreviewBusy: boolean;
   stationLengthScale: number;
   showSettings: boolean;
+  /** Kid accounts have no settings surface — hides the Settings menu item. */
+  isKid: boolean;
   onToggleSttListening: () => void;
   onToggleReadAloud: () => void;
   onToggleNotifications: () => void;
@@ -69,6 +71,7 @@ export function MobileTopBar({
   voicePreviewBusy,
   stationLengthScale,
   showSettings,
+  isKid,
   onToggleSttListening,
   onToggleReadAloud,
   onToggleNotifications,
@@ -112,13 +115,18 @@ export function MobileTopBar({
           />
         </Box>
 
-        <VoicePTT
-          disabled={transmitting || listenOnly}
-          onStart={onVoicePttStart}
-          onChunk={onVoicePttChunk}
-          onEnd={onVoicePttEnd}
-          onCancel={onVoicePttCancel}
-        />
+        {/* Server rejects voice_tx_start/voice_tx_end for kid accounts (C1) —
+            hide rather than disable so a kid never sees a button that would
+            record audio and then error on release. */}
+        {!isKid && (
+          <VoicePTT
+            disabled={transmitting || listenOnly}
+            onStart={onVoicePttStart}
+            onChunk={onVoicePttChunk}
+            onEnd={onVoicePttEnd}
+            onCancel={onVoicePttCancel}
+          />
+        )}
 
         <Button
           color="error"
@@ -146,10 +154,14 @@ export function MobileTopBar({
               <ListItemText primary="Dark mode" />
               <Switch edge="end" checked={darkMode} onChange={onToggleDark} slotProps={{ input: { 'aria-label': 'Dark mode' } }} />
             </ListItem>
-            <ListItem>
-              <ListItemText primary="Listen only" />
-              <Switch edge="end" checked={listenOnly} onChange={onToggleListenOnly} slotProps={{ input: { 'aria-label': 'Listen only' } }} />
-            </ListItem>
+            {/* Listen-only is server-enforced off for kid accounts (I5) — a kid
+                toggling it themselves would defeat that lock, so hide it. */}
+            {!isKid && (
+              <ListItem>
+                <ListItemText primary="Listen only" />
+                <Switch edge="end" checked={listenOnly} onChange={onToggleListenOnly} slotProps={{ input: { 'aria-label': 'Listen only' } }} />
+              </ListItem>
+            )}
             <ListItem>
               <ListItemText primary="STT listening" />
               <Switch edge="end" checked={sttListening} onChange={onToggleSttListening} slotProps={{ input: { 'aria-label': 'STT listening' } }} />
@@ -177,6 +189,7 @@ export function MobileTopBar({
               onSaveTtsPrefs={onSaveTtsPrefs}
               showSettings={showSettings}
               onToggleSettings={onToggleSettings}
+              isKid={isKid}
             />
           </Box>
         </Box>

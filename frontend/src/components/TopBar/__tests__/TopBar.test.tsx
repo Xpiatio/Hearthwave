@@ -25,6 +25,7 @@ const mockProfile: UserProfile = {
   callsign: 'W1AAA',
   location: 'Grand Rapids, MI',
   is_admin: true,
+  role: 'admin',
   created_at: '2024-01-01T00:00:00Z',
   prefs: {
     dark_mode: false,
@@ -50,6 +51,7 @@ function makeProps(overrides: Partial<Parameters<typeof TopBar>[0]> = {}) {
     connected: true,
     isOnline: true,
     uiLevel: 'operator' as const,
+    isKid: false,
     serviceMode: 'GMRS',
     listenOnly: false,
     readAloud: false,
@@ -187,7 +189,7 @@ describe('TopBar', () => {
     })
 
     it('hides NCS MODE button for non-admin users', () => {
-      const nonAdminProfile = { ...mockProfile, is_admin: false }
+      const nonAdminProfile = { ...mockProfile, is_admin: false, role: 'adult' as const }
       render(<TopBar {...makeProps({ profile: nonAdminProfile })} />)
       expect(screen.queryByRole('button', { name: /ncs/i })).not.toBeInTheDocument()
     })
@@ -311,7 +313,7 @@ describe('TopBar', () => {
     })
 
     it('hides clear chat button for non-admins', () => {
-      render(<TopBar {...makeProps({ profile: { ...mockProfile, is_admin: false } })} />)
+      render(<TopBar {...makeProps({ profile: { ...mockProfile, is_admin: false, role: 'adult' } })} />)
       expect(screen.queryByRole('button', { name: /clear chat log/i })).not.toBeInTheDocument()
     })
 
@@ -362,6 +364,29 @@ describe('TopBar', () => {
       const { container } = render(<TopBar {...makeProps()} />)
       const results = await axe(container)
       expect(results.violations).toHaveLength(0)
+    })
+  })
+
+  describe('kid gating', () => {
+    it('hides the Voice PTT button for kid accounts', () => {
+      render(<TopBar {...makeProps({ isKid: true })} />)
+      expect(screen.queryByLabelText('Voice PTT (mock)')).not.toBeInTheDocument()
+    })
+
+    it('shows the Voice PTT button for non-kid accounts', () => {
+      render(<TopBar {...makeProps({ isKid: false })} />)
+      expect(screen.getByLabelText('Voice PTT (mock)')).toBeInTheDocument()
+    })
+
+    it('hides the Listen-only button for kid accounts', () => {
+      render(<TopBar {...makeProps({ isKid: true })} />)
+      expect(screen.queryByText('TX ENABLED')).not.toBeInTheDocument()
+      expect(screen.queryByText('LISTEN ONLY')).not.toBeInTheDocument()
+    })
+
+    it('shows the Listen-only button for non-kid accounts', () => {
+      render(<TopBar {...makeProps({ isKid: false })} />)
+      expect(screen.getByText('TX ENABLED')).toBeInTheDocument()
     })
   })
 

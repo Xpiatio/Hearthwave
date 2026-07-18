@@ -52,11 +52,13 @@ interface Props {
   onSaveTtsPrefs: (prefs: { voice: string; length_scale: number }) => void;
   showSettings: boolean;
   onToggleSettings: () => void;
+  /** Kid accounts have no settings surface — hides the Settings menu item. */
+  isKid?: boolean;
 }
 
 const EMOJI_OPTIONS = ['👤', '👨', '👩', '👦', '👧', '🧑', '👴', '👵', '🧔', '👮'];
 
-export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogout, voices, voicePreviewBusy, onPreviewVoice, stationLengthScale, onSaveTtsPrefs, showSettings, onToggleSettings }: Props) {
+export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogout, voices, voicePreviewBusy, onPreviewVoice, stationLengthScale, onSaveTtsPrefs, showSettings, onToggleSettings, isKid = false }: Props) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
@@ -121,8 +123,10 @@ export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogo
 
   function handleEditSave() {
     onUpdateProfile({
-      operator_name: operatorName.trim(),
-      callsign: callsign.trim().toUpperCase(),
+      // A kid's identity fields aren't editable here (fields hidden above),
+      // and the server now rejects a kid self-editing them (I6) — omit
+      // rather than resend the unchanged values to avoid tripping that.
+      ...(isKid ? {} : { operator_name: operatorName.trim(), callsign: callsign.trim().toUpperCase() }),
       location: location.trim(),
       avatar_emoji: avatarEmoji,
     });
@@ -167,10 +171,12 @@ export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogo
           Change Password
         </MenuItem>
         <Divider />
-        <MenuItem selected={showSettings} onClick={() => { onToggleSettings(); handleClose(); }}>
-          <ListItemIcon><SettingsIcon fontSize="small" /></ListItemIcon>
-          Settings
-        </MenuItem>
+        {!isKid && (
+          <MenuItem selected={showSettings} onClick={() => { onToggleSettings(); handleClose(); }}>
+            <ListItemIcon><SettingsIcon fontSize="small" /></ListItemIcon>
+            Settings
+          </MenuItem>
+        )}
         <Divider />
         <MenuItem onClick={() => { setAboutOpen(true); handleClose(); }}>
           <ListItemIcon><InfoOutlinedIcon fontSize="small" /></ListItemIcon>
@@ -211,14 +217,20 @@ export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogo
                 ))}
               </Box>
             </Box>
-            <TextField label="Operator Name" value={operatorName} onChange={(e) => setOperatorName(e.target.value)} fullWidth />
-            <TextField
-              label="Call Sign"
-              value={callsign}
-              onChange={(e) => setCallsign(e.target.value.toUpperCase())}
-              fullWidth
-              slotProps={{ htmlInput: { style: { textTransform: 'uppercase' } } }}
-            />
+            {/* Server rejects a kid's self-edit of identity fields (I6) — an
+                adult sets these instead, so don't offer them here. */}
+            {!isKid && (
+              <>
+                <TextField label="Operator Name" value={operatorName} onChange={(e) => setOperatorName(e.target.value)} fullWidth />
+                <TextField
+                  label="Call Sign"
+                  value={callsign}
+                  onChange={(e) => setCallsign(e.target.value.toUpperCase())}
+                  fullWidth
+                  slotProps={{ htmlInput: { style: { textTransform: 'uppercase' } } }}
+                />
+              </>
+            )}
             <TextField label="Location" value={location} onChange={(e) => setLocation(e.target.value)} fullWidth />
 
             {voices.length > 0 && (

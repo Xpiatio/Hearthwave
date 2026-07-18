@@ -43,6 +43,7 @@ This manual covers day-to-day operation of Hearthwave as a GMRS family hub or ne
 27. [AAC interface (symbol-button communication)](#27-aac-interface-symbol-button-communication)
 28. [Home screen & interface levels](#28-home-screen--interface-levels)
 29. [Accessibility options](#29-accessibility-options)
+30. [Family activity](#30-family-activity)
 
 ---
 
@@ -161,15 +162,19 @@ On phones Hearthwave shows a single-column mobile view (tablets and larger scree
 │                                                      │
 └──────────────────────────────────────────────────────┘
 ┌────────── Bottom Navigation ─────────────────────────┐
-│ Chat  │  NCS  │  Journals  │  Status  │  Settings    │
+│  Chat  │  Family  │  Stations*  │  Journal*           │
 └──────────────────────────────────────────────────────┘
+  * Stations and Journal only appear for Operator-level accounts.
 ```
 
 - Tap **[≡]** (top-left) to open the settings drawer: dark mode, listen-only,
   STT, read-aloud, notifications.
 - The **PTT** button and **ABORT TX** button are always visible in the top bar.
-- Bottom navigation switches between Chat, NCS, Journals, Status, and Settings
-  views.
+- **Chat** and **Family** are available at both interface levels; **Stations**
+  and **Journal** need the **Operator** level (see
+  [section 28](#28-home-screen--interface-levels)). NCS mode is desktop/tablet
+  only and does not appear on the phone layout.
+- See [section 30](#30-family-activity) for what the Family tab does.
 - The account menu is accessible from the settings drawer.
 
 ---
@@ -499,20 +504,38 @@ Admin accounts open the **Settings** dialog from the **Settings** entry in the a
 
 ### User accounts
 
-The **User Accounts** table lists all family member accounts.
+The **User Accounts** table lists all family member accounts, with a **Role** column for each.
 
 **Creating a new account:**
 1. Click **New User**.
 2. Choose an avatar emoji, enter the display name, operator name, call sign, and location.
 3. Set a password (minimum 8 characters, confirmed).
-4. Check **Admin** if this person should be able to change station settings.
+4. Pick a **Role** — **Admin**, **Adult**, or **Kid** (see below).
 5. Click **Create**.
+
+**Changing a role later:** Use the **Role** dropdown directly in that user's row — it saves immediately, no separate save step. You cannot change your own role (the dropdown is disabled on your own row), which prevents a station from being accidentally left with no admin.
 
 **Resetting a lockout:** If someone is locked out after too many wrong passwords, click the **unlock icon** (🔓) next to their name. They can sign in immediately.
 
 **Deleting an account:** Click the **delete icon** (🗑) next to a user. You cannot delete your own account.
 
 > **Security note:** For public internet access, put a TLS reverse proxy (nginx, Caddy) in front of the app. Passwords are hashed with PBKDF2-SHA256 (260,000 iterations, per-user salt) but session tokens travel in plaintext over HTTP without TLS.
+
+#### Roles
+
+| Role | Can do |
+|---|---|
+| **Admin** | Everything Adult can, plus station settings (Settings → Station/System/Plugins tabs), user management, NCS mode, and the admin-only controls throughout this manual. |
+| **Adult** | Full day-to-day operation — send/receive, contacts, journals, quick messages, Family check-ins — but no station settings. |
+| **Kid** | A locked-down account for children — see below. |
+
+**Kid accounts** are restricted for safety and simplicity:
+- Can use text **CHAT** freely, with the profanity filter always on and locked — a Kid account cannot turn it off.
+- Can only **transmit on-air** (send over the radio) using their preset quick messages — the same buttons shown in the Family activity (see [section 30](#30-family-activity)) — sent exactly as written; there is no free-text on-air transmit box.
+- Interface level is locked to **Simple** (no Operator-level controls, ever).
+- No access to the Settings dialog at all — the gear icon is hidden on the Home screen and settings drawer.
+- Can still send the **I'm OK** check-in — see [section 30](#30-family-activity) — since that is treated as a safety action available to every role.
+- AAC Interface (symbol buttons, [section 27](#27-aac-interface-symbol-button-communication)) is not yet supported for Kid accounts.
 
 ### NCS / SKYWARN (admin only)
 
@@ -1136,11 +1159,13 @@ On desktop and tablet, signing in lands you on a **Home screen** — a small gri
 | Card | Shown when |
 |---|---|
 | **💬 Chat** | Always. Subtitle shows a new-message count if there's unread chat since you last left Home. |
+| **🏠 Family** | Always, for every role including Kid accounts. Subtitle shows "Everyone OK" or a missed-check-in count; the card turns amber if anyone has missed a check-in. See [section 30](#30-family-activity). |
 | **🎙 Net Control** | Only for accounts on the **Operator** interface level, and only when the NCS plugin is enabled (see [section 22](#22-plugins)). |
 
 Click a card (or focus it and press **Enter**) to open it:
 
 - **Chat** opens the full station console — chat display, spectrogram, quick messages, message box, and whichever panels you have toggled on.
+- **Family** opens the full-screen presence board (see [section 30](#30-family-activity)).
 - **Net Control** opens the same station console with the NCS panel already showing.
 
 ### Returning to Home
@@ -1193,3 +1218,69 @@ The whole app, including the Home screen, is operable from the keyboard:
 - **Enter** (or **Space**) activates the focused card, quick message, or button anywhere in the app.
 - **Escape** returns to the Home screen from the station console (see [section 28](#28-home-screen--interface-levels)).
 - Focused controls show a visible focus ring (a colored outline) so keyboard users can always see where focus is — this is especially clear with High Contrast enabled.
+
+---
+
+## 30. Family activity
+
+The Family activity is a presence-and-check-in board for the whole household — who's been heard on the radio recently, who's tapped "I'm OK" today, and who's overdue for a check-in. It is available to **every account, including Kid accounts**, at **both interface levels** (Simple and Operator) — unlike Net Control, it is not an Operator-only feature.
+
+### Opening the Family activity
+
+- **Desktop / tablet:** click the **🏠 Family** card on the [Home screen](#28-home-screen--interface-levels). The card's subtitle shows "Everyone OK" or a missed-check-in count, and turns amber if anyone is overdue.
+- **Mobile:** tap the **Family** tab in the bottom navigation (see [section 2a](#2a-mobile-interface)) — it's there for both interface levels, not just Operator.
+- Click the **back arrow** (top-left) or press **Escape** to return to Home (or to Chat, on mobile).
+
+### The presence board
+
+Every family member with an account gets a card showing their avatar, name, a status chip, and a relative "last heard" time.
+
+| Status chip | Meaning |
+|---|---|
+| **OK ✓** *(with time)* | This person tapped **I'm OK** today. |
+| **On air** | This person transmitted within the last 10 minutes — takes priority over a same-day OK. |
+| **No word** | Neither of the above. |
+| **Missed check-in** *(amber)* | That member has a check-in reminder (set by an admin) whose deadline has passed today with no OK check-in yet. This overrides whatever the chip would otherwise say, so an overdue check-in is never hidden behind an old "OK". |
+
+A day rollover clears "Missed check-in" automatically — it's recomputed continuously from the reminder time and today's check-in, not a log you have to clear by hand.
+
+> **What updates "last heard":** only that person's *own* transmission does — Hearthwave does not try to guess presence from a callsign it hears spoken by someone else. There's no historical log either; the board always shows current status, not a timeline.
+
+### The "I'm OK" button
+
+The large green **I'm OK** button at the center of the Family activity does three things at once when pressed:
+1. Speaks **"Family status: {your name} is okay."** over the air, in your voice — unless your account is in [Listen-only mode](#13-settings), in which case the on-air announcement is skipped but the next two steps still happen.
+2. Posts the same line to the shared chat log for every connected user to see.
+3. Marks you **OK** on the presence board for today, clearing any "Missed check-in" chip.
+
+**I'm OK is available to every role, including Kid accounts** — it's treated as a safety feature rather than a normal transmission, so it isn't affected by the kid quick-message restriction described below.
+
+### Quick messages in the Family activity
+
+The row of preset buttons below the I'm OK button is a **separate list from the quick-messages bar** used in the main Chat view ([section 5](#5-quick-messages)). This list is stored on your account on the server (not just in your browser), which is what lets a **Kid account** use it as an allow-list:
+
+- **Kid accounts** see this same preset row in place of a free-text message box everywhere in the app — it is the *only* thing a kid account can transmit, sent exactly as written.
+- **Adult and Admin accounts** can use the presets here as a shortcut, and still have the normal free-text message box in Chat.
+
+**Migration note:** the first time your account connects after this feature shipped, whatever list you had customized in the Chat quick-messages bar (via its ⚙ editor) was copied once into this server-synced list. After that one-time copy, the two lists are independent — editing your Chat quick-messages bar going forward does **not** change what appears in the Family activity.
+
+### Admin setup
+
+#### Check-in reminders
+
+Admin accounts (who are not also Kid accounts) see a **Check-in reminders** section at the bottom of the Family activity, with one row per family member:
+
+- A **time** field (24-hour `HH:MM`) — the daily deadline by which that person should have tapped I'm OK.
+- An **enable** switch — reminders are off by default per member.
+
+Every change saves immediately; there is no separate save step. Only one daily time per member is supported (not a schedule of several reminders a day).
+
+**Notifications:** if [browser notifications](#17-browser-notifications) are enabled and the tab is in the background, a notification fires the moment a member's card flips to "Missed check-in" — once per flip, not repeatedly.
+
+#### Roles and Kid account presets
+
+Roles (**Admin** / **Adult** / **Kid**) are set from **Settings → Users**, described in [section 15](#15-admin--managing-users). An admin can also edit any account's quick-message preset list (the one described above) from that same screen: click the **speech-bubble icon** next to a user's row to open the **Quick Messages** editor, add or remove phrases (up to 20, 1–200 characters each), and click **Save**.
+
+For a **Kid** account, the list can never be saved empty — a kid account needs at least one preset to have anything to transmit — and none of its presets may contain `{` or `}` (placeholders like `{Name}` are a Chat-quick-messages-bar feature only; the server rejects them here). Adult and Admin accounts have no placeholder restriction.
+
+---
