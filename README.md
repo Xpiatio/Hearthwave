@@ -114,6 +114,12 @@ browser-based React frontend communicating over WebSocket.
   saved-phrases list biases recognition toward group-specific vocabulary
 - **Multi-user auth** — PBKDF2 password hashing, per-user session tokens, and
   per-user preferences stored server-side
+- **Family activity & roles** — a presence board (OK / on air / no word /
+  missed check-in) with a giant **I'm OK** button that speaks, chats, and
+  updates status in one tap; admin-configurable daily check-in reminders per
+  member; and three account roles (Admin / Adult / Kid) — Kid accounts can
+  only transmit their preset quick messages, with the profanity filter and
+  Simple interface locked on
 - **Voice PTT** — browser microphone button (or Space bar) captures and transmits
   audio; pre-roll buffer captures the first syllable even before PTT is pressed
 - **Priority audio mixer** — six traffic priority levels (Routine → Emergency)
