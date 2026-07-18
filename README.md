@@ -39,6 +39,11 @@ browser-based React frontend communicating over WebSocket.
 
 ## Features
 
+- **Wall display (kiosk)** — point any tablet at `/display` with an admin-issued
+  device token and it becomes a glanceable family board: who's OK, weather and
+  street alerts, the last few messages, the next net, and a clock; tap to mark
+  someone OK or send a household quick message — no login screen, no settings
+  exposed, and every send is server-checked against the admin's allowlist
 - **Hearthwave Home** — the app opens on a home screen of large activity cards
   (Chat, Family, Neighborhood, Net Control) instead of dropping everyone into
   the operator console; a per-user interface level (Simple / Operator) hides

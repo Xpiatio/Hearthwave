@@ -45,6 +45,7 @@ This manual covers day-to-day operation of Hearthwave as a GMRS family hub or ne
 29. [Accessibility options](#29-accessibility-options)
 30. [Family activity](#30-family-activity)
 31. [Neighborhood activity](#31-neighborhood-activity)
+32. [Wall display (kiosk)](#32-wall-display-kiosk)
 
 ---
 
@@ -1364,5 +1365,47 @@ An admin turns this on from **Settings → Users** (see [section 15](#15-admin--
 
 - **Kid accounts can never be coordinators** — the switch is disabled on a Kid account's row, and demoting an existing coordinator to Kid automatically clears the grant.
 - An admin can grant the coordinator switch to their own account (it isn't disabled on your own row the way the Role dropdown is).
+
+---
+
+## 32. Wall display (kiosk)
+
+A wall display turns a spare tablet — the one on the kitchen counter, say — into an always-on glance screen for the household: who's OK, what the weather and street alerts look like, the last few chat messages, and when the next net is. It runs as its own page, with no login and no access to the rest of the app.
+
+### Setting up a display (admin)
+
+1. Open **Settings → Station tab** (admin only) and scroll to **Wall displays**.
+2. Type a name for the tablet (e.g. "Kitchen") and click **Add display**.
+3. The new device's token is shown **once**, in a copyable field. Copy it now — Hearthwave does not show it again. If it's lost before the tablet is set up, the only fix is to revoke that display and add a new one.
+4. On the tablet itself, browse to `http://<host>/display` and paste the token into the connect screen. The token is then remembered on that device (stored in the browser's local storage), so the tablet reconnects on its own after a reboot or a power cut — no re-pairing needed.
+
+The **Wall displays** table lists every paired device with when it was created and when it was last seen, plus a **Revoke** button. Revoking disconnects that display immediately; it will have to be re-paired with a fresh token to come back online.
+
+### What it shows
+
+- **Family presence tiles** — one per household member, with the same status chips as the [Family activity](#30-family-activity): **OK**, **On air**, **No word**, or **Missed check-in**.
+- A **weather / street alert banner**, when one is active.
+- The **last three chat messages**.
+- The **next scheduled net** (or "Net running now" while one is in progress).
+- A large **clock**.
+
+The display dims to a dark theme automatically between 7 PM and 7 AM, and the whole layout drifts a few pixels every so often — a standard anti-burn-in measure for a screen that shows the same layout for hours at a stretch. None of this needs any setup; it just runs.
+
+### Tap to wake
+
+The display is normally passive — nothing on it responds to touch. Tapping anywhere wakes it into an interactive mode for 45 seconds, during which:
+
+- **Tapping a family member's tile** brings up a large **"Mark {name} as OK?"** confirmation with **Yes** / **No**. Tapping **Yes** does the same three things the Family activity's I'm OK button does: speaks it on the air, posts it to chat, and updates that person's presence.
+- A row of **household quick-message** buttons appears, if any are configured (see below). Tapping one sends that exact message.
+
+If nothing is tapped again, the display reverts to its passive glance layout after the 45 seconds run out.
+
+### Household quick messages (admin)
+
+The buttons on the wall display come from a **Household Quick Messages** list, configured by an admin in the same **Settings → Station tab → Wall displays** section — one message per line. Leaving the list empty hides the quick-message row on every display. Every message a display sends is checked against this exact list on the server, so a display can never transmit anything outside what an admin has put there.
+
+### What a display can't do
+
+A wall display is a read-and-tap glance screen, not a client login. It has no access to Settings, cannot transmit outside its quick-message allowlist, and can't see user accounts or any other part of the app. When a display does send something — a Mark-OK or a quick message — it shows up in chat under the display's own name (e.g. "Kitchen"), not as any household member.
 
 ---
