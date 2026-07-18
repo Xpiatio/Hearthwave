@@ -1402,6 +1402,16 @@ export default function App() {
   // (see set_neighborhood_coordinator), not a role, so it reads from prefs.
   const isCoordinator = profile?.prefs?.neighborhood_coordinator === true;
 
+  // netDay/netTime are sourced from neighborhood_state, not the status
+  // message that feeds the rest of adminConfig — merge them in here so
+  // every consumer of adminConfig (AdminPanel via SettingsDialog, MobileApp)
+  // sees the same shape.
+  const mergedAdminConfig = {
+    ...adminConfig,
+    netDay: neighborhoodState?.net_day ?? '',
+    netTime: neighborhoodState?.net_time ?? '',
+  };
+
   const sharedProps = {
     txComposition,
     familyPresence,
@@ -1479,7 +1489,7 @@ export default function App() {
     onToggleSttListening: handleToggleSttListening,
     onToggleDark: handleToggleDark,
     uiLevel,
-    adminConfig,
+    adminConfig: mergedAdminConfig,
     showSettings,
     onToggleSettings: handleToggleSettings,
     showContacts,
@@ -1643,7 +1653,7 @@ export default function App() {
         onUiLevelChange={handleUiLevelChange}
         onFontScaleChange={handleFontScaleChange}
         onToggleHighContrast={handleToggleHighContrast}
-        adminConfig={adminConfig}
+        adminConfig={mergedAdminConfig}
         voices={voices}
         voicePreviewBusy={voicePreviewBusy}
         onAdminSave={handleAdminSave}
@@ -1667,6 +1677,7 @@ export default function App() {
             onResetLockout={(userId) => send({ type: 'reset_lockout', user_id: userId })}
             onSetRole={sendSetRole}
             onSetUserQuickMessages={sendSetUserQuickMessages}
+            onSetNeighborhoodCoordinator={sendSetNeighborhoodCoordinator}
           />
         )}
       />

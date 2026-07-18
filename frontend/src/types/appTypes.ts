@@ -10,6 +10,8 @@ export interface AdminConfig {
   ncsPreambleText: string;
   ncsClosingText: string;
   rxMode: string;
+  netDay: string;
+  netTime: string;
 }
 
 export interface JournalResultDraft {

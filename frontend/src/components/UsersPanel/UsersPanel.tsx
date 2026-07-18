@@ -16,6 +16,7 @@ import {
   MenuItem,
   Paper,
   Select,
+  Switch,
   Table,
   TableBody,
   TableCell,
@@ -58,6 +59,7 @@ interface Props {
   onResetLockout: (userId: string) => void;
   onSetRole: (userId: string, role: Role) => void;
   onSetUserQuickMessages: (userId: string, quickMessages: string[]) => void;
+  onSetNeighborhoodCoordinator: (userId: string, coordinator: boolean) => void;
 }
 
 const EMOJI_OPTIONS = ['👤', '👨', '👩', '👦', '👧', '🧑', '👴', '👵', '🧔', '👮'];
@@ -70,6 +72,7 @@ export function UsersPanel({
   onResetLockout,
   onSetRole,
   onSetUserQuickMessages,
+  onSetNeighborhoodCoordinator,
 }: Props) {
   const [createOpen, setCreateOpen] = useState(false);
   const [displayName, setDisplayName] = useState('');
@@ -166,6 +169,7 @@ export function UsersPanel({
             <TableCell>User</TableCell>
             <TableCell>Call Sign</TableCell>
             <TableCell>Role</TableCell>
+            <TableCell>Coordinator</TableCell>
             <TableCell align="right">Actions</TableCell>
           </TableRow>
         </TableHead>
@@ -200,6 +204,19 @@ export function UsersPanel({
                         <MenuItem key={r} value={r}>{ROLE_LABELS[r]}</MenuItem>
                       ))}
                     </Select>
+                  </span>
+                </Tooltip>
+              </TableCell>
+              <TableCell>
+                <Tooltip title={p.role === 'kid' ? 'Kid accounts cannot be coordinators' : ''}>
+                  <span>
+                    <Switch
+                      size="small"
+                      checked={p.prefs?.neighborhood_coordinator === true}
+                      disabled={p.role === 'kid'}
+                      onChange={(e) => onSetNeighborhoodCoordinator(p.id, e.target.checked)}
+                      slotProps={{ input: { 'aria-label': `Neighborhood coordinator for ${p.display_name}` } }}
+                    />
                   </span>
                 </Tooltip>
               </TableCell>
