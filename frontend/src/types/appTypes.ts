@@ -12,6 +12,8 @@ export interface AdminConfig {
   rxMode: string;
   netDay: string;
   netTime: string;
+  /** Quick-message shortcuts offered on the kiosk display's "I'm OK" screen. */
+  display_quick_messages: string[];
 }
 
 export interface JournalResultDraft {

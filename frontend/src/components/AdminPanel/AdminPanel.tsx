@@ -18,11 +18,16 @@ import {
   Slider,
   ToggleButtonGroup,
   ToggleButton,
+  Table,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableCell,
 } from '@mui/material';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import MicIcon from '@mui/icons-material/Mic';
-import type { VoiceOption } from '../../types/ws';
+import type { VoiceOption, DeviceTokenRecord } from '../../types/ws';
 
 const SPEED_MARKS = [
   { value: 0.5, label: 'Fast' },
@@ -54,6 +59,8 @@ interface AdminConfig {
   netDay: string;
   /** "HH:MM" 24-hour time, or "" when unset. */
   netTime: string;
+  /** Quick-message shortcuts offered on the kiosk display's "I'm OK" screen. */
+  display_quick_messages: string[];
 }
 
 interface Props {
@@ -76,8 +83,16 @@ interface Props {
     rx_mode: string;
     neighborhood_net_day: string;
     neighborhood_net_time: string;
+    display_quick_messages: string[];
   }) => void;
   onPreviewVoice: (voiceId: string) => void;
+  /** Wall-display device tokens, admin-managed (Task 3 device_token_* WS chain). */
+  deviceTokens: DeviceTokenRecord[];
+  /** The one-time token from the most recent device_token_created reply, shown
+   *  once in a copyable field then never again — not persisted server-side. */
+  createdToken: DeviceTokenRecord | null;
+  onCreateDeviceToken: (label: string) => void;
+  onRevokeDeviceToken: (id: string) => void;
   children?: React.ReactNode;
   /** When true, render just the form body (no Dialog chrome) for embedding in
    *  a tabbed SettingsDialog. The Save button is kept; Cancel/title are not. */
@@ -110,11 +125,13 @@ function seedFromConfig(config: AdminConfig): string {
     rx_mode: config.rxMode || 'voice',
     neighborhood_net_day: config.netDay || '',
     neighborhood_net_time: config.netTime || '',
+    display_quick_messages: config.display_quick_messages || [],
   });
 }
 
 export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPanel(
   { open, onClose, config, voices, voicePreviewBusy, onSave, onPreviewVoice, children,
+    deviceTokens, createdToken, onCreateDeviceToken, onRevokeDeviceToken,
     embedded = false, hideSaveButton = false, onDirtyChange },
   ref
 ) {
@@ -132,6 +149,8 @@ export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPane
   const [netDay, setNetDay] = useState('');
   const [netTime, setNetTime] = useState('');
   const [showKey, setShowKey] = useState(false);
+  const [quickMessagesText, setQuickMessagesText] = useState('');
+  const [newDisplayLabel, setNewDisplayLabel] = useState('');
 
   const seedRef = useRef<string>('');
 
@@ -153,6 +172,7 @@ export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPane
     setNetDay(config.netDay || '');
     setNetTime(config.netTime || '');
     setShowKey(false);
+    setQuickMessagesText((config.display_quick_messages || []).join('\n'));
     // Compute seed from config directly (state setters are async), mirroring
     // buildValues() serialization. geminiKey initializes to '' on open.
     seedRef.current = seedFromConfig(config);
@@ -182,6 +202,10 @@ export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPane
       rx_mode: rxMode,
       neighborhood_net_day: netDay,
       neighborhood_net_time: netTime,
+      display_quick_messages: quickMessagesText
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean),
     };
   }
 
@@ -201,6 +225,13 @@ export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPane
   function handleSave() { // used only by the embedded/standalone button
     commitValues();
     onClose();
+  }
+
+  function handleCreateDisplay() {
+    const trimmed = newDisplayLabel.trim();
+    if (!trimmed) return;
+    onCreateDeviceToken(trimmed);
+    setNewDisplayLabel('');
   }
 
   const content = (
@@ -425,6 +456,95 @@ export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPane
                 : 'Incoming audio transcribed with Whisper speech-to-text.'}
             </Typography>
           </Box>
+
+          <Divider />
+
+          <Typography variant="overline" sx={{ color: 'text.secondary', lineHeight: 1 }}>
+            Wall displays
+          </Typography>
+
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Display</TableCell>
+                <TableCell>Created</TableCell>
+                <TableCell>Last Seen</TableCell>
+                <TableCell align="right">Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {deviceTokens.map((t) => (
+                <TableRow key={t.id}>
+                  <TableCell>{t.label}</TableCell>
+                  <TableCell>{t.created_at}</TableCell>
+                  <TableCell>{t.last_seen ?? 'Never'}</TableCell>
+                  <TableCell align="right">
+                    <Button
+                      size="small"
+                      color="error"
+                      aria-label={`Revoke ${t.label}`}
+                      onClick={() => onRevokeDeviceToken(t.id)}
+                    >
+                      Revoke
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {deviceTokens.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4}>
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                      No wall displays yet.
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <TextField
+              size="small"
+              fullWidth
+              label="Display Name"
+              value={newDisplayLabel}
+              onChange={(e) => setNewDisplayLabel(e.target.value)}
+              placeholder="e.g. Kitchen"
+            />
+            <Button
+              variant="outlined"
+              onClick={handleCreateDisplay}
+              disabled={!newDisplayLabel.trim()}
+            >
+              Add display
+            </Button>
+          </Box>
+
+          {createdToken && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+              <TextField
+                size="small"
+                fullWidth
+                label={`Token for ${createdToken.label}`}
+                value={createdToken.token ?? ''}
+                slotProps={{ htmlInput: { readOnly: true, style: { fontFamily: 'monospace' } } }}
+              />
+              <Typography variant="caption" color="warning.main">
+                Copy now — it won't be shown again.
+              </Typography>
+            </Box>
+          )}
+
+          <TextField
+            label="Household Quick Messages"
+            size="small"
+            value={quickMessagesText}
+            onChange={(e) => setQuickMessagesText(e.target.value)}
+            multiline
+            minRows={3}
+            fullWidth
+            helperText="Buttons shown on the wall display. One message per line."
+          />
 
           {children && (
             <>

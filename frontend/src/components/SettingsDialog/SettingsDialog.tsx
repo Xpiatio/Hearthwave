@@ -7,7 +7,7 @@ import { ConfigPanel } from '../ConfigPanel/ConfigPanel';
 import { AdminPanel, type AdminPanelHandle } from '../AdminPanel/AdminPanel';
 import { ServerConfigPanel, type ServerConfigPanelHandle } from '../ServerConfigPanel/ServerConfigPanel';
 import { PluginsPanel, type PluginDraft } from '../PluginsPanel/PluginsPanel';
-import type { InputDeviceOption, MonitorSinkOption, OutputDeviceOption, PluginManifest } from '../../types/ws';
+import type { InputDeviceOption, MonitorSinkOption, OutputDeviceOption, PluginManifest, DeviceTokenRecord } from '../../types/ws';
 
 interface Props {
   open: boolean;
@@ -51,6 +51,10 @@ interface Props {
   onAdminSave: React.ComponentProps<typeof AdminPanel>['onSave'];
   onPreviewVoice: React.ComponentProps<typeof AdminPanel>['onPreviewVoice'];
   usersPanel?: React.ReactNode;
+  deviceTokens: DeviceTokenRecord[];
+  createdToken: DeviceTokenRecord | null;
+  onCreateDeviceToken: (label: string) => void;
+  onRevokeDeviceToken: (id: string) => void;
 
   // System tab (admin only)
   serverConfig: React.ComponentProps<typeof ServerConfigPanel>['config'];
@@ -215,6 +219,8 @@ export function SettingsDialog(props: Props) {
               ref={adminRef} embedded hideSaveButton open={open} onClose={onClose}
               config={props.adminConfig} voices={props.voices} voicePreviewBusy={props.voicePreviewBusy}
               onSave={props.onAdminSave} onPreviewVoice={props.onPreviewVoice}
+              deviceTokens={props.deviceTokens} createdToken={props.createdToken}
+              onCreateDeviceToken={props.onCreateDeviceToken} onRevokeDeviceToken={props.onRevokeDeviceToken}
               onDirtyChange={setAdminDirty}
             >
               {props.usersPanel}
