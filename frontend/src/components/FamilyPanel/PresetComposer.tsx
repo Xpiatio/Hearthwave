@@ -1,4 +1,4 @@
-import { Box, Button } from '@mui/material';
+import { Box, Button, Typography } from '@mui/material';
 
 export interface PresetComposerProps {
   quickMessages: string[];
@@ -10,8 +10,23 @@ export interface PresetComposerProps {
  *  no trimming or decoration — the server gates a kid account's TX to an
  *  exact match against this same quick_messages list (see server.py
  *  `_is_kid` tx_message handling), so any alteration here would make every
- *  kid send fail server-side. */
+ *  kid send fail server-side.
+ *
+ *  A kid whose admin hasn't set up any presets yet has an empty
+ *  quick_messages list — every message they could send would be rejected
+ *  server-side, so render an explanatory empty state instead of a dead
+ *  zero-button row. */
 export function PresetComposer({ quickMessages, onSend }: PresetComposerProps) {
+  if (quickMessages.length === 0) {
+    return (
+      <Box role="group" aria-label="Quick messages" sx={{ p: 2 }}>
+        <Typography variant="body2" color="text.secondary">
+          Ask an adult to set up your messages.
+        </Typography>
+      </Box>
+    );
+  }
+
   return (
     <Box
       role="group"

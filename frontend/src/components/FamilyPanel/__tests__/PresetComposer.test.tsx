@@ -29,4 +29,15 @@ describe('PresetComposer', () => {
     );
     expect(await axe(container)).toHaveNoViolations();
   });
+
+  it('renders an empty-state message instead of a dead zero-button row when there are no presets', () => {
+    render(<PresetComposer quickMessages={[]} onSend={vi.fn()} />);
+    expect(screen.getByText('Ask an adult to set up your messages.')).toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('empty state has no axe violations', async () => {
+    const { container } = render(<PresetComposer quickMessages={[]} onSend={vi.fn()} />);
+    expect(await axe(container)).toHaveNoViolations();
+  });
 });

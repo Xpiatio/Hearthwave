@@ -51,6 +51,7 @@ function makeProps(overrides: Partial<Parameters<typeof TopBar>[0]> = {}) {
     connected: true,
     isOnline: true,
     uiLevel: 'operator' as const,
+    isKid: false,
     serviceMode: 'GMRS',
     listenOnly: false,
     readAloud: false,
@@ -363,6 +364,29 @@ describe('TopBar', () => {
       const { container } = render(<TopBar {...makeProps()} />)
       const results = await axe(container)
       expect(results.violations).toHaveLength(0)
+    })
+  })
+
+  describe('kid gating', () => {
+    it('hides the Voice PTT button for kid accounts', () => {
+      render(<TopBar {...makeProps({ isKid: true })} />)
+      expect(screen.queryByLabelText('Voice PTT (mock)')).not.toBeInTheDocument()
+    })
+
+    it('shows the Voice PTT button for non-kid accounts', () => {
+      render(<TopBar {...makeProps({ isKid: false })} />)
+      expect(screen.getByLabelText('Voice PTT (mock)')).toBeInTheDocument()
+    })
+
+    it('hides the Listen-only button for kid accounts', () => {
+      render(<TopBar {...makeProps({ isKid: true })} />)
+      expect(screen.queryByText('TX ENABLED')).not.toBeInTheDocument()
+      expect(screen.queryByText('LISTEN ONLY')).not.toBeInTheDocument()
+    })
+
+    it('shows the Listen-only button for non-kid accounts', () => {
+      render(<TopBar {...makeProps({ isKid: false })} />)
+      expect(screen.getByText('TX ENABLED')).toBeInTheDocument()
     })
   })
 

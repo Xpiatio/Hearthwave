@@ -242,6 +242,49 @@ describe('AccountMenu', () => {
     })
   })
 
+  describe('Edit Profile dialog kid gating', () => {
+    async function openEditDialog(props: ReturnType<typeof makeProps>) {
+      render(<AccountMenu {...props} />)
+      fireEvent.click(screen.getByRole('button', { name: /account menu/i }))
+      await waitFor(() => screen.getByText('Edit Profile'))
+      fireEvent.click(screen.getByText('Edit Profile'))
+      await waitFor(() => screen.getByRole('dialog'))
+    }
+
+    it('hides Operator Name and Call Sign fields for kid accounts', async () => {
+      await openEditDialog(makeProps({ isKid: true }))
+      expect(screen.queryByLabelText('Operator Name')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Call Sign')).not.toBeInTheDocument()
+      expect(screen.getByDisplayValue('Grand Rapids, MI')).toBeInTheDocument()
+    })
+
+    it('shows Operator Name and Call Sign fields for non-kid accounts', async () => {
+      await openEditDialog(makeProps({ isKid: false }))
+      expect(screen.getByLabelText('Operator Name')).toBeInTheDocument()
+      expect(screen.getByLabelText('Call Sign')).toBeInTheDocument()
+    })
+
+    it('omits operator_name and callsign from onUpdateProfile for kid accounts', async () => {
+      const onUpdateProfile = vi.fn()
+      await openEditDialog(makeProps({ isKid: true, onUpdateProfile }))
+      fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+      expect(onUpdateProfile).toHaveBeenCalledOnce()
+      const payload = onUpdateProfile.mock.calls[0][0]
+      expect(payload).not.toHaveProperty('operator_name')
+      expect(payload).not.toHaveProperty('callsign')
+      expect(payload.location).toBe('Grand Rapids, MI')
+    })
+
+    it('includes operator_name and callsign in onUpdateProfile for non-kid accounts', async () => {
+      const onUpdateProfile = vi.fn()
+      await openEditDialog(makeProps({ isKid: false, onUpdateProfile }))
+      fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+      const payload = onUpdateProfile.mock.calls[0][0]
+      expect(payload.operator_name).toBe('Alice Smith')
+      expect(payload.callsign).toBe('W1AAA')
+    })
+  })
+
   describe('Change Password dialog', () => {
     async function openPasswordDialog(props = makeProps()) {
       render(<AccountMenu {...props} />)

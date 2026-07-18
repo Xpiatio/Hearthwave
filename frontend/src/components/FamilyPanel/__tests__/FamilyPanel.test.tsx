@@ -95,6 +95,16 @@ describe('FamilyPanel', () => {
     expect(screen.queryByLabelText(/Check-in reminder/)).not.toBeInTheDocument();
   });
 
+  it('kid with an empty preset list gets an explanatory empty state instead of a dead row', () => {
+    render(<FamilyPanel {...makeProps({ isKid: true, isAdmin: false, quickMessages: [] })} />);
+    expect(screen.getByText('Ask an adult to set up your messages.')).toBeInTheDocument();
+  });
+
+  it('adult with an empty preset list still gets the (empty) button row, not the kid empty state', () => {
+    render(<FamilyPanel {...makeProps({ isKid: false, quickMessages: [] })} />);
+    expect(screen.queryByText('Ask an adult to set up your messages.')).not.toBeInTheDocument();
+  });
+
   it('back button returns home', () => {
     const props = makeProps();
     render(<FamilyPanel {...props} />);

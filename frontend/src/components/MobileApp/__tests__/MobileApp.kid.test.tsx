@@ -178,4 +178,28 @@ describe('MobileApp — kid-mode gating', () => {
 
     expect(onSend).toHaveBeenCalledWith("I'm OK", '', '')
   })
+
+  it('hides the Voice PTT button for a kid account (C1)', () => {
+    render(<MobileApp {...makeProps()} />)
+    expect(screen.queryByRole('button', { name: 'Push to talk' })).not.toBeInTheDocument()
+  })
+
+  it('hides the Listen-only switch in the drawer for a kid account (I5)', () => {
+    render(<MobileApp {...makeProps()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'open menu' }))
+    expect(screen.queryByLabelText('Listen only')).not.toBeInTheDocument()
+  })
+})
+
+describe('MobileApp — non-kid mode', () => {
+  it('shows the Voice PTT button for a non-kid account', () => {
+    render(<MobileApp {...makeProps({ isKid: false })} />)
+    expect(screen.getByRole('button', { name: 'Push to talk' })).toBeInTheDocument()
+  })
+
+  it('shows the Listen-only switch in the drawer for a non-kid account', () => {
+    render(<MobileApp {...makeProps({ isKid: false })} />)
+    fireEvent.click(screen.getByRole('button', { name: 'open menu' }))
+    expect(screen.getByLabelText('Listen only')).toBeInTheDocument()
+  })
 })

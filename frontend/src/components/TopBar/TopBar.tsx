@@ -330,18 +330,22 @@ export function TopBar({
           </Tooltip>
         )}
 
-        <Tooltip title={listenOnly ? 'Listen-only mode — click to enable TX' : 'TX enabled — click for listen-only'}>
-          <Button
-            variant={listenOnly ? 'contained' : 'outlined'}
-            color={listenOnly ? 'warning' : 'inherit'}
-            size="small"
-            onClick={onToggleListenOnly}
-            aria-pressed={listenOnly}
-            aria-label={listenOnly ? 'Listen-only mode active — click to enable transmit' : 'Transmit enabled — click for listen-only'}
-          >
-            {listenOnly ? 'LISTEN ONLY' : 'TX ENABLED'}
-          </Button>
-        </Tooltip>
+        {/* Listen-only is server-enforced off for kid accounts (I5) — a kid
+            toggling it themselves would defeat that lock, so hide it. */}
+        {!isKid && (
+          <Tooltip title={listenOnly ? 'Listen-only mode — click to enable TX' : 'TX enabled — click for listen-only'}>
+            <Button
+              variant={listenOnly ? 'contained' : 'outlined'}
+              color={listenOnly ? 'warning' : 'inherit'}
+              size="small"
+              onClick={onToggleListenOnly}
+              aria-pressed={listenOnly}
+              aria-label={listenOnly ? 'Listen-only mode active — click to enable transmit' : 'Transmit enabled — click for listen-only'}
+            >
+              {listenOnly ? 'LISTEN ONLY' : 'TX ENABLED'}
+            </Button>
+          </Tooltip>
+        )}
 
         <Tooltip title={readAloud ? 'Read aloud on — incoming messages spoken aloud' : 'Read aloud off — click to hear incoming messages'}>
           <Button
@@ -369,13 +373,18 @@ export function TopBar({
           </Button>
         </Tooltip>
 
-        <VoicePTT
-          disabled={listenOnly || transmitting || !connected}
-          onStart={onVoicePttStart}
-          onChunk={onVoicePttChunk}
-          onEnd={onVoicePttEnd}
-          onCancel={onVoicePttCancel}
-        />
+        {/* Server rejects voice_tx_start/voice_tx_end for kid accounts (C1) —
+            hide rather than disable so a kid never sees a button that would
+            record audio and then error on release. */}
+        {!isKid && (
+          <VoicePTT
+            disabled={listenOnly || transmitting || !connected}
+            onStart={onVoicePttStart}
+            onChunk={onVoicePttChunk}
+            onEnd={onVoicePttEnd}
+            onCancel={onVoicePttCancel}
+          />
+        )}
 
         <Tooltip title={transmitting ? 'Abort current transmission immediately' : 'No active transmission'}>
           <span>

@@ -123,8 +123,10 @@ export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogo
 
   function handleEditSave() {
     onUpdateProfile({
-      operator_name: operatorName.trim(),
-      callsign: callsign.trim().toUpperCase(),
+      // A kid's identity fields aren't editable here (fields hidden above),
+      // and the server now rejects a kid self-editing them (I6) — omit
+      // rather than resend the unchanged values to avoid tripping that.
+      ...(isKid ? {} : { operator_name: operatorName.trim(), callsign: callsign.trim().toUpperCase() }),
       location: location.trim(),
       avatar_emoji: avatarEmoji,
     });
@@ -215,14 +217,20 @@ export function AccountMenu({ profile, onUpdateProfile, onChangePassword, onLogo
                 ))}
               </Box>
             </Box>
-            <TextField label="Operator Name" value={operatorName} onChange={(e) => setOperatorName(e.target.value)} fullWidth />
-            <TextField
-              label="Call Sign"
-              value={callsign}
-              onChange={(e) => setCallsign(e.target.value.toUpperCase())}
-              fullWidth
-              slotProps={{ htmlInput: { style: { textTransform: 'uppercase' } } }}
-            />
+            {/* Server rejects a kid's self-edit of identity fields (I6) — an
+                adult sets these instead, so don't offer them here. */}
+            {!isKid && (
+              <>
+                <TextField label="Operator Name" value={operatorName} onChange={(e) => setOperatorName(e.target.value)} fullWidth />
+                <TextField
+                  label="Call Sign"
+                  value={callsign}
+                  onChange={(e) => setCallsign(e.target.value.toUpperCase())}
+                  fullWidth
+                  slotProps={{ htmlInput: { style: { textTransform: 'uppercase' } } }}
+                />
+              </>
+            )}
             <TextField label="Location" value={location} onChange={(e) => setLocation(e.target.value)} fullWidth />
 
             {voices.length > 0 && (

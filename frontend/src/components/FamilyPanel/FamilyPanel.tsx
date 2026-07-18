@@ -78,18 +78,26 @@ export function FamilyPanel(props: FamilyPanelProps) {
         I&apos;m OK
       </ButtonBase>
 
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
-        {props.quickMessages.map((text) => (
-          <Button
-            key={text}
-            variant="outlined"
-            onClick={() => props.onQuickMessage(text)}
-            sx={{ minHeight: 56, textTransform: 'none' }}
-          >
-            {text}
-          </Button>
-        ))}
-      </Box>
+      {props.isKid && props.quickMessages.length === 0 ? (
+        <Box sx={{ p: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            Ask an adult to set up your messages.
+          </Typography>
+        </Box>
+      ) : (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
+          {props.quickMessages.map((text) => (
+            <Button
+              key={text}
+              variant="outlined"
+              onClick={() => props.onQuickMessage(text)}
+              sx={{ minHeight: 56, textTransform: 'none' }}
+            >
+              {text}
+            </Button>
+          ))}
+        </Box>
+      )}
 
       {showReminders && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

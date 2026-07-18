@@ -1274,7 +1274,11 @@ export default function App() {
 
   // Kid gating: hide Settings entry points and other adult-only affordances.
   const isKid = profile?.role === 'kid';
-  const quickMessages = profile?.prefs?.quick_messages ?? QUICK_DEFAULTS;
+  // Kids only ever see an admin-curated preset list (server-enforced TX
+  // allowlist) — falling back to QUICK_DEFAULTS for a kid with an empty
+  // allowlist would show buttons that error on every tap. Adults keep the
+  // QUICK_DEFAULTS fallback since their tx_message isn't allowlist-gated.
+  const quickMessages = profile?.prefs?.quick_messages ?? (isKid ? [] : QUICK_DEFAULTS);
 
   const sharedProps = {
     txComposition,

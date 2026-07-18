@@ -535,6 +535,7 @@ The **User Accounts** table lists all family member accounts, with a **Role** co
 - Interface level is locked to **Simple** (no Operator-level controls, ever).
 - No access to the Settings dialog at all — the gear icon is hidden on the Home screen and settings drawer.
 - Can still send the **I'm OK** check-in — see [section 30](#30-family-activity) — since that is treated as a safety action available to every role.
+- AAC Interface (symbol buttons, [section 27](#27-aac-interface-symbol-button-communication)) is not yet supported for Kid accounts.
 
 ### NCS / SKYWARN (admin only)
 
