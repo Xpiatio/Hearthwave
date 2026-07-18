@@ -132,6 +132,9 @@ export function useDisplaySocket(token: string | null): UseDisplaySocketResult {
       case 'chat_history':
         setMessages(capMessages(msg.messages.map(streamMsgToEntry)));
         break;
+      case 'chat_cleared':
+        setMessages([]);
+        break;
       case 'chat_echo':
       case 'tx_echo':
         appendMessage(streamMsgToEntry(msg));

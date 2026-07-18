@@ -150,6 +150,17 @@ describe('useDisplaySocket', () => {
     expect(socketCount()).toBe(2);
   });
 
+  it('clears messages on chat_cleared', () => {
+    const { result } = renderHook(() => useDisplaySocket('tok123'));
+    act(() => {
+      mockServerSend({ type: 'chat_echo', ts: 't1', display_name: 'A', text: 'm1' });
+      mockServerSend({ type: 'chat_echo', ts: 't2', display_name: 'A', text: 'm2' });
+    });
+    expect(result.current.messages).toHaveLength(2);
+    act(() => mockServerSend({ type: 'chat_cleared' }));
+    expect(result.current.messages).toHaveLength(0);
+  });
+
   it('send() dispatches over the open socket', () => {
     const { result } = renderHook(() => useDisplaySocket('tok123'));
     act(() => mockServerSend({ type: 'status', radio_connected: true, volume_ok: true, channel_clear: true }));
