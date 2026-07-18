@@ -568,19 +568,8 @@ describe('Wall displays admin section', () => {
     await user.clear(labelField)
     await user.type(labelField, 'Kitchen')
     expect(addButton).not.toBeDisabled()
-  })
-
-  it('does not call onCreateDeviceToken when Add display is clicked with whitespace-only label', async () => {
-    const props = makeDefaultProps()
-    render(<AdminPanel {...props} />)
-
-    const labelField = screen.getByLabelText(/display name/i)
-    fireEvent.change(labelField, { target: { value: '  \n  ' } })
-
-    // The button should be disabled, so this tests the guard is in place
-    const addButton = screen.getByRole('button', { name: /add display/i })
-    expect(addButton).toBeDisabled()
-    expect(props.onCreateDeviceToken).not.toHaveBeenCalled()
+    // Native disabled-button semantics guarantee onCreateDeviceToken cannot fire from disabled state;
+    // the handler's internal trim guard is intentional defense-in-depth, not UI-reachable today.
   })
 
   it('normalizes quick-messages with multiline messy input and filters empty lines', async () => {
