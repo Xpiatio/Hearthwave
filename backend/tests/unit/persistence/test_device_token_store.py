@@ -32,6 +32,12 @@ class TestCreate:
         with pytest.raises(ValueError):
             _store(tmp_path).create("x" * 81)
 
+    def test_create_accepts_max_length_label(self, tmp_path):
+        """Label of exactly MAX_LABEL_LEN (80) characters is accepted."""
+        s = _store(tmp_path)
+        rec = s.create("x" * 80)
+        assert rec["label"] == "x" * 80
+
 
 class TestValidate:
     def test_validate_good_token_returns_record_and_stamps_last_seen(self, tmp_path):
@@ -60,3 +66,14 @@ class TestRevoke:
 
     def test_revoke_unknown_id_returns_false(self, tmp_path):
         assert _store(tmp_path).revoke("nope") is False
+
+
+class TestLoad:
+    def test_load_corrupted_json_yields_empty_store(self, tmp_path):
+        """Corrupted device_tokens.json is handled gracefully, yielding empty store."""
+        path = tmp_path / "device_tokens.json"
+        # Write literal garbage (not valid JSON) to the file
+        path.write_text("{ invalid json garbage }")
+        # Loading should not raise, should yield empty store
+        s = DeviceTokenStore(path=path)
+        assert s.list_all() == []

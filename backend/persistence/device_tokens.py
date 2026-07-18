@@ -6,12 +6,15 @@ log itself out — so revocation (admin-initiated) is the only removal path.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import secrets
 from pathlib import Path
 
 from backend.constants import utc_now_iso
 from backend.persistence._utils import atomic_json_write
+
+_log = logging.getLogger(__name__)
 
 _DEFAULT_PATH = Path(os.environ.get("RADIO_TTY_DEVICE_TOKENS", "/data/device_tokens.json"))
 
@@ -25,9 +28,16 @@ class DeviceTokenStore:
         self._load()
 
     def _load(self) -> None:
-        if self._path.exists():
-            data = json.loads(self._path.read_text())
-            self._tokens = list(data.get("tokens", []))
+        if not self._path.exists():
+            return
+        try:
+            with open(self._path, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            if isinstance(data, dict):
+                self._tokens = list(data.get("tokens", []))
+        except (json.JSONDecodeError, OSError) as exc:
+            _log.warning("Could not load %s: %s; starting empty", self._path, exc)
+            self._tokens = []
 
     def _save(self) -> None:
         atomic_json_write(self._path, {"tokens": self._tokens})
