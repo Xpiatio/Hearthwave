@@ -1,4 +1,4 @@
-import { render as rtlRender, screen, within } from '@testing-library/react'
+import { render as rtlRender, screen, within, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ThemeProvider } from '@mui/material/styles'
 import { makeTheme } from '../../../theme'
@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createRef } from 'react'
 import { AdminPanel } from '../AdminPanel'
 import type { AdminPanelHandle } from '../AdminPanel'
-import type { VoiceOption } from '../../../types/ws'
+import type { VoiceOption, DeviceTokenRecord } from '../../../types/ws'
 
 function render(ui: React.ReactElement) {
   return rtlRender(
@@ -33,6 +33,7 @@ function makeConfig(overrides: Partial<{
   rxMode: string;
   netDay: string;
   netTime: string;
+  display_quick_messages: string[];
 }> = {}) {
   return {
     stationCallsign: 'W8XYZ',
@@ -48,6 +49,7 @@ function makeConfig(overrides: Partial<{
     rxMode: 'voice',
     netDay: '',
     netTime: '',
+    display_quick_messages: [],
     ...overrides,
   }
 }
@@ -61,6 +63,10 @@ function makeDefaultProps() {
     voicePreviewBusy: false,
     onSave: vi.fn(),
     onPreviewVoice: vi.fn(),
+    deviceTokens: [] as DeviceTokenRecord[],
+    createdToken: null as DeviceTokenRecord | null,
+    onCreateDeviceToken: vi.fn(),
+    onRevokeDeviceToken: vi.fn(),
   }
 }
 
@@ -289,6 +295,7 @@ describe('AdminPanel', () => {
       rx_mode: 'voice',
       neighborhood_net_day: '',
       neighborhood_net_time: '',
+      display_quick_messages: [],
     })
     expect(props.onClose).toHaveBeenCalledTimes(1)
   })
@@ -411,6 +418,10 @@ describe('AdminPanel', () => {
           voicePreviewBusy={false}
           onSave={vi.fn()}
           onPreviewVoice={vi.fn()}
+          deviceTokens={[]}
+          createdToken={null}
+          onCreateDeviceToken={vi.fn()}
+          onRevokeDeviceToken={vi.fn()}
         />
       </ThemeProvider>
     )
@@ -425,6 +436,10 @@ describe('AdminPanel', () => {
           voicePreviewBusy={false}
           onSave={vi.fn()}
           onPreviewVoice={vi.fn()}
+          deviceTokens={[]}
+          createdToken={null}
+          onCreateDeviceToken={vi.fn()}
+          onRevokeDeviceToken={vi.fn()}
         />
       </ThemeProvider>
     )
@@ -477,5 +492,98 @@ describe('AdminPanel', () => {
   it('hides the embedded Save button when hideSaveButton is set', () => {
     render(<AdminPanel {...makeDefaultProps()} embedded hideSaveButton />)
     expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument()
+  })
+})
+
+// -----------------------------------------------------------------------------
+// Wall displays admin section (device tokens + household quick messages)
+// -----------------------------------------------------------------------------
+
+describe('Wall displays admin section', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  const ts = '2026-07-18T12:00:00Z'
+
+  it('lists device tokens with revoke buttons', () => {
+    const props = makeDefaultProps()
+    render(
+      <AdminPanel
+        {...props}
+        deviceTokens={[{ id: 'd1', label: 'Kitchen', created_at: ts, last_seen: null }]}
+      />
+    )
+    expect(screen.getByText('Kitchen')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /revoke/i }))
+    expect(props.onRevokeDeviceToken).toHaveBeenCalledWith('d1')
+  })
+
+  it('creates a token from the label field', () => {
+    const props = makeDefaultProps()
+    render(<AdminPanel {...props} />)
+    fireEvent.change(screen.getByLabelText(/display name/i), { target: { value: 'Kitchen' } })
+    fireEvent.click(screen.getByRole('button', { name: /add display/i }))
+    expect(props.onCreateDeviceToken).toHaveBeenCalledWith('Kitchen')
+  })
+
+  it('shows the one-time token after creation', () => {
+    const props = makeDefaultProps()
+    render(
+      <AdminPanel
+        {...props}
+        createdToken={{ id: 'd1', label: 'Kitchen', created_at: ts, last_seen: null, token: 'SECRET' }}
+      />
+    )
+    expect(screen.getByDisplayValue('SECRET')).toBeInTheDocument()
+    expect(screen.getByText(/won't be shown again/i)).toBeInTheDocument()
+  })
+
+  it('saves display_quick_messages one-per-line in the onSave payload', () => {
+    const props = makeDefaultProps()
+    render(<AdminPanel {...props} />)
+    fireEvent.change(screen.getByLabelText(/household quick messages/i),
+      { target: { value: 'Dinner is ready\nCome home please' } })
+    fireEvent.click(screen.getByRole('button', { name: /save/i }))
+    expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({
+      display_quick_messages: ['Dinner is ready', 'Come home please'],
+    }))
+  })
+
+  it('disables Add display button when label is blank or whitespace-only', async () => {
+    const user = userEvent.setup()
+    const props = makeDefaultProps()
+    render(<AdminPanel {...props} />)
+
+    const addButton = screen.getByRole('button', { name: /add display/i })
+    // Initially disabled (empty field)
+    expect(addButton).toBeDisabled()
+
+    // Type whitespace-only
+    const labelField = screen.getByLabelText(/display name/i)
+    await user.type(labelField, '   ')
+    expect(addButton).toBeDisabled()
+
+    // Clear and type a real value to verify it becomes enabled
+    await user.clear(labelField)
+    await user.type(labelField, 'Kitchen')
+    expect(addButton).not.toBeDisabled()
+    // Native disabled-button semantics guarantee onCreateDeviceToken cannot fire from disabled state;
+    // the handler's internal trim guard is intentional defense-in-depth, not UI-reachable today.
+  })
+
+  it('normalizes quick-messages with multiline messy input and filters empty lines', async () => {
+    const props = makeDefaultProps()
+    render(<AdminPanel {...props} />)
+
+    // Type multiline with empty lines and extra whitespace
+    fireEvent.change(screen.getByLabelText(/household quick messages/i), {
+      target: { value: 'Dinner is ready\n\n  Come home please  \n' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /save/i }))
+
+    expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({
+      display_quick_messages: ['Dinner is ready', 'Come home please'],
+    }))
   })
 })

@@ -41,6 +41,7 @@ import type {
   NeighborhoodIncidentReportPayload,
   NeighborhoodStreetAlertPayload,
   SetNeighborhoodCoordinatorPayload,
+  DeviceTokenRecord,
 } from './types/ws';
 import type { ChatEntry } from './components/ChatDisplay/ChatDisplay';
 import type { SpectrogramHandle } from './components/Spectrogram/Spectrogram';
@@ -215,6 +216,12 @@ export default function App() {
   const [plugins, setPlugins] = useState<PluginManifest[]>([]);
   const [pluginBusy, setPluginBusy] = useState(false);
 
+  // Kiosk wall-display device tokens (admin-managed via SettingsDialog/AdminPanel).
+  const [deviceTokens, setDeviceTokens] = useState<DeviceTokenRecord[]>([]);
+  // Holds the one-time token immediately after creation; cleared when the
+  // settings dialog closes so it never lingers once the admin navigates away.
+  const [createdToken, setCreatedToken] = useState<DeviceTokenRecord | null>(null);
+
   // Dark mode — initialized from localStorage to avoid FOUC; overridden by profile on load
   const [darkMode, setDarkMode] = useState(
     () => localStorage.getItem('radio_tty_dark_mode') === 'true'
@@ -334,6 +341,7 @@ export default function App() {
     ncsPreambleText: '',
     ncsClosingText: '',
     rxMode: 'voice',
+    display_quick_messages: [] as string[],
   });
 
   // Plugin infrastructure — last WS message forwarded to mounted plugin panels
@@ -467,6 +475,7 @@ export default function App() {
           ncsPreambleText: msg.ncs_preamble_text ?? prev.ncsPreambleText,
           ncsClosingText: msg.ncs_closing_text ?? prev.ncsClosingText,
           rxMode: msg.rx_mode ?? prev.rxMode,
+          display_quick_messages: msg.display_quick_messages ?? prev.display_quick_messages,
         }));
         setServerConfig((prev) => ({
           vadThreshold: msg.vad_threshold ?? prev.vadThreshold,
@@ -784,6 +793,14 @@ export default function App() {
         setNeighborhoodState(msg);
         break;
 
+      case 'device_tokens':
+        setDeviceTokens(msg.tokens);
+        break;
+
+      case 'device_token_created':
+        setCreatedToken(msg.record);
+        break;
+
       case 'neighborhood_incidents':
         setIncidents(msg.incidents);
         break;
@@ -1012,6 +1029,7 @@ export default function App() {
     journals_dir: string;
     ncs_zone: string;
     rx_mode: string;
+    display_quick_messages: string[];
   }) {
     send({ type: 'set_admin_config', ...values });
   }
@@ -1145,6 +1163,14 @@ export default function App() {
       user_id: userId,
       coordinator,
     } satisfies SetNeighborhoodCoordinatorPayload);
+  }
+
+  function handleCreateDeviceToken(label: string) {
+    send({ type: 'device_token_create', label });
+  }
+
+  function handleRevokeDeviceToken(id: string) {
+    send({ type: 'device_token_revoke', id });
   }
 
   function handleToggleDark() {
@@ -1316,7 +1342,21 @@ export default function App() {
     if (showContacts) handleContactsClose();
     else setShowContacts(true);
   }
-  const handleToggleSettings = () => setShowSettings((v) => !v);
+  const handleToggleSettings = () => setShowSettings((v) => {
+    const next = !v;
+    if (next) {
+      // Device tokens are admin-only server-side; only ask for the list when
+      // the profile is actually admin, mirroring the isAdmin gate used to hide
+      // the Station/System tabs below. Non-admins sending this got back a
+      // hard "Admin access required." error toast on every Settings open.
+      if (profile?.is_admin) {
+        send({ type: 'device_token_list' });
+      }
+    } else {
+      setCreatedToken(null);
+    }
+    return next;
+  });
   function handleToggleNcs() {
     setShowNcs((v) => !v);
   }
@@ -1659,6 +1699,10 @@ export default function App() {
         voicePreviewBusy={voicePreviewBusy}
         onAdminSave={handleAdminSave}
         onPreviewVoice={handlePreviewVoice}
+        deviceTokens={deviceTokens}
+        createdToken={createdToken}
+        onCreateDeviceToken={handleCreateDeviceToken}
+        onRevokeDeviceToken={handleRevokeDeviceToken}
         serverConfig={serverConfig}
         onServerConfigSave={handleServerConfigSave}
         onRescanVocabulary={handleRescanVocabulary}

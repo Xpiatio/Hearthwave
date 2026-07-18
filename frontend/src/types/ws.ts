@@ -90,6 +90,8 @@ export interface StatusMsg {
   saved_phrases?: string[];
   /** Installed plugins: manifest + enabled state + config schema/values. */
   plugins?: PluginManifest[];
+  /** Quick-message shortcuts offered on the kiosk display's "I'm OK" screen. */
+  display_quick_messages?: string[];
 }
 
 /** One declarative setting a plugin exposes; the frontend renders a form field. */
@@ -624,6 +626,34 @@ export interface NeighborhoodJournalSavedMsg {
   path: string;
 }
 
+// Kiosk display device tokens — long-lived, revocable credentials that let a
+// dedicated display device authenticate over WS without a user login
+// (server → client; admin-managed via AdminPanel).
+export interface DeviceTokenRecord {
+  id: string;
+  label: string;
+  created_at: string;
+  last_seen: string | null;
+  /** Present only in the one-time device_token_created reply. */
+  token?: string;
+}
+
+export interface DeviceTokensMsg {
+  type: 'device_tokens';
+  tokens: DeviceTokenRecord[];
+}
+
+export interface DeviceTokenCreatedMsg {
+  type: 'device_token_created';
+  record: DeviceTokenRecord;
+}
+
+// Kiosk display — server ack for a display's own actions (server → client).
+export interface DisplayAckMsg {
+  type: 'display_ack';
+  action: 'im_ok' | 'quick_message';
+}
+
 export type WsMessage =
   | RxMessageMsg
   | RxMessagePatchMsg
@@ -683,6 +713,9 @@ export type WsMessage =
   | NeighborhoodIncidentSentMsg
   | NeighborhoodIncidentErrorMsg
   | NeighborhoodJournalSavedMsg
+  | DeviceTokensMsg
+  | DeviceTokenCreatedMsg
+  | DisplayAckMsg
   | VoiceTxAckMsg
   | VoiceTxErrorMsg
   | { type: 'voice_preview_done' }
@@ -805,6 +838,18 @@ export interface SetNeighborhoodCoordinatorPayload {
   type: 'set_neighborhood_coordinator';
   user_id: string;
   coordinator: boolean;
+}
+
+// Kiosk display — Client → Server payloads (sent via send(), NOT part of
+// WsMessage union). Identity comes from the device token's session server-side.
+export interface DisplayImOkPayload {
+  type: 'display_im_ok';
+  user_id: string;
+}
+
+export interface DisplayQuickMessagePayload {
+  type: 'display_quick_message';
+  text: string;
 }
 
 // Voice PTT — Server → Client messages (part of WsMessage union)

@@ -17,8 +17,10 @@ function makeProps(overrides = {}) {
     adminConfig: {
       stationCallsign: 'N0CALL', stationName: '', stationLocation: '', stationVoice: '',
       stationLengthScale: 1, geminiApiKeySet: false, journalsDir: '', ncsZone: '', rxMode: 'voice',
+      display_quick_messages: [],
     },
     voices: [], voicePreviewBusy: false, onAdminSave: vi.fn(), onPreviewVoice: vi.fn(),
+    deviceTokens: [], createdToken: null, onCreateDeviceToken: vi.fn(), onRevokeDeviceToken: vi.fn(),
     serverConfig: {
       vadThreshold: 0.5, whisperModel: 'base', whisperModelFinal: '', squelchAdaptive: false,
       sttDebugCapture: false, txConditioning: false, voxPrimerEnabled: false, voxPrimerMs: 0,
