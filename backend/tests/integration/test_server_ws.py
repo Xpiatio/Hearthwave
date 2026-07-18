@@ -38,6 +38,7 @@ def _minimal_cfg(tmp_path: Path, *, listen_only: bool = False) -> ServerConfig:
         "contacts_file": str(contacts_file),
         "presence_file": str(tmp_path / "presence.json"),
         "family_file": str(tmp_path / "family.json"),
+        "incidents_file": str(tmp_path / "incidents.json"),
         "listen_only": listen_only,
     })
 
@@ -51,9 +52,15 @@ def _make_mocks():
     return mock_stt, mock_tts
 
 
-def _make_auth_mocks(*, listen_only: bool = False, is_admin: bool = True, role: str | None = None):
+def _make_auth_mocks(*, listen_only: bool = False, is_admin: bool = True, role: str | None = None,
+                      coordinator: bool = False):
     if role is None:
         role = "admin" if is_admin else "adult"
+    prefs: dict = {}
+    if listen_only:
+        prefs["listen_only"] = listen_only
+    if coordinator:
+        prefs["neighborhood_coordinator"] = True
     mock_users = MagicMock()
     mock_users.is_empty.return_value = False
     mock_users.get.return_value = {
@@ -61,7 +68,7 @@ def _make_auth_mocks(*, listen_only: bool = False, is_admin: bool = True, role: 
         "display_name": "Test Operator",
         "is_admin": is_admin,
         "role": role,
-        "prefs": {"listen_only": listen_only} if listen_only else {},
+        "prefs": prefs,
     }
     mock_users.get_public_one.return_value = {"display_name": "Test Operator"}
 
@@ -199,13 +206,14 @@ def kid_client(tmp_path):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _drain_initial(ws, limit: int = 10) -> list[dict]:
+def _drain_initial(ws, limit: int = 12) -> list[dict]:
     """Drain the burst of initial frames every new connection receives.
 
     The server sends: status, user_profile, contacts, session_attendance,
-    pending_stations, family_presence, voices_list, chat_history (and
-    optionally online_status). Stop when chat_history is seen so tests start
-    from a clean slate.
+    pending_stations, family_presence, family_reminders (non-kid),
+    neighborhood_state, neighborhood_incidents, voices_list, chat_history
+    (and optionally online_status). Stop when chat_history is seen so tests
+    start from a clean slate.
     """
     frames = []
     for _ in range(limit):
@@ -1865,6 +1873,47 @@ class TestRoleHandlers:
         assert any(p.get("role") == "kid" for p in msg["profiles"])
         mock_users.set_role.assert_called_once_with("other", "kid")
 
+    # -- Phase 3 Task 1 review, Finding 1(a): demoting to kid must also
+    #    clear neighborhood_coordinator, not just quick_messages --
+
+    def test_set_role_demote_clears_neighborhood_coordinator(self, tmp_path):
+        """A coordinator-adult demoted to kid must have neighborhood_coordinator
+        cleared alongside quick_messages — both the update_prefs merge call
+        and every read surface fed by the resulting profiles broadcast /
+        get_public must show coordinator False."""
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()
+        mock_users.set_role.return_value = {"id": "other", "role": "kid", "is_admin": False}
+        mock_users.update_prefs.return_value = {
+            "id": "other", "role": "kid", "is_admin": False,
+            "prefs": {"quick_messages": [], "neighborhood_coordinator": False},
+        }
+        mock_users.get_public.return_value = [
+            {"id": "test-user", "role": "admin", "is_admin": True, "prefs": {}},
+            {"id": "other", "role": "kid", "is_admin": False,
+             "prefs": {"quick_messages": [], "neighborhood_coordinator": False}},
+        ]
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "set_role", "user_id": "other", "role": "kid"})
+                    msg = _next_of_type(ws, "profiles")
+        assert msg is not None
+        mock_users.update_prefs.assert_called_once_with(
+            "other", {"quick_messages": [], "neighborhood_coordinator": False}
+        )
+        target = next(p for p in msg["profiles"] if p["id"] == "other")
+        assert target["prefs"]["neighborhood_coordinator"] is False
+
     def test_set_role_unknown_role_returns_error(self, tmp_path):
         cfg = _minimal_cfg(tmp_path)
         mock_stt, mock_tts = _make_mocks()
@@ -2124,6 +2173,151 @@ class TestRoleHandlers:
 
 
 # ---------------------------------------------------------------------------
+# set_neighborhood_coordinator — admin-only pref grant, kid-target rejection,
+# live-sync to an already-connected target socket (Phase 3 Task 1)
+# ---------------------------------------------------------------------------
+
+class TestNeighborhoodCoordinator:
+    def test_requires_admin(self, non_admin_client):
+        tc, _cfg = non_admin_client
+        with tc.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "set_neighborhood_coordinator", "user_id": "other", "coordinator": True})
+            msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert "admin" in msg["detail"].lower()
+
+    def test_admin_sets_coordinator_on_adult(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()  # admin, id="test-user"
+
+        def get_side_effect(user_id):
+            if user_id == "adult-1":
+                return {"id": "adult-1", "role": "adult", "is_admin": False, "prefs": {}}
+            return {"id": "test-user", "display_name": "Test Operator",
+                    "is_admin": True, "role": "admin", "prefs": {}}
+        mock_users.get.side_effect = get_side_effect
+        mock_users.update_prefs.return_value = {
+            "id": "adult-1", "role": "adult", "is_admin": False,
+            "prefs": {"neighborhood_coordinator": True},
+        }
+        mock_users.get_public.return_value = [
+            {"id": "adult-1", "role": "adult", "is_admin": False,
+             "prefs": {"neighborhood_coordinator": True}},
+        ]
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "set_neighborhood_coordinator",
+                                  "user_id": "adult-1", "coordinator": True})
+                    msg = _next_of_type(ws, "profiles")
+        assert msg is not None
+        target = next(p for p in msg["profiles"] if p["id"] == "adult-1")
+        assert target["prefs"]["neighborhood_coordinator"] is True
+        mock_users.update_prefs.assert_called_once_with("adult-1", {"neighborhood_coordinator": True})
+
+    def test_target_kid_rejected(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()  # admin, id="test-user"
+
+        def get_side_effect(user_id):
+            if user_id == "kid-1":
+                return {"id": "kid-1", "role": "kid", "is_admin": False, "prefs": {}}
+            return {"id": "test-user", "display_name": "Test Operator",
+                    "is_admin": True, "role": "admin", "prefs": {}}
+        mock_users.get.side_effect = get_side_effect
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "set_neighborhood_coordinator",
+                                  "user_id": "kid-1", "coordinator": True})
+                    msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert msg["detail"] == "Kid accounts cannot be coordinators"
+        mock_users.update_prefs.assert_not_called()
+
+    def test_live_sync_updates_connected_target_without_reconnect(self, tmp_path):
+        """Mirrors TestLiveRoleAndPresetSync: an admin grant must reach the
+        target's already-open socket's ConnectionState immediately (via
+        _sync_live_state_for_user), not only the persisted profile — that's
+        what lets a Task 3 coordinator-gated handler work without a reconnect."""
+        from backend.server import _manager
+
+        target_id = "target-1"
+        with _two_user_server(tmp_path, target_id=target_id, target_role="adult") as (tc, mock_users):
+            mock_users.update_prefs.return_value = {
+                "id": target_id, "role": "adult", "is_admin": False,
+                "prefs": {"neighborhood_coordinator": True},
+            }
+            with (
+                tc.websocket_connect("/ws?token=target-token") as ws_target,
+                tc.websocket_connect("/ws?token=admin-token") as ws_admin,
+            ):
+                _drain_initial(ws_target)
+                _drain_initial(ws_admin)
+
+                ws_admin.send_json({"type": "set_neighborhood_coordinator",
+                                     "user_id": target_id, "coordinator": True})
+                assert _next_of_type(ws_admin, "profiles") is not None
+
+                live_states = _manager.states_for_user(target_id)
+                assert live_states
+                assert live_states[0].prefs.get("neighborhood_coordinator") is True
+
+    # -- Phase 3 Task 1 review, Finding 3: a revoke must reach the target's
+    #    already-open socket just as reliably as a grant does --
+
+    def test_live_sync_revoke_updates_connected_target_without_reconnect(self, tmp_path):
+        """Mirrors test_live_sync_updates_connected_target_without_reconnect,
+        but grant-then-revoke: after the admin flips coordinator back to
+        False, the target's live ConnectionState.prefs must flip too,
+        without a reconnect."""
+        from backend.server import _manager
+
+        target_id = "target-1"
+        with _two_user_server(
+            tmp_path, target_id=target_id, target_role="adult",
+            target_prefs={"neighborhood_coordinator": True},
+        ) as (tc, mock_users):
+            mock_users.update_prefs.return_value = {
+                "id": target_id, "role": "adult", "is_admin": False,
+                "prefs": {"neighborhood_coordinator": False},
+            }
+            with (
+                tc.websocket_connect("/ws?token=target-token") as ws_target,
+                tc.websocket_connect("/ws?token=admin-token") as ws_admin,
+            ):
+                _drain_initial(ws_target)
+                _drain_initial(ws_admin)
+
+                ws_admin.send_json({"type": "set_neighborhood_coordinator",
+                                     "user_id": target_id, "coordinator": False})
+                assert _next_of_type(ws_admin, "profiles") is not None
+
+                live_states = _manager.states_for_user(target_id)
+                assert live_states
+                assert live_states[0].prefs.get("neighborhood_coordinator") is False
+
+
+# ---------------------------------------------------------------------------
 # quick_messages pref — validation, save, and admin-set path
 # ---------------------------------------------------------------------------
 
@@ -2299,6 +2493,39 @@ class TestKidSaveUserPrefsAllowedKeys:
         assert msg is not None
         assert msg["profile"]["prefs"]["aac_grid"] == grid
         mock_users.update_prefs.assert_called_once_with("test-user", {"aac_grid": grid})
+
+    def test_kid_cannot_self_grant_neighborhood_coordinator(self, tmp_path):
+        """neighborhood_coordinator is admin-only (see TestNeighborhoodCoordinator);
+        it must be silently dropped from a self-serve save_user_prefs, not just
+        for kids but this specifically proves the kid path drops it too.
+
+        Phase 3 Task 1 fix, Finding 1(b): effective_prefs now forces this key
+        to False for every kid profile (a belt-and-braces lock), so a kid's
+        prefs always carry it as False rather than leaving it absent."""
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks(is_admin=False, role="kid")
+        mock_users.update_prefs.return_value = {
+            "id": "test-user", "display_name": "Test Operator", "is_admin": False,
+            "role": "kid", "prefs": {"dark_mode": True},
+        }
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "save_user_prefs",
+                                  "prefs": {"neighborhood_coordinator": True, "dark_mode": True}})
+                    msg = _next_of_type(ws, "user_profile")
+        assert msg is not None
+        assert msg["profile"]["prefs"]["neighborhood_coordinator"] is False
+        mock_users.update_prefs.assert_called_once_with("test-user", {"dark_mode": True})
 
 
 class TestSetUserQuickMessages:
@@ -3352,3 +3579,763 @@ class TestDeleteProfileCleansUpFamilyData:
         assert "other" not in reminders_msg["reminders"]
         assert presence_msg is not None
         assert all(e["user_id"] != "other" for e in presence_msg["entries"])
+
+    def test_delete_profile_removes_neighborhood_roster_row(self, tmp_path):
+        """M2: delete_profile must also drop the deleted user's neighborhood
+        roster row (and current_call if it pointed at them) — otherwise they
+        linger on the Neighborhood board for a user_id that no longer
+        exists."""
+        target_id = "target-1"
+        with _two_user_server(tmp_path, target_id=target_id, target_role="adult") as (tc, mock_users):
+            with (
+                tc.websocket_connect("/ws?token=target-token") as ws_target,
+                tc.websocket_connect("/ws?token=admin-token") as ws_admin,
+            ):
+                _drain_initial(ws_target)
+                _drain_initial(ws_admin)
+
+                ws_target.send_json({"type": "neighborhood_checkin"})
+                state_msg = _next_of_type(ws_target, "neighborhood_state")
+                assert any(r["user_id"] == target_id for r in state_msg["roster"])
+                # The checkin broadcast also reaches ws_admin's queue — drain
+                # it so the next neighborhood_state read below is the one
+                # triggered by delete_profile, not this earlier one.
+                _next_of_type(ws_admin, "neighborhood_state")
+
+                ws_admin.send_json({"type": "delete_profile", "user_id": target_id})
+                broadcast = _next_of_type(ws_admin, "neighborhood_state")
+        assert broadcast is not None
+        assert all(r["user_id"] != target_id for r in broadcast["roster"])
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 Task 2 — neighborhood net: state, check-ins, round-table
+# ---------------------------------------------------------------------------
+
+def _neighborhood_server(tmp_path, *, role: str = "adult", is_admin: bool = False,
+                          coordinator: bool = False, mock_tts=None, profile: dict | None = None,
+                          journals: bool = False, listen_only: bool = False):
+    """Context manager yielding (TestClient, cfg) wired for neighborhood-net tests."""
+    cfg = _minimal_cfg(tmp_path, listen_only=listen_only)
+    if journals:
+        cfg["journals_dir"] = str(tmp_path / "journals")
+    mock_stt, default_tts = _make_mocks()
+    tts = mock_tts if mock_tts is not None else default_tts
+    mock_users, mock_tokens = _make_auth_mocks(
+        is_admin=is_admin, role=role, coordinator=coordinator, listen_only=listen_only,
+    )
+    if profile is not None:
+        mock_users.get_public_one.return_value = profile
+    return cfg, mock_stt, tts, mock_users, mock_tokens
+
+
+class TestNeighborhoodConnectTimeKidLock:
+    """I3: connect-time conn_prefs must run through _effective_prefs (which
+    forces neighborhood_coordinator=False for kids) rather than the inline
+    block that only covered 3 of the 4 kid pref locks — otherwise a kid
+    connecting with a stale neighborhood_coordinator=True in stored prefs
+    would pass _is_coordinator (which reads state.prefs) for the life of
+    the connection."""
+
+    def test_kid_with_stale_coordinator_pref_cannot_start_net(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, role="kid", coordinator=True,
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_start"})
+                    msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert msg["detail"] == "Coordinator access required"
+
+
+class TestNeighborhoodNetHandlers:
+    def test_get_state_sent_on_connect(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(tmp_path)
+        cfg["neighborhood_net_day"] = "Saturday"
+        cfg["neighborhood_net_time"] = "09:00"
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    frames = _drain_initial(ws)
+        state_msgs = [f for f in frames if f.get("type") == "neighborhood_state"]
+        assert len(state_msgs) == 1
+        msg = state_msgs[0]
+        assert msg == {
+            "type": "neighborhood_state",
+            "active": False,
+            "roster": [],
+            "current_call": None,
+            "net_day": "Saturday",
+            "net_time": "09:00",
+        }
+
+    def test_get_state_request_returns_current_state(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(tmp_path)
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_get_state"})
+                    msg = _next_of_type(ws, "neighborhood_state")
+        assert msg is not None and msg["active"] is False
+
+    def test_checkin_any_role_incl_kid_broadcasts_state_from_connection_profile(self, tmp_path):
+        """Checkin transmits nothing and works for a kid; identity comes from
+        the CONNECTION's own profile — client-supplied fields are ignored
+        (same kid-rename protection precedent as update_profile)."""
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, role="kid",
+            profile={
+                "display_name": "Kiddo", "operator_name": "Kiddo Op",
+                "callsign": "W5KID", "location": "Back Yard",
+            },
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({
+                        "type": "neighborhood_checkin",
+                        "callsign": "FAKE", "name": "Not Real", "location": "Nowhere",
+                    })
+                    msg = _next_of_type(ws, "neighborhood_state")
+        assert msg is not None
+        assert len(msg["roster"]) == 1
+        row = msg["roster"][0]
+        assert row["callsign"] == "W5KID"
+        assert row["name"] == "Kiddo Op"
+        assert row["location"] == "Back Yard"
+        assert row["status"] == "checked_in"
+
+    def test_start_rejected_for_adult_without_coordinator_pref(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(tmp_path)
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_start"})
+                    err = _next_of_type(ws, "error")
+        assert err is not None
+        assert err["detail"] == "Coordinator access required"
+
+    def test_start_activates_for_coordinator(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, coordinator=True,
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_start"})
+                    msg = _next_of_type(ws, "neighborhood_state")
+        assert msg is not None and msg["active"] is True
+
+    @pytest.mark.parametrize("msg_type", [
+        "neighborhood_start", "neighborhood_end", "neighborhood_call_next", "neighborhood_call_reset",
+    ])
+    def test_coordinator_only_handlers_reject_plain_adult(self, tmp_path, msg_type):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(tmp_path)
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": msg_type})
+                    err = _next_of_type(ws, "error")
+        assert err is not None
+        assert err["detail"] == "Coordinator access required"
+
+    def test_status_change_for_other_user_requires_coordinator(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(tmp_path)
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_status", "user_id": "other-user", "status": "standby"})
+                    err = _next_of_type(ws, "error")
+        assert err is not None
+        assert err["detail"] == "Coordinator access required"
+
+    def test_status_change_for_own_user_allowed_without_coordinator(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(tmp_path)
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_checkin"})
+                    _next_of_type(ws, "neighborhood_state")
+                    ws.send_json({"type": "neighborhood_status", "status": "standby"})
+                    msg = _next_of_type(ws, "neighborhood_state")
+        assert msg is not None
+        assert msg["roster"][0]["status"] == "standby"
+
+    def test_call_next_enqueues_tx_and_broadcasts_current_call(self, tmp_path):
+        captured: dict[str, str] = {}
+
+        async def _capture_synth(_voice, text, *_args, **_kwargs):
+            captured["text"] = text
+            return None, None
+
+        mock_stt, mock_tts = _make_mocks()
+        mock_tts.synthesize_to_buffer = _capture_synth
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, coordinator=True, mock_tts=mock_tts,
+            profile={"display_name": "Coord Op", "callsign": "W5CRD", "location": "Front St"},
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch("piper.PiperVoice"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_start"})
+                    _next_of_type(ws, "neighborhood_state")
+                    ws.send_json({"type": "neighborhood_checkin"})
+                    _next_of_type(ws, "neighborhood_state")
+                    ws.send_json({"type": "neighborhood_call_next"})
+                    frames = _drain_until_idle(ws)
+        state_msgs = [f for f in frames if f.get("type") == "neighborhood_state"]
+        idle_msgs = [f for f in frames if f.get("type") == "tx_status" and f.get("status") == "idle"]
+        assert state_msgs, "expected a neighborhood_state broadcast after call_next"
+        assert idle_msgs, "expected the TX pump to run the queued call to completion"
+        assert state_msgs[-1]["current_call"] == "test-user"
+        assert state_msgs[-1]["roster"][0]["called"] is True
+        assert captured.get("text") == "Coord Op, you're up. Anything to report? W5TST."
+
+    def test_call_next_round_complete_returns_none_and_clears_current_call(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, coordinator=True,
+            profile={"display_name": "Coord Op", "callsign": "W5CRD", "location": ""},
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch("piper.PiperVoice"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_start"})
+                    _next_of_type(ws, "neighborhood_state")
+                    ws.send_json({"type": "neighborhood_checkin"})
+                    _next_of_type(ws, "neighborhood_state")
+                    ws.send_json({"type": "neighborhood_call_next"})
+                    _drain_until_idle(ws)
+                    # Second call_next: round already complete (only one
+                    # checked-in station, already called) — no TX, current
+                    # call cleared, so no tx_status:idle will follow.
+                    ws.send_json({"type": "neighborhood_call_next"})
+                    msg = _next_of_type(ws, "neighborhood_state")
+        assert msg is not None
+        assert msg["current_call"] is None
+
+    def test_call_reset_clears_called_flags(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, coordinator=True,
+            profile={"display_name": "Coord Op", "callsign": "W5CRD", "location": ""},
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch("piper.PiperVoice"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_start"})
+                    _next_of_type(ws, "neighborhood_state")
+                    ws.send_json({"type": "neighborhood_checkin"})
+                    _next_of_type(ws, "neighborhood_state")
+                    ws.send_json({"type": "neighborhood_call_next"})
+                    _drain_until_idle(ws)
+                    ws.send_json({"type": "neighborhood_call_reset"})
+                    msg = _next_of_type(ws, "neighborhood_state")
+        assert msg is not None
+        assert msg["current_call"] is None
+        assert msg["roster"][0]["called"] is False
+
+    def test_end_with_nonempty_roster_saves_journal(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, coordinator=True, journals=True,
+            profile={"display_name": "Coord Op", "callsign": "W5CRD", "location": "Front St"},
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_start"})
+                    _next_of_type(ws, "neighborhood_state")
+                    ws.send_json({"type": "neighborhood_checkin"})
+                    _next_of_type(ws, "neighborhood_state")
+                    ws.send_json({"type": "neighborhood_end"})
+                    saved = _next_of_type(ws, "neighborhood_journal_saved")
+        assert saved is not None
+        journal_files = list((tmp_path / "journals").glob("*.json"))
+        assert len(journal_files) == 1
+        entry = json.loads(journal_files[0].read_text())
+        assert entry["title"].startswith("Neighborhood net ")
+        assert entry["callsigns_locations"] == [{"callsign": "W5CRD", "location": "Front St"}]
+        # M1: duration_seconds was computed by NeighborhoodNet.end() but never
+        # written anywhere — USER_MANUAL §31 promises it's journaled.
+        assert "Duration:" in entry["summary"]
+        assert "minute" in entry["summary"]
+
+    def test_end_with_empty_roster_does_not_save_journal(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, coordinator=True, journals=True,
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_start"})
+                    _next_of_type(ws, "neighborhood_state")
+                    ws.send_json({"type": "neighborhood_end"})
+                    msg = _next_of_type(ws, "neighborhood_state")
+        assert msg is not None and msg["active"] is False
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 Task 6 review fix — set_admin_config must rebroadcast
+# neighborhood_state when it touches the net schedule, else already-connected
+# clients keep showing a stale next-net day/time until they reconnect.
+# ---------------------------------------------------------------------------
+
+class TestSetAdminConfigNeighborhoodBroadcast:
+    def test_net_schedule_change_reaches_second_client_without_reconnect(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, is_admin=True,
+        )
+        cfg.save = MagicMock()
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with (
+                    tc.websocket_connect(WS_URL) as ws1,
+                    tc.websocket_connect(WS_URL) as ws2,
+                ):
+                    _drain_initial(ws1)
+                    _drain_initial(ws2)
+                    ws1.send_json({
+                        "type": "set_admin_config",
+                        "neighborhood_net_day": "Wednesday",
+                        "neighborhood_net_time": "19:30",
+                    })
+                    msg = _next_of_type(ws2, "neighborhood_state")
+        assert msg is not None, "second client never got a neighborhood_state rebroadcast"
+        assert msg["net_day"] == "Wednesday"
+        assert msg["net_time"] == "19:30"
+
+    def test_unrelated_admin_config_save_does_not_broadcast_neighborhood_state(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, is_admin=True,
+        )
+        cfg.save = MagicMock()
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with (
+                    tc.websocket_connect(WS_URL) as ws1,
+                    tc.websocket_connect(WS_URL) as ws2,
+                ):
+                    _drain_initial(ws1)
+                    _drain_initial(ws2)
+                    ws1.send_json({"type": "set_admin_config", "name": "New Station Name"})
+                    # Only the status broadcast should follow — nothing neighborhood-related.
+                    msg = ws2.receive_json()
+        assert msg["type"] == "status"
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 Task 3 — incident reports + street alert
+# ---------------------------------------------------------------------------
+
+def _valid_incident_payload(**overrides) -> dict:
+    payload = {
+        "type": "neighborhood_incident_report",
+        "category": "hazard",
+        "description": "Tree down blocking the road",
+        "location": "5th and Main",
+    }
+    payload.update(overrides)
+    return payload
+
+
+class TestNeighborhoodIncidentReport:
+    def test_kid_report_rejected(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(tmp_path, role="kid")
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json(_valid_incident_payload())
+                    msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert msg["detail"] == "TX not allowed for this account"
+
+    def test_invalid_payload_returns_incident_error(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(tmp_path)
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json(_valid_incident_payload(category="not-a-category"))
+                    msg = _next_of_type(ws, "neighborhood_incident_error")
+        assert msg is not None
+        assert msg["detail"]
+
+    def test_valid_report_transmits_logs_and_broadcasts(self, tmp_path):
+        captured: dict[str, str] = {}
+
+        async def _capture_synth(_voice, text, *_args, **_kwargs):
+            captured["text"] = text
+            return None, None
+
+        mock_stt, mock_tts = _make_mocks()
+        mock_tts.synthesize_to_buffer = _capture_synth
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, mock_tts=mock_tts,
+            profile={"display_name": "Ann Adult", "callsign": "W5ANN", "location": "Home"},
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch("piper.PiperVoice"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json(_valid_incident_payload())
+                    frames = _drain_until_idle(ws)
+        tx_echo = next(f for f in frames if f.get("type") == "tx_echo")
+        incidents_msgs = [f for f in frames if f.get("type") == "neighborhood_incidents"]
+        sent_msg = next(f for f in frames if f.get("type") == "neighborhood_incident_sent")
+        assert incidents_msgs, "expected a neighborhood_incidents broadcast"
+        assert tx_echo["display_name"] == "NEIGHBORHOOD"
+        assert tx_echo["callsign"] == "W5ANN"
+        assert tx_echo["text"].startswith("NEIGHBORHOOD HAZARD. TREE DOWN BLOCKING THE ROAD. ")
+        assert captured["text"] == tx_echo["text"] == sent_msg["text"]
+        assert sent_msg["ts"]
+        entries = incidents_msgs[-1]["incidents"]
+        assert len(entries) == 1
+        assert entries[0]["category"] == "hazard"
+        assert entries[0]["reporter"] == "Ann Adult"
+        assert entries[0]["location"] == "5th and Main"
+
+    def test_incidents_sent_on_connect(self, tmp_path):
+        (tmp_path / "incidents.json").write_text(json.dumps([
+            {"id": "abc123", "category": "hazard", "description": "x", "location": "y",
+             "reporter": "Ann", "ts": "2026-07-17T09:00:00Z"},
+        ]))
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(tmp_path)
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    frames = _drain_initial(ws)
+        incidents_msgs = [f for f in frames if f.get("type") == "neighborhood_incidents"]
+        assert len(incidents_msgs) == 1
+        assert incidents_msgs[0]["incidents"][0]["id"] == "abc123"
+
+    def test_list_incidents_any_role_returns_current_list(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(tmp_path, role="kid")
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_list_incidents"})
+                    msg = _next_of_type(ws, "neighborhood_incidents")
+        assert msg is not None
+        assert msg["incidents"] == []
+
+
+def _neighborhood_alert_two_user_server(tmp_path):
+    """A coordinator adult ('coord-1') and a kid ('kid-1') on one TestClient,
+    mirroring _two_user_server, so a test can prove a street alert broadcast
+    reaches an already-connected kid socket."""
+    cfg = _minimal_cfg(tmp_path)
+    mock_stt, mock_tts = _make_mocks()
+    mock_users = MagicMock()
+    mock_users.is_empty.return_value = False
+    profiles = {
+        "coord-1": {"id": "coord-1", "display_name": "Coord Op", "is_admin": False,
+                    "role": "adult", "prefs": {"neighborhood_coordinator": True}},
+        "kid-1": {"id": "kid-1", "display_name": "Kiddo", "is_admin": False,
+                  "role": "kid", "prefs": {}},
+    }
+    mock_users.get.side_effect = lambda uid: profiles.get(uid)
+    mock_users.get_public_one.side_effect = lambda uid: (
+        None if profiles.get(uid) is None
+        else {k: v for k, v in profiles[uid].items() if k != "prefs"}
+    )
+    mock_tokens = MagicMock()
+    mock_tokens.validate.side_effect = {"coord-token": "coord-1", "kid-token": "kid-1"}.get
+    mock_tokens.purge_expired.return_value = 0
+    return cfg, mock_stt, mock_tts, mock_users, mock_tokens
+
+
+class TestNeighborhoodStreetAlert:
+    def test_non_coordinator_rejected(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(tmp_path)
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_street_alert", "message": "Water main break on Elm"})
+                    msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert msg["detail"] == "Coordinator access required"
+
+    def test_empty_message_rejected(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(tmp_path, coordinator=True)
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_street_alert", "message": "   "})
+                    msg = _next_of_type(ws, "error")
+        assert msg is not None
+
+    def test_coordinator_alert_transmits_and_broadcasts(self, tmp_path):
+        captured: dict[str, str] = {}
+
+        async def _capture_synth(_voice, text, *_args, **_kwargs):
+            captured["text"] = text
+            return None, None
+
+        mock_stt, mock_tts = _make_mocks()
+        mock_tts.synthesize_to_buffer = _capture_synth
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, coordinator=True, mock_tts=mock_tts,
+            profile={"display_name": "Coord Op", "callsign": "W5CRD", "location": ""},
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch("piper.PiperVoice"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_street_alert", "message": "  Water main break on Elm  "})
+                    frames = _drain_until_idle(ws)
+        alert_msg = next(f for f in frames if f.get("type") == "neighborhood_alert")
+        tx_echo = next(f for f in frames if f.get("type") == "tx_echo")
+        assert alert_msg["message"] == "Water main break on Elm"
+        assert alert_msg["issued_by"] == "Coord Op"
+        assert alert_msg["id"]
+        assert alert_msg["ts"]
+        assert captured["text"] == "NEIGHBORHOOD ALERT. Water main break on Elm. W5TST."
+        assert tx_echo["text"] == captured["text"]
+        assert tx_echo["display_name"] == "NEIGHBORHOOD"
+
+    def test_alert_reaches_kid_client(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_alert_two_user_server(tmp_path)
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch("piper.PiperVoice"),
+        ):
+            with TestClient(app) as tc:
+                with (
+                    tc.websocket_connect("/ws?token=kid-token") as ws_kid,
+                    tc.websocket_connect("/ws?token=coord-token") as ws_coord,
+                ):
+                    _drain_initial(ws_kid)
+                    _drain_initial(ws_coord)
+                    ws_coord.send_json({"type": "neighborhood_street_alert", "message": "Boil water advisory"})
+                    _drain_until_idle(ws_coord)
+                    msg = _next_of_type(ws_kid, "neighborhood_alert")
+        assert msg is not None
+        assert msg["message"] == "Boil water advisory"
+
+    def test_listen_only_coordinator_alert_skips_tts_but_broadcasts(self, tmp_path):
+        captured: dict[str, str] = {}
+
+        async def _capture_synth(_voice, text, *_args, **_kwargs):
+            captured["text"] = text
+            return None, None
+
+        mock_stt, mock_tts = _make_mocks()
+        mock_tts.synthesize_to_buffer = _capture_synth
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, coordinator=True, mock_tts=mock_tts, listen_only=True,
+            profile={"display_name": "Coord Op", "callsign": "W5CRD", "location": ""},
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch("piper.PiperVoice"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_street_alert", "message": "Boil water advisory"})
+                    msg = _next_of_type(ws, "neighborhood_alert")
+        assert msg is not None
+        assert msg["message"] == "Boil water advisory"
+        assert "text" not in captured
+        journals_dir = tmp_path / "journals"
+        assert not journals_dir.exists() or not list(journals_dir.glob("*.json"))

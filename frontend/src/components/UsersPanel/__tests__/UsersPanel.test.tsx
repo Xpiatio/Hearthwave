@@ -63,6 +63,7 @@ function makeDefaultProps() {
     onResetLockout: vi.fn(),
     onSetRole: vi.fn(),
     onSetUserQuickMessages: vi.fn(),
+    onSetNeighborhoodCoordinator: vi.fn(),
   }
 }
 
@@ -586,6 +587,61 @@ describe('UsersPanel', () => {
     await user.click(screen.getByRole('button', { name: /^save$/i }))
 
     expect(props.onSetUserQuickMessages).toHaveBeenCalledWith('user-2', ['QSL'])
+  })
+
+  // -------------------------------------------------------------------------
+  // Neighborhood coordinator toggle
+  // -------------------------------------------------------------------------
+
+  it('renders a Coordinator switch for each profile', () => {
+    render(<UsersPanel {...makeDefaultProps()} />)
+    expect(screen.getByRole('switch', { name: 'Neighborhood coordinator for Admin' })).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'Neighborhood coordinator for Bob' })).toBeInTheDocument()
+  })
+
+  it('reflects neighborhood_coordinator=true from prefs in the switch state', () => {
+    const coordinatorProfile = makeProfile({
+      id: 'user-4',
+      display_name: 'Dana',
+      is_admin: false,
+      prefs: { ...USER_PROFILE.prefs, neighborhood_coordinator: true },
+    })
+    const props = { ...makeDefaultProps(), profiles: [ADMIN_PROFILE, coordinatorProfile] }
+    render(<UsersPanel {...props} />)
+    expect(screen.getByRole('switch', { name: 'Neighborhood coordinator for Dana' })).toBeChecked()
+  })
+
+  it('reflects neighborhood_coordinator=false/undefined as unchecked', () => {
+    render(<UsersPanel {...makeDefaultProps()} />)
+    expect(screen.getByRole('switch', { name: 'Neighborhood coordinator for Bob' })).not.toBeChecked()
+  })
+
+  it('calls onSetNeighborhoodCoordinator with the userId and new value when the switch is toggled', async () => {
+    const user = userEvent.setup()
+    const props = makeDefaultProps()
+    render(<UsersPanel {...props} />)
+
+    await user.click(screen.getByRole('switch', { name: 'Neighborhood coordinator for Bob' }))
+
+    expect(props.onSetNeighborhoodCoordinator).toHaveBeenCalledWith('user-2', true)
+  })
+
+  it('disables the Coordinator switch for kid rows', () => {
+    const kidProfile = makeProfile({
+      id: 'user-3',
+      display_name: 'Casey',
+      is_admin: false,
+      role: 'kid',
+    })
+    const props = { ...makeDefaultProps(), profiles: [ADMIN_PROFILE, kidProfile] }
+    render(<UsersPanel {...props} />)
+
+    expect(screen.getByRole('switch', { name: 'Neighborhood coordinator for Casey' })).toBeDisabled()
+  })
+
+  it('does NOT disable the Coordinator switch for adult rows', () => {
+    render(<UsersPanel {...makeDefaultProps()} />)
+    expect(screen.getByRole('switch', { name: 'Neighborhood coordinator for Bob' })).not.toBeDisabled()
   })
 
   // -------------------------------------------------------------------------

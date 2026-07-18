@@ -41,6 +41,20 @@ WebSocket message types (client → server):
     save_journal      — {"type": "save_journal", "title": str, "summary": str,
                           "callsigns_locations": [...], "transcript": str}
     delete_journal    — {"type": "delete_journal", "file_path": str}
+    neighborhood_get_state — {"type": "neighborhood_get_state"}
+    neighborhood_checkin — {"type": "neighborhood_checkin"}  (identity comes from the
+                          connection's own profile, not client-supplied fields)
+    neighborhood_status — {"type": "neighborhood_status", "status": "checked_in"|"standby",
+                          "user_id"?: str}  (own user_id only unless coordinator)
+    neighborhood_start — {"type": "neighborhood_start"}  (coordinator-only)
+    neighborhood_end  — {"type": "neighborhood_end"}  (coordinator-only)
+    neighborhood_call_next — {"type": "neighborhood_call_next"}  (coordinator-only)
+    neighborhood_call_reset — {"type": "neighborhood_call_reset"}  (coordinator-only)
+    neighborhood_incident_report — {"type": "neighborhood_incident_report", "category": str,
+                          "description": str, "location": str}  (kid → error)
+    neighborhood_list_incidents — {"type": "neighborhood_list_incidents"}  (any role)
+    neighborhood_street_alert — {"type": "neighborhood_street_alert", "message": str}
+                          (coordinator-only)
 
 WebSocket message types (server → client):
     status            — {"type": "status", "radio_connected": bool,
@@ -73,6 +87,15 @@ WebSocket message types (server → client):
     journal_error     — {"type": "journal_error", "detail": str}
     journal_saved     — {"type": "journal_saved", "path": str}
     journal_deleted   — {"type": "journal_deleted", "file_path": str}
+    neighborhood_state — {"type": "neighborhood_state", "active": bool, "roster": [...],
+                          "current_call": str|None, "net_day": str, "net_time": str}
+    neighborhood_journal_saved — {"type": "neighborhood_journal_saved", "path": str}
+    neighborhood_incidents — {"type": "neighborhood_incidents", "incidents": [...]}  (sent on
+                          connect and after every incident_report)
+    neighborhood_incident_error — {"type": "neighborhood_incident_error", "detail": str}
+    neighborhood_incident_sent — {"type": "neighborhood_incident_sent", "text": str, "ts": str}
+    neighborhood_alert — {"type": "neighborhood_alert", "id": str, "message": str,
+                          "issued_by": str, "ts": str}  (broadcast to all roles)
     spectrogram_row   — {"type": "spectrogram_row", "row": [int, ...],
                           "vad": bool, "squelch": bool}
     voice_preview_audio — {"type": "voice_preview_audio", "data": str (base64 int16 PCM),
@@ -95,6 +118,8 @@ import datetime
 import json
 import logging
 import os
+import re
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -126,6 +151,8 @@ from backend.fcc.id_rule import (
     format_tail_id,
 )
 from backend.hw_detect import detect as detect_compute
+from backend.neighborhood.incidents import CATEGORIES, format_incident, validate_incident
+from backend.neighborhood.net import NeighborhoodNet
 from backend.net.online import invalidate as _invalidate_online
 from backend.net.online import is_online, is_online_cached
 from backend import __version__
@@ -144,6 +171,7 @@ from backend.persistence.audit import AuditLog
 from backend.auth_ratelimit import _extract_ip, get_client_ip
 from backend.family.reminders import is_checkin_missed
 from backend.persistence.family import FamilyStore
+from backend.persistence.incidents import IncidentsStore
 from backend.persistence.journal import delete_journal, load_journals, load_published_manifest, publish_journal, save_journal, unpublish_journal
 from backend.persistence.presence import PresenceStore
 from backend.persistence.tokens import TokenStore
@@ -192,6 +220,8 @@ _users_store: UsersStore | None = None
 _token_store: TokenStore | None = None
 _presence_store: PresenceStore | None = None
 _family_store: FamilyStore | None = None
+_incidents_store: IncidentsStore | None = None
+_neighborhood: NeighborhoodNet | None = None
 _audit_log: AuditLog | None = None
 _stt_worker: STTWorker | None = None
 _synthesizer: TTSSynthesizer | None = None
@@ -592,6 +622,24 @@ def _build_family_presence_msg() -> dict:
 def _build_family_reminders_msg() -> dict:
     reminders = _family_store.get_reminders() if _family_store else {}
     return {"type": "family_reminders", "reminders": reminders}
+
+
+def _build_neighborhood_state_msg() -> dict:
+    return {
+        "type": "neighborhood_state",
+        "active": _neighborhood.active if _neighborhood else False,
+        "roster": _neighborhood.roster() if _neighborhood else [],
+        "current_call": _neighborhood.current_call if _neighborhood else None,
+        "net_day": _config.neighborhood_net_day if _config else "",
+        "net_time": _config.neighborhood_net_time if _config else "",
+    }
+
+
+def _build_neighborhood_incidents_msg() -> dict:
+    return {
+        "type": "neighborhood_incidents",
+        "incidents": _incidents_store.list() if _incidents_store else [],
+    }
 
 
 async def _on_auto_add_result(
@@ -1512,7 +1560,7 @@ async def _voices_watcher_pump() -> None:
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     """Startup / shutdown wiring."""
-    global _config, _contacts_store, _users_store, _token_store, _presence_store, _family_store, _stt_worker, _synthesizer, _monitor, _plugin_ctx
+    global _config, _contacts_store, _users_store, _token_store, _presence_store, _family_store, _incidents_store, _neighborhood, _stt_worker, _synthesizer, _monitor, _plugin_ctx
     global _stt_out_queue, _tx_queue, _tts_event_queue, _background_tasks, _tx_abort_event
     global _audio_level, _radio_error, _channel_clear, _last_id_time, _has_transmitted, _last_beacon_time, _ncs_plugin
     global _level_window, _attendance, _spectro, _monitor_chunk_cb
@@ -1550,6 +1598,8 @@ async def _lifespan(app: FastAPI):
     _token_store = TokenStore(_config.tokens_file)
     _presence_store = PresenceStore(_config.presence_file)
     _family_store = FamilyStore(_config.family_file)
+    _incidents_store = IncidentsStore(_config.incidents_file)
+    _neighborhood = NeighborhoodNet()
     purged = _token_store.purge_expired()
     if purged:
         _log.info("Purged %d expired session tokens.", purged)
@@ -1894,6 +1944,14 @@ async def _ws_handle_set_admin_config(ws: WebSocket, data: dict, state: "Connect
         _config["ncs_preamble_text"] = str(data["ncs_preamble_text"])
     if "ncs_closing_text" in data:
         _config["ncs_closing_text"] = str(data["ncs_closing_text"])
+    if "neighborhood_net_day" in data:
+        day = str(data["neighborhood_net_day"]).strip()
+        if day == "" or day in _NEIGHBORHOOD_NET_DAYS:
+            _config["neighborhood_net_day"] = day
+    if "neighborhood_net_time" in data:
+        time_str = str(data["neighborhood_net_time"]).strip()
+        if time_str == "" or _HHMM_RE.match(time_str):
+            _config["neighborhood_net_time"] = time_str
     rx_mode_changed = False
     if "rx_mode" in data:
         new_mode = str(data["rx_mode"]).strip().lower()
@@ -1902,6 +1960,8 @@ async def _ws_handle_set_admin_config(ws: WebSocket, data: dict, state: "Connect
             rx_mode_changed = True
     _config.save()
     await _manager.broadcast(_build_status())
+    if "neighborhood_net_day" in data or "neighborhood_net_time" in data:
+        await _manager.broadcast(_build_neighborhood_state_msg())
     if rx_mode_changed and _stt_worker is not None and _stt_listening:
         _stt_worker.stop()
         await _stt_worker.join()
@@ -2258,6 +2318,24 @@ def _is_kid(state: "ConnectionState") -> bool:
     return getattr(state, "role", "adult") == "kid"
 
 
+def _is_coordinator(state: "ConnectionState") -> bool:
+    """True if this connection's live prefs mark it a neighborhood coordinator.
+
+    Reads the same live-synced state.prefs that server-side gates already
+    check (see _sync_live_state_for_user) so a coordinator grant/revoke
+    takes effect on an already-connected socket without a reconnect.
+    """
+    return state.prefs.get("neighborhood_coordinator") is True
+
+
+# Allowed weekday values for neighborhood_net_day (admin config); empty string
+# is also allowed and means "unset" rather than "no net".
+_NEIGHBORHOOD_NET_DAYS = (
+    "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
+)
+_HHMM_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
 async def _enqueue_family_tts(text: str, state: "ConnectionState") -> None:
     """Enqueue a pre-formatted family_status phrase for TTS/PTT.
 
@@ -2333,11 +2411,12 @@ async def websocket_endpoint(
 
     await ws.accept()
     role = profile.get("role") or ("admin" if profile.get("is_admin") else "adult")
-    conn_prefs = {**DEFAULT_PREFS, **profile.get("prefs", {})}
-    if role == "kid":
-        conn_prefs["filter_profanity"] = True
-        conn_prefs["ui_level"] = "simple"
-        conn_prefs["listen_only"] = False
+    # _effective_prefs applies all 4 kid pref locks (filter_profanity/ui_level/
+    # listen_only/neighborhood_coordinator) — the inline block this replaced
+    # only covered the first 3, so a kid connecting with a stale
+    # neighborhood_coordinator=True in stored prefs would pass _is_coordinator
+    # (which reads state.prefs) for the life of the connection.
+    conn_prefs = _effective_prefs(profile)
     state = ConnectionState(
         user_id=user_id,
         is_admin=bool(profile.get("is_admin", False)),
@@ -2367,6 +2446,8 @@ async def websocket_endpoint(
     await _manager.send_to(ws, _build_family_presence_msg())
     if not _is_kid(state):
         await _manager.send_to(ws, _build_family_reminders_msg())
+    await _manager.send_to(ws, _build_neighborhood_state_msg())
+    await _manager.send_to(ws, _build_neighborhood_incidents_msg())
     await _manager.send_to(ws, {"type": "voices_list", "voices": _list_voices()})
     # Backfill the shared message stream accumulated since the last clear
     # (snapshotted above, before this socket joined the broadcast set).
@@ -3019,6 +3100,10 @@ async def websocket_endpoint(
             elif msg_type == "save_user_prefs":
                 if _users_store is None:
                     continue
+                # neighborhood_coordinator is deliberately absent: it's an
+                # admin-only grant (see set_neighborhood_coordinator) — a user
+                # must never be able to self-promote by round-tripping it
+                # through their own prefs.
                 allowed = {"dark_mode", "filter_profanity", "listen_only",
                            "read_aloud", "notifications_enabled", "spectro_colormap", "spectro_time_window_s",
                            "tts_voice", "tts_length_scale", "aac_mode", "aac_grid",
@@ -3151,13 +3236,46 @@ async def websocket_endpoint(
                     # Newly demoted to kid: any quick_messages already on the
                     # profile were self-set while adult (not admin-curated) —
                     # clear them rather than let them silently become the
-                    # kid's approved on-air TX allowlist.
+                    # kid's approved on-air TX allowlist. Also clear a
+                    # prior neighborhood_coordinator grant so it doesn't
+                    # persist as True across the demotion (effective_prefs
+                    # forces it False on read regardless, but the stored
+                    # value should reflect reality too).
                     try:
-                        updated = _users_store.update_prefs(target_role_id, {"quick_messages": []})
+                        updated = _users_store.update_prefs(
+                            target_role_id,
+                            {"quick_messages": [], "neighborhood_coordinator": False},
+                        )
                     except KeyError:
                         pass
                 _sync_live_state_for_user(target_role_id, updated)
                 await _manager.broadcast_to_user(target_role_id, _build_user_profile_msg(updated))
+                await _manager.broadcast({
+                    "type": "profiles",
+                    "profiles": _users_store.get_public(),
+                })
+
+            elif msg_type == "set_neighborhood_coordinator":
+                if not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
+                    continue
+                if _users_store is None:
+                    continue
+                target_id = data.get("user_id", "")
+                target_profile = _users_store.get(target_id)
+                if target_profile is not None and target_profile.get("role") == "kid":
+                    await _manager.send_to(ws, {"type": "error", "detail": "Kid accounts cannot be coordinators"})
+                    continue
+                coordinator = bool(data.get("coordinator"))
+                try:
+                    updated = _users_store.update_prefs(target_id, {"neighborhood_coordinator": coordinator})
+                except KeyError:
+                    updated = None
+                if updated is None:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Unknown user."})
+                    continue
+                _sync_live_state_for_user(target_id, updated)
+                await _manager.broadcast_to_user(target_id, _build_user_profile_msg(updated))
                 await _manager.broadcast({
                     "type": "profiles",
                     "profiles": _users_store.get_public(),
@@ -3217,6 +3335,11 @@ async def websocket_endpoint(
                     if _presence_store is not None:
                         _presence_store.remove(target_id)
                         await _manager.broadcast(_build_family_presence_msg())
+                    # Same for the neighborhood roster/round-table — otherwise
+                    # a deleted user's row (and a current_call pointing at
+                    # them) lingers forever on the Neighborhood board.
+                    if _neighborhood is not None and _neighborhood.remove(target_id):
+                        await _manager.broadcast(_build_neighborhood_state_msg())
                     await _manager.broadcast({
                         "type": "profiles",
                         "profiles": _users_store.get_public(),
@@ -3331,6 +3454,197 @@ async def websocket_endpoint(
                 state.voice_tx_bytes    = 0
                 state.voice_tx_callsign = ""
                 state.voice_tx_operator = ""
+
+            elif msg_type == "neighborhood_get_state":
+                await _manager.send_to(ws, _build_neighborhood_state_msg())
+
+            elif msg_type == "neighborhood_checkin":
+                # Any role, including kid — a check-in transmits nothing over
+                # the air. Identity comes from the CONNECTION's own profile
+                # (not client-supplied fields) — same kid-rename protection
+                # precedent as update_profile/family_status.
+                profile_rec = (
+                    _users_store.get_public_one(state.user_id) if _users_store else None
+                ) or {}
+                callsign = (profile_rec.get("callsign") or "").strip()
+                name = (
+                    profile_rec.get("operator_name") or profile_rec.get("display_name") or "Operator"
+                ).strip()
+                location = (profile_rec.get("location") or "").strip()
+                if _neighborhood is not None:
+                    _neighborhood.checkin(state.user_id, callsign, name, location)
+                await _manager.broadcast(_build_neighborhood_state_msg())
+
+            elif msg_type == "neighborhood_status":
+                target_id = data.get("user_id") or state.user_id
+                if target_id != state.user_id and not _is_coordinator(state):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Coordinator access required"})
+                    continue
+                status = data.get("status")
+                if status not in ("checked_in", "standby"):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Invalid status."})
+                    continue
+                if _neighborhood is not None:
+                    _neighborhood.set_status(target_id, status)
+                await _manager.broadcast(_build_neighborhood_state_msg())
+
+            elif msg_type == "neighborhood_start":
+                if not _is_coordinator(state):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Coordinator access required"})
+                    continue
+                if _neighborhood is not None:
+                    _neighborhood.start()
+                await _manager.broadcast(_build_neighborhood_state_msg())
+
+            elif msg_type == "neighborhood_end":
+                if not _is_coordinator(state):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Coordinator access required"})
+                    continue
+                summary = _neighborhood.end() if _neighborhood is not None else {"roster": []}
+                await _manager.broadcast(_build_neighborhood_state_msg())
+                roster_snapshot = summary.get("roster") or []
+                if roster_snapshot and _config is not None:
+                    date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+                    title = f"Neighborhood net {date_str}"
+                    roster_lines = "\n".join(
+                        f"  {r['callsign']} — {r.get('name', '')} — {r.get('location', '')}"
+                        for r in roster_snapshot
+                    )
+                    duration_minutes = round(summary.get("duration_seconds", 0) / 60)
+                    duration_line = f"Duration: {duration_minutes} minute{'s' if duration_minutes != 1 else ''}"
+                    summary_text = f"Neighborhood Net\n\n{duration_line}\n\nChecked-in stations:\n{roster_lines}"
+                    callsigns_with_locations = [
+                        {"callsign": r["callsign"], "location": r.get("location", "")}
+                        for r in roster_snapshot
+                    ]
+                    try:
+                        path = save_journal(
+                            title=title,
+                            summary=summary_text,
+                            callsigns_with_locations=callsigns_with_locations,
+                            transcript=roster_lines or "(no check-ins)",
+                            journals_dir=_config.journals_dir,
+                        )
+                        await _manager.broadcast({"type": "neighborhood_journal_saved", "path": path})
+                    except Exception as exc:
+                        _log.error("Neighborhood net journal save failed: %s", exc)
+
+            elif msg_type == "neighborhood_call_next":
+                if not _is_coordinator(state):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Coordinator access required"})
+                    continue
+                row = _neighborhood.call_next() if _neighborhood is not None else None
+                if row is not None:
+                    station_callsign = _config.callsign if _config else ""
+                    text = f"{row['name']}, you're up. Anything to report? {station_callsign}."
+                    await _tx_queue.put(
+                        {"text": text, "_pre_formatted": True, "_operator_initiated": True}
+                    )
+                await _manager.broadcast(_build_neighborhood_state_msg())
+
+            elif msg_type == "neighborhood_call_reset":
+                if not _is_coordinator(state):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Coordinator access required"})
+                    continue
+                if _neighborhood is not None:
+                    _neighborhood.call_reset()
+                await _manager.broadcast(_build_neighborhood_state_msg())
+
+            elif msg_type == "neighborhood_incident_report":
+                # Reporting an incident keys the radio, so it follows the
+                # same "TX not allowed" gate as free-text tx_message for kid
+                # accounts (see the tx_message _is_kid branch above).
+                if _is_kid(state):
+                    await _manager.send_to(ws, {"type": "error", "detail": "TX not allowed for this account"})
+                    continue
+                err = validate_incident(data)
+                if err:
+                    await _manager.send_to(ws, {"type": "neighborhood_incident_error", "detail": err})
+                    continue
+                category = data.get("category")
+                description = (data.get("description") or "").strip()
+                location = (data.get("location") or "").strip()
+                profile_rec = (
+                    (_users_store.get_public_one(state.user_id) or {}) if _users_store else {}
+                )
+                display_name = profile_rec.get("display_name") or ""
+                callsign = (
+                    profile_rec.get("callsign") or (_config.callsign if _config else "") or ""
+                ).strip()
+                hhmm_local = datetime.datetime.now().strftime("%H:%M")
+                text = format_incident(CATEGORIES[category], description, location, hhmm_local, callsign)
+                # Safety report so it still logs/broadcasts in listen-only mode
+                # (family_status precedent) — listen-only only skips the TX leg.
+                if not state.prefs.get("listen_only", False):
+                    await _tx_queue.put(
+                        {"text": text, "_pre_formatted": True, "_operator_initiated": True}
+                    )
+                ts = utc_now_iso()
+                await _manager.broadcast({
+                    "type": "tx_echo",
+                    "ts": ts,
+                    "callsign": callsign,
+                    "operator": "",
+                    "display_name": "NEIGHBORHOOD",
+                    "text": text,
+                    "target_call": "ALL",
+                    "target_name": "",
+                })
+                if _incidents_store is not None:
+                    _incidents_store.add({
+                        "category": category,
+                        "description": description,
+                        "location": location,
+                        "reporter": display_name,
+                        "ts": ts,
+                    })
+                await _manager.broadcast(_build_neighborhood_incidents_msg())
+                await _manager.send_to(ws, {"type": "neighborhood_incident_sent", "text": text, "ts": ts})
+
+            elif msg_type == "neighborhood_list_incidents":
+                await _manager.send_to(ws, _build_neighborhood_incidents_msg())
+
+            elif msg_type == "neighborhood_street_alert":
+                if not _is_coordinator(state):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Coordinator access required"})
+                    continue
+                message = (data.get("message") or "").strip()
+                if not (1 <= len(message) <= 200):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Alert message must be 1-200 characters."})
+                    continue
+                callsign = _config.callsign if _config else ""
+                profile_rec = (
+                    (_users_store.get_public_one(state.user_id) or {}) if _users_store else {}
+                )
+                display_name = profile_rec.get("display_name") or ""
+                text = f"NEIGHBORHOOD ALERT. {message}. {callsign}."
+                # Safety broadcast — listen-only only skips the TX leg (same
+                # precedent as neighborhood_incident_report/family_status).
+                if not state.prefs.get("listen_only", False):
+                    await _tx_queue.put(
+                        {"text": text, "_pre_formatted": True, "_operator_initiated": True}
+                    )
+                ts = utc_now_iso()
+                await _manager.broadcast({
+                    "type": "tx_echo",
+                    "ts": ts,
+                    "callsign": callsign,
+                    "operator": "",
+                    "display_name": "NEIGHBORHOOD",
+                    "text": text,
+                    "target_call": "ALL",
+                    "target_name": "",
+                })
+                # Broadcast reaches every connection, kids included — this is
+                # safety information, not a TX permission (see coordinator
+                # gate above), so _manager.broadcast is used unfiltered.
+                await _manager.broadcast({
+                    "type": "neighborhood_alert",
+                    "id": uuid.uuid4().hex,
+                    "message": message,
+                    "issued_by": display_name,
+                    "ts": ts,
+                })
 
             elif msg_type == "tx_abort":
                 _tx_abort_event.set()

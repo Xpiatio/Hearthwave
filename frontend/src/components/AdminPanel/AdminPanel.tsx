@@ -31,6 +31,10 @@ const SPEED_MARKS = [
   { value: 2.0, label: 'Slowest' },
 ];
 
+const NEIGHBORHOOD_NET_DAYS = [
+  'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
+] as const;
+
 interface AdminConfig {
   stationCallsign: string;
   stationName: string;
@@ -43,6 +47,13 @@ interface AdminConfig {
   ncsPreambleText: string;
   ncsClosingText: string;
   rxMode: string;
+  /** Neighborhood net weekly schedule — full weekday name ("Sunday".."Saturday")
+   *  or "" for "not scheduled". Sourced from neighborhood_state (not the
+   *  status message), so callers must merge it in rather than treat it as
+   *  part of the admin-config sync from `status`. */
+  netDay: string;
+  /** "HH:MM" 24-hour time, or "" when unset. */
+  netTime: string;
 }
 
 interface Props {
@@ -63,6 +74,8 @@ interface Props {
     ncs_preamble_text: string;
     ncs_closing_text: string;
     rx_mode: string;
+    neighborhood_net_day: string;
+    neighborhood_net_time: string;
   }) => void;
   onPreviewVoice: (voiceId: string) => void;
   children?: React.ReactNode;
@@ -95,6 +108,8 @@ function seedFromConfig(config: AdminConfig): string {
     ncs_preamble_text: config.ncsPreambleText || '',
     ncs_closing_text: config.ncsClosingText || '',
     rx_mode: config.rxMode || 'voice',
+    neighborhood_net_day: config.netDay || '',
+    neighborhood_net_time: config.netTime || '',
   });
 }
 
@@ -114,6 +129,8 @@ export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPane
   const [ncsPreambleText, setNcsPreambleText] = useState('');
   const [ncsClosingText, setNcsClosingText] = useState('');
   const [rxMode, setRxMode] = useState('voice');
+  const [netDay, setNetDay] = useState('');
+  const [netTime, setNetTime] = useState('');
   const [showKey, setShowKey] = useState(false);
 
   const seedRef = useRef<string>('');
@@ -133,6 +150,8 @@ export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPane
     setNcsPreambleText(config.ncsPreambleText || '');
     setNcsClosingText(config.ncsClosingText || '');
     setRxMode(config.rxMode || 'voice');
+    setNetDay(config.netDay || '');
+    setNetTime(config.netTime || '');
     setShowKey(false);
     // Compute seed from config directly (state setters are async), mirroring
     // buildValues() serialization. geminiKey initializes to '' on open.
@@ -161,6 +180,8 @@ export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPane
       ncs_preamble_text: ncsPreambleText,
       ncs_closing_text: ncsClosingText,
       rx_mode: rxMode,
+      neighborhood_net_day: netDay,
+      neighborhood_net_time: netTime,
     };
   }
 
@@ -344,6 +365,42 @@ export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPane
             minRows={2}
             fullWidth
           />
+
+          <Divider />
+
+          <Typography variant="overline" sx={{ color: 'text.secondary', lineHeight: 1 }}>
+            Neighborhood
+          </Typography>
+
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+            <FormControl size="small" sx={{ minWidth: 200 }}>
+              <InputLabel id="neighborhood-net-day-label">Net Day</InputLabel>
+              <Select
+                labelId="neighborhood-net-day-label"
+                label="Net Day"
+                value={netDay}
+                displayEmpty
+                onChange={(e) => setNetDay(e.target.value)}
+              >
+                <MenuItem value="">Not scheduled</MenuItem>
+                {NEIGHBORHOOD_NET_DAYS.map((day) => (
+                  <MenuItem key={day} value={day}>{day}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <TextField
+              label="Net Time"
+              type="time"
+              size="small"
+              value={netTime}
+              onChange={(e) => setNetTime(e.target.value)}
+              slotProps={{ inputLabel: { shrink: true } }}
+            />
+          </Box>
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+            Weekly neighborhood net schedule, shown on the Neighborhood activity and home card.
+          </Typography>
 
           <Divider />
 

@@ -56,15 +56,20 @@ def effective_prefs(profile: dict) -> dict:
     """Merge profile prefs with defaults, forcing server-enforced kid locks.
 
     Shared by the WS server and the REST auth routes so both surfaces apply
-    the same kid pref locks (filter_profanity/ui_level/listen_only) — a
-    profile's *stored* prefs must never be handed back to the client as-is
-    when role == "kid".
+    the same kid pref locks (filter_profanity/ui_level/listen_only/
+    neighborhood_coordinator) — a profile's *stored* prefs must never be
+    handed back to the client as-is when role == "kid". The
+    neighborhood_coordinator lock is belt-and-braces: set_role's
+    demotion-to-kid branch already clears the stored value, but this keeps
+    every read surface (REST, get_public, live-sync) safe even if a stale
+    True ever persists.
     """
     prefs = {**DEFAULT_PREFS, **profile.get("prefs", {})}
     if profile.get("role") == "kid":
         prefs["filter_profanity"] = True
         prefs["ui_level"] = "simple"
         prefs["listen_only"] = False
+        prefs["neighborhood_coordinator"] = False
     return prefs
 
 

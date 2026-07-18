@@ -128,7 +128,22 @@ function makeProps(overrides: Partial<MobileAppProps> = {}): MobileAppProps {
       ncsPreambleText: '',
       ncsClosingText: '',
       rxMode: 'voice',
+      netDay: '',
+      netTime: '',
     },
+    isCoordinator: false,
+    neighborhoodState: null,
+    incidents: [],
+    neighborhoodAlerts: [],
+    incidentError: null,
+    sendNeighborhoodCheckin: vi.fn(),
+    sendNeighborhoodStatus: vi.fn(),
+    sendIncidentReport: vi.fn(),
+    sendStreetAlert: vi.fn(),
+    sendNeighborhoodStart: vi.fn(),
+    sendNeighborhoodEnd: vi.fn(),
+    sendNeighborhoodCallNext: vi.fn(),
+    sendNeighborhoodCallReset: vi.fn(),
     showSettings: false,
     onToggleSettings: vi.fn(),
     showContacts: false,
@@ -167,6 +182,9 @@ describe('MobileApp — simple tier hides operator-only tabs/panels', () => {
 
     // Chat is still available in simple tier.
     expect(screen.getByRole('button', { name: 'Chat' })).toBeInTheDocument()
+    // Family and Neighborhood are ungated in both tiers.
+    expect(screen.getByRole('button', { name: 'Family' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Neighborhood' })).toBeInTheDocument()
   })
 
   it('renders the Stations/Journal tabs in operator tier', () => {
@@ -220,5 +238,50 @@ describe('MobileApp — Family tab', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Chat' }))
     expect(screen.queryByRole('list', { name: 'Family members' })).not.toBeInTheDocument()
+  })
+})
+
+describe('MobileApp — Neighborhood tab', () => {
+  it('shows the Neighborhood bottom-nav tab in simple tier', () => {
+    render(<MobileApp {...makeProps({ uiLevel: 'simple' })} />)
+    expect(screen.getByRole('button', { name: 'Neighborhood' })).toBeInTheDocument()
+  })
+
+  it('shows the Neighborhood bottom-nav tab in operator tier', () => {
+    render(<MobileApp {...makeProps({ uiLevel: 'operator' })} />)
+    expect(screen.getByRole('button', { name: 'Neighborhood' })).toBeInTheDocument()
+  })
+
+  it('renders the NeighborhoodPanel when the Neighborhood tab is tapped', () => {
+    render(<MobileApp {...makeProps({ uiLevel: 'simple' })} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Neighborhood' }))
+
+    expect(screen.getByRole('heading', { name: 'Neighborhood' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Check in' })).toBeInTheDocument()
+  })
+
+  it('unmounts the NeighborhoodPanel when switching away to another tab', () => {
+    render(<MobileApp {...makeProps({ uiLevel: 'operator' })} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Neighborhood' }))
+    expect(screen.getByRole('heading', { name: 'Neighborhood' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Chat' }))
+    expect(screen.queryByRole('heading', { name: 'Neighborhood' })).not.toBeInTheDocument()
+  })
+
+  it('survives the operator-tier clamp like Family when parked on Neighborhood and the tier flips to simple', () => {
+    const { rerender } = render(<MobileApp {...makeProps({ uiLevel: 'operator' })} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Neighborhood' }))
+    expect(screen.getByRole('heading', { name: 'Neighborhood' })).toBeInTheDocument()
+
+    rerender(
+      <ThemeProvider theme={makeTheme(false)}>
+        <MobileApp {...makeProps({ uiLevel: 'simple' })} />
+      </ThemeProvider>
+    )
+    expect(screen.getByRole('heading', { name: 'Neighborhood' })).toBeInTheDocument()
   })
 })

@@ -4,8 +4,9 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import LogoutIcon from '@mui/icons-material/Logout';
 import { Logo } from '../Logo/Logo';
 import { ActivityCard } from './ActivityCard';
-import type { FamilyPresenceEntry, UserProfile } from '../../types/ws';
+import type { FamilyPresenceEntry, NeighborhoodAlertMsg, UserProfile } from '../../types/ws';
 import { deriveStatus } from '../../family/presence';
+import { nextNetLabel } from '../../neighborhood/schedule';
 
 interface Props {
   profile: UserProfile;
@@ -14,8 +15,12 @@ interface Props {
   ncsEnabled: boolean;
   unreadCount: number;
   familyEntries: FamilyPresenceEntry[];
+  neighborhoodActive: boolean;
+  netDay: string;
+  netTime: string;
+  neighborhoodAlerts: NeighborhoodAlertMsg[];
   isKid: boolean;
-  onOpenActivity: (a: 'station' | 'ncs' | 'family') => void;
+  onOpenActivity: (a: 'station' | 'ncs' | 'family' | 'neighborhood') => void;
   onOpenSettings: () => void;
   onLogout: () => void;
 }
@@ -30,6 +35,17 @@ function familySummary(entries: FamilyPresenceEntry[]): string {
   const now = new Date();
   const allOk = entries.every((e) => deriveStatus(e, now) === 'ok');
   return allOk ? 'Everyone OK' : '';
+}
+
+/** Most recent street alert's message, but only while it's still fresh
+ *  (< 30 min old) — a stale alert shouldn't keep flagging the card as
+ *  needing attention. Picks by timestamp rather than array order so it
+ *  doesn't depend on the caller's sort. */
+function recentAlertText(alerts: NeighborhoodAlertMsg[]): string | undefined {
+  if (alerts.length === 0) return undefined;
+  const latest = alerts.reduce((a, b) => (new Date(a.ts) > new Date(b.ts) ? a : b));
+  const ageMin = (Date.now() - new Date(latest.ts).getTime()) / 60_000;
+  return ageMin < 30 ? latest.message : undefined;
 }
 
 interface CardDef {
@@ -63,6 +79,12 @@ export function HomeScreen(props: Props) {
         ? familySummary(props.familyEntries)
         : undefined,
       onClick: () => props.onOpenActivity('family'),
+    },
+    {
+      key: 'neighborhood', emoji: '🏘', title: 'Neighborhood',
+      subtitle: props.neighborhoodActive ? 'Net running now' : nextNetLabel(props.netDay, props.netTime, new Date()),
+      alertText: recentAlertText(props.neighborhoodAlerts),
+      onClick: () => props.onOpenActivity('neighborhood'),
     },
   ];
   if (props.uiLevel === 'operator' && props.ncsEnabled) {

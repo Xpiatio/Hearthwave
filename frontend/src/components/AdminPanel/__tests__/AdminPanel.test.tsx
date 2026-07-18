@@ -31,6 +31,8 @@ function makeConfig(overrides: Partial<{
   ncsPreambleText: string;
   ncsClosingText: string;
   rxMode: string;
+  netDay: string;
+  netTime: string;
 }> = {}) {
   return {
     stationCallsign: 'W8XYZ',
@@ -44,6 +46,8 @@ function makeConfig(overrides: Partial<{
     ncsPreambleText: '',
     ncsClosingText: '',
     rxMode: 'voice',
+    netDay: '',
+    netTime: '',
     ...overrides,
   }
 }
@@ -283,6 +287,8 @@ describe('AdminPanel', () => {
       ncs_preamble_text: '',
       ncs_closing_text: '',
       rx_mode: 'voice',
+      neighborhood_net_day: '',
+      neighborhood_net_time: '',
     })
     expect(props.onClose).toHaveBeenCalledTimes(1)
   })
@@ -308,6 +314,64 @@ describe('AdminPanel', () => {
 
     expect(props.onSave).toHaveBeenCalledWith(
       expect.objectContaining({ ncs_zone: 'MIZ025' })
+    )
+  })
+
+  // -------------------------------------------------------------------------
+  // Neighborhood net schedule
+  // -------------------------------------------------------------------------
+
+  it('defaults the net day select to "Not scheduled" when netDay is empty', () => {
+    render(<AdminPanel {...makeDefaultProps()} />)
+    expect(screen.getByRole('combobox', { name: /net day/i })).toHaveTextContent('Not scheduled')
+  })
+
+  it('shows the configured net day and net time', () => {
+    render(<AdminPanel {...makeDefaultProps()} config={makeConfig({ netDay: 'Saturday', netTime: '09:00' })} />)
+    expect(screen.getByRole('combobox', { name: /net day/i })).toHaveTextContent('Saturday')
+    expect(screen.getByLabelText(/net time/i)).toHaveValue('09:00')
+  })
+
+  it('lists all seven weekdays plus "Not scheduled" as net day options', async () => {
+    const user = userEvent.setup()
+    render(<AdminPanel {...makeDefaultProps()} />)
+
+    await user.click(screen.getByRole('combobox', { name: /net day/i }))
+
+    const listbox = screen.getByRole('listbox')
+    for (const day of ['Not scheduled', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']) {
+      expect(within(listbox).getByText(day)).toBeInTheDocument()
+    }
+  })
+
+  it('saves the selected net day and net time', async () => {
+    const user = userEvent.setup()
+    const props = makeDefaultProps()
+    render(<AdminPanel {...props} />)
+
+    await user.click(screen.getByRole('combobox', { name: /net day/i }))
+    await user.click(await screen.findByRole('option', { name: 'Saturday' }))
+    await user.type(screen.getByLabelText(/net time/i), '09:00')
+
+    await user.click(screen.getByRole('button', { name: /save/i }))
+
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ neighborhood_net_day: 'Saturday', neighborhood_net_time: '09:00' })
+    )
+  })
+
+  it('saves an empty net day when reset to "Not scheduled"', async () => {
+    const user = userEvent.setup()
+    const props = makeDefaultProps()
+    render(<AdminPanel {...props} config={makeConfig({ netDay: 'Saturday', netTime: '09:00' })} />)
+
+    await user.click(screen.getByRole('combobox', { name: /net day/i }))
+    await user.click(await screen.findByRole('option', { name: 'Not scheduled' }))
+
+    await user.click(screen.getByRole('button', { name: /save/i }))
+
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ neighborhood_net_day: '' })
     )
   })
 

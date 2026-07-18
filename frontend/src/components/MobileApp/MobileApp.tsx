@@ -10,6 +10,7 @@ import ChatIcon from '@mui/icons-material/Chat';
 import PeopleIcon from '@mui/icons-material/People';
 import ArticleIcon from '@mui/icons-material/Article';
 import FamilyRestroomIcon from '@mui/icons-material/FamilyRestroom';
+import HolidayVillageIcon from '@mui/icons-material/HolidayVillage';
 import { MobileTopBar } from './MobileTopBar';
 import { ChatDisplay } from '../ChatDisplay/ChatDisplay';
 import type { ChatEntry } from '../ChatDisplay/ChatDisplay';
@@ -20,6 +21,7 @@ import { AttendancePanel } from '../AttendancePanel/AttendancePanel';
 import { JournalPanel } from '../JournalPanel/JournalPanel';
 import { FamilyPanel } from '../FamilyPanel/FamilyPanel';
 import { PresetComposer } from '../FamilyPanel/PresetComposer';
+import { NeighborhoodPanel } from '../NeighborhoodPanel/NeighborhoodPanel';
 import { PendingStationsBar } from '../PendingStationsBar/PendingStationsBar';
 import { ContactsDialog } from '../ContactsDialog/ContactsDialog';
 import type { TxComposition } from '../../plugins';
@@ -33,6 +35,9 @@ import type {
   UserProfile,
   VoiceOption,
   WsMessage,
+  NeighborhoodStateMsg,
+  IncidentEntry,
+  NeighborhoodAlertMsg,
 } from '../../types/ws';
 import type { AdminConfig, JournalResultDraft, PendingStation } from '../../types/appTypes';
 
@@ -56,6 +61,21 @@ export interface MobileAppProps {
   familyReminders: Record<string, { time: string; enabled: boolean }>;
   sendImOk: () => void;
   sendSetReminder: (userId: string, time: string | null, enabled: boolean) => void;
+
+  // Neighborhood activity — same sharedProps-spread convention as Family above.
+  isCoordinator: boolean;
+  neighborhoodState: NeighborhoodStateMsg | null;
+  incidents: IncidentEntry[];
+  neighborhoodAlerts: NeighborhoodAlertMsg[];
+  incidentError: string | null;
+  sendNeighborhoodCheckin: () => void;
+  sendNeighborhoodStatus: (status: 'checked_in' | 'standby', userId?: string) => void;
+  sendIncidentReport: (category: string, description: string, location: string) => void;
+  sendStreetAlert: (message: string) => void;
+  sendNeighborhoodStart: () => void;
+  sendNeighborhoodEnd: () => void;
+  sendNeighborhoodCallNext: () => void;
+  sendNeighborhoodCallReset: () => void;
 
   // Core data
   messages: ChatEntry[];
@@ -170,6 +190,19 @@ export function MobileApp({
   familyReminders,
   sendImOk,
   sendSetReminder,
+  isCoordinator,
+  neighborhoodState,
+  incidents: neighborhoodIncidents,
+  neighborhoodAlerts,
+  incidentError,
+  sendNeighborhoodCheckin,
+  sendNeighborhoodStatus,
+  sendIncidentReport,
+  sendStreetAlert,
+  sendNeighborhoodStart,
+  sendNeighborhoodEnd,
+  sendNeighborhoodCallNext,
+  sendNeighborhoodCallReset,
   messages,
   contacts,
   transmitting,
@@ -239,21 +272,22 @@ export function MobileApp({
   onCloseJournalSavedSnack,
   onCloseVocabSnack,
 }: MobileAppProps) {
-  const [tab, setTab] = useState<'chat' | 'stations' | 'journal' | 'family'>('chat');
+  const [tab, setTab] = useState<'chat' | 'stations' | 'journal' | 'family' | 'neighborhood'>('chat');
   const messageInputRef = useRef<MessageInputHandle>(null);
 
   // Stations (attendance) and Journal are operator-only surfaces — they
   // must not render in simple tier, mirroring the isOperatorTier pattern in
   // DesktopApp.tsx (commit 0b6f296). Mobile has no waterfall/spectrogram,
   // RX level meter, or NCS panel, so there's nothing else to gate here.
-  // Family is available in both tiers.
+  // Family and Neighborhood are available in both tiers.
   const isOperatorTier = uiLevel === 'operator';
 
   // If the tier flips to simple while parked on an operator-only tab, fall
   // back to Chat rather than stranding the user on a hidden panel. `tab`
   // itself is left untouched so the previous selection is restored if the
-  // tier flips back to operator. Family survives the clamp in either tier.
-  const activeTab = isOperatorTier ? tab : tab === 'family' ? 'family' : 'chat';
+  // tier flips back to operator. Family/Neighborhood survive the clamp in
+  // either tier.
+  const activeTab = isOperatorTier ? tab : (tab === 'family' || tab === 'neighborhood') ? tab : 'chat';
 
   return (
     <Box
@@ -352,6 +386,36 @@ export function MobileApp({
         </Box>
       )}
 
+      {/* Neighborhood tab — conditional mount for the same reason as Family
+          above: NeighborhoodPanel also owns a document-level Escape-to-home
+          binding via useEscapeToHome. */}
+      {activeTab === 'neighborhood' && (
+        <Box sx={{ flex: '1 1 auto', overflowY: 'auto' }}>
+          <NeighborhoodPanel
+            roster={neighborhoodState?.roster ?? []}
+            netActive={neighborhoodState?.active ?? false}
+            currentCall={neighborhoodState?.current_call ?? null}
+            incidents={neighborhoodIncidents}
+            alerts={neighborhoodAlerts}
+            netDay={neighborhoodState?.net_day ?? ''}
+            netTime={neighborhoodState?.net_time ?? ''}
+            isCoordinator={isCoordinator}
+            isKid={isKid}
+            myUserId={profile.id}
+            onCheckin={sendNeighborhoodCheckin}
+            onStatusChange={(status) => sendNeighborhoodStatus(status)}
+            onIncidentReport={({ category, description, location }) => sendIncidentReport(category, description, location)}
+            incidentError={incidentError}
+            onStreetAlert={sendStreetAlert}
+            onStartNet={sendNeighborhoodStart}
+            onEndNet={sendNeighborhoodEnd}
+            onCallNext={sendNeighborhoodCallNext}
+            onNewRound={sendNeighborhoodCallReset}
+            onGoHome={() => setTab('chat')}
+          />
+        </Box>
+      )}
+
       {/* Stations tab (operator-only) */}
       {activeTab === 'stations' && (
         <Box sx={{ flex: '1 1 auto', overflowY: 'auto' }}>
@@ -392,6 +456,7 @@ export function MobileApp({
       >
         <BottomNavigationAction label="Chat" value="chat" icon={<ChatIcon />} />
         <BottomNavigationAction label="Family" value="family" icon={<FamilyRestroomIcon />} />
+        <BottomNavigationAction label="Neighborhood" value="neighborhood" icon={<HolidayVillageIcon />} />
         {isOperatorTier && (
           <BottomNavigationAction label="Stations" value="stations" icon={<PeopleIcon />} />
         )}
