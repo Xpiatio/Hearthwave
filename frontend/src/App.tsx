@@ -1345,7 +1345,13 @@ export default function App() {
   const handleToggleSettings = () => setShowSettings((v) => {
     const next = !v;
     if (next) {
-      send({ type: 'device_token_list' });
+      // Device tokens are admin-only server-side; only ask for the list when
+      // the profile is actually admin, mirroring the isAdmin gate used to hide
+      // the Station/System tabs below. Non-admins sending this got back a
+      // hard "Admin access required." error toast on every Settings open.
+      if (profile?.is_admin) {
+        send({ type: 'device_token_list' });
+      }
     } else {
       setCreatedToken(null);
     }
