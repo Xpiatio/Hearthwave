@@ -399,6 +399,7 @@ export interface UserPrefs {
   font_scale?: number;
   high_contrast?: boolean;
   quick_messages?: string[];
+  neighborhood_coordinator?: boolean;
 }
 
 export interface UserProfile {
@@ -563,6 +564,66 @@ export interface FamilyRemindersMsg {
   reminders: Record<string, { time: string; enabled: boolean }>;
 }
 
+// Neighborhood activity — net roster/round-table, incident reports, and
+// street alerts (server → client). See backend/neighborhood/net.py and
+// backend/persistence/incidents.py for the shapes this mirrors.
+export interface NeighborhoodRosterRow {
+  user_id: string;
+  callsign: string;
+  name: string;
+  location: string;
+  status: 'checked_in' | 'standby';
+  checkin_time: string;
+  called: boolean;
+}
+
+export interface NeighborhoodStateMsg {
+  type: 'neighborhood_state';
+  active: boolean;
+  roster: NeighborhoodRosterRow[];
+  current_call: string | null;
+  net_day: string;
+  net_time: string;
+}
+
+export interface IncidentEntry {
+  id: string;
+  category: string;
+  description: string;
+  location: string;
+  reporter: string;
+  ts: string;
+}
+
+export interface NeighborhoodIncidentsMsg {
+  type: 'neighborhood_incidents';
+  incidents: IncidentEntry[];
+}
+
+export interface NeighborhoodAlertMsg {
+  type: 'neighborhood_alert';
+  id: string;
+  message: string;
+  issued_by: string;
+  ts: string;
+}
+
+export interface NeighborhoodIncidentSentMsg {
+  type: 'neighborhood_incident_sent';
+  text: string;
+  ts: string;
+}
+
+export interface NeighborhoodIncidentErrorMsg {
+  type: 'neighborhood_incident_error';
+  detail: string;
+}
+
+export interface NeighborhoodJournalSavedMsg {
+  type: 'neighborhood_journal_saved';
+  path: string;
+}
+
 export type WsMessage =
   | RxMessageMsg
   | RxMessagePatchMsg
@@ -616,6 +677,12 @@ export type WsMessage =
   | NCSRoundCompleteMsg
   | FamilyPresenceMsg
   | FamilyRemindersMsg
+  | NeighborhoodStateMsg
+  | NeighborhoodIncidentsMsg
+  | NeighborhoodAlertMsg
+  | NeighborhoodIncidentSentMsg
+  | NeighborhoodIncidentErrorMsg
+  | NeighborhoodJournalSavedMsg
   | VoiceTxAckMsg
   | VoiceTxErrorMsg
   | { type: 'voice_preview_done' }
@@ -691,6 +758,53 @@ export interface SetUserQuickMessagesPayload {
   type: 'set_user_quick_messages';
   user_id: string;
   quick_messages: string[];
+}
+
+// Neighborhood activity — Client → Server payloads (sent via send(), NOT
+// part of WsMessage union). Identity for check-in/incident/alert text comes
+// from the connection's own profile server-side — never client-supplied.
+export interface NeighborhoodCheckinPayload {
+  type: 'neighborhood_checkin';
+}
+
+export interface NeighborhoodStatusPayload {
+  type: 'neighborhood_status';
+  status: 'checked_in' | 'standby';
+  user_id?: string;
+}
+
+export interface NeighborhoodStartPayload {
+  type: 'neighborhood_start';
+}
+
+export interface NeighborhoodEndPayload {
+  type: 'neighborhood_end';
+}
+
+export interface NeighborhoodCallNextPayload {
+  type: 'neighborhood_call_next';
+}
+
+export interface NeighborhoodCallResetPayload {
+  type: 'neighborhood_call_reset';
+}
+
+export interface NeighborhoodIncidentReportPayload {
+  type: 'neighborhood_incident_report';
+  category: string;
+  description: string;
+  location: string;
+}
+
+export interface NeighborhoodStreetAlertPayload {
+  type: 'neighborhood_street_alert';
+  message: string;
+}
+
+export interface SetNeighborhoodCoordinatorPayload {
+  type: 'set_neighborhood_coordinator';
+  user_id: string;
+  coordinator: boolean;
 }
 
 // Voice PTT — Server → Client messages (part of WsMessage union)

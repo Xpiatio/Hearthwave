@@ -29,6 +29,18 @@ import type {
   SetFamilyReminderPayload,
   SetRolePayload,
   SetUserQuickMessagesPayload,
+  NeighborhoodStateMsg,
+  IncidentEntry,
+  NeighborhoodAlertMsg,
+  NeighborhoodCheckinPayload,
+  NeighborhoodStatusPayload,
+  NeighborhoodStartPayload,
+  NeighborhoodEndPayload,
+  NeighborhoodCallNextPayload,
+  NeighborhoodCallResetPayload,
+  NeighborhoodIncidentReportPayload,
+  NeighborhoodStreetAlertPayload,
+  SetNeighborhoodCoordinatorPayload,
 } from './types/ws';
 import type { ChatEntry } from './components/ChatDisplay/ChatDisplay';
 import type { SpectrogramHandle } from './components/Spectrogram/Spectrogram';
@@ -163,13 +175,21 @@ export default function App() {
 
   // Home-screen shell: which activity is in front (desktop only). Chat unread
   // count is the simplest honest Phase 1 measure — messages received while on home.
-  const [activity, setActivity] = useState<'home' | 'station' | 'family'>('home');
+  const [activity, setActivity] = useState<'home' | 'station' | 'family' | 'neighborhood'>('home');
   const homeSeenCountRef = useRef(0);
 
   // Family activity: presence roster (last_heard/last_ok/missed_checkin per
   // family member) and check-in reminders (admin-configured, hidden from kids).
   const [familyPresence, setFamilyPresence] = useState<FamilyPresenceEntry[]>([]);
   const [familyReminders, setFamilyReminders] = useState<Record<string, { time: string; enabled: boolean }>>({});
+
+  // Neighborhood activity: net state (roster + round-table current call),
+  // the incident feed, street-alert banner history (last 3, deduped by id),
+  // and the most recent incident-report validation error from the server.
+  const [neighborhoodState, setNeighborhoodState] = useState<NeighborhoodStateMsg | null>(null);
+  const [incidents, setIncidents] = useState<IncidentEntry[]>([]);
+  const [neighborhoodAlerts, setNeighborhoodAlerts] = useState<NeighborhoodAlertMsg[]>([]);
+  const [incidentError, setIncidentError] = useState<string | null>(null);
   const [serverConfig, setServerConfig] = useState<ServerConfig>({
     vadThreshold: 0.5,
     whisperModel: 'small.en',
@@ -759,6 +779,45 @@ export default function App() {
         setFamilyReminders(msg.reminders);
         break;
 
+      case 'neighborhood_state':
+        setNeighborhoodState(msg);
+        break;
+
+      case 'neighborhood_incidents':
+        setIncidents(msg.incidents);
+        break;
+
+      case 'neighborhood_alert':
+        setNeighborhoodAlerts((prev) => {
+          if (prev.some((a) => a.id === msg.id)) return prev;
+          if (
+            notificationsEnabledRef.current &&
+            Notification.permission === 'granted' &&
+            document.visibilityState === 'hidden'
+          ) {
+            new Notification('📢 Neighborhood Alert', {
+              body: msg.message.slice(0, 120),
+              tag: `neighborhood-alert-${msg.id}`,
+              silent: false,
+            });
+          }
+          return [msg, ...prev].slice(0, 3);
+        });
+        break;
+
+      case 'neighborhood_incident_sent':
+        setIncidentError(null);
+        break;
+
+      case 'neighborhood_incident_error':
+        setIncidentError(msg.detail);
+        break;
+
+      case 'neighborhood_journal_saved':
+        setJournalSavedSnack('Neighborhood net journal saved');
+        sendRef.current({ type: 'list_journals' });
+        break;
+
       case 'voice_preview_done':
         setVoicePreviewBusy(false);
         break;
@@ -1033,6 +1092,56 @@ export default function App() {
     } satisfies SetUserQuickMessagesPayload);
   }
 
+  // Neighborhood activity — check-in/status/round-table/incident/alert sends.
+  function sendNeighborhoodCheckin() {
+    send({ type: 'neighborhood_checkin' } satisfies NeighborhoodCheckinPayload);
+  }
+
+  function sendNeighborhoodStatus(status: 'checked_in' | 'standby', userId?: string) {
+    send({
+      type: 'neighborhood_status',
+      status,
+      ...(userId ? { user_id: userId } : {}),
+    } satisfies NeighborhoodStatusPayload);
+  }
+
+  function sendIncidentReport(category: string, description: string, location: string) {
+    send({
+      type: 'neighborhood_incident_report',
+      category,
+      description,
+      location,
+    } satisfies NeighborhoodIncidentReportPayload);
+  }
+
+  function sendStreetAlert(message: string) {
+    send({ type: 'neighborhood_street_alert', message } satisfies NeighborhoodStreetAlertPayload);
+  }
+
+  function sendNeighborhoodStart() {
+    send({ type: 'neighborhood_start' } satisfies NeighborhoodStartPayload);
+  }
+
+  function sendNeighborhoodEnd() {
+    send({ type: 'neighborhood_end' } satisfies NeighborhoodEndPayload);
+  }
+
+  function sendNeighborhoodCallNext() {
+    send({ type: 'neighborhood_call_next' } satisfies NeighborhoodCallNextPayload);
+  }
+
+  function sendNeighborhoodCallReset() {
+    send({ type: 'neighborhood_call_reset' } satisfies NeighborhoodCallResetPayload);
+  }
+
+  function sendSetNeighborhoodCoordinator(userId: string, coordinator: boolean) {
+    send({
+      type: 'set_neighborhood_coordinator',
+      user_id: userId,
+      coordinator,
+    } satisfies SetNeighborhoodCoordinatorPayload);
+  }
+
   function handleToggleDark() {
     const next = !darkMode;
     setDarkMode(next);
@@ -1226,9 +1335,13 @@ export default function App() {
     homeSeenCountRef.current = messages.length;
     setActivity('home');
   }
-  function handleOpenActivity(a: 'station' | 'ncs' | 'family') {
+  function handleOpenActivity(a: 'station' | 'ncs' | 'family' | 'neighborhood') {
     if (a === 'family') {
       setActivity('family');
+      return;
+    }
+    if (a === 'neighborhood') {
+      setActivity('neighborhood');
       return;
     }
     if (a === 'ncs') setShowNcs(true);
@@ -1280,16 +1393,34 @@ export default function App() {
   // QUICK_DEFAULTS fallback since their tx_message isn't allowlist-gated.
   const quickMessages = profile?.prefs?.quick_messages ?? (isKid ? [] : QUICK_DEFAULTS);
 
+  // Coordinator gating for the Neighborhood activity — an admin-only grant
+  // (see set_neighborhood_coordinator), not a role, so it reads from prefs.
+  const isCoordinator = profile?.prefs?.neighborhood_coordinator === true;
+
   const sharedProps = {
     txComposition,
     familyPresence,
     familyReminders,
+    neighborhoodState,
+    incidents,
+    neighborhoodAlerts,
+    incidentError,
+    isCoordinator,
     isKid,
     quickMessages,
     sendImOk,
     sendSetReminder,
     sendSetRole,
     sendSetUserQuickMessages,
+    sendNeighborhoodCheckin,
+    sendNeighborhoodStatus,
+    sendIncidentReport,
+    sendStreetAlert,
+    sendNeighborhoodStart,
+    sendNeighborhoodEnd,
+    sendNeighborhoodCallNext,
+    sendNeighborhoodCallReset,
+    sendSetNeighborhoodCoordinator,
     profile: profile!,
     connected,
     isOnline,
