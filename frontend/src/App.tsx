@@ -63,6 +63,7 @@ import { UsersPanel } from './components/UsersPanel/UsersPanel';
 import { DEFAULTS as QUICK_DEFAULTS } from './components/QuickMessages/QuickMessages';
 import { newlyMissed } from './family/presence';
 import { useDeviceClass } from './hooks/useDeviceClass';
+import { ScreenFlash, VIBRATE_PATTERNS, type FlashKind } from './components/ScreenFlash/ScreenFlash';
 import './App.css';
 
 let entryCounter = 0;
@@ -320,6 +321,7 @@ export default function App() {
   notificationsEnabledRef.current = notificationsEnabled;
   const visualAlertsRef = useRef(false);
   visualAlertsRef.current = visualAlerts;
+  const [flash, setFlash] = useState<{ kind: FlashKind; seq: number } | null>(null);
   const [filterProfanity, setFilterProfanity] = useState(true);
   const [spectroColormap, setSpectroColormap] = useState<'viridis' | 'grayscale'>('viridis');
   const [spectroTimeWindowS, setSpectroTimeWindowS] = useState(30);
@@ -362,6 +364,14 @@ export default function App() {
 
   // NCS panel visibility (admin-only toggle)
   const [showNcs, setShowNcs] = useState(false);
+
+  function triggerVisualAlert(kind: FlashKind) {
+    if (!visualAlertsRef.current) return;
+    setFlash((prev) => ({ kind, seq: (prev?.seq ?? 0) + 1 }));
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate(VIBRATE_PATTERNS[kind]);
+    }
+  }
 
   const handleWsMessage = useCallback((msg: WsMessage) => {
     setLastMessage(msg);
@@ -443,6 +453,7 @@ export default function App() {
               silent: true,
             });
           }
+          triggerVisualAlert('rx');
         }
         break;
       }
@@ -786,6 +797,7 @@ export default function App() {
             silent: false,
           });
         }
+        triggerVisualAlert('weather');
         break;
 
       case 'family_presence': {
@@ -804,6 +816,7 @@ export default function App() {
               });
             }
           }
+          if (newlyMissed(prev, entries).length > 0) triggerVisualAlert('family');
           return entries;
         });
         break;
@@ -843,6 +856,7 @@ export default function App() {
               silent: false,
             });
           }
+          triggerVisualAlert('street');
           return [msg, ...prev].slice(0, 3);
         });
         break;
@@ -1607,6 +1621,7 @@ export default function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
+      <ScreenFlash flash={flash} />
       <TokenPromptDialog
         open={promptState !== null}
         tokens={promptState?.tokens ?? []}
