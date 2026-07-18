@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useMemo } from 'react';
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { ThemeProvider, CssBaseline, Box, CircularProgress } from '@mui/material';
 import { makeTheme, withTouchDensity } from './theme';
 import { useAuth } from './hooks/useAuth';
@@ -151,6 +151,7 @@ export function streamMsgToEntry(msg: StoredStreamMsg): ChatEntry {
 import type { JournalResultDraft, PendingStation, PromptState } from './types/appTypes';
 import type { AACGrid } from './types/aac';
 import { TokenPromptDialog } from './components/TokenPromptDialog/TokenPromptDialog';
+import { ShortcutOverlay } from './components/ShortcutOverlay/ShortcutOverlay';
 import { ConfirmDialog } from './components/ConfirmDialog';
 
 export default function App() {
@@ -176,6 +177,7 @@ export default function App() {
   const [showContacts, setShowContacts] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showCalibration, setShowCalibration] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   // Home-screen shell: which activity is in front (desktop only). Chat unread
   // count is the simplest honest Phase 1 measure — messages received while on home.
@@ -275,6 +277,18 @@ export default function App() {
 
   const deviceClass = useDeviceClass();
   const isMobile = deviceClass === 'phone';
+
+  // "?" opens the shortcut overlay anywhere except while typing.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== '?' || e.defaultPrevented) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      setShortcutsOpen((v) => !v);
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
 
   const baseTheme = useMemo(
     () => makeTheme(darkMode, { fontScale, highContrast }),
@@ -1629,6 +1643,7 @@ export default function App() {
         onSubmit={handleTokenSubmit}
         onCancel={handleTokenCancel}
       />
+      <ShortcutOverlay open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <ConfirmDialog
         open={pluginToUninstall !== null}
         title="Uninstall plugin?"
