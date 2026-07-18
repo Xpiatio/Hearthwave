@@ -259,3 +259,20 @@ class TestDisplayQuickMessagesConfig:
         msg = _next_of_type(admin_ws, "error")
         assert msg is not None
         assert "quick message" in msg["detail"].lower()
+
+    def test_invalid_quick_messages_does_not_block_other_fields(self, admin_ws):
+        """A mixed payload with an invalid display_quick_messages alongside a
+        valid unrelated admin field should still apply the valid field (per-field
+        validation, matching the skip-only-this-field idiom used by neighboring
+        set_admin_config legs like neighborhood_net_day/tts_length_scale/rx_mode),
+        while still reporting the display_quick_messages error."""
+        admin_ws.send_json({"type": "set_admin_config",
+                            "name": "New Station Name",
+                            "display_quick_messages": ["ok", "x" * 300]})
+        err = _next_of_type(admin_ws, "error")
+        assert err is not None
+        assert "quick message" in err["detail"].lower()
+        status = _next_of_type(admin_ws, "status")
+        assert status is not None
+        assert status["station_name"] == "New Station Name"
+        assert status["display_quick_messages"] == []

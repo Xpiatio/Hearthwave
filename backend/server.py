@@ -1969,14 +1969,14 @@ async def _ws_handle_set_admin_config(ws: WebSocket, data: dict, state: "Connect
     if "display_quick_messages" in data:
         raw = data["display_quick_messages"]
         if raw == []:
-            cleaned = []
+            _config["display_quick_messages"] = []
         else:
             cleaned = _validate_quick_messages(raw)
             if cleaned is None:
                 await _manager.send_to(ws, {"type": "error",
                     "detail": "Invalid display quick messages (1-20 entries, each 1-200 chars)."})
-                return
-        _config["display_quick_messages"] = cleaned
+            else:
+                _config["display_quick_messages"] = cleaned
     rx_mode_changed = False
     if "rx_mode" in data:
         new_mode = str(data["rx_mode"]).strip().lower()
