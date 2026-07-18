@@ -95,6 +95,7 @@ import datetime
 import json
 import logging
 import os
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -144,6 +145,7 @@ from backend.persistence.audit import AuditLog
 from backend.auth_ratelimit import _extract_ip, get_client_ip
 from backend.family.reminders import is_checkin_missed
 from backend.persistence.family import FamilyStore
+from backend.persistence.incidents import IncidentsStore
 from backend.persistence.journal import delete_journal, load_journals, load_published_manifest, publish_journal, save_journal, unpublish_journal
 from backend.persistence.presence import PresenceStore
 from backend.persistence.tokens import TokenStore
@@ -192,6 +194,7 @@ _users_store: UsersStore | None = None
 _token_store: TokenStore | None = None
 _presence_store: PresenceStore | None = None
 _family_store: FamilyStore | None = None
+_incidents_store: IncidentsStore | None = None
 _audit_log: AuditLog | None = None
 _stt_worker: STTWorker | None = None
 _synthesizer: TTSSynthesizer | None = None
@@ -1512,7 +1515,7 @@ async def _voices_watcher_pump() -> None:
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     """Startup / shutdown wiring."""
-    global _config, _contacts_store, _users_store, _token_store, _presence_store, _family_store, _stt_worker, _synthesizer, _monitor, _plugin_ctx
+    global _config, _contacts_store, _users_store, _token_store, _presence_store, _family_store, _incidents_store, _stt_worker, _synthesizer, _monitor, _plugin_ctx
     global _stt_out_queue, _tx_queue, _tts_event_queue, _background_tasks, _tx_abort_event
     global _audio_level, _radio_error, _channel_clear, _last_id_time, _has_transmitted, _last_beacon_time, _ncs_plugin
     global _level_window, _attendance, _spectro, _monitor_chunk_cb
@@ -1550,6 +1553,7 @@ async def _lifespan(app: FastAPI):
     _token_store = TokenStore(_config.tokens_file)
     _presence_store = PresenceStore(_config.presence_file)
     _family_store = FamilyStore(_config.family_file)
+    _incidents_store = IncidentsStore(_config.incidents_file)
     purged = _token_store.purge_expired()
     if purged:
         _log.info("Purged %d expired session tokens.", purged)
@@ -1894,6 +1898,14 @@ async def _ws_handle_set_admin_config(ws: WebSocket, data: dict, state: "Connect
         _config["ncs_preamble_text"] = str(data["ncs_preamble_text"])
     if "ncs_closing_text" in data:
         _config["ncs_closing_text"] = str(data["ncs_closing_text"])
+    if "neighborhood_net_day" in data:
+        day = str(data["neighborhood_net_day"]).strip()
+        if day == "" or day in _NEIGHBORHOOD_NET_DAYS:
+            _config["neighborhood_net_day"] = day
+    if "neighborhood_net_time" in data:
+        time_str = str(data["neighborhood_net_time"]).strip()
+        if time_str == "" or _HHMM_RE.match(time_str):
+            _config["neighborhood_net_time"] = time_str
     rx_mode_changed = False
     if "rx_mode" in data:
         new_mode = str(data["rx_mode"]).strip().lower()
@@ -2256,6 +2268,24 @@ KID_ALLOWED_PREF_KEYS = {"dark_mode", "font_scale", "high_contrast", "aac_mode",
 
 def _is_kid(state: "ConnectionState") -> bool:
     return getattr(state, "role", "adult") == "kid"
+
+
+def _is_coordinator(state: "ConnectionState") -> bool:
+    """True if this connection's live prefs mark it a neighborhood coordinator.
+
+    Reads the same live-synced state.prefs that server-side gates already
+    check (see _sync_live_state_for_user) so a coordinator grant/revoke
+    takes effect on an already-connected socket without a reconnect.
+    """
+    return state.prefs.get("neighborhood_coordinator") is True
+
+
+# Allowed weekday values for neighborhood_net_day (admin config); empty string
+# is also allowed and means "unset" rather than "no net".
+_NEIGHBORHOOD_NET_DAYS = (
+    "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
+)
+_HHMM_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
 async def _enqueue_family_tts(text: str, state: "ConnectionState") -> None:
@@ -3019,6 +3049,10 @@ async def websocket_endpoint(
             elif msg_type == "save_user_prefs":
                 if _users_store is None:
                     continue
+                # neighborhood_coordinator is deliberately absent: it's an
+                # admin-only grant (see set_neighborhood_coordinator) — a user
+                # must never be able to self-promote by round-tripping it
+                # through their own prefs.
                 allowed = {"dark_mode", "filter_profanity", "listen_only",
                            "read_aloud", "notifications_enabled", "spectro_colormap", "spectro_time_window_s",
                            "tts_voice", "tts_length_scale", "aac_mode", "aac_grid",
@@ -3158,6 +3192,32 @@ async def websocket_endpoint(
                         pass
                 _sync_live_state_for_user(target_role_id, updated)
                 await _manager.broadcast_to_user(target_role_id, _build_user_profile_msg(updated))
+                await _manager.broadcast({
+                    "type": "profiles",
+                    "profiles": _users_store.get_public(),
+                })
+
+            elif msg_type == "set_neighborhood_coordinator":
+                if not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
+                    continue
+                if _users_store is None:
+                    continue
+                target_id = data.get("user_id", "")
+                target_profile = _users_store.get(target_id)
+                if target_profile is not None and target_profile.get("role") == "kid":
+                    await _manager.send_to(ws, {"type": "error", "detail": "Kid accounts cannot be coordinators"})
+                    continue
+                coordinator = bool(data.get("coordinator"))
+                try:
+                    updated = _users_store.update_prefs(target_id, {"neighborhood_coordinator": coordinator})
+                except KeyError:
+                    updated = None
+                if updated is None:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Unknown user."})
+                    continue
+                _sync_live_state_for_user(target_id, updated)
+                await _manager.broadcast_to_user(target_id, _build_user_profile_msg(updated))
                 await _manager.broadcast({
                     "type": "profiles",
                     "profiles": _users_store.get_public(),

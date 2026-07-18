@@ -330,6 +330,11 @@ class ServerConfig(dict):
         raw = self.get("family_file")
         return Path(raw) if raw else Path("/data/family.json")
 
+    @property
+    def incidents_file(self) -> Path:
+        raw = self.get("incidents_file")
+        return Path(raw) if raw else Path("/data/incidents.json")
+
     # ---- NCS / Net Control Station --------------------------------------
     # NCS is a built-in plugin (id "ncs"); its master toggle lives in the plugin
     # namespace (see plugin_* helpers below). These are Station-tab settings it reads.
@@ -355,6 +360,20 @@ class ServerConfig(dict):
         """Closing net sign-off template; placeholders substituted before TTS.
         Supports {callsign} {name} {location} {date} {time}. Empty = none."""
         return self.get("ncs_closing_text", "") or ""
+
+    # ---- Neighborhood activity -------------------------------------------
+    # Scheduled net day/time shown on the Neighborhood Hub card. Empty = unset
+    # (not "no net" — just not yet configured by the coordinator/admin).
+
+    @property
+    def neighborhood_net_day(self) -> str:
+        """Day of week for the recurring neighborhood net (e.g. 'Tuesday'). Empty = unset."""
+        return self.get("neighborhood_net_day", "") or ""
+
+    @property
+    def neighborhood_net_time(self) -> str:
+        """24h HH:MM local start time for the recurring neighborhood net. Empty = unset."""
+        return self.get("neighborhood_net_time", "") or ""
 
     # ---- plugins (namespaced config for installed plugins) --------------
     # Each plugin's state lives under config["plugins"][id]: the master toggle at

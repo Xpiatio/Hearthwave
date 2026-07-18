@@ -49,6 +49,7 @@ def _cfg(tmp_path: Path, **overrides) -> ServerConfig:
         "contacts_file": str(contacts_file),
         "presence_file": str(tmp_path / "presence.json"),
         "family_file": str(tmp_path / "family.json"),
+        "incidents_file": str(tmp_path / "incidents.json"),
     }
     base.update(overrides)
     return ServerConfig(base)

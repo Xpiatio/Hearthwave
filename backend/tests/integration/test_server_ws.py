@@ -38,6 +38,7 @@ def _minimal_cfg(tmp_path: Path, *, listen_only: bool = False) -> ServerConfig:
         "contacts_file": str(contacts_file),
         "presence_file": str(tmp_path / "presence.json"),
         "family_file": str(tmp_path / "family.json"),
+        "incidents_file": str(tmp_path / "incidents.json"),
         "listen_only": listen_only,
     })
 
@@ -2124,6 +2125,117 @@ class TestRoleHandlers:
 
 
 # ---------------------------------------------------------------------------
+# set_neighborhood_coordinator — admin-only pref grant, kid-target rejection,
+# live-sync to an already-connected target socket (Phase 3 Task 1)
+# ---------------------------------------------------------------------------
+
+class TestNeighborhoodCoordinator:
+    def test_requires_admin(self, non_admin_client):
+        tc, _cfg = non_admin_client
+        with tc.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "set_neighborhood_coordinator", "user_id": "other", "coordinator": True})
+            msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert "admin" in msg["detail"].lower()
+
+    def test_admin_sets_coordinator_on_adult(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()  # admin, id="test-user"
+
+        def get_side_effect(user_id):
+            if user_id == "adult-1":
+                return {"id": "adult-1", "role": "adult", "is_admin": False, "prefs": {}}
+            return {"id": "test-user", "display_name": "Test Operator",
+                    "is_admin": True, "role": "admin", "prefs": {}}
+        mock_users.get.side_effect = get_side_effect
+        mock_users.update_prefs.return_value = {
+            "id": "adult-1", "role": "adult", "is_admin": False,
+            "prefs": {"neighborhood_coordinator": True},
+        }
+        mock_users.get_public.return_value = [
+            {"id": "adult-1", "role": "adult", "is_admin": False,
+             "prefs": {"neighborhood_coordinator": True}},
+        ]
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "set_neighborhood_coordinator",
+                                  "user_id": "adult-1", "coordinator": True})
+                    msg = _next_of_type(ws, "profiles")
+        assert msg is not None
+        target = next(p for p in msg["profiles"] if p["id"] == "adult-1")
+        assert target["prefs"]["neighborhood_coordinator"] is True
+        mock_users.update_prefs.assert_called_once_with("adult-1", {"neighborhood_coordinator": True})
+
+    def test_target_kid_rejected(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()  # admin, id="test-user"
+
+        def get_side_effect(user_id):
+            if user_id == "kid-1":
+                return {"id": "kid-1", "role": "kid", "is_admin": False, "prefs": {}}
+            return {"id": "test-user", "display_name": "Test Operator",
+                    "is_admin": True, "role": "admin", "prefs": {}}
+        mock_users.get.side_effect = get_side_effect
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "set_neighborhood_coordinator",
+                                  "user_id": "kid-1", "coordinator": True})
+                    msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert msg["detail"] == "Kid accounts cannot be coordinators"
+        mock_users.update_prefs.assert_not_called()
+
+    def test_live_sync_updates_connected_target_without_reconnect(self, tmp_path):
+        """Mirrors TestLiveRoleAndPresetSync: an admin grant must reach the
+        target's already-open socket's ConnectionState immediately (via
+        _sync_live_state_for_user), not only the persisted profile — that's
+        what lets a Task 3 coordinator-gated handler work without a reconnect."""
+        from backend.server import _manager
+
+        target_id = "target-1"
+        with _two_user_server(tmp_path, target_id=target_id, target_role="adult") as (tc, mock_users):
+            mock_users.update_prefs.return_value = {
+                "id": target_id, "role": "adult", "is_admin": False,
+                "prefs": {"neighborhood_coordinator": True},
+            }
+            with (
+                tc.websocket_connect("/ws?token=target-token") as ws_target,
+                tc.websocket_connect("/ws?token=admin-token") as ws_admin,
+            ):
+                _drain_initial(ws_target)
+                _drain_initial(ws_admin)
+
+                ws_admin.send_json({"type": "set_neighborhood_coordinator",
+                                     "user_id": target_id, "coordinator": True})
+                assert _next_of_type(ws_admin, "profiles") is not None
+
+                live_states = _manager.states_for_user(target_id)
+                assert live_states
+                assert live_states[0].prefs.get("neighborhood_coordinator") is True
+
+
+# ---------------------------------------------------------------------------
 # quick_messages pref — validation, save, and admin-set path
 # ---------------------------------------------------------------------------
 
@@ -2299,6 +2411,35 @@ class TestKidSaveUserPrefsAllowedKeys:
         assert msg is not None
         assert msg["profile"]["prefs"]["aac_grid"] == grid
         mock_users.update_prefs.assert_called_once_with("test-user", {"aac_grid": grid})
+
+    def test_kid_cannot_self_grant_neighborhood_coordinator(self, tmp_path):
+        """neighborhood_coordinator is admin-only (see TestNeighborhoodCoordinator);
+        it must be silently dropped from a self-serve save_user_prefs, not just
+        for kids but this specifically proves the kid path drops it too."""
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks(is_admin=False, role="kid")
+        mock_users.update_prefs.return_value = {
+            "id": "test-user", "display_name": "Test Operator", "is_admin": False,
+            "role": "kid", "prefs": {"dark_mode": True},
+        }
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "save_user_prefs",
+                                  "prefs": {"neighborhood_coordinator": True, "dark_mode": True}})
+                    msg = _next_of_type(ws, "user_profile")
+        assert msg is not None
+        assert "neighborhood_coordinator" not in msg["profile"]["prefs"]
+        mock_users.update_prefs.assert_called_once_with("test-user", {"dark_mode": True})
 
 
 class TestSetUserQuickMessages:
