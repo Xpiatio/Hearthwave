@@ -46,6 +46,8 @@ function makeProps(overrides: Partial<AACAppProps> = {}): AACAppProps {
     onExitAac: vi.fn(),
     switchScan: false,
     switchScanIntervalS: 1.5,
+    errorSnack: null,
+    onCloseErrorSnack: vi.fn(),
     ...overrides,
   }
 }
@@ -97,9 +99,22 @@ describe('AACApp', () => {
     await user.click(screen.getByRole('tab', { name: /Radio/ }))
     await user.click(screen.getByRole('button', { name: 'Check in' }))
     await user.click(screen.getByRole('button', { name: 'Send message over radio' }))
-    expect(onSend).toHaveBeenCalledWith('This is WRXB123 checking in', '', '')
+    expect(onSend).toHaveBeenCalledWith('This is WRXB123 checking in', '', '', ['This is {callsign} checking in'])
     const strip = screen.getByRole('status', { name: 'Message being composed' })
     expect(within(strip).getByText(/Tap buttons/)).toBeInTheDocument()
+  })
+
+  it('SEND passes the raw button chunks alongside the resolved text', () => {
+    const onSend = vi.fn()
+    render(<AACApp {...makeProps({ onSend })} />)
+    fireEvent.click(within(screen.getByRole('group')).getByRole('button', { name: 'Yes' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Send message over radio' }))
+    expect(onSend).toHaveBeenCalledWith('Yes', '', '', ['Yes'])
+  })
+
+  it('shows server errors in a snackbar', () => {
+    render(<AACApp {...makeProps({ errorSnack: 'TX not allowed for this account', onCloseErrorSnack: vi.fn() })} />)
+    expect(screen.getByRole('alert')).toHaveTextContent('TX not allowed for this account')
   })
 
   it('SEND is disabled when strip empty, disconnected, or listen-only', async () => {

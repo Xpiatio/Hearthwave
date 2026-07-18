@@ -543,7 +543,7 @@ The **User Accounts** table lists all family member accounts, with a **Role** co
 - No access to the Settings dialog at all — the gear icon is hidden on the Home screen and settings drawer.
 - Can still send the **I'm OK** check-in — see [section 30](#30-family-activity) — since that is treated as a safety action available to every role.
 - Can still check in to the Neighborhood net and view the incident log and street alerts — see [section 31](#31-neighborhood-activity) — but cannot file an incident report (it keys the radio) and can never be a Neighborhood coordinator.
-- AAC Interface (symbol buttons, [section 27](#27-aac-interface-symbol-button-communication)) is not yet supported for Kid accounts.
+- Kid accounts can use the AAC Interface (section 27): sends are limited to the words on their buttons — the server checks every send against the buttons a parent configured (or the built-in starter grid) and rejects anything else.
 
 ### NCS / SKYWARN (admin only)
 

@@ -251,6 +251,21 @@ export default function App() {
   // Stable fallback grid — regenerating per render would churn button ids.
   const defaultAacGrid = useMemo(() => makeDefaultGrid(), []);
 
+  // Kid gating: hide Settings entry points and other adult-only affordances.
+  // Hoisted above the auth-state early returns below so it's available to
+  // hooks that must run unconditionally on every render.
+  const isKid = profile?.role === 'kid';
+
+  // A kid's AAC sends are validated server-side against their *stored* grid;
+  // the client-only built-in default grid is invisible to the server. Persist
+  // it once so a kid can use AAC before an adult customizes anything.
+  useEffect(() => {
+    if (aacMode && isKid && profile && aacGrid == null) {
+      handleSaveAacGrid(defaultAacGrid);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aacMode, isKid, profile, aacGrid]);
+
   // Interface tier ("simple" hides advanced controls) — persisted locally;
   // overridden by profile prefs on load
   const [uiLevel, setUiLevel] = useState<'simple' | 'operator'>(
@@ -933,7 +948,7 @@ export default function App() {
   sendRef.current = send;
 
 
-  function handleSend(text: string, targetCall: string, targetName: string) {
+  function handleSend(text: string, targetCall: string, targetName: string, aacChunks?: string[]) {
     if (!profile) return;
     const payload: TxMessagePayload = {
       type: 'tx_message',
@@ -945,6 +960,7 @@ export default function App() {
       // Transmit in this operator's profile voice/speed (the [tx] [name]
       // convention); the backend resolves it by display name.
       voice_as: profile.display_name,
+      ...(aacChunks && aacChunks.length > 0 ? { aac_chunks: aacChunks } : {}),
     };
     send(payload);
   }
@@ -1507,8 +1523,6 @@ export default function App() {
   // the message length so the prefixed packet fits one mesh frame).
   const txComposition = resolveTxComposition(plugins, profile);
 
-  // Kid gating: hide Settings entry points and other adult-only affordances.
-  const isKid = profile?.role === 'kid';
   // Kids only ever see an admin-curated preset list (server-enforced TX
   // allowlist) — falling back to QUICK_DEFAULTS for a kid with an empty
   // allowlist would show buttons that error on every tap. Adults keep the
@@ -1670,6 +1684,8 @@ export default function App() {
           onExitAac={handleToggleAacMode}
           switchScan={switchScan}
           switchScanIntervalS={switchScanIntervalS}
+          errorSnack={errorSnack}
+          onCloseErrorSnack={handleCloseErrorSnack}
         />
       ) : isMobile ? (
         <MobileApp

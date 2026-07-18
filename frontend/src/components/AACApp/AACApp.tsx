@@ -9,6 +9,7 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
+  Snackbar,
   Tab,
   Tabs,
   TextField,
@@ -40,12 +41,14 @@ export interface AACAppProps {
   listenOnly: boolean;
   messages: ChatEntry[];
   grid: AACGrid;
-  onSend: (text: string, targetCall: string, targetName: string) => void;
+  onSend: (text: string, targetCall: string, targetName: string, aacChunks?: string[]) => void;
   onTxAbort: () => void;
   onSaveGrid: (grid: AACGrid) => void;
   onExitAac: () => void;
   switchScan: boolean;
   switchScanIntervalS: number;
+  errorSnack: string | null;
+  onCloseErrorSnack: () => void;
 }
 
 export function AACApp({
@@ -62,6 +65,8 @@ export function AACApp({
   onExitAac,
   switchScan,
   switchScanIntervalS,
+  errorSnack,
+  onCloseErrorSnack,
 }: AACAppProps) {
   const [chunks, setChunks] = useState<string[]>([]);
   const [activeCatId, setActiveCatId] = useState<string>(grid.categories[0]?.id ?? '');
@@ -103,7 +108,7 @@ export function AACApp({
     if (!canSend) return;
     const text = resolveTokens(chunks.join(' '), profile.operator_name, effectiveCallsign);
     if (!text) return;
-    onSend(text, '', '');
+    onSend(text, '', '', chunks);
     setChunks([]);
   }
 
@@ -372,6 +377,12 @@ export function AACApp({
         onConfirm={handleDeleteCategory}
         onClose={() => setCatDeleteConfirmOpen(false)}
       />
+
+      <Snackbar open={!!errorSnack} autoHideDuration={6000} onClose={onCloseErrorSnack}>
+        <Alert severity="error" onClose={onCloseErrorSnack} sx={{ fontSize: '1.1rem' }}>
+          {errorSnack}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
