@@ -2411,11 +2411,12 @@ async def websocket_endpoint(
 
     await ws.accept()
     role = profile.get("role") or ("admin" if profile.get("is_admin") else "adult")
-    conn_prefs = {**DEFAULT_PREFS, **profile.get("prefs", {})}
-    if role == "kid":
-        conn_prefs["filter_profanity"] = True
-        conn_prefs["ui_level"] = "simple"
-        conn_prefs["listen_only"] = False
+    # _effective_prefs applies all 4 kid pref locks (filter_profanity/ui_level/
+    # listen_only/neighborhood_coordinator) — the inline block this replaced
+    # only covered the first 3, so a kid connecting with a stale
+    # neighborhood_coordinator=True in stored prefs would pass _is_coordinator
+    # (which reads state.prefs) for the life of the connection.
+    conn_prefs = _effective_prefs(profile)
     state = ConnectionState(
         user_id=user_id,
         is_admin=bool(profile.get("is_admin", False)),
@@ -3334,6 +3335,11 @@ async def websocket_endpoint(
                     if _presence_store is not None:
                         _presence_store.remove(target_id)
                         await _manager.broadcast(_build_family_presence_msg())
+                    # Same for the neighborhood roster/round-table — otherwise
+                    # a deleted user's row (and a current_call pointing at
+                    # them) lingers forever on the Neighborhood board.
+                    if _neighborhood is not None and _neighborhood.remove(target_id):
+                        await _manager.broadcast(_build_neighborhood_state_msg())
                     await _manager.broadcast({
                         "type": "profiles",
                         "profiles": _users_store.get_public(),
@@ -3504,7 +3510,9 @@ async def websocket_endpoint(
                         f"  {r['callsign']} — {r.get('name', '')} — {r.get('location', '')}"
                         for r in roster_snapshot
                     )
-                    summary_text = f"Neighborhood Net\n\nChecked-in stations:\n{roster_lines}"
+                    duration_minutes = round(summary.get("duration_seconds", 0) / 60)
+                    duration_line = f"Duration: {duration_minutes} minute{'s' if duration_minutes != 1 else ''}"
+                    summary_text = f"Neighborhood Net\n\n{duration_line}\n\nChecked-in stations:\n{roster_lines}"
                     callsigns_with_locations = [
                         {"callsign": r["callsign"], "location": r.get("location", "")}
                         for r in roster_snapshot

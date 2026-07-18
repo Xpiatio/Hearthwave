@@ -144,3 +144,41 @@ def test_set_status_unknown_user_is_noop():
     n.start()
     n.set_status("nobody", "standby")  # must not raise
     assert n.roster() == []
+
+
+def test_remove_deletes_roster_row():
+    n = NeighborhoodNet()
+    n.start()
+    n.checkin("u1", "A", "Ann", "")
+    n.checkin("u2", "B", "Bob", "")
+    assert n.remove("u1") is True
+    assert [r["user_id"] for r in n.roster()] == ["u2"]
+
+
+def test_remove_unknown_user_is_noop_and_returns_false():
+    n = NeighborhoodNet()
+    n.start()
+    n.checkin("u1", "A", "Ann", "")
+    assert n.remove("nobody") is False
+    assert len(n.roster()) == 1
+
+
+def test_remove_clears_current_call_when_it_pointed_at_removed_user():
+    n = NeighborhoodNet()
+    n.start()
+    n.checkin("u1", "A", "Ann", "")
+    n.call_next()
+    assert n.current_call == "u1"
+    n.remove("u1")
+    assert n.current_call is None
+
+
+def test_remove_leaves_current_call_alone_when_it_points_elsewhere():
+    n = NeighborhoodNet()
+    n.start()
+    n.checkin("u1", "A", "Ann", "")
+    n.checkin("u2", "B", "Bob", "")
+    n.call_next()
+    assert n.current_call == "u1"
+    n.remove("u2")
+    assert n.current_call == "u1"

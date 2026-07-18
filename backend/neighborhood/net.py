@@ -114,5 +114,18 @@ class NeighborhoodNet:
             row["called"] = False
         self.current_call = None
 
+    def remove(self, user_id: str) -> bool:
+        """Remove a user's roster row entirely (e.g. on account deletion).
+
+        Clears current_call too if it pointed at the removed user, so a
+        deleted user's round-table turn can't leave current_call dangling
+        on a user_id nothing else refers to. Returns True if a row was
+        removed, False if the user had no row (no-op).
+        """
+        removed = self._roster.pop(user_id, None) is not None
+        if removed and self.current_call == user_id:
+            self.current_call = None
+        return removed
+
     def roster(self) -> list[dict]:
         return list(self._roster.values())

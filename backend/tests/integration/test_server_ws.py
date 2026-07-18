@@ -3580,6 +3580,33 @@ class TestDeleteProfileCleansUpFamilyData:
         assert presence_msg is not None
         assert all(e["user_id"] != "other" for e in presence_msg["entries"])
 
+    def test_delete_profile_removes_neighborhood_roster_row(self, tmp_path):
+        """M2: delete_profile must also drop the deleted user's neighborhood
+        roster row (and current_call if it pointed at them) — otherwise they
+        linger on the Neighborhood board for a user_id that no longer
+        exists."""
+        target_id = "target-1"
+        with _two_user_server(tmp_path, target_id=target_id, target_role="adult") as (tc, mock_users):
+            with (
+                tc.websocket_connect("/ws?token=target-token") as ws_target,
+                tc.websocket_connect("/ws?token=admin-token") as ws_admin,
+            ):
+                _drain_initial(ws_target)
+                _drain_initial(ws_admin)
+
+                ws_target.send_json({"type": "neighborhood_checkin"})
+                state_msg = _next_of_type(ws_target, "neighborhood_state")
+                assert any(r["user_id"] == target_id for r in state_msg["roster"])
+                # The checkin broadcast also reaches ws_admin's queue — drain
+                # it so the next neighborhood_state read below is the one
+                # triggered by delete_profile, not this earlier one.
+                _next_of_type(ws_admin, "neighborhood_state")
+
+                ws_admin.send_json({"type": "delete_profile", "user_id": target_id})
+                broadcast = _next_of_type(ws_admin, "neighborhood_state")
+        assert broadcast is not None
+        assert all(r["user_id"] != target_id for r in broadcast["roster"])
+
 
 # ---------------------------------------------------------------------------
 # Phase 3 Task 2 — neighborhood net: state, check-ins, round-table
@@ -3600,6 +3627,35 @@ def _neighborhood_server(tmp_path, *, role: str = "adult", is_admin: bool = Fals
     if profile is not None:
         mock_users.get_public_one.return_value = profile
     return cfg, mock_stt, tts, mock_users, mock_tokens
+
+
+class TestNeighborhoodConnectTimeKidLock:
+    """I3: connect-time conn_prefs must run through _effective_prefs (which
+    forces neighborhood_coordinator=False for kids) rather than the inline
+    block that only covered 3 of the 4 kid pref locks — otherwise a kid
+    connecting with a stale neighborhood_coordinator=True in stored prefs
+    would pass _is_coordinator (which reads state.prefs) for the life of
+    the connection."""
+
+    def test_kid_with_stale_coordinator_pref_cannot_start_net(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, role="kid", coordinator=True,
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_start"})
+                    msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert msg["detail"] == "Coordinator access required"
 
 
 class TestNeighborhoodNetHandlers:
@@ -3905,6 +3961,10 @@ class TestNeighborhoodNetHandlers:
         entry = json.loads(journal_files[0].read_text())
         assert entry["title"].startswith("Neighborhood net ")
         assert entry["callsigns_locations"] == [{"callsign": "W5CRD", "location": "Front St"}]
+        # M1: duration_seconds was computed by NeighborhoodNet.end() but never
+        # written anywhere — USER_MANUAL §31 promises it's journaled.
+        assert "Duration:" in entry["summary"]
+        assert "minute" in entry["summary"]
 
     def test_end_with_empty_roster_does_not_save_journal(self, tmp_path):
         cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
