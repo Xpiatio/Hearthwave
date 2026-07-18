@@ -65,6 +65,10 @@ services:
       - hearthwave-voices:/app/Voices:ro
       - hearthwave-models:/app/backend/Models:ro
       - /run/user/${PULSE_UID:-1000}/pulse:/run/pulse:ro
+      # Host timezone, so times spoken on air and embedded in reports/journals
+      # are local (the container otherwise runs UTC). Non-Linux hosts: remove
+      # this line and set a TZ environment variable instead (e.g. TZ=America/Detroit).
+      - /etc/localtime:/etc/localtime:ro
     environment:
       - PULSE_SERVER=unix:/run/pulse/native
       # Uncomment to create the admin account headlessly on first run:
