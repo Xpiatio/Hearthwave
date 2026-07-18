@@ -454,6 +454,101 @@ class TestSaveUserPrefsUiLevelAndA11y:
         assert msg["profile"]["prefs"]["dark_mode"] is True
         mock_users.update_prefs.assert_called_once_with("test-user", {"dark_mode": True})
 
+    def test_switch_scan_and_visual_alerts_saved(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()
+        mock_users.update_prefs.return_value = {
+            "id": "test-user",
+            "display_name": "Test Operator",
+            "is_admin": True,
+            "prefs": {"switch_scan": True, "switch_scan_interval_s": 2, "visual_alerts": True},
+        }
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "save_user_prefs",
+                                  "prefs": {"switch_scan": True, "switch_scan_interval_s": 2, "visual_alerts": True}})
+                    msg = _next_of_type(ws, "user_profile")
+        assert msg is not None
+        assert msg["profile"]["prefs"]["switch_scan"] is True
+        assert msg["profile"]["prefs"]["switch_scan_interval_s"] == 2
+        assert msg["profile"]["prefs"]["visual_alerts"] is True
+        mock_users.update_prefs.assert_called_once_with(
+            "test-user",
+            {"switch_scan": True, "switch_scan_interval_s": 2, "visual_alerts": True},
+        )
+
+    def test_switch_scan_interval_s_rejects_bad_values(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()
+        mock_users.update_prefs.return_value = {
+            "id": "test-user",
+            "display_name": "Test Operator",
+            "is_admin": True,
+            "prefs": {"switch_scan": True},
+        }
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    # Invalid interval (5 not in allowed set) and boolean slip-through.
+                    # The bool will be caught by isinstance check; bad value by range check.
+                    ws.send_json({"type": "save_user_prefs",
+                                  "prefs": {"switch_scan": True, "switch_scan_interval_s": 5}})
+                    msg = _next_of_type(ws, "user_profile")
+        assert msg is not None
+        assert msg["profile"]["prefs"]["switch_scan"] is True
+        # Only switch_scan should be in the call; switch_scan_interval_s rejected.
+        mock_users.update_prefs.assert_called_once_with("test-user", {"switch_scan": True})
+
+    def test_kid_switch_scan_and_visual_alerts_saved(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks(is_admin=False, role="kid")
+        mock_users.update_prefs.return_value = {
+            "id": "test-user",
+            "display_name": "Test Operator",
+            "is_admin": False,
+            "role": "kid",
+            "prefs": {"switch_scan": True, "visual_alerts": True},
+        }
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "save_user_prefs",
+                                  "prefs": {"switch_scan": True, "visual_alerts": True, "listen_only": True}})
+                    msg = _next_of_type(ws, "user_profile")
+        assert msg is not None
+        # listen_only NOT kid-allowed must be filtered out
+        mock_users.update_prefs.assert_called_once_with(
+            "test-user", {"switch_scan": True, "visual_alerts": True},
+        )
+
 
 # ---------------------------------------------------------------------------
 # tx_message — happy path

@@ -49,6 +49,9 @@ DEFAULT_PREFS: dict = {
     "ui_level": "simple",   # "simple" | "operator" — home-screen tier
     "font_scale": 1,        # 1 | 1.25 | 1.5 | 2
     "high_contrast": False,
+    "switch_scan": False,
+    "switch_scan_interval_s": 1.5,  # 1 | 1.5 | 2 | 3
+    "visual_alerts": False,
 }
 
 

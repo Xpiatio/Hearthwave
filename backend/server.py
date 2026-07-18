@@ -2339,7 +2339,7 @@ async def _check_listen_only(ws: WebSocket, state: "ConnectionState") -> bool:
 # so a kid can exit AAC mode and an adult can configure their grid) via
 # save_user_prefs; filter_profanity/ui_level/listen_only are server-enforced
 # (see _effective_prefs). Full kid+AAC send support is deferred (Phase 5).
-KID_ALLOWED_PREF_KEYS = {"dark_mode", "font_scale", "high_contrast", "aac_mode", "aac_grid"}
+KID_ALLOWED_PREF_KEYS = {"dark_mode", "font_scale", "high_contrast", "aac_mode", "aac_grid", "switch_scan", "visual_alerts"}
 
 
 def _is_kid(state: "ConnectionState") -> bool:
@@ -3253,7 +3253,8 @@ async def websocket_endpoint(
                 allowed = {"dark_mode", "filter_profanity", "listen_only",
                            "read_aloud", "notifications_enabled", "spectro_colormap", "spectro_time_window_s",
                            "tts_voice", "tts_length_scale", "aac_mode", "aac_grid",
-                           "ui_level", "font_scale", "high_contrast", "quick_messages"}
+                           "ui_level", "font_scale", "high_contrast", "quick_messages",
+                           "switch_scan", "switch_scan_interval_s", "visual_alerts"}
                 updates = {k: v for k, v in data.get("prefs", data).items() if k in allowed}
                 if _is_kid(state):
                     updates = {k: v for k, v in updates.items() if k in KID_ALLOWED_PREF_KEYS}
@@ -3269,6 +3270,15 @@ async def websocket_endpoint(
                     updates.pop("font_scale")
                 if "high_contrast" in updates and not isinstance(updates["high_contrast"], bool):
                     updates.pop("high_contrast")
+                if "switch_scan" in updates and not isinstance(updates["switch_scan"], bool):
+                    updates.pop("switch_scan")
+                if "visual_alerts" in updates and not isinstance(updates["visual_alerts"], bool):
+                    updates.pop("visual_alerts")
+                if (
+                    "switch_scan_interval_s" in updates
+                    and (isinstance(updates["switch_scan_interval_s"], bool) or updates["switch_scan_interval_s"] not in (1, 1.5, 2, 3))
+                ):
+                    updates.pop("switch_scan_interval_s")
                 if "quick_messages" in updates:
                     qm = _validate_quick_messages(updates["quick_messages"])
                     if qm is None:
