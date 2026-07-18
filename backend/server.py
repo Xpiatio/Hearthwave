@@ -313,6 +313,9 @@ class ConnectionState:
     voice_tx_callsign: str  = ""
     voice_tx_operator: str  = ""
     voice_tx_bytes:    int  = 0  # running total for cap check
+    # Wall-display (kiosk) label, e.g. "Kitchen" — used to attribute
+    # display_quick_message chat echoes to the device rather than a user.
+    display_label:     str  = ""
 
 
 class ConnectionManager:
@@ -2467,6 +2470,7 @@ async def websocket_endpoint(
             is_admin=False,
             prefs=dict(DEFAULT_PREFS),
             role="display",
+            display_label=display_rec["label"],
         )
         # Always profanity-filtered — a wall display has no per-user pref.
         history_msgs = _stream_history.render_for(True)
@@ -2655,6 +2659,36 @@ async def websocket_endpoint(
                 if _presence_store is not None:
                     _presence_store.mark_ok(state.user_id, utc_now_iso())
                     await _manager.broadcast(_build_family_presence_msg())
+
+            elif msg_type == "display_im_ok":
+                # Wall-display proxy for family_status "I'm OK": the kitchen
+                # tablet has no user identity, so the tapped member is named
+                # explicitly. Household trust model — any member tile can be
+                # tapped; server only validates the user exists.
+                target_id = data.get("user_id") or ""
+                profile_rec = _users_store.get_public_one(target_id) if _users_store else None
+                if not profile_rec:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Unknown family member."})
+                    continue
+                name = (profile_rec.get("operator_name") or profile_rec.get("display_name") or "Operator").strip()
+                text = f"Family status: {name} is okay."
+                await _enqueue_family_tts(text, state)  # display prefs carry no voice → station default
+                await _broadcast_family_chat(text, profile_rec.get("display_name") or "")
+                if _presence_store is not None:
+                    _presence_store.mark_ok(target_id, utc_now_iso())
+                    await _manager.broadcast(_build_family_presence_msg())
+                await _manager.send_to(ws, {"type": "display_ack", "action": "im_ok"})
+
+            elif msg_type == "display_quick_message":
+                text = (data.get("text") or "").strip()
+                allowed = _config.display_quick_messages if _config else []
+                if text not in allowed:
+                    await _manager.send_to(ws, {"type": "error",
+                        "detail": "Message not allowed for this display."})
+                    continue
+                await _enqueue_family_tts(text, state)
+                await _broadcast_family_chat(text, state.display_label or "Wall display")
+                await _manager.send_to(ws, {"type": "display_ack", "action": "quick_message"})
 
             elif msg_type == "set_family_reminder":
                 if not state.is_admin:
