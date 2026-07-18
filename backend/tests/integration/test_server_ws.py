@@ -1866,6 +1866,47 @@ class TestRoleHandlers:
         assert any(p.get("role") == "kid" for p in msg["profiles"])
         mock_users.set_role.assert_called_once_with("other", "kid")
 
+    # -- Phase 3 Task 1 review, Finding 1(a): demoting to kid must also
+    #    clear neighborhood_coordinator, not just quick_messages --
+
+    def test_set_role_demote_clears_neighborhood_coordinator(self, tmp_path):
+        """A coordinator-adult demoted to kid must have neighborhood_coordinator
+        cleared alongside quick_messages — both the update_prefs merge call
+        and every read surface fed by the resulting profiles broadcast /
+        get_public must show coordinator False."""
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()
+        mock_users.set_role.return_value = {"id": "other", "role": "kid", "is_admin": False}
+        mock_users.update_prefs.return_value = {
+            "id": "other", "role": "kid", "is_admin": False,
+            "prefs": {"quick_messages": [], "neighborhood_coordinator": False},
+        }
+        mock_users.get_public.return_value = [
+            {"id": "test-user", "role": "admin", "is_admin": True, "prefs": {}},
+            {"id": "other", "role": "kid", "is_admin": False,
+             "prefs": {"quick_messages": [], "neighborhood_coordinator": False}},
+        ]
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "set_role", "user_id": "other", "role": "kid"})
+                    msg = _next_of_type(ws, "profiles")
+        assert msg is not None
+        mock_users.update_prefs.assert_called_once_with(
+            "other", {"quick_messages": [], "neighborhood_coordinator": False}
+        )
+        target = next(p for p in msg["profiles"] if p["id"] == "other")
+        assert target["prefs"]["neighborhood_coordinator"] is False
+
     def test_set_role_unknown_role_returns_error(self, tmp_path):
         cfg = _minimal_cfg(tmp_path)
         mock_stt, mock_tts = _make_mocks()
@@ -2234,6 +2275,40 @@ class TestNeighborhoodCoordinator:
                 assert live_states
                 assert live_states[0].prefs.get("neighborhood_coordinator") is True
 
+    # -- Phase 3 Task 1 review, Finding 3: a revoke must reach the target's
+    #    already-open socket just as reliably as a grant does --
+
+    def test_live_sync_revoke_updates_connected_target_without_reconnect(self, tmp_path):
+        """Mirrors test_live_sync_updates_connected_target_without_reconnect,
+        but grant-then-revoke: after the admin flips coordinator back to
+        False, the target's live ConnectionState.prefs must flip too,
+        without a reconnect."""
+        from backend.server import _manager
+
+        target_id = "target-1"
+        with _two_user_server(
+            tmp_path, target_id=target_id, target_role="adult",
+            target_prefs={"neighborhood_coordinator": True},
+        ) as (tc, mock_users):
+            mock_users.update_prefs.return_value = {
+                "id": target_id, "role": "adult", "is_admin": False,
+                "prefs": {"neighborhood_coordinator": False},
+            }
+            with (
+                tc.websocket_connect("/ws?token=target-token") as ws_target,
+                tc.websocket_connect("/ws?token=admin-token") as ws_admin,
+            ):
+                _drain_initial(ws_target)
+                _drain_initial(ws_admin)
+
+                ws_admin.send_json({"type": "set_neighborhood_coordinator",
+                                     "user_id": target_id, "coordinator": False})
+                assert _next_of_type(ws_admin, "profiles") is not None
+
+                live_states = _manager.states_for_user(target_id)
+                assert live_states
+                assert live_states[0].prefs.get("neighborhood_coordinator") is False
+
 
 # ---------------------------------------------------------------------------
 # quick_messages pref — validation, save, and admin-set path
@@ -2415,7 +2490,11 @@ class TestKidSaveUserPrefsAllowedKeys:
     def test_kid_cannot_self_grant_neighborhood_coordinator(self, tmp_path):
         """neighborhood_coordinator is admin-only (see TestNeighborhoodCoordinator);
         it must be silently dropped from a self-serve save_user_prefs, not just
-        for kids but this specifically proves the kid path drops it too."""
+        for kids but this specifically proves the kid path drops it too.
+
+        Phase 3 Task 1 fix, Finding 1(b): effective_prefs now forces this key
+        to False for every kid profile (a belt-and-braces lock), so a kid's
+        prefs always carry it as False rather than leaving it absent."""
         cfg = _minimal_cfg(tmp_path)
         mock_stt, mock_tts = _make_mocks()
         mock_users, mock_tokens = _make_auth_mocks(is_admin=False, role="kid")
@@ -2438,7 +2517,7 @@ class TestKidSaveUserPrefsAllowedKeys:
                                   "prefs": {"neighborhood_coordinator": True, "dark_mode": True}})
                     msg = _next_of_type(ws, "user_profile")
         assert msg is not None
-        assert "neighborhood_coordinator" not in msg["profile"]["prefs"]
+        assert msg["profile"]["prefs"]["neighborhood_coordinator"] is False
         mock_users.update_prefs.assert_called_once_with("test-user", {"dark_mode": True})
 
 

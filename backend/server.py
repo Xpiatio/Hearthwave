@@ -3185,9 +3185,16 @@ async def websocket_endpoint(
                     # Newly demoted to kid: any quick_messages already on the
                     # profile were self-set while adult (not admin-curated) —
                     # clear them rather than let them silently become the
-                    # kid's approved on-air TX allowlist.
+                    # kid's approved on-air TX allowlist. Also clear a
+                    # prior neighborhood_coordinator grant so it doesn't
+                    # persist as True across the demotion (effective_prefs
+                    # forces it False on read regardless, but the stored
+                    # value should reflect reality too).
                     try:
-                        updated = _users_store.update_prefs(target_role_id, {"quick_messages": []})
+                        updated = _users_store.update_prefs(
+                            target_role_id,
+                            {"quick_messages": [], "neighborhood_coordinator": False},
+                        )
                     except KeyError:
                         pass
                 _sync_live_state_for_user(target_role_id, updated)

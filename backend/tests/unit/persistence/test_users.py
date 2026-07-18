@@ -14,6 +14,7 @@ from backend.persistence.users import (
     SENSITIVE_PROFILE_FIELDS,
     UsersStore,
     _hash_password,
+    effective_prefs,
 )
 
 
@@ -247,6 +248,24 @@ class TestGetPublic:
         assert result["prefs"]["ui_level"] == "simple"
         assert result["prefs"]["listen_only"] is False
 
+    # -- Phase 3 Task 1 fix, Finding 1(b): a demoted-to-kid profile must
+    #    never surface a stale neighborhood_coordinator: True through any
+    #    read path, even if set_role's own clear (Finding 1(a)) is somehow
+    #    bypassed or a stale value otherwise persists on the stored profile.
+
+    def test_get_public_applies_kid_pref_lock_neighborhood_coordinator(self, store: UsersStore):
+        kid = store.create(display_name="Kid", password="pw12345678", role="kid")
+        store.update_prefs(kid["id"], {"neighborhood_coordinator": True})
+        public = store.get_public()
+        kid_public = next(p for p in public if p["id"] == kid["id"])
+        assert kid_public["prefs"]["neighborhood_coordinator"] is False
+
+    def test_get_public_one_applies_kid_pref_lock_neighborhood_coordinator(self, store: UsersStore):
+        kid = store.create(display_name="Kid", password="pw12345678", role="kid")
+        store.update_prefs(kid["id"], {"neighborhood_coordinator": True})
+        result = store.get_public_one(kid["id"])
+        assert result["prefs"]["neighborhood_coordinator"] is False
+
     def test_get_public_leaves_adult_prefs_unchanged(self, store: UsersStore, alice: dict):
         store.update_prefs(alice["id"], {
             "filter_profanity": False, "ui_level": "operator", "listen_only": True,
@@ -265,6 +284,28 @@ class TestGetPublic:
         assert result["prefs"]["filter_profanity"] is False
         assert result["prefs"]["ui_level"] == "operator"
         assert result["prefs"]["listen_only"] is True
+
+
+# ---------------------------------------------------------------------------
+# Tests: effective_prefs (unit, no store) — Phase 3 Task 1 fix, Finding 1(b)
+# ---------------------------------------------------------------------------
+
+class TestEffectivePrefs:
+    def test_kid_neighborhood_coordinator_forced_false_even_if_stale_true(self):
+        """Belt-and-braces lock: even if a stale True somehow persists on a
+        kid profile's stored prefs (e.g. set_role's clear was bypassed),
+        effective_prefs must never hand it back."""
+        profile = {"role": "kid", "prefs": {"neighborhood_coordinator": True}}
+        assert effective_prefs(profile)["neighborhood_coordinator"] is False
+
+    def test_adult_neighborhood_coordinator_passes_through(self):
+        profile = {"role": "adult", "prefs": {"neighborhood_coordinator": True}}
+        assert effective_prefs(profile)["neighborhood_coordinator"] is True
+
+    def test_kid_defaults_neighborhood_coordinator_false(self):
+        """No stored value at all still resolves to False for a kid."""
+        profile = {"role": "kid", "prefs": {}}
+        assert effective_prefs(profile)["neighborhood_coordinator"] is False
 
 
 # ---------------------------------------------------------------------------
