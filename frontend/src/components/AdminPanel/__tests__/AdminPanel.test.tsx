@@ -549,4 +549,52 @@ describe('Wall displays admin section', () => {
       display_quick_messages: ['Dinner is ready', 'Come home please'],
     }))
   })
+
+  it('disables Add display button when label is blank or whitespace-only', async () => {
+    const user = userEvent.setup()
+    const props = makeDefaultProps()
+    render(<AdminPanel {...props} />)
+
+    const addButton = screen.getByRole('button', { name: /add display/i })
+    // Initially disabled (empty field)
+    expect(addButton).toBeDisabled()
+
+    // Type whitespace-only
+    const labelField = screen.getByLabelText(/display name/i)
+    await user.type(labelField, '   ')
+    expect(addButton).toBeDisabled()
+
+    // Clear and type a real value to verify it becomes enabled
+    await user.clear(labelField)
+    await user.type(labelField, 'Kitchen')
+    expect(addButton).not.toBeDisabled()
+  })
+
+  it('does not call onCreateDeviceToken when Add display is clicked with whitespace-only label', async () => {
+    const props = makeDefaultProps()
+    render(<AdminPanel {...props} />)
+
+    const labelField = screen.getByLabelText(/display name/i)
+    fireEvent.change(labelField, { target: { value: '  \n  ' } })
+
+    // The button should be disabled, so this tests the guard is in place
+    const addButton = screen.getByRole('button', { name: /add display/i })
+    expect(addButton).toBeDisabled()
+    expect(props.onCreateDeviceToken).not.toHaveBeenCalled()
+  })
+
+  it('normalizes quick-messages with multiline messy input and filters empty lines', async () => {
+    const props = makeDefaultProps()
+    render(<AdminPanel {...props} />)
+
+    // Type multiline with empty lines and extra whitespace
+    fireEvent.change(screen.getByLabelText(/household quick messages/i), {
+      target: { value: 'Dinner is ready\n\n  Come home please  \n' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /save/i }))
+
+    expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({
+      display_quick_messages: ['Dinner is ready', 'Come home please'],
+    }))
+  })
 })
