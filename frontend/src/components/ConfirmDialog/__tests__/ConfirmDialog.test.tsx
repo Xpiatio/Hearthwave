@@ -76,7 +76,7 @@ describe('ConfirmDialog', () => {
   it('renders confirm button with error color when destructive=true', () => {
     const onConfirm = vi.fn();
     const onClose = vi.fn();
-    const { container } = render(
+    render(
       <ConfirmDialog
         open
         title="Delete?"
@@ -93,7 +93,7 @@ describe('ConfirmDialog', () => {
   it('renders confirm button with primary color when destructive=false', () => {
     const onConfirm = vi.fn();
     const onClose = vi.fn();
-    const { container } = render(
+    render(
       <ConfirmDialog
         open
         title="Submit?"
@@ -110,7 +110,7 @@ describe('ConfirmDialog', () => {
   it('is hidden when open=false', () => {
     const onConfirm = vi.fn();
     const onClose = vi.fn();
-    const { container } = render(
+    render(
       <ConfirmDialog
         open={false}
         title="Delete?"
@@ -122,37 +122,15 @@ describe('ConfirmDialog', () => {
     expect(screen.queryByText('Delete?')).not.toBeInTheDocument();
   });
 
-  it('integrates useSwitchScan hook', async () => {
-    const onConfirm = vi.fn();
-    const onClose = vi.fn();
-    const { rerender } = render(
-      <ConfirmDialog
-        open
-        title="Test?"
-        confirmLabel="Yes"
-        switchScan={false}
-        switchScanIntervalS={0.5}
-        onConfirm={onConfirm}
-        onClose={onClose}
-      />
-    );
-    // Switch scan is disabled (switchScan=false), so no autofocus behavior
-    expect(screen.getByRole('button', { name: /yes/i })).toBeInTheDocument();
-
-    // Enable switch scan
-    rerender(
-      <ConfirmDialog
-        open
-        title="Test?"
-        confirmLabel="Yes"
-        switchScan={true}
-        switchScanIntervalS={0.5}
-        onConfirm={onConfirm}
-        onClose={onClose}
-      />
-    );
-    // useSwitchScan should be active now
-    expect(screen.getByRole('button', { name: /yes/i })).toBeInTheDocument();
+  it('switch scanning cycles the two buttons while open', () => {
+    vi.useFakeTimers();
+    render(<ConfirmDialog open title="Sure?" confirmLabel="Yes, do it"
+      switchScan switchScanIntervalS={1} onConfirm={vi.fn()} onClose={vi.fn()} />);
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(screen.getByRole('button', { name: /yes, do it/i })).toHaveFocus();
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(screen.getByRole('button', { name: /no, go back/i })).toHaveFocus();
+    vi.useRealTimers();
   });
 
   it('passes a11y checks', async () => {
