@@ -530,8 +530,8 @@ The **User Accounts** table lists all family member accounts, with a **Role** co
 | **Kid** | A locked-down account for children — see below. |
 
 **Kid accounts** are restricted for safety and simplicity:
-- Can only transmit their preset quick messages — the same buttons shown in the Family activity (see [section 30](#30-family-activity)) — sent exactly as written; there is no free-text message box or **CHAT** action.
-- Profanity filter is always on and cannot be turned off.
+- Can use text **CHAT** freely, with the profanity filter always on and locked — a Kid account cannot turn it off.
+- Can only **transmit on-air** (send over the radio) using their preset quick messages — the same buttons shown in the Family activity (see [section 30](#30-family-activity)) — sent exactly as written; there is no free-text on-air transmit box.
 - Interface level is locked to **Simple** (no Operator-level controls, ever).
 - No access to the Settings dialog at all — the gear icon is hidden on the Home screen and settings drawer.
 - Can still send the **I'm OK** check-in — see [section 30](#30-family-activity) — since that is treated as a safety action available to every role.

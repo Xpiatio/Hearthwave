@@ -2242,6 +2242,65 @@ class TestQuickMessagesPref:
         assert msg["profile"]["prefs"]["dark_mode"] is True
 
 
+# ---------------------------------------------------------------------------
+# I4: keys in KID_ALLOWED_PREF_KEYS (aac_mode, aac_grid, ...) must actually
+# reach update_prefs and come back on the user_profile message for a kid —
+# not just survive the filter with no persistence.
+# ---------------------------------------------------------------------------
+
+class TestKidSaveUserPrefsAllowedKeys:
+    def test_kid_aac_mode_persists(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks(is_admin=False, role="kid")
+        mock_users.update_prefs.return_value = {
+            "id": "test-user", "display_name": "Test Operator", "is_admin": False,
+            "role": "kid", "prefs": {"aac_mode": False},
+        }
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "save_user_prefs", "prefs": {"aac_mode": False}})
+                    msg = _next_of_type(ws, "user_profile")
+        assert msg is not None
+        assert msg["profile"]["prefs"]["aac_mode"] is False
+        mock_users.update_prefs.assert_called_once_with("test-user", {"aac_mode": False})
+
+    def test_kid_aac_grid_passthrough(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks(is_admin=False, role="kid")
+        grid = {"version": 1, "categories": []}
+        mock_users.update_prefs.return_value = {
+            "id": "test-user", "display_name": "Test Operator", "is_admin": False,
+            "role": "kid", "prefs": {"aac_grid": grid},
+        }
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "save_user_prefs", "prefs": {"aac_grid": grid}})
+                    msg = _next_of_type(ws, "user_profile")
+        assert msg is not None
+        assert msg["profile"]["prefs"]["aac_grid"] == grid
+        mock_users.update_prefs.assert_called_once_with("test-user", {"aac_grid": grid})
+
+
 class TestSetUserQuickMessages:
     def test_admin_sets_kid_presets(self, tmp_path):
         cfg = _minimal_cfg(tmp_path)
@@ -2701,6 +2760,71 @@ class TestKidListenOnlyGate:
                     msg = _next_of_type(ws, "user_profile")
         assert msg is not None
         assert msg["profile"]["prefs"]["listen_only"] is True
+
+
+# ---------------------------------------------------------------------------
+# N1: set_config's filter_profanity leg was ungated for kids — a kid could
+# flip their own profanity filter off via set_config, defeating the
+# kid-safety filter save_user_prefs enforces via KID_ALLOWED_PREF_KEYS.
+# fuzzy_callsign / fuzzy_callsign_rewrite are station-wide and untouched.
+# ---------------------------------------------------------------------------
+
+class TestKidProfanityFilterGate:
+    def test_kid_set_config_filter_profanity_rejected(self, kid_client):
+        with kid_client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "set_config", "filter_profanity": False})
+            msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert "adult" in msg["detail"].lower()
+
+    def test_kid_set_config_filter_profanity_prefs_unchanged(self, tmp_path):
+        """Sanity check: the rejected leg must not mutate state.prefs or
+        reach the store."""
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks(is_admin=False, role="kid")
+        mock_users.get.return_value["prefs"] = {"filter_profanity": True}
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "set_config", "filter_profanity": False})
+                    msg = _next_of_type(ws, "error")
+        assert msg is not None
+        mock_users.update_prefs.assert_not_called()
+
+    def test_adult_set_config_filter_profanity_unaffected(self, tmp_path):
+        """Sanity check: the kid gate must not affect non-kid roles."""
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()  # admin, id="test-user"
+        mock_users.update_prefs.return_value = {
+            "id": "test-user", "display_name": "Test Operator", "is_admin": True,
+            "role": "admin", "prefs": {"filter_profanity": False},
+        }
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "set_config", "filter_profanity": False})
+                    msg = _next_of_type(ws, "user_profile")
+        assert msg is not None
+        assert msg["profile"]["prefs"]["filter_profanity"] is False
 
 
 # ---------------------------------------------------------------------------

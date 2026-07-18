@@ -2936,14 +2936,17 @@ async def websocket_endpoint(
                     continue
                 # filter_profanity is now per-user; fuzzy_callsign remains station-wide.
                 if "filter_profanity" in data:
-                    fp = bool(data["filter_profanity"])
-                    state.prefs["filter_profanity"] = fp
-                    if _users_store is not None:
-                        try:
-                            updated = _users_store.update_prefs(state.user_id, {"filter_profanity": fp})
-                            await _manager.send_to(ws, _build_user_profile_msg(updated))
-                        except KeyError:
-                            pass
+                    if _is_kid(state):
+                        await _manager.send_to(ws, {"type": "error", "detail": "Profanity filter is set by an adult for this account."})
+                    else:
+                        fp = bool(data["filter_profanity"])
+                        state.prefs["filter_profanity"] = fp
+                        if _users_store is not None:
+                            try:
+                                updated = _users_store.update_prefs(state.user_id, {"filter_profanity": fp})
+                                await _manager.send_to(ws, _build_user_profile_msg(updated))
+                            except KeyError:
+                                pass
                 if "fuzzy_callsign" in data:
                     _config["fuzzy_callsign"] = bool(data["fuzzy_callsign"])
                 if "fuzzy_callsign_rewrite" in data:
