@@ -41,6 +41,7 @@ import { DesktopApp } from './components/DesktopApp/DesktopApp';
 import { MobileApp } from './components/MobileApp/MobileApp';
 import { AACApp } from './components/AACApp/AACApp';
 import { HomeScreen } from './components/HomeScreen/HomeScreen';
+import { FamilyPanel } from './components/FamilyPanel/FamilyPanel';
 import { makeDefaultGrid, sanitizeAacGrid } from './components/AACApp/defaultGrid';
 import { SettingsDialog } from './components/SettingsDialog/SettingsDialog';
 import { CalibrationDialog } from './components/CalibrationDialog/CalibrationDialog';
@@ -1400,9 +1401,24 @@ export default function App() {
           uiLevel={uiLevel}
           ncsEnabled={isPluginEnabled(plugins, 'ncs')}
           unreadCount={unreadCount}
+          familyEntries={familyPresence}
+          isKid={isKid}
           onOpenActivity={handleOpenActivity}
           onOpenSettings={handleToggleSettings}
           onLogout={handleLogout}
+        />
+      ) : activity === 'family' ? (
+        <FamilyPanel
+          profile={profile}
+          entries={familyPresence}
+          reminders={familyReminders}
+          isKid={isKid}
+          isAdmin={!!profile.is_admin}
+          quickMessages={quickMessages}
+          onImOk={sendImOk}
+          onQuickMessage={(text) => handleSend(text, '', '')}
+          onSetReminder={sendSetReminder}
+          onGoHome={handleGoHome}
         />
       ) : (
         <DesktopApp

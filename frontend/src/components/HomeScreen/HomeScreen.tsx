@@ -4,7 +4,8 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import LogoutIcon from '@mui/icons-material/Logout';
 import { Logo } from '../Logo/Logo';
 import { ActivityCard } from './ActivityCard';
-import type { UserProfile } from '../../types/ws';
+import type { FamilyPresenceEntry, UserProfile } from '../../types/ws';
+import { deriveStatus } from '../../family/presence';
 
 interface Props {
   profile: UserProfile;
@@ -12,9 +13,23 @@ interface Props {
   uiLevel: 'simple' | 'operator';
   ncsEnabled: boolean;
   unreadCount: number;
-  onOpenActivity: (a: 'station' | 'ncs') => void;
+  familyEntries: FamilyPresenceEntry[];
+  isKid: boolean;
+  onOpenActivity: (a: 'station' | 'ncs' | 'family') => void;
   onOpenSettings: () => void;
   onLogout: () => void;
+}
+
+/** Family card subtitle: flags any overdue check-in first (most actionable),
+ *  then celebrates an all-clear roster, otherwise stays quiet rather than
+ *  guessing at a partial state. */
+function familySummary(entries: FamilyPresenceEntry[]): string {
+  if (entries.length === 0) return '';
+  const missed = entries.filter((e) => e.missed_checkin).length;
+  if (missed > 0) return `${missed} missed check-in`;
+  const now = new Date();
+  const allOk = entries.every((e) => deriveStatus(e, now) === 'ok');
+  return allOk ? 'Everyone OK' : '';
 }
 
 interface CardDef {
@@ -37,6 +52,11 @@ export function HomeScreen(props: Props) {
       subtitle: props.unreadCount > 0 ? `${props.unreadCount} new` : 'Talk on the radio',
       unreadCount: props.unreadCount,
       onClick: () => props.onOpenActivity('station'),
+    },
+    {
+      key: 'family', emoji: '🏠', title: 'Family',
+      subtitle: familySummary(props.familyEntries),
+      onClick: () => props.onOpenActivity('family'),
     },
   ];
   if (props.uiLevel === 'operator' && props.ncsEnabled) {
@@ -75,9 +95,11 @@ export function HomeScreen(props: Props) {
           color={props.connected ? 'success' : 'error'}
           label={props.connected ? 'Connected' : 'Disconnected'}
         />
-        <Tooltip title="Settings">
-          <IconButton aria-label="Settings" onClick={props.onOpenSettings}><SettingsIcon /></IconButton>
-        </Tooltip>
+        {!props.isKid && (
+          <Tooltip title="Settings">
+            <IconButton aria-label="Settings" onClick={props.onOpenSettings}><SettingsIcon /></IconButton>
+          </Tooltip>
+        )}
         <Tooltip title="Log out">
           <IconButton aria-label="Log out" onClick={props.onLogout}><LogoutIcon /></IconButton>
         </Tooltip>
