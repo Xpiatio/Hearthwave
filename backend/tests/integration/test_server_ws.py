@@ -3433,7 +3433,7 @@ class TestFamilyStatus:
 
                     chat = _next_of_type(ws, "chat_echo")
                     assert chat is not None
-                    assert chat["text"] == "Family status: Test Operator is okay."
+                    assert chat["text"] == "Family status: Test Operator is okay. W5TST Test Operator."
 
                     presence = _next_of_type(ws, "family_presence")
                     assert presence is not None
@@ -3443,7 +3443,7 @@ class TestFamilyStatus:
 
                     _drain_until_idle(ws)  # blocks until the TTS leg has actually run
 
-        assert captured.get("text") == "Family status: Test Operator is okay."
+        assert captured.get("text") == "Family status: Test Operator is okay. W5TST Test Operator."
 
     def test_listen_only_skips_tts_leg_but_still_chats_and_marks_ok(self, tmp_path):
         cfg = _minimal_cfg(tmp_path, listen_only=True)
@@ -4392,6 +4392,8 @@ class TestNeighborhoodIncidentReport:
         assert tx_echo["display_name"] == "NEIGHBORHOOD"
         assert tx_echo["callsign"] == "W5ANN"
         assert tx_echo["text"].startswith("NEIGHBORHOOD HAZARD. TREE DOWN BLOCKING THE ROAD. ")
+        # GMRS station ID: ends with call sign + operator name.
+        assert tx_echo["text"].endswith("W5ANN ANN ADULT.")
         assert captured["text"] == tx_echo["text"] == sent_msg["text"]
         assert sent_msg["ts"]
         entries = incidents_msgs[-1]["incidents"]

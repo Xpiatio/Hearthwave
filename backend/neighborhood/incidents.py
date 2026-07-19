@@ -41,11 +41,17 @@ def validate_incident(payload: dict) -> str | None:
 
 
 def format_incident(
-    category_label: str, description: str, location: str, hhmm_local: str, callsign: str,
+    category_label: str, description: str, location: str, hhmm_local: str,
+    callsign: str, name: str = "",
 ) -> str:
-    """Assemble the standardized on-air/chat incident phrase, uppercased."""
+    """Assemble the standardized on-air/chat incident phrase, uppercased.
+
+    Ends with the GMRS station ID — call sign followed by the operator's name
+    when one is set — so a keyed incident report identifies the station on air.
+    """
+    tail = f"{callsign} {name}." if (name or "").strip() else f"{callsign}."
     text = (
         f"NEIGHBORHOOD {category_label}. {description}. "
-        f"LOCATION {location}. TIME {hhmm_local} LOCAL. {callsign}."
+        f"LOCATION {location}. TIME {hhmm_local} LOCAL. {tail}"
     )
     return text.upper()

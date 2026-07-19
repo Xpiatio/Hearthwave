@@ -2695,7 +2695,10 @@ async def websocket_endpoint(
                     (_users_store.get_public_one(state.user_id) or {}) if _users_store else {}
                 )
                 name = (profile_rec.get("operator_name") or profile_rec.get("display_name") or "Operator").strip()
-                text = f"Family status: {name} is okay."
+                callsign = (profile_rec.get("callsign") or (_config.callsign if _config else "") or "").strip()
+                # End with the GMRS station ID (call sign + name) — an "I'm OK"
+                # keys the radio, so it must identify the station on air.
+                text = f"Family status: {name} is okay. {format_tail_id(callsign, name)}"
                 if not state.prefs.get("listen_only", False):
                     await _enqueue_family_tts(text, state)
                 await _broadcast_family_chat(text, profile_rec.get("display_name") or "")
@@ -2717,7 +2720,9 @@ async def websocket_endpoint(
                     await _manager.send_to(ws, {"type": "error", "detail": "Unknown family member."})
                     continue
                 name = (profile_rec.get("operator_name") or profile_rec.get("display_name") or "Operator").strip()
-                text = f"Family status: {name} is okay."
+                callsign = (profile_rec.get("callsign") or (_config.callsign if _config else "") or "").strip()
+                # End with the GMRS station ID (call sign + name), same as family_status.
+                text = f"Family status: {name} is okay. {format_tail_id(callsign, name)}"
                 await _enqueue_family_tts(text, state)  # display prefs carry no voice → station default
                 await _broadcast_family_chat(text, profile_rec.get("display_name") or "")
                 if _presence_store is not None:
@@ -3771,7 +3776,9 @@ async def websocket_endpoint(
                     profile_rec.get("callsign") or (_config.callsign if _config else "") or ""
                 ).strip()
                 hhmm_local = datetime.datetime.now().strftime("%H:%M")
-                text = format_incident(CATEGORIES[category], description, location, hhmm_local, callsign)
+                # End with the GMRS station ID (call sign + name) — the report keys the radio.
+                name = (profile_rec.get("operator_name") or display_name or "").strip()
+                text = format_incident(CATEGORIES[category], description, location, hhmm_local, callsign, name)
                 # Safety report so it still logs/broadcasts in listen-only mode
                 # (family_status precedent) — listen-only only skips the TX leg.
                 if not state.prefs.get("listen_only", False):
