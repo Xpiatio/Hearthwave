@@ -49,6 +49,11 @@ browser-based React frontend communicating over WebSocket.
   the operator console; a per-user interface level (Simple / Operator) hides
   radio-operator controls for family members, and new accessibility options add
   adjustable text size, a high-contrast theme, and visible keyboard focus rings
+- **Accessibility: switch scanning & visual alerts** — drive the whole app from a
+  single adaptive button (auto-scan with selectable speed and select-to-activate),
+  flash the screen on incoming messages, control everything from the keyboard
+  (press `?` for the shortcut list), and confirm important actions with large-button
+  dialogs; kid accounts can send from the AAC board
 - **Neighborhood activity** — a dedicated home-screen card / mobile tab for
   watch groups: one-tap roster check-in (identity comes from your profile, and
   an early check-in survives the net actually starting), the next scheduled net
