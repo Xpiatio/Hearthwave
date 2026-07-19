@@ -46,13 +46,25 @@ describe('ButtonEditorDialog', () => {
   it('delete asks for confirmation then calls onDelete', async () => {
     const user = userEvent.setup()
     const onDelete = vi.fn()
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     const button = { id: 'b1', emoji: '👍', label: 'Yes', text: 'Yes' }
     render(
       <ButtonEditorDialog open button={button} onSave={vi.fn()} onDelete={onDelete} onClose={vi.fn()} />
     )
     await user.click(screen.getByRole('button', { name: 'DELETE' }))
-    expect(window.confirm).toHaveBeenCalled()
+    expect(onDelete).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: /yes, delete it/i }))
     expect(onDelete).toHaveBeenCalledWith('b1')
+  })
+
+  it('does NOT call onDelete when the delete confirmation is declined', async () => {
+    const user = userEvent.setup()
+    const onDelete = vi.fn()
+    const button = { id: 'b1', emoji: '👍', label: 'Yes', text: 'Yes' }
+    render(
+      <ButtonEditorDialog open button={button} onSave={vi.fn()} onDelete={onDelete} onClose={vi.fn()} />
+    )
+    await user.click(screen.getByRole('button', { name: 'DELETE' }))
+    await user.click(screen.getByRole('button', { name: /no, go back/i }))
+    expect(onDelete).not.toHaveBeenCalled()
   })
 })

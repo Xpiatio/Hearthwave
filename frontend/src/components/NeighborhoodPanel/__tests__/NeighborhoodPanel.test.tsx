@@ -2,7 +2,7 @@ import { render as rtlRender, screen, fireEvent, within, waitFor } from '@testin
 import userEvent from '@testing-library/user-event';
 import { ThemeProvider } from '@mui/material/styles';
 import { makeTheme } from '../../../theme';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { axe } from 'jest-axe';
 import { NeighborhoodPanel } from '../NeighborhoodPanel';
 import type { NeighborhoodPanelProps } from '../NeighborhoodPanel';
@@ -262,33 +262,25 @@ describe('NeighborhoodPanel', () => {
   });
 
   describe('street alert', () => {
-    let confirmSpy: ReturnType<typeof vi.spyOn>;
-    beforeEach(() => {
-      confirmSpy = vi.spyOn(window, 'confirm');
-    });
-    afterEach(() => {
-      confirmSpy.mockRestore();
-    });
-
-    it('sends the alert after a single confirm', () => {
-      confirmSpy.mockReturnValue(true);
+    it('sends the alert after confirming', () => {
       const props = makeProps({ isCoordinator: true });
       render(<NeighborhoodPanel {...props} />);
 
       fireEvent.change(screen.getByLabelText('Street alert message'), { target: { value: 'Power out on Maple St' } });
       fireEvent.click(screen.getByRole('button', { name: 'Send street alert' }));
 
-      expect(confirmSpy).toHaveBeenCalledOnce();
+      expect(props.onStreetAlert).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole('button', { name: /yes, send the alert/i }));
       expect(props.onStreetAlert).toHaveBeenCalledWith('Power out on Maple St');
     });
 
-    it('does not send when confirm is declined', () => {
-      confirmSpy.mockReturnValue(false);
+    it('does not send when the confirmation is declined', () => {
       const props = makeProps({ isCoordinator: true });
       render(<NeighborhoodPanel {...props} />);
 
       fireEvent.change(screen.getByLabelText('Street alert message'), { target: { value: 'Power out on Maple St' } });
       fireEvent.click(screen.getByRole('button', { name: 'Send street alert' }));
+      fireEvent.click(screen.getByRole('button', { name: /no, go back/i }));
 
       expect(props.onStreetAlert).not.toHaveBeenCalled();
     });

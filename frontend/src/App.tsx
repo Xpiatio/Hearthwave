@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useMemo } from 'react';
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { ThemeProvider, CssBaseline, Box, CircularProgress } from '@mui/material';
 import { makeTheme, withTouchDensity } from './theme';
 import { useAuth } from './hooks/useAuth';
@@ -63,6 +63,7 @@ import { UsersPanel } from './components/UsersPanel/UsersPanel';
 import { DEFAULTS as QUICK_DEFAULTS } from './components/QuickMessages/QuickMessages';
 import { newlyMissed } from './family/presence';
 import { useDeviceClass } from './hooks/useDeviceClass';
+import { ScreenFlash, VIBRATE_PATTERNS, type FlashKind } from './components/ScreenFlash/ScreenFlash';
 import './App.css';
 
 let entryCounter = 0;
@@ -150,6 +151,8 @@ export function streamMsgToEntry(msg: StoredStreamMsg): ChatEntry {
 import type { JournalResultDraft, PendingStation, PromptState } from './types/appTypes';
 import type { AACGrid } from './types/aac';
 import { TokenPromptDialog } from './components/TokenPromptDialog/TokenPromptDialog';
+import { ShortcutOverlay } from './components/ShortcutOverlay/ShortcutOverlay';
+import { ConfirmDialog } from './components/ConfirmDialog';
 
 export default function App() {
   const { token, profile, setProfile, loading: authLoading, setupNeeded, setup, login, logout } = useAuth();
@@ -174,6 +177,7 @@ export default function App() {
   const [showContacts, setShowContacts] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showCalibration, setShowCalibration] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   // Home-screen shell: which activity is in front (desktop only). Chat unread
   // count is the simplest honest Phase 1 measure — messages received while on home.
@@ -215,6 +219,7 @@ export default function App() {
   });
   const [plugins, setPlugins] = useState<PluginManifest[]>([]);
   const [pluginBusy, setPluginBusy] = useState(false);
+  const [pluginToUninstall, setPluginToUninstall] = useState<string | null>(null);
 
   // Kiosk wall-display device tokens (admin-managed via SettingsDialog/AdminPanel).
   const [deviceTokens, setDeviceTokens] = useState<DeviceTokenRecord[]>([]);
@@ -246,6 +251,21 @@ export default function App() {
   // Stable fallback grid — regenerating per render would churn button ids.
   const defaultAacGrid = useMemo(() => makeDefaultGrid(), []);
 
+  // Kid gating: hide Settings entry points and other adult-only affordances.
+  // Hoisted above the auth-state early returns below so it's available to
+  // hooks that must run unconditionally on every render.
+  const isKid = profile?.role === 'kid';
+
+  // A kid's AAC sends are validated server-side against their *stored* grid;
+  // the client-only built-in default grid is invisible to the server. Persist
+  // it once so a kid can use AAC before an adult customizes anything.
+  useEffect(() => {
+    if (aacMode && isKid && profile && aacGrid == null) {
+      handleSaveAacGrid(defaultAacGrid);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aacMode, isKid, profile, aacGrid]);
+
   // Interface tier ("simple" hides advanced controls) — persisted locally;
   // overridden by profile prefs on load
   const [uiLevel, setUiLevel] = useState<'simple' | 'operator'>(
@@ -262,8 +282,28 @@ export default function App() {
     () => localStorage.getItem('radio_tty_high_contrast') === 'true'
   );
 
+  // Switch scanning (single-switch a11y) — persisted locally; overridden by profile prefs on load
+  const [switchScan, setSwitchScan] = useState(localStorage.getItem('radio_tty_switch_scan') === 'true');
+  const [switchScanIntervalS, setSwitchScanIntervalS] = useState(() => {
+    const v = Number(localStorage.getItem('radio_tty_switch_scan_interval_s'));
+    return [1, 1.5, 2, 3].includes(v) ? v : 1.5;
+  });
+  const [visualAlerts, setVisualAlerts] = useState(localStorage.getItem('radio_tty_visual_alerts') === 'true');
+
   const deviceClass = useDeviceClass();
   const isMobile = deviceClass === 'phone';
+
+  // "?" opens the shortcut overlay anywhere except while typing.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== '?' || e.defaultPrevented) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      setShortcutsOpen((v) => !v);
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
 
   const baseTheme = useMemo(
     () => makeTheme(darkMode, { fontScale, highContrast }),
@@ -308,6 +348,9 @@ export default function App() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const notificationsEnabledRef = useRef(false);
   notificationsEnabledRef.current = notificationsEnabled;
+  const visualAlertsRef = useRef(false);
+  visualAlertsRef.current = visualAlerts;
+  const [flash, setFlash] = useState<{ kind: FlashKind; seq: number } | null>(null);
   const [filterProfanity, setFilterProfanity] = useState(true);
   const [spectroColormap, setSpectroColormap] = useState<'viridis' | 'grayscale'>('viridis');
   const [spectroTimeWindowS, setSpectroTimeWindowS] = useState(30);
@@ -350,6 +393,14 @@ export default function App() {
 
   // NCS panel visibility (admin-only toggle)
   const [showNcs, setShowNcs] = useState(false);
+
+  function triggerVisualAlert(kind: FlashKind) {
+    if (!visualAlertsRef.current) return;
+    setFlash((prev) => ({ kind, seq: (prev?.seq ?? 0) + 1 }));
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate(VIBRATE_PATTERNS[kind]);
+    }
+  }
 
   const handleWsMessage = useCallback((msg: WsMessage) => {
     setLastMessage(msg);
@@ -431,6 +482,7 @@ export default function App() {
               silent: true,
             });
           }
+          triggerVisualAlert('rx');
         }
         break;
       }
@@ -534,6 +586,18 @@ export default function App() {
         if (prefs.high_contrast !== undefined) {
           setHighContrast(prefs.high_contrast);
           localStorage.setItem('radio_tty_high_contrast', String(prefs.high_contrast));
+        }
+        if (prefs.switch_scan !== undefined) {
+          setSwitchScan(prefs.switch_scan);
+          localStorage.setItem('radio_tty_switch_scan', String(prefs.switch_scan));
+        }
+        if (prefs.switch_scan_interval_s !== undefined) {
+          setSwitchScanIntervalS(prefs.switch_scan_interval_s);
+          localStorage.setItem('radio_tty_switch_scan_interval_s', String(prefs.switch_scan_interval_s));
+        }
+        if (prefs.visual_alerts !== undefined) {
+          setVisualAlerts(prefs.visual_alerts);
+          localStorage.setItem('radio_tty_visual_alerts', String(prefs.visual_alerts));
         }
         // One-time migration: the QuickMessages panel used to keep its presets
         // purely in localStorage. Once the server-side pref exists this is a
@@ -762,6 +826,7 @@ export default function App() {
             silent: false,
           });
         }
+        triggerVisualAlert('weather');
         break;
 
       case 'family_presence': {
@@ -780,6 +845,7 @@ export default function App() {
               });
             }
           }
+          if (newlyMissed(prev, entries).length > 0) triggerVisualAlert('family');
           return entries;
         });
         break;
@@ -819,6 +885,7 @@ export default function App() {
               silent: false,
             });
           }
+          triggerVisualAlert('street');
           return [msg, ...prev].slice(0, 3);
         });
         break;
@@ -881,7 +948,7 @@ export default function App() {
   sendRef.current = send;
 
 
-  function handleSend(text: string, targetCall: string, targetName: string) {
+  function handleSend(text: string, targetCall: string, targetName: string, aacChunks?: string[]) {
     if (!profile) return;
     const payload: TxMessagePayload = {
       type: 'tx_message',
@@ -893,6 +960,7 @@ export default function App() {
       // Transmit in this operator's profile voice/speed (the [tx] [name]
       // convention); the backend resolves it by display name.
       voice_as: profile.display_name,
+      ...(aacChunks && aacChunks.length > 0 ? { aac_chunks: aacChunks } : {}),
     };
     send(payload);
   }
@@ -1076,8 +1144,13 @@ export default function App() {
     }
   }
 
-  async function handleUninstallPlugin(id: string) {
-    if (!window.confirm(`Uninstall plugin "${id}"? This removes its files.`)) return;
+  function handleUninstallPlugin(id: string) {
+    setPluginToUninstall(id);
+  }
+
+  async function confirmUninstallPlugin() {
+    const id = pluginToUninstall;
+    if (!id) return;
     setPluginBusy(true);
     try {
       await fetch(`/plugins/${encodeURIComponent(id)}`, { method: 'DELETE', headers: authHeaders() });
@@ -1197,6 +1270,26 @@ export default function App() {
     setHighContrast(next);
     localStorage.setItem('radio_tty_high_contrast', String(next));
     send({ type: 'save_user_prefs', prefs: { high_contrast: next } });
+  }
+
+  function handleToggleSwitchScan() {
+    const next = !switchScan;
+    setSwitchScan(next);
+    localStorage.setItem('radio_tty_switch_scan', String(next));
+    send({ type: 'save_user_prefs', prefs: { switch_scan: next } });
+  }
+
+  function handleSwitchScanIntervalChange(next: number) {
+    setSwitchScanIntervalS(next);
+    localStorage.setItem('radio_tty_switch_scan_interval_s', String(next));
+    send({ type: 'save_user_prefs', prefs: { switch_scan_interval_s: next } });
+  }
+
+  function handleToggleVisualAlerts() {
+    const next = !visualAlerts;
+    setVisualAlerts(next);
+    localStorage.setItem('radio_tty_visual_alerts', String(next));
+    send({ type: 'save_user_prefs', prefs: { visual_alerts: next } });
   }
 
   function handleToggleAacMode() {
@@ -1430,8 +1523,6 @@ export default function App() {
   // the message length so the prefixed packet fits one mesh frame).
   const txComposition = resolveTxComposition(plugins, profile);
 
-  // Kid gating: hide Settings entry points and other adult-only affordances.
-  const isKid = profile?.role === 'kid';
   // Kids only ever see an admin-curated preset list (server-enforced TX
   // allowlist) — falling back to QUICK_DEFAULTS for a kid with an empty
   // allowlist would show buttons that error on every tap. Adults keep the
@@ -1558,12 +1649,25 @@ export default function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
+      <ScreenFlash flash={flash} />
       <TokenPromptDialog
         open={promptState !== null}
         tokens={promptState?.tokens ?? []}
         originalText={promptState?.originalText ?? ''}
         onSubmit={handleTokenSubmit}
         onCancel={handleTokenCancel}
+      />
+      <ShortcutOverlay open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <ConfirmDialog
+        open={pluginToUninstall !== null}
+        title="Uninstall plugin?"
+        body={pluginToUninstall ? `"${pluginToUninstall}" and its files will be removed.` : ''}
+        confirmLabel="Yes, uninstall"
+        destructive
+        switchScan={switchScan}
+        switchScanIntervalS={switchScanIntervalS}
+        onConfirm={confirmUninstallPlugin}
+        onClose={() => setPluginToUninstall(null)}
       />
       {aacMode ? (
         <AACApp
@@ -1578,6 +1682,10 @@ export default function App() {
           onTxAbort={handleTxAbort}
           onSaveGrid={handleSaveAacGrid}
           onExitAac={handleToggleAacMode}
+          switchScan={switchScan}
+          switchScanIntervalS={switchScanIntervalS}
+          errorSnack={errorSnack}
+          onCloseErrorSnack={handleCloseErrorSnack}
         />
       ) : isMobile ? (
         <MobileApp
@@ -1600,6 +1708,8 @@ export default function App() {
           onOpenActivity={handleOpenActivity}
           onOpenSettings={handleToggleSettings}
           onLogout={handleLogout}
+          switchScan={switchScan && !showSettings}
+          switchScanIntervalS={switchScanIntervalS}
         />
       ) : activity === 'family' ? (
         <FamilyPanel
@@ -1694,6 +1804,12 @@ export default function App() {
         onUiLevelChange={handleUiLevelChange}
         onFontScaleChange={handleFontScaleChange}
         onToggleHighContrast={handleToggleHighContrast}
+        switchScan={switchScan}
+        switchScanIntervalS={switchScanIntervalS}
+        visualAlerts={visualAlerts}
+        onToggleSwitchScan={handleToggleSwitchScan}
+        onSwitchScanIntervalChange={handleSwitchScanIntervalChange}
+        onToggleVisualAlerts={handleToggleVisualAlerts}
         adminConfig={mergedAdminConfig}
         voices={voices}
         voicePreviewBusy={voicePreviewBusy}

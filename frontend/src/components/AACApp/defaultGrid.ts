@@ -126,8 +126,8 @@ export function sanitizeAacGrid(raw: unknown): AACGrid {
  */
 export function resolveTokens(text: string, operatorName: string, callsign: string): string {
   return text
-    .replace(/{Name}/gi, operatorName || 'Operator')
-    .replace(/{callsign}/gi, callsign || 'my callsign')
+    .replace(/{Name}/gi, () => operatorName || 'Operator')
+    .replace(/{callsign}/gi, () => callsign || 'my callsign')
     .replace(/{[^}]*}/g, '')
     .replace(/\s{2,}/g, ' ')
     .trim();

@@ -400,6 +400,9 @@ export interface UserPrefs {
   ui_level?: 'simple' | 'operator';
   font_scale?: number;
   high_contrast?: boolean;
+  switch_scan?: boolean;
+  switch_scan_interval_s?: number; // 1 | 1.5 | 2 | 3
+  visual_alerts?: boolean;
   quick_messages?: string[];
   neighborhood_coordinator?: boolean;
 }
@@ -734,6 +737,10 @@ export interface TxMessagePayload {
   // (the [tx] [name] convention). Resolved server-side via get_by_display_name;
   // falls back to the station default when unknown.
   voice_as?: string;
+  // Raw AAC button texts this message was composed from. For kid accounts the
+  // server validates these against the stored aac_grid and rebuilds the text
+  // itself; for adults they're inert.
+  aac_chunks?: string[];
 }
 
 // Chat-only line — Client → Server (sent via send(), NOT part of WsMessage union).

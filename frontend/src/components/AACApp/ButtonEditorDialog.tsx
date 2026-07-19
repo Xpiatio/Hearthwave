@@ -11,6 +11,7 @@ import {
 } from '@mui/material';
 import type { AACButton } from '../../types/aac';
 import { newId } from './defaultGrid';
+import { ConfirmDialog } from '../ConfirmDialog';
 
 interface Props {
   open: boolean;
@@ -25,6 +26,7 @@ export function ButtonEditorDialog({ open, button, onSave, onDelete, onClose }: 
   const [emoji, setEmoji] = useState('');
   const [label, setLabel] = useState('');
   const [text, setText] = useState('');
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -48,6 +50,7 @@ export function ButtonEditorDialog({ open, button, onSave, onDelete, onClose }: 
   }
 
   return (
+    <>
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle>{button ? 'Edit Button' : 'Add Button'}</DialogTitle>
       <DialogContent>
@@ -84,12 +87,7 @@ export function ButtonEditorDialog({ open, button, onSave, onDelete, onClose }: 
         {button && (
           <Button
             color="error"
-            onClick={() => {
-              if (window.confirm(`Delete the "${button.label}" button?`)) {
-                onDelete(button.id);
-                onClose();
-              }
-            }}
+            onClick={() => setDeleteConfirmOpen(true)}
           >
             DELETE
           </Button>
@@ -101,5 +99,20 @@ export function ButtonEditorDialog({ open, button, onSave, onDelete, onClose }: 
         </Button>
       </DialogActions>
     </Dialog>
+    <ConfirmDialog
+      open={deleteConfirmOpen}
+      title="Delete this button?"
+      body={button ? `"${button.label}" will be removed.` : ''}
+      confirmLabel="Yes, delete it"
+      destructive
+      onConfirm={() => {
+        if (button) {
+          onDelete(button.id);
+          onClose();
+        }
+      }}
+      onClose={() => setDeleteConfirmOpen(false)}
+    />
+    </>
   );
 }

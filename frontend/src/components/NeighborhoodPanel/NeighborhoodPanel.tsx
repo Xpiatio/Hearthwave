@@ -7,6 +7,7 @@ import { nextNetLabel } from '../../neighborhood/schedule';
 import { IncidentDialog } from './IncidentDialog';
 import { IncidentLog } from './IncidentLog';
 import { RosterList } from './RosterList';
+import { ConfirmDialog } from '../ConfirmDialog';
 
 export interface NeighborhoodPanelProps {
   roster: NeighborhoodRosterRow[];
@@ -59,6 +60,7 @@ export function NeighborhoodPanel(props: NeighborhoodPanelProps) {
 
   const [incidentOpen, setIncidentOpen] = useState(false);
   const [streetAlert, setStreetAlert] = useState('');
+  const [alertConfirmOpen, setAlertConfirmOpen] = useState(false);
 
   // Tracks the most recent incidentError the user has already seen and
   // dismissed (via Cancel/backdrop close), so a stale error from a prior
@@ -110,10 +112,14 @@ export function NeighborhoodPanel(props: NeighborhoodPanelProps) {
     setIncidentOpen(false);
   }
 
-  function handleSendStreetAlert() {
+  function requestSendStreetAlert() {
+    if (!streetAlert.trim()) return;
+    setAlertConfirmOpen(true);
+  }
+
+  function confirmSendStreetAlert() {
     const message = streetAlert.trim();
     if (!message) return;
-    if (!window.confirm('Send this alert to everyone on the street?')) return;
     props.onStreetAlert(message);
     setStreetAlert('');
   }
@@ -229,7 +235,7 @@ export function NeighborhoodPanel(props: NeighborhoodPanelProps) {
             <Button
               variant="contained"
               color="warning"
-              onClick={handleSendStreetAlert}
+              onClick={requestSendStreetAlert}
               disabled={!streetAlert.trim()}
               sx={{ alignSelf: 'flex-start' }}
             >
@@ -244,6 +250,16 @@ export function NeighborhoodPanel(props: NeighborhoodPanelProps) {
         error={visibleIncidentError}
         onClose={handleIncidentDialogClose}
         onSubmit={handleIncidentSubmit}
+      />
+
+      <ConfirmDialog
+        open={alertConfirmOpen}
+        title="Send this alert to everyone?"
+        body={streetAlert.trim()}
+        confirmLabel="Yes, send the alert"
+        destructive
+        onConfirm={confirmSendStreetAlert}
+        onClose={() => setAlertConfirmOpen(false)}
       />
     </Box>
   );

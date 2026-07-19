@@ -7,6 +7,7 @@ import { ActivityCard } from './ActivityCard';
 import type { FamilyPresenceEntry, NeighborhoodAlertMsg, UserProfile } from '../../types/ws';
 import { deriveStatus } from '../../family/presence';
 import { nextNetLabel } from '../../neighborhood/schedule';
+import { useSwitchScan } from '../../hooks/useSwitchScan';
 
 interface Props {
   profile: UserProfile;
@@ -23,6 +24,8 @@ interface Props {
   onOpenActivity: (a: 'station' | 'ncs' | 'family' | 'neighborhood') => void;
   onOpenSettings: () => void;
   onLogout: () => void;
+  switchScan: boolean;
+  switchScanIntervalS: number;
 }
 
 /** Family card subtitle: flags any overdue check-in first (most actionable),
@@ -97,10 +100,12 @@ export function HomeScreen(props: Props) {
   // Roving tabindex: one card is tabbable; arrows move focus.
   const [focusIdx, setFocusIdx] = useState(0);
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  const gridRef = useRef<HTMLDivElement | null>(null);
   // Clamp so a stale focusIdx (e.g. cards shrank because uiLevel/ncsEnabled
   // changed) never points past the end — otherwise every card would land at
   // tabIndex -1 and the grid would become unreachable by keyboard.
   const effectiveFocusIdx = Math.min(focusIdx, cards.length - 1);
+  useSwitchScan(props.switchScan, props.switchScanIntervalS * 1000, gridRef);
   function handleKeyDown(e: React.KeyboardEvent, idx: number) {
     let next = idx;
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (idx + 1) % cards.length;
@@ -138,6 +143,7 @@ export function HomeScreen(props: Props) {
       </Typography>
 
       <Box
+        ref={gridRef}
         role="list"
         aria-label="Activities"
         sx={{

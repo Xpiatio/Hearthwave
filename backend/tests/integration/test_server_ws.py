@@ -454,6 +454,136 @@ class TestSaveUserPrefsUiLevelAndA11y:
         assert msg["profile"]["prefs"]["dark_mode"] is True
         mock_users.update_prefs.assert_called_once_with("test-user", {"dark_mode": True})
 
+    def test_switch_scan_and_visual_alerts_saved(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()
+        mock_users.update_prefs.return_value = {
+            "id": "test-user",
+            "display_name": "Test Operator",
+            "is_admin": True,
+            "prefs": {"switch_scan": True, "switch_scan_interval_s": 2, "visual_alerts": True},
+        }
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "save_user_prefs",
+                                  "prefs": {"switch_scan": True, "switch_scan_interval_s": 2, "visual_alerts": True}})
+                    msg = _next_of_type(ws, "user_profile")
+        assert msg is not None
+        assert msg["profile"]["prefs"]["switch_scan"] is True
+        assert msg["profile"]["prefs"]["switch_scan_interval_s"] == 2
+        assert msg["profile"]["prefs"]["visual_alerts"] is True
+        mock_users.update_prefs.assert_called_once_with(
+            "test-user",
+            {"switch_scan": True, "switch_scan_interval_s": 2, "visual_alerts": True},
+        )
+
+    def test_switch_scan_interval_s_rejects_bad_values(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()
+        mock_users.update_prefs.return_value = {
+            "id": "test-user",
+            "display_name": "Test Operator",
+            "is_admin": True,
+            "prefs": {"switch_scan": True},
+        }
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    # Invalid interval (5 not in allowed set) and boolean slip-through.
+                    # The bool will be caught by isinstance check; bad value by range check.
+                    ws.send_json({"type": "save_user_prefs",
+                                  "prefs": {"switch_scan": True, "switch_scan_interval_s": 5}})
+                    msg = _next_of_type(ws, "user_profile")
+        assert msg is not None
+        assert msg["profile"]["prefs"]["switch_scan"] is True
+        # Only switch_scan should be in the call; switch_scan_interval_s rejected.
+        mock_users.update_prefs.assert_called_once_with("test-user", {"switch_scan": True})
+
+    def test_kid_switch_scan_and_visual_alerts_saved(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks(is_admin=False, role="kid")
+        mock_users.update_prefs.return_value = {
+            "id": "test-user",
+            "display_name": "Test Operator",
+            "is_admin": False,
+            "role": "kid",
+            "prefs": {"switch_scan": True, "visual_alerts": True, "switch_scan_interval_s": 2},
+        }
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "save_user_prefs",
+                                  "prefs": {"switch_scan": True, "visual_alerts": True, "switch_scan_interval_s": 2, "listen_only": True}})
+                    msg = _next_of_type(ws, "user_profile")
+        assert msg is not None
+        # listen_only NOT kid-allowed must be filtered out
+        mock_users.update_prefs.assert_called_once_with(
+            "test-user", {"switch_scan": True, "visual_alerts": True, "switch_scan_interval_s": 2},
+        )
+
+    def test_kid_pref_bad_values_filtered(self, tmp_path):
+        """Bad-typed pref values (non-bool for bool prefs, invalid values)
+        must be filtered out before kid pref save."""
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks(is_admin=False, role="kid")
+        mock_users.update_prefs.return_value = {
+            "id": "test-user",
+            "display_name": "Test Operator",
+            "is_admin": False,
+            "role": "kid",
+            "prefs": {"dark_mode": True},  # only valid pref survives
+        }
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    # Send bad values: switch_scan_interval_s=True (bool), switch_scan="yes" (str), visual_alerts=1 (int)
+                    ws.send_json({"type": "save_user_prefs",
+                                  "prefs": {"dark_mode": True, "switch_scan_interval_s": True,
+                                           "switch_scan": "yes", "visual_alerts": 1}})
+                    msg = _next_of_type(ws, "user_profile")
+        assert msg is not None
+        # Bad-typed values filtered out, only dark_mode (valid) should be passed to update_prefs
+        mock_users.update_prefs.assert_called_once_with(
+            "test-user", {"dark_mode": True},
+        )
+
 
 # ---------------------------------------------------------------------------
 # tx_message — happy path
@@ -2889,6 +3019,131 @@ class TestKidTxGate:
         with client.websocket_connect(WS_URL) as ws:
             _drain_initial(ws)
             ws.send_json({"type": "tx_message", "callsign": "W5TST", "text": "arbitrary words"})
+            frames = _drain_until_idle(ws)
+        assert frames[0] == {"type": "tx_status", "status": "transmitting"}
+
+    def _kid_client_with_grid(self, tmp_path):
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks(is_admin=False, role="kid")
+        mock_users.get.return_value["prefs"] = {"aac_grid": {
+            "version": 1,
+            "categories": [{"id": "c1", "name": "Core", "emoji": "⭐", "buttons": [
+                {"id": "b1", "emoji": "👍", "label": "Yes", "text": "Yes"},
+                {"id": "b2", "emoji": "📻", "label": "Check in", "text": "This is {callsign} checking in"},
+            ]}],
+        }}
+        return cfg, mock_stt, mock_tts, mock_users, mock_tokens
+
+    def test_kid_aac_chunks_from_grid_transmit(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = self._kid_client_with_grid(tmp_path)
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "tx_message", "callsign": "WRXB123",
+                                  "text": "ignored by server",
+                                  "aac_chunks": ["Yes", "This is {callsign} checking in"]})
+                    frames = _drain_until_idle(ws)
+        assert frames[0] == {"type": "tx_status", "status": "transmitting"}
+        # no prompt_token frame — placeholders resolved server-side
+        assert all(f["type"] != "prompt_token" for f in frames)
+
+    def test_kid_aac_callsign_payload_backslash_does_not_crash_or_leak(self, tmp_path):
+        """A kid with no stored callsign sends a {callsign} button while the
+        client payload's `callsign` field is a regex backslash-group ref.
+        This must not crash the socket (re.sub literal-replacement fix) and
+        must not use the payload value at all (no client-payload fallback) —
+        the resolved text should fall back to the station's own callsign."""
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = self._kid_client_with_grid(tmp_path)
+        # No callsign on the stored profile — falls through to station config.
+        mock_users.get_public_one.return_value = {"display_name": "Test Operator"}
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "tx_message", "callsign": "\\1",
+                                  "text": "ignored by server",
+                                  "aac_chunks": ["This is {callsign} checking in"]})
+                    frames = _drain_until_idle(ws)
+        assert frames[0] == {"type": "tx_status", "status": "transmitting"}
+        assert frames[-1] == {"type": "tx_status", "status": "idle"}
+        tx_echo = next(f for f in frames if f.get("type") == "tx_echo")
+        assert "\\1" not in tx_echo["text"]
+        # cfg's station callsign (see _minimal_cfg) is the fallback.
+        assert tx_echo["text"] == "This is W5TST checking in"
+
+    def test_kid_aac_callsign_uses_stored_profile_callsign_when_present(self, tmp_path):
+        """When the kid's stored profile has a callsign, {callsign} resolves
+        to that value — never the client-payload `callsign` field."""
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = self._kid_client_with_grid(tmp_path)
+        mock_users.get_public_one.return_value = {"display_name": "Test Operator", "callsign": "KE8ABC"}
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "tx_message", "callsign": "WRXB123",
+                                  "text": "ignored by server",
+                                  "aac_chunks": ["This is {callsign} checking in"]})
+                    frames = _drain_until_idle(ws)
+        tx_echo = next(f for f in frames if f.get("type") == "tx_echo")
+        assert tx_echo["text"] == "This is KE8ABC checking in"
+
+    def test_kid_aac_chunk_not_in_grid_rejected(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = self._kid_client_with_grid(tmp_path)
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "tx_message", "callsign": "WRXB123",
+                                  "text": "x", "aac_chunks": ["Yes", "free text injection"]})
+                    msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert "not allowed" in msg["detail"].lower()
+
+    def test_kid_aac_chunks_without_stored_grid_rejected(self, kid_client):
+        """kid_client has quick_messages but no aac_grid — chunk sends must fail."""
+        with kid_client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "tx_message", "callsign": "WRXB123",
+                          "text": "x", "aac_chunks": ["Yes"]})
+            msg = _next_of_type(ws, "error")
+        assert msg is not None
+
+    def test_adult_tx_ignores_aac_chunks(self, client):
+        """Non-kid sends are validated as before; chunks are inert metadata."""
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "tx_message", "callsign": "W5TST", "text": "hello",
+                          "aac_chunks": ["whatever"]})
             frames = _drain_until_idle(ws)
         assert frames[0] == {"type": "tx_status", "status": "transmitting"}
 

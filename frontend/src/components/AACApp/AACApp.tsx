@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Box,
@@ -9,6 +9,7 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
+  Snackbar,
   Tab,
   Tabs,
   TextField,
@@ -29,6 +30,8 @@ import { SentenceStrip } from './SentenceStrip';
 import { IncomingStrip } from './IncomingStrip';
 import { ButtonGrid } from './ButtonGrid';
 import { ButtonEditorDialog } from './ButtonEditorDialog';
+import { ConfirmDialog } from '../ConfirmDialog';
+import { useSwitchScan } from '../../hooks/useSwitchScan';
 
 export interface AACAppProps {
   profile: UserProfile;
@@ -38,10 +41,14 @@ export interface AACAppProps {
   listenOnly: boolean;
   messages: ChatEntry[];
   grid: AACGrid;
-  onSend: (text: string, targetCall: string, targetName: string) => void;
+  onSend: (text: string, targetCall: string, targetName: string, aacChunks?: string[]) => void;
   onTxAbort: () => void;
   onSaveGrid: (grid: AACGrid) => void;
   onExitAac: () => void;
+  switchScan: boolean;
+  switchScanIntervalS: number;
+  errorSnack: string | null;
+  onCloseErrorSnack: () => void;
 }
 
 export function AACApp({
@@ -56,6 +63,10 @@ export function AACApp({
   onTxAbort,
   onSaveGrid,
   onExitAac,
+  switchScan,
+  switchScanIntervalS,
+  errorSnack,
+  onCloseErrorSnack,
 }: AACAppProps) {
   const [chunks, setChunks] = useState<string[]>([]);
   const [activeCatId, setActiveCatId] = useState<string>(grid.categories[0]?.id ?? '');
@@ -67,6 +78,12 @@ export function AACApp({
   const [catEditorTarget, setCatEditorTarget] = useState<AACCategory | null>(null);
   const [catDraftName, setCatDraftName] = useState('');
   const [catDraftEmoji, setCatDraftEmoji] = useState('');
+  const [catDeleteConfirmOpen, setCatDeleteConfirmOpen] = useState(false);
+
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const scanActive =
+    switchScan && !editMode && !editorOpen && !catEditorOpen && !exitConfirmOpen && !catDeleteConfirmOpen;
+  useSwitchScan(scanActive, switchScanIntervalS * 1000, rootRef);
 
   // Keep the active tab valid when the grid changes (edits, server refresh).
   useEffect(() => {
@@ -91,7 +108,7 @@ export function AACApp({
     if (!canSend) return;
     const text = resolveTokens(chunks.join(' '), profile.operator_name, effectiveCallsign);
     if (!text) return;
-    onSend(text, '', '');
+    onSend(text, '', '', chunks);
     setChunks([]);
   }
 
@@ -144,16 +161,19 @@ export function AACApp({
     setCatEditorOpen(false);
   }
 
+  function requestDeleteCategory() {
+    if (!catEditorTarget || grid.categories.length <= 1) return;
+    setCatDeleteConfirmOpen(true);
+  }
+
   function handleDeleteCategory() {
     if (!catEditorTarget) return;
-    if (grid.categories.length <= 1) return;
-    if (!window.confirm(`Delete the "${catEditorTarget.name}" category and all its buttons?`)) return;
     mutateCategory(catEditorTarget.id, () => null);
     setCatEditorOpen(false);
   }
 
   return (
-    <Box sx={{ height: '100vh', minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
+    <Box ref={rootRef} sx={{ height: '100vh', minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
       <Box
         sx={{
@@ -216,6 +236,7 @@ export function AACApp({
                   {c.name}
                 </span>
               }
+              data-scan="true"
               sx={{ fontSize: '1rem', minHeight: 56 }}
             />
           ))}
@@ -265,6 +286,7 @@ export function AACApp({
               color="error"
               onClick={onTxAbort}
               aria-label="Abort transmission"
+              data-scan="true"
               startIcon={<CancelIcon />}
               sx={{ minHeight: 72, px: 3 }}
             >
@@ -279,6 +301,7 @@ export function AACApp({
             onClick={handleSendClick}
             disabled={!canSend}
             aria-label="Send message over radio"
+            data-scan="true"
             startIcon={<SendIcon sx={{ fontSize: '2rem' }} />}
             sx={{ minHeight: 72, fontSize: '1.4rem' }}
           >
@@ -317,7 +340,7 @@ export function AACApp({
         </DialogContent>
         <DialogActions>
           {catEditorTarget && grid.categories.length > 1 && (
-            <Button color="error" onClick={handleDeleteCategory}>
+            <Button color="error" onClick={requestDeleteCategory}>
               DELETE
             </Button>
           )}
@@ -329,34 +352,37 @@ export function AACApp({
         </DialogActions>
       </Dialog>
 
-      {/* Exit confirmation — the only path back to the normal UI */}
-      <Dialog open={exitConfirmOpen} onClose={() => setExitConfirmOpen(false)} fullWidth maxWidth="xs">
-        <DialogTitle>Exit AAC mode?</DialogTitle>
-        <DialogContent>
-          <Typography>This switches back to the standard Hearthwave screen.</Typography>
-        </DialogContent>
-        <DialogActions sx={{ flexDirection: 'column', gap: 1, p: 2 }}>
-          <Button
-            fullWidth
-            variant="contained"
-            onClick={() => {
-              setExitConfirmOpen(false);
-              onExitAac();
-            }}
-            sx={{ minHeight: 64, fontSize: '1.2rem' }}
-          >
-            ✅ Yes, exit
-          </Button>
-          <Button
-            fullWidth
-            variant="outlined"
-            onClick={() => setExitConfirmOpen(false)}
-            sx={{ minHeight: 64, fontSize: '1.2rem' }}
-          >
-            ↩️ No, stay here
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {/* Exit confirmation — only path back to normal UI */}
+      <ConfirmDialog
+        open={exitConfirmOpen}
+        title="Exit AAC mode?"
+        body="This switches back to the standard Hearthwave screen."
+        confirmLabel="Yes, exit"
+        cancelLabel="No, stay here"
+        switchScan={switchScan}
+        switchScanIntervalS={switchScanIntervalS}
+        onConfirm={onExitAac}
+        onClose={() => setExitConfirmOpen(false)}
+      />
+
+      {/* Category delete confirmation */}
+      <ConfirmDialog
+        open={catDeleteConfirmOpen}
+        title="Delete this category?"
+        body={catEditorTarget ? `"${catEditorTarget.name}" and all its buttons will be removed.` : ''}
+        confirmLabel="Yes, delete it"
+        destructive
+        switchScan={switchScan}
+        switchScanIntervalS={switchScanIntervalS}
+        onConfirm={handleDeleteCategory}
+        onClose={() => setCatDeleteConfirmOpen(false)}
+      />
+
+      <Snackbar open={!!errorSnack} autoHideDuration={6000} onClose={onCloseErrorSnack}>
+        <Alert severity="error" onClose={onCloseErrorSnack} sx={{ fontSize: '1.1rem' }}>
+          {errorSnack}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

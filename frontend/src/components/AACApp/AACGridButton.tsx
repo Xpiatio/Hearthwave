@@ -5,14 +5,23 @@ interface Props {
   button: AACButton;
   editMode: boolean;
   onPress: (button: AACButton) => void;
+  tabIndex?: number;
+  onKeyDown?: (e: React.KeyboardEvent) => void;
+  onFocus?: () => void;
+  buttonRef?: (el: HTMLButtonElement | null) => void;
 }
 
-export function AACGridButton({ button, editMode, onPress }: Props) {
+export function AACGridButton({ button, editMode, onPress, tabIndex, onKeyDown, onFocus, buttonRef }: Props) {
   return (
     <Button
       variant="outlined"
       onClick={() => onPress(button)}
       aria-label={editMode ? `Edit button: ${button.label}` : button.label}
+      data-scan={editMode ? undefined : 'true'}
+      tabIndex={tabIndex}
+      onKeyDown={onKeyDown}
+      onFocus={onFocus}
+      ref={buttonRef}
       sx={{
         minHeight: 88,
         display: 'flex',

@@ -515,8 +515,34 @@ describe('Wall displays admin section', () => {
       />
     )
     expect(screen.getByText('Kitchen')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /revoke/i }))
+    expect(screen.getByRole('button', { name: /revoke/i })).toBeInTheDocument()
+  })
+
+  it('revoking a device token asks for confirmation first', () => {
+    const props = makeDefaultProps()
+    render(
+      <AdminPanel
+        {...props}
+        deviceTokens={[{ id: 'd1', label: 'Kitchen', created_at: ts, last_seen: null }]}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke Kitchen' }))
+    expect(props.onRevokeDeviceToken).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: /yes, revoke it/i }))
     expect(props.onRevokeDeviceToken).toHaveBeenCalledWith('d1')
+  })
+
+  it('does not revoke a device token when the confirmation is declined', () => {
+    const props = makeDefaultProps()
+    render(
+      <AdminPanel
+        {...props}
+        deviceTokens={[{ id: 'd1', label: 'Kitchen', created_at: ts, last_seen: null }]}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke Kitchen' }))
+    fireEvent.click(screen.getByRole('button', { name: /no, go back/i }))
+    expect(props.onRevokeDeviceToken).not.toHaveBeenCalled()
   })
 
   it('creates a token from the label field', () => {

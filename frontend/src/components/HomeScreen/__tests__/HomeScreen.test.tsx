@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, act } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { axe } from 'jest-axe';
 import { HomeScreen } from '../HomeScreen';
@@ -25,6 +25,7 @@ const base = {
   neighborhoodActive: false, netDay: 'tue', netTime: '19:00',
   neighborhoodAlerts: [] as NeighborhoodAlertMsg[], isKid: false,
   onOpenActivity: vi.fn(), onOpenSettings: vi.fn(), onLogout: vi.fn(),
+  switchScan: false, switchScanIntervalS: 1.5,
 };
 
 describe('HomeScreen', () => {
@@ -194,5 +195,17 @@ describe('HomeScreen', () => {
     render(<HomeScreen {...base} onOpenActivity={onOpenActivity} />);
     fireEvent.click(screen.getByRole('button', { name: /neighborhood/i }));
     expect(onOpenActivity).toHaveBeenCalledWith('neighborhood');
+  });
+
+  it('switch scanning cycles focus through activity cards', () => {
+    vi.useFakeTimers();
+    render(<HomeScreen {...base} uiLevel="simple" switchScan switchScanIntervalS={1.5} />);
+    const grid = screen.getByRole('list', { name: /activities/i });
+    const cards = within(grid).getAllByRole('button');
+    act(() => { vi.advanceTimersByTime(1500); });
+    expect(cards[0]).toHaveFocus();
+    act(() => { vi.advanceTimersByTime(1500); });
+    expect(cards[1]).toHaveFocus();
+    vi.useRealTimers();
   });
 });
