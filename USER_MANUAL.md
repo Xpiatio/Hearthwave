@@ -1,6 +1,6 @@
 # Hearthwave User Manual
 
-> **Version:** v2.19.0
+> **Version:** v2.19.1
 
 This manual covers day-to-day operation of Hearthwave as a GMRS family hub or neighborhood watch base station — a shared radio operating station where every household member or watch volunteer connects from their own device. For installation and server setup, see [README.md](README.md).
 
@@ -1342,7 +1342,7 @@ Every report ever sent appears in the **Incident log**, newest first, with a **F
 
 A **coordinator** (see below) can send a **street alert** — a short message (1–200 characters) meant for everyone, such as a road closure or a suspicious vehicle sighting. Sending one:
 
-- Speaks "NEIGHBORHOOD ALERT" plus the message over the air (again skipped only in Listen-only mode) and posts it to chat.
+- Speaks "NEIGHBORHOOD ALERT" plus the message over the air, ending with the station call sign and name (the GMRS station ID) — again skipped only in Listen-only mode — and posts it to chat.
 - Shows a banner on every connected user's Neighborhood card/panel for about 30 minutes.
 - Fires a [browser notification](#17-browser-notifications) for any user who has notifications enabled, even if their tab is in the background.
 
@@ -1403,7 +1403,7 @@ If nothing is tapped again, the display reverts to its passive glance layout aft
 
 ### Household quick messages (admin)
 
-The buttons on the wall display come from a **Household Quick Messages** list, configured by an admin in the same **Settings → Station tab → Wall displays** section — one message per line. Leaving the list empty hides the quick-message row on every display. Every message a display sends is checked against this exact list on the server, so a display can never transmit anything outside what an admin has put there.
+The buttons on the wall display come from a **Household Quick Messages** list, configured by an admin in the same **Settings → Station tab → Wall displays** section — one message per line. Leaving the list empty hides the quick-message row on every display. Every message a display sends is checked against this exact list on the server, so a display can never transmit anything outside what an admin has put there. On air, the message ends with the station's own call sign and name (the GMRS station ID), since a wall display has no operator identity of its own; the chat echo stays plain.
 
 ### What a display can't do
 
