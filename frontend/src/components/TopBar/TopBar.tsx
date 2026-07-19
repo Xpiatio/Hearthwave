@@ -8,11 +8,6 @@ import {
   Divider,
   IconButton,
   Tooltip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogContentText,
-  DialogActions,
 } from '@mui/material';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
@@ -22,6 +17,7 @@ import { AccountMenu } from '../AccountMenu/AccountMenu';
 import { VoicePTT } from '../VoicePTT/VoicePTT';
 import { Logo } from '../Logo/Logo';
 import { AboutDialog } from '../AboutDialog/AboutDialog';
+import { ConfirmDialog } from '../ConfirmDialog/ConfirmDialog';
 import type { UserProfile, VoiceOption } from '../../types/ws';
 
 interface Props {
@@ -404,16 +400,21 @@ export function TopBar({
 
         <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
 
-        {/* Group 4 — UI utilities. Clearing the chat is admin-only, global, and operator-tier. */}
-        {uiLevel === 'operator' && profile.is_admin && (
+        {/* Group 4 — UI utilities. Clearing the chat is admin-only and global
+            (visible to admins on both tiers). */}
+        {profile.is_admin && (
           <Tooltip title="Clear chat log for everyone">
-            <IconButton
-              onClick={() => setConfirmClearOpen(true)}
-              aria-label="Clear chat log"
+            <Button
+              color="error"
+              variant="outlined"
               size="small"
+              startIcon={<DeleteSweepIcon />}
+              onClick={() => setConfirmClearOpen(true)}
+              aria-label="Clear chat log for everyone"
+              sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}
             >
-              <DeleteSweepIcon />
-            </IconButton>
+              CLEAR CHAT
+            </Button>
           </Tooltip>
         )}
 
@@ -428,27 +429,16 @@ export function TopBar({
         </Tooltip>
       </Toolbar>
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
-      <Dialog open={confirmClearOpen} onClose={() => setConfirmClearOpen(false)}>
-        <DialogTitle>Clear chat for everyone?</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            This wipes the shared chat log for all connected operators — base
-            station, web, and mobile. This cannot be undone.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmClearOpen(false)}>Cancel</Button>
-          <Button
-            color="error"
-            onClick={() => {
-              setConfirmClearOpen(false);
-              onClearChat();
-            }}
-          >
-            Clear for everyone
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDialog
+        open={confirmClearOpen}
+        title="Clear chat for everyone?"
+        body="This wipes the shared chat log for all connected operators — base station, web, and mobile. This cannot be undone."
+        confirmLabel="Yes, clear for everyone"
+        cancelLabel="No, keep the chat"
+        destructive
+        onConfirm={onClearChat}
+        onClose={() => setConfirmClearOpen(false)}
+      />
     </AppBar>
   );
 }

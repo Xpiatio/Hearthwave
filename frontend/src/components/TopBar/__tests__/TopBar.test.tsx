@@ -323,8 +323,24 @@ describe('TopBar', () => {
       fireEvent.click(screen.getByRole('button', { name: /clear chat log/i }))
       // Opens a confirmation dialog — no clear yet.
       expect(onClearChat).not.toHaveBeenCalled()
-      fireEvent.click(screen.getByRole('button', { name: /clear for everyone/i }))
+      fireEvent.click(screen.getByRole('button', { name: /yes, clear for everyone/i }))
       expect(onClearChat).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not call onClearChat when declining the confirmation', () => {
+      const onClearChat = vi.fn()
+      render(<TopBar {...makeProps({ onClearChat, profile: { ...mockProfile, is_admin: true } })} />)
+      fireEvent.click(screen.getByRole('button', { name: /clear chat log/i }))
+      fireEvent.click(screen.getByRole('button', { name: /no, keep the chat/i }))
+      expect(onClearChat).not.toHaveBeenCalled()
+    })
+
+    it('keeps the clear chat button visible for admins on the simple tier', () => {
+      render(<TopBar {...makeProps({
+        uiLevel: 'simple',
+        profile: { ...mockProfile, is_admin: true },
+      })} />)
+      expect(screen.getByRole('button', { name: /clear chat log/i })).toBeInTheDocument()
     })
 
     it('renders dark mode toggle', () => {
@@ -402,7 +418,6 @@ describe('TopBar', () => {
       expect(screen.queryByRole('button', { name: /toggle journal panel/i })).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: /toggle stations heard panel/i })).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: /ncs/i })).not.toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: /clear chat log/i })).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: /service mode:/i })).not.toBeInTheDocument()
       expect(screen.queryByLabelText(/listening (stopped|active)/i)).not.toBeInTheDocument()
     })
