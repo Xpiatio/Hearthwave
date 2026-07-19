@@ -20,7 +20,7 @@ show how it's done.
 Hearthwave is a fork of GMRS-TTY that replaces the desktop PySide6 UI with a
 browser-based React frontend communicating over WebSocket.
 
-> **Latest release:** v2.18.0
+> **Latest release:** v2.19.0
 
 ## Who uses it
 
@@ -39,10 +39,14 @@ browser-based React frontend communicating over WebSocket.
 
 ## Features
 
+- **Station ID on safety messages** — "I'm OK" family check-ins and neighborhood
+  incident reports now end with your call sign and name, so every keyed
+  transmission identifies the station on air per GMRS Part 95
 - **Wall display (kiosk)** — point any tablet at `/display` with an admin-issued
   device token and it becomes a glanceable family board: who's OK, weather and
-  street alerts, the last few messages, the next net, and a clock; tap to mark
-  someone OK or send a household quick message — no login screen, no settings
+  street alerts, a live view of the last five radio-stream messages (received
+  transmissions stream in as they're decoded), the next net, and a clock; tap to
+  mark someone OK or send a household quick message — no login screen, no settings
   exposed, and every send is server-checked against the admin's allowlist
 - **Hearthwave Home** — the app opens on a home screen of large activity cards
   (Chat, Family, Neighborhood, Net Control) instead of dropping everyone into

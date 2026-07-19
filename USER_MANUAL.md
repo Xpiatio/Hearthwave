@@ -1,6 +1,6 @@
 # Hearthwave User Manual
 
-> **Version:** v2.18.0
+> **Version:** v2.19.0
 
 This manual covers day-to-day operation of Hearthwave as a GMRS family hub or neighborhood watch base station — a shared radio operating station where every household member or watch volunteer connects from their own device. For installation and server setup, see [README.md](README.md).
 
@@ -1261,7 +1261,7 @@ A day rollover clears "Missed check-in" automatically — it's recomputed contin
 ### The "I'm OK" button
 
 The large green **I'm OK** button at the center of the Family activity does three things at once when pressed:
-1. Speaks **"Family status: {your name} is okay."** over the air, in your voice — unless your account is in [Listen-only mode](#13-settings), in which case the on-air announcement is skipped but the next two steps still happen.
+1. Speaks **"Family status: {your name} is okay. {your call sign} {your name}."** over the air, in your voice — unless your account is in [Listen-only mode](#13-settings), in which case the on-air announcement is skipped but the next two steps still happen. The trailing call sign and name are the GMRS station ID, since an "I'm OK" keys the radio.
 2. Posts the same line to the shared chat log for every connected user to see.
 3. Marks you **OK** on the presence board for today, clearing any "Missed check-in" chip.
 
@@ -1326,7 +1326,7 @@ The **Report an incident** button opens a short form with three fields:
 - **Location** — a required location (e.g. "corner of 5th and Main").
 
 Sending the report:
-1. Speaks a standardized announcement over the air — category, description, location, time, and your callsign — unless your account is in [Listen-only mode](#13-settings), in which case the on-air announcement is skipped but the next two steps still happen.
+1. Speaks a standardized announcement over the air — category, description, location, time, and your call sign and name (the GMRS station ID, since the report keys the radio) — unless your account is in [Listen-only mode](#13-settings), in which case the on-air announcement is skipped but the next two steps still happen.
 2. Posts the same announcement to the shared chat log for every connected user to see.
 3. Adds it to the incident log (below).
 
@@ -1386,7 +1386,7 @@ The **Wall displays** table lists every paired device with when it was created a
 
 - **Family presence tiles** — one per household member, with the same status chips as the [Family activity](#30-family-activity): **OK**, **On air**, **No word**, or **Missed check-in**.
 - A **weather / street alert banner**, when one is active.
-- The **last five messages in the radio stream** (transmitted, received, and chat).
+- The **last five messages in the radio stream** (transmitted, received, and chat). Received transmissions stream in as they're decoded — an in-progress line shows dimmed and updates in place, then settles when the final transcript arrives.
 - The **next scheduled net** (or "Net running now" while one is in progress).
 - A large **clock**.
 
