@@ -70,6 +70,18 @@ class TestFormatIncident:
             "LOCATION 5TH AND MAIN. TIME 09:41 LOCAL. W5TST."
         )
 
+    def test_ends_with_callsign_and_name_when_name_supplied(self):
+        text = format_incident(
+            CATEGORIES["hazard"], "Tree down", "5th and Main", "09:41", "W5TST", "Bob",
+        )
+        assert text.endswith("W5TST BOB.")
+
+    def test_ends_with_callsign_only_when_name_blank(self):
+        text = format_incident(
+            CATEGORIES["hazard"], "Tree down", "5th and Main", "09:41", "W5TST", "  ",
+        )
+        assert text.endswith("W5TST.")
+
     def test_uses_supplied_category_label_and_uppercases_whole_phrase(self):
         text = format_incident(
             CATEGORIES["lost"], "brown dog, no collar", "Elm St park", "14:05", "w5abc",

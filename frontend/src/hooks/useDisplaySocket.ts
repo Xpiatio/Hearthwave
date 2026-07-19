@@ -12,7 +12,7 @@ import type { ChatEntry } from '../components/ChatDisplay/ChatDisplay';
 const MIN_BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 30000;
 // Memory-bounded for overnight running — the kiosk display shows only the
-// last 3 anyway; 20 gives a little headroom without growing unbounded.
+// last 5 anyway; 20 gives a little headroom without growing unbounded.
 const MESSAGE_CAP = 20;
 
 export interface DisplayAlert {
@@ -109,6 +109,10 @@ export function useDisplaySocket(token: string | null): UseDisplaySocketResult {
   const [lastAck, setLastAck] = useState<DisplayAckEvent | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
+  // Maps an in-progress utterance_id to its ChatEntry id so streaming rx
+  // partials update the same line in place (mirrors App.tsx's inProgressRef)
+  // rather than appending a fresh entry per delta.
+  const inProgressRef = useRef<Map<string, string>>(new Map());
   const ackSeqRef = useRef(0);
   const backoffRef = useRef(MIN_BACKOFF_MS);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -130,17 +134,61 @@ export function useDisplaySocket(token: string | null): UseDisplaySocketResult {
         setNeighborhood(msg);
         break;
       case 'chat_history':
+        // Backfill is finals only — drop any stale in-progress mappings.
+        inProgressRef.current.clear();
         setMessages(capMessages(msg.messages.map(streamMsgToEntry)));
         break;
       case 'chat_cleared':
+        inProgressRef.current.clear();
         setMessages([]);
         break;
       case 'chat_echo':
       case 'tx_echo':
         appendMessage(streamMsgToEntry(msg));
         break;
-      case 'rx_message':
-        if (!msg.partial) appendMessage(streamMsgToEntry(msg));
+      case 'rx_message': {
+        // Stream rx like the operator screen: partials show live and update
+        // the same line in place; the final settles that line (or appends if
+        // no partial was seen). Keyed by utterance_id.
+        const uid = msg.utterance_id;
+        const existingId = inProgressRef.current.get(uid);
+        if (msg.partial) {
+          if (existingId) {
+            setMessages((prev) =>
+              prev.map((e) =>
+                e.id === existingId
+                  ? { ...e, text: msg.text, partial: true, callsign_spans: msg.callsign_spans, source: msg.source }
+                  : e,
+              ),
+            );
+          } else {
+            const entry = { ...streamMsgToEntry(msg), partial: true };
+            inProgressRef.current.set(uid, entry.id);
+            setMessages((prev) => capMessages([...prev, entry]));
+          }
+        } else {
+          inProgressRef.current.delete(uid);
+          if (existingId) {
+            setMessages((prev) =>
+              prev.map((e) =>
+                e.id === existingId
+                  ? { ...e, text: msg.text, partial: false, callsign_spans: msg.callsign_spans, source: msg.source }
+                  : e,
+              ),
+            );
+          } else {
+            appendMessage(streamMsgToEntry(msg));
+          }
+        }
+        break;
+      }
+      case 'system_msg':
+        appendMessage({
+          id: nextId(),
+          timestamp: formatTime(),
+          kind: 'system',
+          text: msg.text,
+        });
         break;
       case 'ncs_alert':
         setAlert({ kind: 'weather', message: msg.headline, ts: new Date().toISOString() });
