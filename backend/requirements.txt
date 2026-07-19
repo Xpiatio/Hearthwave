@@ -1,10 +1,8 @@
 fastapi
 uvicorn[standard]
-websockets
 # Required by the plugin-install endpoint (multipart .zip upload).
 python-multipart
 sounddevice==0.5.5
-soundfile==0.13.1
 piper-tts
 # >=1.0 for hotwords decode-option support (used by the eval CLI).
 faster-whisper>=1.0
@@ -19,7 +17,10 @@ pyserial
 # onnxruntime-directml, etc.) are installed at Docker build time when a GPU
 # target is selected.  Keep the CPU package here as the baseline.
 onnxruntime
-speechbrain
+# Imported directly by hw_detect / stt device selection + GPU transcriber. Also
+# pulled transitively by silero-vad, but declared here so it can't be orphaned.
+# GPU builds (rocm/cuda) override this wheel from a vendor index in the Dockerfile.
+torch
 huggingface_hub
 # Optional: enables the MeshCore plugin (outbound LoRa mesh bridge). The plugin
 # imports it lazily and degrades gracefully when absent, so it is safe to omit

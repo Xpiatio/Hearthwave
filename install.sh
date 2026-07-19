@@ -144,7 +144,6 @@ fi
 echo ""
 echo "==> Validating install..."
 python -c "import sounddevice; print('  sounddevice    OK')"
-python -c "import soundfile; print('  soundfile      OK')"
 python -c "import faster_whisper; print('  faster-whisper OK')"
 python -c "import piper; print('  piper-tts      OK')"
 python -c "import silero_vad; print('  silero-vad     OK')"
