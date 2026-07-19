@@ -255,6 +255,9 @@ class TestDisplayQuickMessage:
             msg = _next_of_type(ws, "chat_echo")
             assert msg is not None
             assert msg["display_name"] == "Kitchen"  # fixture label
+            # Chat stays plain — the GMRS station ID is appended to the on-air
+            # (TTS) text only, not the chat echo.
+            assert msg["text"] == "Dinner is ready"
 
 
 # ---------------------------------------------------------------------------
