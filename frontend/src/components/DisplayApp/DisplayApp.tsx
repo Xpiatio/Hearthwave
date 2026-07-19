@@ -258,8 +258,12 @@ function ConnectedDisplay({ socket }: { socket: UseDisplaySocketResult }) {
 
         <Box component="footer" sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
           <Box role="group" aria-label="Recent messages">
-            {messages.slice(-3).map((m) => (
-              <Typography key={m.id} noWrap sx={{ fontSize: '1.1rem' }}>
+            {messages.slice(-5).map((m) => (
+              <Typography
+                key={m.id}
+                noWrap
+                sx={{ fontSize: '1.1rem', ...(m.partial ? { fontStyle: 'italic', opacity: 0.7 } : {}) }}
+              >
                 {m.sender && <b>{m.sender} </b>}
                 {m.text}
               </Typography>

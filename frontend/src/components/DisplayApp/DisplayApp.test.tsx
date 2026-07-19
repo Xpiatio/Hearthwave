@@ -180,13 +180,40 @@ describe('DisplayApp passive layout', () => {
     expect(screen.getByText(/ok/i)).toBeInTheDocument();
   });
 
-  it('shows the latest 3 chat messages only', () => {
+  it('streams rx partials and updates them in place, then settles on the final', () => {
+    const rx = (text: string, partial: boolean) => ({
+      type: 'rx_message',
+      utterance_id: 'u9',
+      text,
+      partial,
+      callsign_spans: [],
+      source: 'voice',
+    });
+    render(<DisplayApp />);
+    act(() => mockServerSend(rx('This is', true)));
+    expect(screen.getByText('This is')).toBeInTheDocument();
+    // Next delta replaces the same line rather than adding a second one.
+    act(() => mockServerSend(rx('This is the Inky', true)));
+    expect(screen.queryByText('This is')).not.toBeInTheDocument();
+    expect(screen.getByText('This is the Inky')).toBeInTheDocument();
+    // Final settles the line — still exactly one entry for the utterance.
+    act(() => mockServerSend(rx('This is the Inky Planner.', false)));
+    expect(screen.getAllByText(/inky planner/i)).toHaveLength(1);
+  });
+
+  it('shows system messages from the radio stream', () => {
+    render(<DisplayApp />);
+    act(() => mockServerSend({ type: 'system_msg', text: 'Repeater timeout' }));
+    expect(screen.getByText('Repeater timeout')).toBeInTheDocument();
+  });
+
+  it('shows the latest 5 stream messages only', () => {
     render(<DisplayApp />);
     act(() => {
-      for (let i = 0; i < 5; i++) mockServerSend(chatMsg(`msg ${i}`));
+      for (let i = 0; i < 7; i++) mockServerSend(chatMsg(`msg ${i}`));
     });
     expect(screen.queryByText('msg 1')).not.toBeInTheDocument();
-    expect(screen.getByText('msg 4')).toBeInTheDocument();
+    expect(screen.getByText('msg 6')).toBeInTheDocument();
   });
 
   it('shows street alert banner when one arrives', () => {

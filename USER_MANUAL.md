@@ -1386,7 +1386,7 @@ The **Wall displays** table lists every paired device with when it was created a
 
 - **Family presence tiles** — one per household member, with the same status chips as the [Family activity](#30-family-activity): **OK**, **On air**, **No word**, or **Missed check-in**.
 - A **weather / street alert banner**, when one is active.
-- The **last three chat messages**.
+- The **last five messages in the radio stream** (transmitted, received, and chat).
 - The **next scheduled net** (or "Net running now" while one is in progress).
 - A large **clock**.
 
