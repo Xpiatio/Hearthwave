@@ -4536,7 +4536,7 @@ class TestNeighborhoodStreetAlert:
         assert alert_msg["issued_by"] == "Coord Op"
         assert alert_msg["id"]
         assert alert_msg["ts"]
-        assert captured["text"] == "NEIGHBORHOOD ALERT. Water main break on Elm. W5TST."
+        assert captured["text"] == "NEIGHBORHOOD ALERT. Water main break on Elm. W5TST Test Op."
         assert tx_echo["text"] == captured["text"]
         assert tx_echo["display_name"] == "NEIGHBORHOOD"
 

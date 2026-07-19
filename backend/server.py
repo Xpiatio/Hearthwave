@@ -2740,7 +2740,12 @@ async def websocket_endpoint(
                     await _manager.send_to(ws, {"type": "error",
                         "detail": "Message not allowed for this display."})
                     continue
-                await _enqueue_family_tts(text, state)
+                # A wall display has no user identity, so it IDs with the station's
+                # own call sign + name (GMRS Part 95) on air. Chat stays plain — the
+                # echo is already labelled with the display's name.
+                station_call = (_config.callsign if _config else "") or ""
+                station_name = (_config.name if _config else "") or ""
+                await _enqueue_family_tts(f"{text} {format_tail_id(station_call, station_name)}", state)
                 await _broadcast_family_chat(text, state.display_label or "Wall display")
                 await _manager.send_to(ws, {"type": "display_ack", "action": "quick_message"})
 
@@ -3823,7 +3828,9 @@ async def websocket_endpoint(
                     (_users_store.get_public_one(state.user_id) or {}) if _users_store else {}
                 )
                 display_name = profile_rec.get("display_name") or ""
-                text = f"NEIGHBORHOOD ALERT. {message}. {callsign}."
+                # End with the GMRS station ID (call sign + name) — the alert keys the radio.
+                station_name = (_config.name if _config else "") or ""
+                text = f"NEIGHBORHOOD ALERT. {message}. {format_tail_id(callsign, station_name)}"
                 # Safety broadcast — listen-only only skips the TX leg (same
                 # precedent as neighborhood_incident_report/family_status).
                 if not state.prefs.get("listen_only", False):
