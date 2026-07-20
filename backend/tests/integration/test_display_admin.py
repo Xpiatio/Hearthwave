@@ -188,7 +188,7 @@ class TestDeviceTokenAdmin:
         admin_ws.send_json({"type": "device_token_list"})
         msg = _next_of_type(admin_ws, "device_tokens")
         assert msg["tokens"] and "token" not in msg["tokens"][0]
-        assert set(msg["tokens"][0].keys()) == {"id", "label", "created_at", "last_seen"}
+        assert set(msg["tokens"][0].keys()) == {"id", "label", "created_at", "last_seen", "eink"}
 
     def test_create_invalid_label_returns_error(self, admin_ws):
         admin_ws.send_json({"type": "device_token_create", "label": ""})

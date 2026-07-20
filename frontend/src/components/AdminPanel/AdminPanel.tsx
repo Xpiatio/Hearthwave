@@ -18,6 +18,7 @@ import {
   Slider,
   ToggleButtonGroup,
   ToggleButton,
+  Switch,
   Table,
   TableHead,
   TableBody,
@@ -94,6 +95,7 @@ interface Props {
   createdToken: DeviceTokenRecord | null;
   onCreateDeviceToken: (label: string) => void;
   onRevokeDeviceToken: (id: string) => void;
+  onSetDeviceTokenEink: (id: string, eink: boolean) => void;
   children?: React.ReactNode;
   /** When true, render just the form body (no Dialog chrome) for embedding in
    *  a tabbed SettingsDialog. The Save button is kept; Cancel/title are not. */
@@ -132,7 +134,7 @@ function seedFromConfig(config: AdminConfig): string {
 
 export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPanel(
   { open, onClose, config, voices, voicePreviewBusy, onSave, onPreviewVoice, children,
-    deviceTokens, createdToken, onCreateDeviceToken, onRevokeDeviceToken,
+    deviceTokens, createdToken, onCreateDeviceToken, onRevokeDeviceToken, onSetDeviceTokenEink,
     embedded = false, hideSaveButton = false, onDirtyChange },
   ref
 ) {
@@ -471,6 +473,7 @@ export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPane
                 <TableCell>Display</TableCell>
                 <TableCell>Created</TableCell>
                 <TableCell>Last Seen</TableCell>
+                <TableCell align="center">E-ink</TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -480,6 +483,14 @@ export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPane
                   <TableCell>{t.label}</TableCell>
                   <TableCell>{t.created_at}</TableCell>
                   <TableCell>{t.last_seen ?? 'Never'}</TableCell>
+                  <TableCell align="center">
+                    <Switch
+                      size="small"
+                      checked={t.eink ?? false}
+                      onChange={(e) => onSetDeviceTokenEink(t.id, e.target.checked)}
+                      slotProps={{ input: { 'aria-label': `E-ink mode for ${t.label}` } }}
+                    />
+                  </TableCell>
                   <TableCell align="right">
                     <Button
                       size="small"
@@ -494,7 +505,7 @@ export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPane
               ))}
               {deviceTokens.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4}>
+                  <TableCell colSpan={5}>
                     <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                       No wall displays yet.
                     </Typography>

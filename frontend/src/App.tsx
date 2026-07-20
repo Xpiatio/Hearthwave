@@ -1246,6 +1246,10 @@ export default function App() {
     send({ type: 'device_token_revoke', id });
   }
 
+  function handleSetDeviceTokenEink(id: string, eink: boolean) {
+    send({ type: 'device_token_set_eink', id, eink });
+  }
+
   function handleToggleDark() {
     const next = !darkMode;
     setDarkMode(next);
@@ -1819,6 +1823,7 @@ export default function App() {
         createdToken={createdToken}
         onCreateDeviceToken={handleCreateDeviceToken}
         onRevokeDeviceToken={handleRevokeDeviceToken}
+        onSetDeviceTokenEink={handleSetDeviceTokenEink}
         serverConfig={serverConfig}
         onServerConfigSave={handleServerConfigSave}
         onRescanVocabulary={handleRescanVocabulary}

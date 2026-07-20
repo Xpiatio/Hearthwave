@@ -67,6 +67,7 @@ function makeDefaultProps() {
     createdToken: null as DeviceTokenRecord | null,
     onCreateDeviceToken: vi.fn(),
     onRevokeDeviceToken: vi.fn(),
+    onSetDeviceTokenEink: vi.fn(),
   }
 }
 
@@ -422,6 +423,7 @@ describe('AdminPanel', () => {
           createdToken={null}
           onCreateDeviceToken={vi.fn()}
           onRevokeDeviceToken={vi.fn()}
+          onSetDeviceTokenEink={vi.fn()}
         />
       </ThemeProvider>
     )
@@ -440,6 +442,7 @@ describe('AdminPanel', () => {
           createdToken={null}
           onCreateDeviceToken={vi.fn()}
           onRevokeDeviceToken={vi.fn()}
+          onSetDeviceTokenEink={vi.fn()}
         />
       </ThemeProvider>
     )

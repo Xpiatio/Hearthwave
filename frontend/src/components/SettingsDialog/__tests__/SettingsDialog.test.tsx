@@ -22,7 +22,7 @@ function makeProps(overrides = {}) {
       display_quick_messages: [],
     },
     voices: [], voicePreviewBusy: false, onAdminSave: vi.fn(), onPreviewVoice: vi.fn(),
-    deviceTokens: [], createdToken: null, onCreateDeviceToken: vi.fn(), onRevokeDeviceToken: vi.fn(),
+    deviceTokens: [], createdToken: null, onCreateDeviceToken: vi.fn(), onRevokeDeviceToken: vi.fn(), onSetDeviceTokenEink: vi.fn(),
     serverConfig: {
       vadThreshold: 0.5, whisperModel: 'base', whisperModelFinal: '', squelchAdaptive: false,
       sttDebugCapture: false, txConditioning: false, voxPrimerEnabled: false, voxPrimerMs: 0,

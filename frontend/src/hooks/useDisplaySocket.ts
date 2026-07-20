@@ -38,6 +38,7 @@ export interface UseDisplaySocketResult {
   messages: ChatEntry[];
   alert: DisplayAlert | null;
   lastAck: DisplayAckEvent | null;
+  eink: boolean;
   send: (msg: object) => void;
 }
 
@@ -107,6 +108,7 @@ export function useDisplaySocket(token: string | null): UseDisplaySocketResult {
   const [messages, setMessages] = useState<ChatEntry[]>([]);
   const [alert, setAlert] = useState<DisplayAlert | null>(null);
   const [lastAck, setLastAck] = useState<DisplayAckEvent | null>(null);
+  const [eink, setEink] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   // Maps an in-progress utterance_id to its ChatEntry id so streaming rx
@@ -126,6 +128,9 @@ export function useDisplaySocket(token: string | null): UseDisplaySocketResult {
     switch (msg.type) {
       case 'status':
         setStatus(msg);
+        break;
+      case 'display_config':
+        setEink(msg.eink);
         break;
       case 'family_presence':
         setPresence(msg.entries);
@@ -284,5 +289,5 @@ export function useDisplaySocket(token: string | null): UseDisplaySocketResult {
     }
   }, []);
 
-  return { connected, authFailed, status, presence, neighborhood, messages, alert, lastAck, send };
+  return { connected, authFailed, status, presence, neighborhood, messages, alert, lastAck, eink, send };
 }

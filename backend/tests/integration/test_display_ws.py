@@ -130,8 +130,9 @@ def client(tmp_path, device_store):
 class TestDisplayAuth:
     def test_valid_device_token_connects_and_gets_snapshots(self, client, display_token):
         with client.websocket_connect(f"/ws?device_token={display_token}") as ws:
-            types = [ws.receive_json()["type"] for _ in range(4)]
+            types = [ws.receive_json()["type"] for _ in range(5)]
         assert "status" in types
+        assert "display_config" in types
         assert "family_presence" in types
         assert "neighborhood_state" in types
         assert "chat_history" in types

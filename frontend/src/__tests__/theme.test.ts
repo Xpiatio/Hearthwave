@@ -26,6 +26,37 @@ describe('makeTheme', () => {
     expect(t.palette.background.default).toBe('#FFFFFF');
     expect(t.palette.text.primary).toBe('#000000');
   });
+
+  describe('e-ink mode', () => {
+    it('forces grayscale black-on-white even when dark is requested', () => {
+      const t = makeTheme(true, { eink: true });
+      expect(t.palette.mode).toBe('light');
+      expect(t.palette.background.default).toBe('#FFFFFF');
+      expect(t.palette.text.primary).toBe('#000000');
+    });
+
+    it('disables all MUI transitions', () => {
+      const t = makeTheme(false, { eink: true });
+      expect(t.transitions.create()).toBe('none');
+    });
+
+    it('renders a flat (gradient-free) dialog title bar', () => {
+      const t = makeTheme(false, { eink: true });
+      const root = t.components?.MuiDialogTitle?.styleOverrides?.root as any;
+      const style = root({ theme: t }) as { background: string; color: string };
+      expect(style.background).toBe('#FFFFFF');
+      expect(style.background).not.toContain('gradient');
+      expect(style.color).toBe('#000000');
+    });
+
+    it('renders a flat white app bar with black text', () => {
+      const t = makeTheme(false, { eink: true });
+      const root = t.components?.MuiAppBar?.styleOverrides?.root as any;
+      const style = root({ theme: t }) as { backgroundColor: string; color: string };
+      expect(style.backgroundColor).toBe('#FFFFFF');
+      expect(style.color).toBe('#000000');
+    });
+  });
 });
 
 describe('withTouchDensity', () => {

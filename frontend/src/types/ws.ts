@@ -637,6 +637,8 @@ export interface DeviceTokenRecord {
   label: string;
   created_at: string;
   last_seen: string | null;
+  /** E-ink display mode for this wall panel. Absent on legacy records → false. */
+  eink?: boolean;
   /** Present only in the one-time device_token_created reply. */
   token?: string;
 }
@@ -649,6 +651,12 @@ export interface DeviceTokensMsg {
 export interface DeviceTokenCreatedMsg {
   type: 'device_token_created';
   record: DeviceTokenRecord;
+}
+
+// Kiosk display — per-device config sent once on connect (server → client).
+export interface DisplayConfigMsg {
+  type: 'display_config';
+  eink: boolean;
 }
 
 // Kiosk display — server ack for a display's own actions (server → client).
@@ -718,6 +726,7 @@ export type WsMessage =
   | NeighborhoodJournalSavedMsg
   | DeviceTokensMsg
   | DeviceTokenCreatedMsg
+  | DisplayConfigMsg
   | DisplayAckMsg
   | VoiceTxAckMsg
   | VoiceTxErrorMsg

@@ -1380,7 +1380,7 @@ A wall display turns a spare tablet — the one on the kitchen counter, say — 
 3. The new device's token is shown **once**, in a copyable field. Copy it now — Hearthwave does not show it again. If it's lost before the tablet is set up, the only fix is to revoke that display and add a new one.
 4. On the tablet itself, browse to `http://<host>/display` and paste the token into the connect screen. The token is then remembered on that device (stored in the browser's local storage), so the tablet reconnects on its own after a reboot or a power cut — no re-pairing needed.
 
-The **Wall displays** table lists every paired device with when it was created and when it was last seen, plus a **Revoke** button. Revoking disconnects that display immediately; it will have to be re-paired with a fresh token to come back online.
+The **Wall displays** table lists every paired device with when it was created and when it was last seen, an **E-ink** toggle (see [E-ink displays](#e-ink-displays) below), and a **Revoke** button. Revoking disconnects that display immediately; it will have to be re-paired with a fresh token to come back online.
 
 ### What it shows
 
@@ -1390,7 +1390,7 @@ The **Wall displays** table lists every paired device with when it was created a
 - The **next scheduled net** (or "Net running now" while one is in progress).
 - A large **clock**.
 
-The display dims to a dark theme automatically between 7 PM and 7 AM, and the whole layout drifts a few pixels every so often — a standard anti-burn-in measure for a screen that shows the same layout for hours at a stretch. None of this needs any setup; it just runs.
+The display dims to a dark theme automatically between 7 PM and 7 AM, and the whole layout drifts a few pixels every so often — a standard anti-burn-in measure for a screen that shows the same layout for hours at a stretch. None of this needs any setup; it just runs. (Both of these behaviours change when [E-ink mode](#e-ink-displays) is on.)
 
 ### Tap to wake
 
@@ -1404,6 +1404,17 @@ If nothing is tapped again, the display reverts to its passive glance layout aft
 ### Household quick messages (admin)
 
 The buttons on the wall display come from a **Household Quick Messages** list, configured by an admin in the same **Settings → Station tab → Wall displays** section — one message per line. Leaving the list empty hides the quick-message row on every display. Every message a display sends is checked against this exact list on the server, so a display can never transmit anything outside what an admin has put there. On air, the message ends with the station's own call sign and name (the GMRS station ID), since a wall display has no operator identity of its own; the chat echo stays plain.
+
+### E-ink displays
+
+If the wall panel is a real **e-ink** screen (the low-power, paper-like kind), turn on its **E-ink** toggle in the **Wall displays** table. E-ink is a good fit for an always-on family board — it draws almost no power and is readable in bright daylight — but it refreshes slowly, is grayscale, ghosts on partial updates, and smears on animation. The E-ink toggle changes how that one display renders to suit the hardware:
+
+- **Fixed grayscale, maximum contrast** — black text on a paper-white background, always. It ignores the automatic day/dusk dimming (an e-ink panel is reflective, so there's no benefit to a dark theme) and drops the coloured gradients on headers.
+- **No animation** — every transition and fade is switched off.
+- **Finalised messages only** — the live, word-by-word partial transcripts are suppressed; a received message appears once, complete, instead of rewriting itself as it decodes.
+- **No layout drift** — e-ink has none of the burn-in that the drift protects against, and the movement would only add ghosting, so the layout stays pinned in place.
+
+The toggle takes effect on that display's next reconnect (reload the `/display` page on the tablet). It's per-device: a normal LCD tablet and an e-ink panel can be paired at the same time, each rendering in its own mode. Turning it back off returns that display to the standard dusk-aware, animated view.
 
 ### What a display can't do
 

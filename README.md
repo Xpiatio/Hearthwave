@@ -39,6 +39,12 @@ browser-based React frontend communicating over WebSocket.
 
 ## Features
 
+- **E-ink wall display** — a per-display setting (admin toggle, per device token)
+  renders the `/display` kiosk for real e-ink panels: fixed grayscale black-on-white
+  that ignores the day/dusk theme, no gradients, and every animation switched off. It
+  suppresses live word-by-word partials so a message only appears once it's final, and
+  pins the layout in place (the burn-in drift that normal panels use is pure ghosting
+  fuel on e-ink) — a low-power, glanceable family board that won't smear or flicker
 - **Station ID on safety messages** — "I'm OK" family check-ins, neighborhood
   incident reports, street alerts, and wall-display quick messages all end with
   the call sign and name, so every keyed transmission identifies the station on
@@ -152,11 +158,17 @@ browser-based React frontend communicating over WebSocket.
   Simple interface locked on
 - **Voice PTT** — browser microphone button (or Space bar) captures and transmits
   audio; pre-roll buffer captures the first syllable even before PTT is pressed
-- **Priority audio mixer** — six traffic priority levels (Routine → Emergency)
-  with an AGC+LPF audio pipeline
+- **Receive audio conditioning** — a per-segment DSP chain (band-pass, spectral-gate
+  denoise, a selectable gain stage — AGC / RMS / off — and a low-pass filter) cleans
+  narrowband FM audio before it reaches Whisper
+- **Won't talk over the channel** — automatic transmissions (like the station-ID
+  beacon) hold until the squelch closes, so Hearthwave never keys up on top of a
+  received signal; an operator-initiated Transmit still overrides — the operator
+  decides when to key
 - **CW decode** — Morse code receive mode alongside voice
-- **NCS mode** — Net Control Station plugin with roster management, six priority
-  levels, and one-click callsign check-in/out
+- **NCS mode** — Net Control Station plugin with roster management, six traffic
+  levels (Routine, Priority, Emergency, General, Short Term, In-n-Out), and
+  one-click callsign check-in/out
 - **Net scripts & round-table** — configurable opening preamble and closing
   scripts read over the air, plus a round-table caller that cycles the roster
   prompting each station for traffic
