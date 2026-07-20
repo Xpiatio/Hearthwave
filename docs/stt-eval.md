@@ -5,7 +5,7 @@ changes are judged by word-error-rate (WER), not by gut feel.
 
 ## 1. Collect captures from live audio
 
-1. In the Radio-TTY config UI (or `data/config.json`), set
+1. In the Hearthwave config UI (or `data/config.json`), set
    `"stt_debug_capture": true`. Restart listening (toggling Listen or
    changing the setting over WebSocket restarts the worker).
 2. Feed the system real radio audio. Two options:
