@@ -8,6 +8,7 @@ import { makeTheme } from '../../theme';
 import { nextNetLabel } from '../../neighborhood/schedule';
 import { PresenceTile } from './PresenceTile';
 import { ConfirmOkDialog } from './ConfirmOkDialog';
+import { DisplayChatConsole } from './DisplayChatConsole';
 import type { DisplayImOkPayload, DisplayQuickMessagePayload, FamilyPresenceEntry } from '../../types/ws';
 
 const DEVICE_TOKEN_KEY = 'radio_tty_device_token';
@@ -191,6 +192,11 @@ function ConnectedDisplay({ socket }: { socket: UseDisplaySocketResult }) {
   // E-ink has no OLED-style burn-in and smears on movement — pin at origin.
   const drift = eink ? { x: 0, y: 0 } : DRIFT_OFFSETS[driftIndex];
   const quickMessages = status?.display_quick_messages ?? [];
+  const netLabel = neighborhood?.active
+    ? 'Net running now'
+    : neighborhood
+      ? nextNetLabel(neighborhood.net_day, neighborhood.net_time, now)
+      : '';
 
   return (
     <ThemeProvider theme={theme}>
@@ -257,26 +263,8 @@ function ConnectedDisplay({ socket }: { socket: UseDisplaySocketResult }) {
           </Box>
         )}
 
-        <Box component="footer" sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-          <Box role="group" aria-label="Recent messages">
-            {(eink ? messages.filter((m) => !m.partial) : messages).slice(-5).map((m) => (
-              <Typography
-                key={m.id}
-                noWrap
-                sx={{ fontSize: '1.1rem', ...(m.partial ? { fontStyle: 'italic', opacity: 0.7 } : {}) }}
-              >
-                {m.sender && <b>{m.sender} </b>}
-                {m.text}
-              </Typography>
-            ))}
-          </Box>
-          <Typography sx={{ fontSize: '1.2rem', color: 'text.secondary' }}>
-            {neighborhood?.active
-              ? 'Net running now'
-              : neighborhood
-                ? nextNetLabel(neighborhood.net_day, neighborhood.net_time, now)
-                : ''}
-          </Typography>
+        <Box component="footer">
+          <DisplayChatConsole messages={messages} eink={eink} netLabel={netLabel} />
         </Box>
 
         <ConfirmOkDialog
