@@ -304,6 +304,7 @@ html[data-theme="dusk"] .theme-toggle .i-moon{ display:none; }
     </a>
     <div class="nav-links">
       <a href="#what">Architecture</a>
+      <a href="#display">Wall display</a>
       <a href="#rules">The rules</a>
       <a href="#map">Rule map</a>
       <a href="#autotx">Automated functions</a>
@@ -345,7 +346,7 @@ html[data-theme="dusk"] .theme-toggle .i-moon{ display:none; }
       <div class="pill reveal">
         <span class="cite">47 CFR § 95.1705(c)</span>
         <h3>You control who reaches the hub</h3>
-        <p>Accounts exist only if the admin — the licensee — creates them. Passwords, session tokens, a transmit-blocking listen-only mode, and a per-user audit log keep station access inside the household your license covers.</p>
+        <p>Accounts — and the device tokens a wall display joins with — exist only if the admin (the licensee) creates them, and can be revoked at any time. Passwords, session tokens, a transmit-blocking listen-only mode, and a per-user audit log keep station access inside the household your license covers.</p>
       </div>
       <div class="pill reveal">
         <span class="cite">47 CFR § 95.1733(a)(8)</span>
@@ -366,7 +367,7 @@ html[data-theme="dusk"] .theme-toggle .i-moon{ display:none; }
     </div>
     <div class="dia reveal">
       <div class="dia-row">
-        <div class="dia-box"><b>Family browsers</b><span>on your home network</span></div>
+        <div class="dia-box"><b>Family browsers &amp; wall display</b><span>on your home network</span></div>
         <div class="dia-arrow"><span class="lbl">control link<br>typed text</span><span class="ar" aria-hidden="true">→</span></div>
         <div class="dia-box"><b>Hearthwave hub</b><span>text → speech · speech → text<br>PTT keying · audit log</span></div>
         <div class="dia-arrow"><span class="lbl">audio + PTT<br>wired, local</span><span class="ar" aria-hidden="true">→</span></div>
@@ -377,6 +378,34 @@ html[data-theme="dusk"] .theme-toggle .i-moon{ display:none; }
       <div class="dia-no">
         <span class="x" aria-hidden="true">✕</span>
         <p><b>The path that does not exist:</b> radio → internet → another radio. There is no code in Hearthwave that carries received audio to another transmitter, another repeater, another Hearthwave instance, or a telephone. Incoming transmissions become <b>text on a screen</b> — a family message log — and stop there.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ WALL DISPLAY + ASSISTIVE ACCESS ═══════════ -->
+<section id="display">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">New access surfaces</span>
+      <h2>A kitchen tablet and a switch <span class="ember">stay inside the license.</span></h2>
+      <p class="lead">Since this page was first written, Hearthwave grew a wall-display kiosk and a set of assistive input paths. Each is a new way to reach the transmitter — so each is gated the same way the rest of the station is: scoped, logged, and self-identifying.</p>
+    </div>
+    <div class="three">
+      <div class="pill reveal">
+        <span class="cite">47 CFR §§ 95.1705(c) · 95.1751</span>
+        <h3>The wall display is a scoped device, not a login</h3>
+        <p>A kitchen tablet joins through a <b>device token the licensee creates and can revoke</b> — never an open or password-less account. Its identity class can send exactly two things: an "I'm OK" tap and a message from the <b>admin-curated quick-message list</b>. Freeform transmit is not in its vocabulary. Having no operator identity, it identifies on air with the station's own call sign and name.</p>
+      </div>
+      <div class="pill reveal">
+        <span class="cite">47 CFR §§ 95.1731(a) · 95.1751</span>
+        <h3>Safety broadcasts self-identify</h3>
+        <p>Street alerts, incident reports, and "I'm OK" status all key the radio, so every one of them ends with the station call sign and name automatically. Street alerts are coordinator-gated; a listen-only account skips the transmit leg entirely and simply sees the message on screen.</p>
+      </div>
+      <div class="pill reveal">
+        <span class="cite">47 CFR § 95.1743</span>
+        <h3>Assistive access without opening the mic</h3>
+        <p>Switch scanning and symbol (AAC) grids let more of the household operate the station. A child's account can only put its <b>stored button vocabulary</b> on the air — the text is rebuilt on the server, so a button press is the only thing that can transmit, never an arbitrary call sign. Every send is still one deliberate action, and the licensee stays responsible for a minor's operation.</p>
       </div>
     </div>
   </div>
@@ -465,7 +494,7 @@ html[data-theme="dusk"] .theme-toggle .i-moon{ display:none; }
           <tr>
             <td>§ 95.1751</td>
             <td><b>Station ID</b> — spoken callsign after transmissions and every 15 minutes during a series.</td>
-            <td>Every transmission is automatically framed with the station callsign in spoken English, and an ID timer transmits the callsign whenever 15 minutes pass with the station active. Identification is enforced by the software, not left to habit.</td>
+            <td>Every transmission is automatically framed with the station callsign in spoken English, and an ID timer transmits the callsign whenever 15 minutes pass with the station active. Pre-formatted safety traffic — "I'm OK", incident reports, street alerts, wall-display quick messages — ends with the call sign and name too; a wall display with no operator identity IDs with the station's own license. Identification is enforced by the software, not left to habit.</td>
           </tr>
           <tr>
             <td>§ 95.1733(a)(10)</td>
@@ -475,7 +504,7 @@ html[data-theme="dusk"] .theme-toggle .i-moon{ display:none; }
           <tr>
             <td>§ 95.1705(c)<br>§ 95.1743</td>
             <td><b>Operation under your license</b> — immediate family; licensee responsible.</td>
-            <td>No open signup: only the admin (licensee) creates accounts. Salted-and-hashed passwords, expiring session tokens, login rate-limiting and lockout, and a <b>listen-only mode</b> that blocks transmission for guests who aren't covered by the license.</td>
+            <td>No open signup: only the admin (licensee) creates accounts — and the device tokens a wall display joins with, which are equally admin-only and revocable. Salted-and-hashed passwords, expiring session tokens, login rate-limiting and lockout, and a <b>listen-only mode</b> that blocks transmission for guests who aren't covered by the license. A wall display is hard-scoped to two message types; a child's account can only transmit its stored button vocabulary.</td>
           </tr>
           <tr>
             <td>§ 95.1731</td>
@@ -550,6 +579,7 @@ html[data-theme="dusk"] .theme-toggle .i-moon{ display:none; }
       <li><span class="ck">✓</span><div><b>Hold a GMRS license</b><span>One license covers your immediate family (§ 95.1705). No license, no transmitting — use listen-only accounts until yours is granted.</span></div></li>
       <li><span class="ck">✓</span><div><b>Use a Part 95E–certified radio</b><span>Hearthwave is the control point; the certified radio is the station. Don't wire it to equipment not certified for GMRS.</span></div></li>
       <li><span class="ck">✓</span><div><b>Keep accounts inside the license</b><span>Create transmit-capable accounts only for immediate family covered by your license; give everyone else listen-only. You are responsible for every operator, including minors (§ 95.1743).</span></div></li>
+      <li><span class="ck">✓</span><div><b>Treat display devices like household keys</b><span>A wall-display device token can send "I'm OK" and your quick-message list on the air. Issue one per trusted device, and revoke it if the tablet leaves the house or is lost (§ 95.1705).</span></div></li>
       <li><span class="ck">✓</span><div><b>Keep the hub off the public internet</b><span>Hearthwave ships no relay, tunnel, or port-forwarding service on purpose. Away from home, reach it over your own VPN (WireGuard/Tailscale) — the control link stays yours, exactly as § 95.1749 intends.</span></div></li>
       <li><span class="ck">✓</span><div><b>Stay present for automated functions</b><span>Enable the beacon only when the station is attended; run nets from the chair, not from memory.</span></div></li>
       <li><span class="ck">✓</span><div><b>Transmit permissible content</b><span>Plain-language personal communications (§ 95.1731). No music, ads, coded messages, or false traffic (§ 95.1733(a)) — software can frame your callsign, but what you say is on you.</span></div></li>
