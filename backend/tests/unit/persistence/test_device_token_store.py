@@ -76,6 +76,29 @@ class TestRevoke:
         assert _store(tmp_path).revoke("nope") is False
 
 
+class TestSetEink:
+    def test_create_defaults_eink_off(self, tmp_path):
+        assert _store(tmp_path).create("Kitchen")["eink"] is False
+
+    def test_set_eink_toggles_and_persists(self, tmp_path):
+        s = _store(tmp_path)
+        rec = s.create("Kitchen")
+        assert s.set_eink(rec["id"], True) is True
+        assert _store(tmp_path).list_all()[0]["eink"] is True
+
+    def test_set_eink_unknown_id_returns_false(self, tmp_path):
+        assert _store(tmp_path).set_eink("nope", True) is False
+
+    def test_legacy_record_without_eink_key_loads(self, tmp_path):
+        """Pre-e-ink records lack the key — must load and read as off, not crash."""
+        path = tmp_path / "device_tokens.json"
+        path.write_text(json.dumps({"tokens": [
+            {"id": "abc", "token": "t" * 32, "label": "Old", "created_at": "x", "last_seen": None},
+        ]}))
+        rec = DeviceTokenStore(path=path).list_all()[0]
+        assert rec.get("eink", False) is False
+
+
 class TestLoad:
     def test_load_corrupted_json_yields_empty_store(self, tmp_path):
         """Corrupted device_tokens.json is handled gracefully, yielding empty store."""

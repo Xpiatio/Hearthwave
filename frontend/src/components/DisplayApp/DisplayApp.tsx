@@ -116,7 +116,7 @@ export function DisplayApp() {
 }
 
 function ConnectedDisplay({ socket }: { socket: UseDisplaySocketResult }) {
-  const { connected, presence, neighborhood, messages, alert, status, lastAck, send } = socket;
+  const { connected, presence, neighborhood, messages, alert, status, lastAck, eink, send } = socket;
   const [now, setNow] = useState(() => new Date());
   const [driftIndex, setDriftIndex] = useState(0);
 
@@ -187,8 +187,9 @@ function ConnectedDisplay({ socket }: { socket: UseDisplaySocketResult }) {
     send(payload);
   }
 
-  const theme = makeTheme(isDuskDark(now), { fontScale: 1.25 });
-  const drift = DRIFT_OFFSETS[driftIndex];
+  const theme = makeTheme(eink ? false : isDuskDark(now), { fontScale: 1.25, eink });
+  // E-ink has no OLED-style burn-in and smears on movement — pin at origin.
+  const drift = eink ? { x: 0, y: 0 } : DRIFT_OFFSETS[driftIndex];
   const quickMessages = status?.display_quick_messages ?? [];
 
   return (
@@ -258,7 +259,7 @@ function ConnectedDisplay({ socket }: { socket: UseDisplaySocketResult }) {
 
         <Box component="footer" sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
           <Box role="group" aria-label="Recent messages">
-            {messages.slice(-5).map((m) => (
+            {(eink ? messages.filter((m) => !m.partial) : messages).slice(-5).map((m) => (
               <Typography
                 key={m.id}
                 noWrap

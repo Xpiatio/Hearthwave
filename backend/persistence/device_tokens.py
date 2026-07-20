@@ -52,6 +52,7 @@ class DeviceTokenStore:
             "label": label,
             "created_at": utc_now_iso(),
             "last_seen": None,
+            "eink": False,
         }
         self._tokens.append(rec)
         self._save()
@@ -59,6 +60,14 @@ class DeviceTokenStore:
 
     def list_all(self) -> list[dict]:
         return [dict(r) for r in self._tokens]
+
+    def set_eink(self, token_id: str, eink: bool) -> bool:
+        for rec in self._tokens:
+            if rec["id"] == token_id:
+                rec["eink"] = bool(eink)
+                self._save()
+                return True
+        return False
 
     def revoke(self, token_id: str) -> bool:
         before = len(self._tokens)

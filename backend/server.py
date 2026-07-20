@@ -635,7 +635,13 @@ def _build_device_tokens_msg() -> dict:
     tokens = _device_token_store.list_all() if _device_token_store else []
     return {
         "type": "device_tokens",
-        "tokens": [{k: r[k] for k in ("id", "label", "created_at", "last_seen")} for r in tokens],
+        "tokens": [
+            {
+                **{k: r[k] for k in ("id", "label", "created_at", "last_seen")},
+                "eink": r.get("eink", False),
+            }
+            for r in tokens
+        ],
     }
 
 
@@ -2496,6 +2502,7 @@ async def websocket_endpoint(
             _audit_log.log("display_connect", user_id=state.user_id, ip=client_ip)
 
         await _manager.send_to(ws, _build_status())
+        await _manager.send_to(ws, {"type": "display_config", "eink": display_rec.get("eink", False)})
         await _manager.send_to(ws, _build_family_presence_msg())
         await _manager.send_to(ws, _build_neighborhood_state_msg())
         await _manager.send_to(ws, {"type": "chat_history", "messages": history_msgs})
@@ -2805,6 +2812,16 @@ async def websocket_endpoint(
                 token_id = data.get("id") or ""
                 if _device_token_store.revoke(token_id):
                     await _manager.disconnect_user(f"display:{token_id}")
+                await _manager.send_to(ws, _build_device_tokens_msg())
+
+            elif msg_type == "device_token_set_eink":
+                if not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
+                    continue
+                if _device_token_store is None:
+                    continue
+                token_id = data.get("id") or ""
+                _device_token_store.set_eink(token_id, bool(data.get("eink")))
                 await _manager.send_to(ws, _build_device_tokens_msg())
 
             elif msg_type == "add_contact":

@@ -62,6 +62,7 @@ interface Props {
   createdToken: DeviceTokenRecord | null;
   onCreateDeviceToken: (label: string) => void;
   onRevokeDeviceToken: (id: string) => void;
+  onSetDeviceTokenEink: (id: string, eink: boolean) => void;
 
   // System tab (admin only)
   serverConfig: React.ComponentProps<typeof ServerConfigPanel>['config'];
@@ -243,6 +244,7 @@ export function SettingsDialog(props: Props) {
               onSave={props.onAdminSave} onPreviewVoice={props.onPreviewVoice}
               deviceTokens={props.deviceTokens} createdToken={props.createdToken}
               onCreateDeviceToken={props.onCreateDeviceToken} onRevokeDeviceToken={props.onRevokeDeviceToken}
+              onSetDeviceTokenEink={props.onSetDeviceTokenEink}
               onDirtyChange={setAdminDirty}
             >
               {props.usersPanel}

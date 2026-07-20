@@ -3,11 +3,17 @@ import { createTheme, type Theme } from '@mui/material/styles';
 export interface ThemeOptionsExtra {
   fontScale?: number;
   highContrast?: boolean;
+  /** E-ink wall panels: fixed grayscale black-on-white, no gradients, no
+   *  animation. Forces light mode + high contrast regardless of `dark`. */
+  eink?: boolean;
 }
 
 export function makeTheme(dark: boolean, opts?: ThemeOptionsExtra) {
   const s = opts?.fontScale ?? 1;
-  const hc = opts?.highContrast ?? false;
+  const eink = opts?.eink ?? false;
+  // E-ink is reflective — always max-contrast black on paper-white, never dusk.
+  if (eink) dark = false;
+  const hc = eink || (opts?.highContrast ?? false);
   return createTheme({
     palette: {
       mode: dark ? 'dark' : 'light',
@@ -105,27 +111,32 @@ export function makeTheme(dark: boolean, opts?: ThemeOptionsExtra) {
       MuiAppBar: {
         styleOverrides: {
           root: ({ theme }) => ({
-            backgroundColor:
-              theme.palette.mode === 'dark' ? '#0F2540' : '#C8D8EC',
+            backgroundColor: eink
+              ? '#FFFFFF'
+              : theme.palette.mode === 'dark' ? '#0F2540' : '#C8D8EC',
             border: 'none',
             borderRadius: 0,
-            color: theme.palette.mode === 'dark' ? '#F9FAFB' : '#0F2540',
+            color: eink ? '#000000' : theme.palette.mode === 'dark' ? '#F9FAFB' : '#0F2540',
           }),
         },
       },
       MuiDialogTitle: {
         styleOverrides: {
           root: ({ theme }) => ({
-            background:
-              theme.palette.mode === 'dark'
+            // Flat white-on-black bar for e-ink — gradients smear on refresh.
+            background: eink
+              ? '#FFFFFF'
+              : theme.palette.mode === 'dark'
                 ? 'linear-gradient(135deg, #0F2540 0%, #1E4976 100%)'
                 : 'linear-gradient(135deg, #1A3A5C 0%, #1E4976 100%)',
-            color: '#F9FAFB',
+            color: eink ? '#000000' : '#F9FAFB',
             fontWeight: 700,
           }),
         },
       },
     },
+    // E-ink panels smear on animation — kill all MUI transitions.
+    ...(eink ? { transitions: { create: () => 'none' } } : {}),
   });
 }
 
