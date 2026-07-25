@@ -305,12 +305,13 @@ function ConnectedDisplay({
   // E-ink smears on movement — no drag animation on those panels.
   const sortable = interactive && !eink;
 
-  // The people band: tiles shrink to a floor, then the band scrolls.
-  const peopleBandSx = {
+  // The people board fills what's left of the right-hand column under the
+  // clock: tiles shrink to a floor, then the board scrolls.
+  const peopleBoardSx = {
     display: 'grid',
     gap: 2,
-    flex: '0 0 auto',
-    maxHeight: '38vh',
+    flexGrow: 1,
+    minHeight: 0,
     overflowY: 'auto',
     gridTemplateColumns: `repeat(auto-fit, minmax(${metrics.minWidth}px, 1fr))`,
     alignContent: 'start',
@@ -417,14 +418,16 @@ function ConnectedDisplay({
             gap: 2,
             flexGrow: 1,
             minHeight: 0,
-            gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 2fr) minmax(280px, 1fr)' },
+            // The right column carries the people board as well as the clock,
+            // so it needs room for two tiles side by side at the largest tier.
+            gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1.4fr) minmax(320px, 1fr)' },
           }}
         >
           <DisplayChatConsole messages={messages} eink={eink} />
 
           <Box
             component="header"
-            sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, minWidth: 0 }}
+            sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, minWidth: 0, minHeight: 0 }}
           >
             <Typography sx={{ fontSize: '4rem', fontWeight: 700, lineHeight: 1 }}>
               {formatClock(now)}
@@ -459,46 +462,47 @@ function ConnectedDisplay({
                 {netLabel}
               </Typography>
             )}
+
+            {/* The DndContext must sit OUTSIDE role="list" — it renders its
+                own screen-reader live region, which is not a permitted list
+                child. */}
+            {sortable ? (
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <Box role="list" aria-label="Family" sx={peopleBoardSx}>
+                  <SortableContext
+                    items={orderedPresence.map((e) => e.user_id)}
+                    strategy={rectSortingStrategy}
+                  >
+                    {orderedPresence.map((e) => (
+                      <SortablePresenceTile
+                        key={e.user_id}
+                        entry={e}
+                        now={now}
+                        interactive
+                        onImOk={handleImOk}
+                        metrics={metrics}
+                      />
+                    ))}
+                  </SortableContext>
+                </Box>
+              </DndContext>
+            ) : (
+              <Box role="list" aria-label="Family" sx={peopleBoardSx}>
+                {orderedPresence.map((e) => (
+                  <Box role="listitem" key={e.user_id}>
+                    <PresenceTile
+                      entry={e}
+                      now={now}
+                      interactive={interactive}
+                      onImOk={handleImOk}
+                      metrics={metrics}
+                    />
+                  </Box>
+                ))}
+              </Box>
+            )}
           </Box>
         </Box>
-
-        {/* The DndContext must sit OUTSIDE role="list" — it renders its own
-            screen-reader live region, which is not a permitted list child. */}
-        {sortable ? (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <Box role="list" aria-label="Family" sx={peopleBandSx}>
-              <SortableContext
-                items={orderedPresence.map((e) => e.user_id)}
-                strategy={rectSortingStrategy}
-              >
-                {orderedPresence.map((e) => (
-                  <SortablePresenceTile
-                    key={e.user_id}
-                    entry={e}
-                    now={now}
-                    interactive
-                    onImOk={handleImOk}
-                    metrics={metrics}
-                  />
-                ))}
-              </SortableContext>
-            </Box>
-          </DndContext>
-        ) : (
-          <Box role="list" aria-label="Family" sx={peopleBandSx}>
-            {orderedPresence.map((e) => (
-              <Box role="listitem" key={e.user_id}>
-                <PresenceTile
-                  entry={e}
-                  now={now}
-                  interactive={interactive}
-                  onImOk={handleImOk}
-                  metrics={metrics}
-                />
-              </Box>
-            ))}
-          </Box>
-        )}
 
         {interactive && quickMessages.length > 0 && (
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
