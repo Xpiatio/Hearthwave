@@ -47,8 +47,6 @@ export function FamilyPanel(props: FamilyPanelProps) {
       </Box>
 
       <Box
-        role="list"
-        aria-label="Family members"
         sx={{
           display: 'grid', gap: 2, justifyContent: 'start',
           // auto-fit packs as many columns as the viewport allows; the tier's
@@ -58,33 +56,47 @@ export function FamilyPanel(props: FamilyPanelProps) {
             `repeat(auto-fit, minmax(min(${density.minColumnPx}px, 100%), ${density.maxColumnPx}px))`,
         }}
       >
-        {props.entries.map((entry) => (
-          <Box role="listitem" key={entry.user_id}>
-            <MemberCard entry={entry} now={now} density={density} />
+        {/* "I'm OK" leads the board as a tile the same size as a member card,
+            so the thing you came here to press sits where your eye lands
+            first. It is deliberately outside the member list — it is an
+            action, not a person. */}
+        <ButtonBase
+          onClick={props.onImOk}
+          aria-label="I'm OK"
+          sx={{
+            height: '100%',
+            minHeight: 96,
+            p: density.padding,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: density.gap,
+            borderRadius: 2,
+            fontWeight: 700,
+            bgcolor: 'success.main',
+            color: 'success.contrastText',
+          }}
+        >
+          <Box component="span" aria-hidden sx={{ fontSize: density.emojiFontSize, lineHeight: 1 }}>
+            ✅
           </Box>
-        ))}
-      </Box>
+          <Typography variant={density.nameVariant} sx={{ fontWeight: 700 }}>
+            I&apos;m OK
+          </Typography>
+        </ButtonBase>
 
-      <ButtonBase
-        onClick={props.onImOk}
-        aria-label="I'm OK"
-        sx={{
-          minHeight: 96,
-          width: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          borderRadius: 2,
-          fontSize: '1.4rem',
-          fontWeight: 700,
-          gap: 1.5,
-          bgcolor: 'success.main',
-          color: 'success.contrastText',
-        }}
-      >
-        <Box component="span" aria-hidden>✅</Box>
-        I&apos;m OK
-      </ButtonBase>
+        {/* display: contents lets the member cards be grid items of the board
+            above while still sitting inside their own list, so the button
+            isn't announced as a family member. */}
+        <Box role="list" aria-label="Family members" sx={{ display: 'contents' }}>
+          {props.entries.map((entry) => (
+            <Box role="listitem" key={entry.user_id}>
+              <MemberCard entry={entry} now={now} density={density} />
+            </Box>
+          ))}
+        </Box>
+      </Box>
 
       {props.isKid && props.quickMessages.length === 0 ? (
         <Box sx={{ p: 1 }}>
