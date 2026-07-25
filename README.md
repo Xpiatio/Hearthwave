@@ -20,7 +20,7 @@ show how it's done.
 Hearthwave is a fork of GMRS-TTY that replaces the desktop PySide6 UI with a
 browser-based React frontend communicating over WebSocket.
 
-> **Latest release:** v2.20.0
+> **Latest release:** v2.21.0
 
 ## Who uses it
 
@@ -39,6 +39,20 @@ browser-based React frontend communicating over WebSocket.
 
 ## Features
 
+- **Mesh bridges carry every spoken message** — with MeshCore or Meshtastic enabled,
+  family check-ins, wall-display quick messages, neighborhood incident reports and
+  street alerts, and Net Control's scripts, round-table calls and SKYWARN spot
+  reports all reach the mesh, not just typed chat overs. The message-box cap now
+  counts UTF-8 bytes like the radio does, so an accented name no longer lets you
+  type past what fits in one packet
+- **Boards that scale to their size** — the Neighborhood roster and incident log
+  tier their density the way the family presence board already did: a six-person net
+  keeps roomy rows, a twenty-person net packs into columns instead of one long
+  scroll, and narrowing the incident log by category gives those cards the room the
+  shorter list earned. An admin (not just a coordinator) can now clear either board
+- **"I'm OK" leads the presence board** — the household's check-in tile sits first
+  on the family panel instead of below the roster, so the button everyone actually
+  reaches for is the first thing on screen
 - **E-ink wall display** — a per-display setting (admin toggle, per device token)
   renders the `/display` kiosk for real e-ink panels: fixed grayscale black-on-white
   that ignores the day/dusk theme, no gradients, and every animation switched off. It

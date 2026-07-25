@@ -33,7 +33,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-BACKEND_IMAGE="ghcr.io/xpiatio/hearthwave-backend:v2.20.0"
+BACKEND_IMAGE="ghcr.io/xpiatio/hearthwave-backend:v2.21.0"
 VOICES_VOL="hearthwave-voices"
 MODELS_VOL="hearthwave-models"
 DATA_VOL="hearthwave-data"
