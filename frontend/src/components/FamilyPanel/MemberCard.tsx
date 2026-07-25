@@ -2,10 +2,15 @@ import { Box, Chip, Paper, Typography } from '@mui/material';
 import type { ChipProps } from '@mui/material';
 import type { FamilyPresenceEntry } from '../../types/ws';
 import { deriveStatus } from '../../family/presence';
+import { densitySpec } from '../../family/density';
+import type { DensitySpec } from '../../family/density';
 
 interface Props {
   entry: FamilyPresenceEntry;
   now: Date;
+  /** Sizing tier from the roster size — see family/density.ts. Defaults to
+   *  the roomy (small-household) tier when a caller renders a lone card. */
+  density?: DensitySpec;
 }
 
 function formatTime(iso: string): string {
@@ -41,20 +46,22 @@ function statusChip(entry: FamilyPresenceEntry, now: Date): { label: string; col
 
 /** Presence card for one family member: avatar, name, status chip, and a
  *  relative "last heard" line. */
-export function MemberCard({ entry, now }: Props) {
+export function MemberCard({ entry, now, density = densitySpec(1) }: Props) {
   const chip = statusChip(entry, now);
   return (
-    <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1, height: '100%' }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-        <Box component="span" aria-hidden sx={{ fontSize: '2.5rem', lineHeight: 1 }}>
+    <Paper sx={{ p: density.padding, display: 'flex', flexDirection: 'column', gap: density.gap, height: '100%' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: density.gap * 1.5, minWidth: 0 }}>
+        <Box component="span" aria-hidden sx={{ fontSize: density.emojiFontSize, lineHeight: 1 }}>
           {entry.avatar_emoji}
         </Box>
-        <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+        {/* overflowWrap keeps a long name inside a narrow compact-tier card
+            instead of pushing the card wider than its grid column. */}
+        <Typography variant={density.nameVariant} sx={{ fontWeight: 700, minWidth: 0, overflowWrap: 'anywhere' }}>
           {entry.display_name}
         </Typography>
       </Box>
-      <Chip size="small" color={chip.color} label={chip.label} sx={{ alignSelf: 'flex-start' }} />
-      <Typography variant="body2" color="text.secondary">
+      <Chip size="small" color={chip.color} label={chip.label} sx={{ alignSelf: 'flex-start', maxWidth: '100%' }} />
+      <Typography variant={density.detailVariant} color="text.secondary">
         Last heard {formatRelative(entry.last_heard, now)}
       </Typography>
     </Paper>

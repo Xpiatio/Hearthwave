@@ -3,6 +3,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import type { FamilyPresenceEntry } from '../../types/ws';
 import { MemberCard } from './MemberCard';
 import { ReminderEditor } from './ReminderEditor';
+import { densitySpec } from '../../family/density';
 import { useEscapeToHome } from '../../hooks/useEscapeToHome';
 
 export interface FamilyPanelProps {
@@ -28,6 +29,9 @@ export function FamilyPanel(props: FamilyPanelProps) {
   useEscapeToHome(props.onGoHome);
   const now = new Date();
   const showReminders = props.isAdmin && !props.isKid;
+  // Cards get roomier for a small household and tighter for a big one, so a
+  // large family still fits on screen. See family/density.ts.
+  const density = densitySpec(props.entries.length);
 
   return (
     <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', p: { xs: 2, md: 4 }, gap: 3 }}>
@@ -46,13 +50,17 @@ export function FamilyPanel(props: FamilyPanelProps) {
         role="list"
         aria-label="Family members"
         sx={{
-          display: 'grid', gap: 2,
-          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
+          display: 'grid', gap: 2, justifyContent: 'start',
+          // auto-fit packs as many columns as the viewport allows; the tier's
+          // max keeps a two-person household from becoming two billboards, and
+          // min(…, 100%) stops a card overflowing a phone-width screen.
+          gridTemplateColumns:
+            `repeat(auto-fit, minmax(min(${density.minColumnPx}px, 100%), ${density.maxColumnPx}px))`,
         }}
       >
         {props.entries.map((entry) => (
           <Box role="listitem" key={entry.user_id}>
-            <MemberCard entry={entry} now={now} />
+            <MemberCard entry={entry} now={now} density={density} />
           </Box>
         ))}
       </Box>
