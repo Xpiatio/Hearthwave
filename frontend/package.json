@@ -1,7 +1,7 @@
 {
   "name": "hearthwave-frontend",
   "private": true,
-  "version": "2.21.1",
+  "version": "2.22.0",
   "type": "module",
   "engines": {
     "node": ">=22.12"

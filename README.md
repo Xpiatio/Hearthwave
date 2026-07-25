@@ -20,7 +20,7 @@ show how it's done.
 Hearthwave is a fork of GMRS-TTY that replaces the desktop PySide6 UI with a
 browser-based React frontend communicating over WebSocket.
 
-> **Latest release:** v2.21.1
+> **Latest release:** v2.22.0
 
 ## Who uses it
 
@@ -39,6 +39,11 @@ browser-based React frontend communicating over WebSocket.
 
 ## Features
 
+- **The careful second pass is on from the first install** — every setup script now
+  stages `large-v3-turbo` alongside the streaming model, so the two-tier transcription
+  that cleans up long overs and callsigns works out of the box instead of waiting for
+  a model you had to know to download. Adds about 1.6 GB to the install; opt out with
+  `--final-model none`
 - **Mesh bridges carry every spoken message** — with MeshCore or Meshtastic enabled,
   family check-ins, wall-display quick messages, neighborhood incident reports and
   street alerts, and Net Control's scripts, round-table calls and SKYWARN spot
