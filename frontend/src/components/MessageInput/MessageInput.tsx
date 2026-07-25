@@ -12,6 +12,7 @@ import {
   Typography,
 } from '@mui/material';
 import type { Contact } from '../../types/ws';
+import { clampUtf8Bytes, utf8Len } from '../../utils/utf8';
 
 export interface MessageInputHandle {
   setText: (text: string) => void;
@@ -23,16 +24,17 @@ interface Props {
   onSend: (text: string, targetCall: string, targetName: string) => void;
   onChat?: (text: string) => void;
   onStandaloneId?: () => void;
-  /** When set (by an active plugin, e.g. MeshCore), cap the message length and
-   *  show a live character counter. The cap already accounts for any sender
-   *  prefix the plugin adds downstream. */
-  maxLength?: number;
+  /** When set (by an active plugin, e.g. MeshCore), cap the message size and show a
+   *  live byte counter. The cap is in UTF-8 bytes — the unit the mesh radios and the
+   *  backend clamp measure — and already accounts for any sender prefix the plugin
+   *  adds downstream. */
+  maxBytes?: number;
   /** Short label shown beside the counter (e.g. "MeshCore"). */
   composeHint?: string;
 }
 
 export const MessageInput = forwardRef<MessageInputHandle, Props>(
-  ({ transmitting, contacts, onSend, onChat, onStandaloneId, maxLength, composeHint }, ref) => {
+  ({ transmitting, contacts, onSend, onChat, onStandaloneId, maxBytes, composeHint }, ref) => {
     const [draft, setDraft] = useState('');
     const [targetKey, setTargetKey] = useState('');
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -45,7 +47,7 @@ export const MessageInput = forwardRef<MessageInputHandle, Props>(
     }));
 
     function applyDraft(value: string) {
-      setDraft(maxLength != null ? value.slice(0, maxLength) : value);
+      setDraft(maxBytes != null ? clampUtf8Bytes(value, maxBytes) : value);
     }
 
     const sortedContacts = [...contacts].sort((a, b) =>
@@ -132,19 +134,20 @@ export const MessageInput = forwardRef<MessageInputHandle, Props>(
           slotProps={{
             htmlInput: {
               'aria-label': 'Message text — press Ctrl+Enter or use the Send button to transmit',
-              ...(maxLength != null ? { maxLength } : {}),
+              // No native maxLength: it counts characters, and the cap is in bytes.
+              // applyDraft does the clamping.
             },
           }}
         />
 
-        {maxLength != null && (
+        {maxBytes != null && (
           <Typography
             variant="caption"
-            color={draft.length >= maxLength ? 'error' : 'text.secondary'}
+            color={utf8Len(draft) >= maxBytes ? 'error' : 'text.secondary'}
             sx={{ alignSelf: 'flex-end' }}
             aria-live="polite"
           >
-            {composeHint ? `${composeHint} · ` : ''}{draft.length} / {maxLength}
+            {composeHint ? `${composeHint} · ` : ''}{utf8Len(draft)} / {maxBytes} bytes
           </Typography>
         )}
 

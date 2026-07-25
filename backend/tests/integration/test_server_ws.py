@@ -11,6 +11,7 @@ Running:
 from __future__ import annotations
 
 import json
+import logging
 import threading
 from contextlib import contextmanager, ExitStack
 from pathlib import Path
@@ -4722,3 +4723,139 @@ class TestNeighborhoodAdminClear:
             err = _next_of_type(ws, "error")
         assert err is not None
         assert err["detail"] == "Admin access required."
+
+
+# ---------------------------------------------------------------------------
+# Plugin TX gate coverage — every operator transmission runs the hook chain
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def tx_spy():
+    """Register a plugin that records every TX payload and can block them all.
+
+    Mesh-bridge plugins mirror radio traffic from on_audio_tx_pre_queue, so any
+    on-air surface that skips the hook is invisible to them. These tests pin the
+    surfaces that must reach it (and the local-only ones that must not).
+    """
+    from backend.plugins.base import BasePlugin, PluginManifest
+    from backend.plugins.registry import plugin_registry
+
+    class _Spy(BasePlugin):
+        manifest = PluginManifest(
+            id="txspy", name="TX Spy", description="records TX payloads",
+            default_enabled=True,
+        )
+
+        def __init__(self) -> None:
+            self.seen: list[dict] = []
+            self.block = False
+
+        async def on_audio_tx_pre_queue(self, payload: dict) -> dict | None:
+            self.seen.append(payload)
+            return None if self.block else payload
+
+    spy = _Spy()
+    plugin_registry.register(spy)
+    try:
+        yield spy
+    finally:
+        plugin_registry._plugins = tuple(p for p in plugin_registry._plugins if p is not spy)
+
+
+def _spy_texts(spy) -> list[str]:
+    return [p.get("text", "") for p in spy.seen]
+
+
+class TestPluginTxGateCoverage:
+    def test_family_status_reaches_the_hook(self, tmp_path, tx_spy):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(tmp_path)
+        mock_users.get_public.return_value = [{"id": "test-user", "display_name": "Test Operator"}]
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "family_status", "status": "ok"})
+                    _next_of_type(ws, "chat_echo", limit=30)
+        assert any("is okay" in t for t in _spy_texts(tx_spy))
+
+    def test_neighborhood_incident_report_reaches_the_hook(self, tmp_path, tx_spy):
+        with _neighborhood_ws(tmp_path, is_admin=False) as ws:
+            ws.send_json(_valid_incident_payload())
+            _next_of_type(ws, "neighborhood_incidents", limit=30)
+        # format_incident() upper-cases the on-air phrase.
+        assert any("TREE DOWN BLOCKING THE ROAD" in t for t in _spy_texts(tx_spy))
+
+    def test_neighborhood_street_alert_reaches_the_hook(self, tmp_path, tx_spy):
+        with _neighborhood_ws(tmp_path, is_admin=False) as ws:
+            ws.send_json({"type": "neighborhood_street_alert", "message": "Gas smell on Elm"})
+            _next_of_type(ws, "tx_echo", limit=30)
+        assert any("NEIGHBORHOOD ALERT. Gas smell on Elm" in t for t in _spy_texts(tx_spy))
+
+    def test_standalone_id_reaches_the_hook(self, client, tx_spy):
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "standalone_id", "operator": "Ben", "callsign": "W5TST"})
+            _drain_until_idle(ws)
+        # The phrase is built later in the TX worker, so the payload carries the
+        # marker and the raw fields rather than text.
+        assert any(p.get("_standalone_id") for p in tx_spy.seen)
+
+    def test_voice_preview_stays_out_of_the_hook(self, client, tx_spy):
+        """A local audition never keys the radio, so it must not be mirrored."""
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "voice_preview", "text": "audition me"})
+            # voice_preview_done marks the end of the preview leg — by then the hook
+            # would have run had the preview gone through the chain.
+            assert _next_of_type(ws, "voice_preview_done", limit=10) is not None
+        assert not any(p.get("_voice_preview") for p in tx_spy.seen)
+        assert "audition me" not in _spy_texts(tx_spy)
+
+    def test_a_blocking_plugin_stops_a_family_status_transmission(self, tmp_path, tx_spy, caplog):
+        """Full-chain gating: a plugin returning None drops the TX leg. The chat and
+        presence legs still run, and the block is logged so it is diagnosable."""
+        tx_spy.block = True
+        cfg = _minimal_cfg(tmp_path)
+        mock_stt, mock_tts = _make_mocks()
+        synthesized: list[str] = []
+
+        async def _capture_synth(_voice, text, *_args, **_kwargs):
+            synthesized.append(text)
+            return None, None
+
+        mock_tts.synthesize_to_buffer = _capture_synth
+        mock_users, mock_tokens = _family_status_auth_mocks()
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch("piper.PiperVoice"),
+            caplog.at_level(logging.WARNING, logger="backend.server"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "family_status", "status": "ok"})
+                    chat = _next_of_type(ws, "chat_echo", limit=30)
+                    assert chat is not None, "chat leg must survive a blocked TX"
+
+                    # Unblock and send a second check-in: draining to its idle proves
+                    # the TX worker has caught up, so exactly one synthesis (the
+                    # second) having run is proof the first was dropped.
+                    tx_spy.block = False
+                    ws.send_json({"type": "family_status", "status": "ok"})
+                    _drain_until_idle(ws)
+
+        assert len(tx_spy.seen) == 2, "the hook must have run for both check-ins"
+        assert len(synthesized) == 1, "a blocked transmission must not be synthesized"
+        assert any("TX blocked by a plugin" in r.message for r in caplog.records)

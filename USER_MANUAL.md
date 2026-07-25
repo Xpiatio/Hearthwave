@@ -257,7 +257,7 @@ The status bar shows **Transmitting** while the radio is keyed and returns to **
 
 **Listen-only mode:** When active, all TX controls are hidden. Your setting does not affect other users — each person controls their own TX access independently.
 
-**Message length limit (mesh-bridge plugins):** When a mesh-bridge plugin (MeshCore or Meshtastic) is enabled (see [section 22](#22-plugins)), a live character counter appears under the message box showing that plugin's hint (e.g. `MeshCore · 18 / 135` or `Meshtastic · 18 / 200`) and typing is capped so the message — plus the sender-name prefix added on the mesh — fits a single mesh packet. The counter turns red at the limit. With no such plugin enabled there is no limit and no counter. Each plugin's settings live in the **Plugins** tab of the Settings dialog.
+**Message length limit (mesh-bridge plugins):** When a mesh-bridge plugin (MeshCore or Meshtastic) is enabled (see [section 22](#22-plugins)), a live byte counter appears under the message box showing that plugin's hint (e.g. `MeshCore · 18 / 135 bytes` or `Meshtastic · 18 / 200 bytes`) and typing is capped so the message — plus the sender-name prefix added on the mesh — fits a single mesh packet. The count is in UTF-8 bytes, the unit mesh radios measure, so accented or emoji characters cost more than one. The counter turns red at the limit. With no such plugin enabled there is no limit and no counter. Each plugin's settings live in the **Plugins** tab of the Settings dialog.
 
 ---
 
@@ -906,13 +906,14 @@ The MeshCore plugin forwards every message you transmit onto a [MeshCore](https:
 **What it does**
 
 - Every message that goes over the air is also sent to the mesh, **prefixed with the sender's name** (e.g. `Ben: heading home`), so mesh-only members know who is talking.
+- That covers every spoken surface, not just typed chat: family check-ins ("I'm OK", including from the wall display), wall-display quick messages, neighborhood incident reports and street alerts, and net scripts, round-table prompts and SKYWARN spot reports from Net Control. Two things carry no text to forward, so they are announced on the radio only: live voice transmissions, and the "This is" station ID.
 - It is **outbound only** — messages *received* on the radio are never forwarded to the mesh. Only what your station transmits is bridged.
 - Because it taps the transmit pipeline after all checks, a message blocked by NCS **BREAK BREAK** is never forwarded either.
 - Forwarding is best-effort and never delays or blocks the radio transmission itself; if the mesh link is busy or down, the over still goes out on the radio normally.
 
 **What you see as an operator**
 
-When the plugin is on, the message box shows a live character counter (e.g. `MeshCore · 18 / 135`) and limits what you type so the message plus the name prefix fits one mesh packet. The limit is the configured **max packet length** minus your prefix length, so a longer display name leaves a little less room. The counter turns red at the limit.
+When the plugin is on, the message box shows a live byte counter (e.g. `MeshCore · 18 / 135 bytes`) and limits what you type so the message plus the name prefix fits one mesh packet. The limit is the configured **max packet length** minus your prefix, both measured in UTF-8 bytes, so a longer display name — or one with accented letters — leaves a little less room. The counter turns red at the limit.
 
 **Settings (Plugins tab)**
 
@@ -922,7 +923,7 @@ Enable the plugin from the Plugins tab and edit its settings there:
 |---------|-------------|
 | Device | Serial device of the MeshCore Companion radio (e.g. `/dev/ttyUSB0`). In Docker the port must also be passed into the container (see below). |
 | Baud rate | Serial speed of the Companion link (default `115200`). |
-| Max packet length | Characters per mesh packet, **including** the sender-name prefix (default `140`). This drives the message-box character limit. |
+| Max packet length | UTF-8 bytes per mesh packet, **including** the sender-name prefix (default `140`). This drives the message-box byte limit. |
 | Channel index | Which MeshCore channel to transmit on (default `0`). |
 | Name separator | Joins the sender name and the message on the mesh (default `": "` → `Alice: hello`). |
 
@@ -940,14 +941,14 @@ The Meshtastic plugin is the second mesh-bridge example seeded into `/data/plugi
 
 > **Mutually exclusive with MeshCore:** enabling Meshtastic automatically disables MeshCore, and vice versa. Only one mesh bridge runs at a time.
 
-When enabled, it adds the same live character counter under the message box, showing its own hint (e.g. `Meshtastic · 18 / 200`) and capping typing so the prefixed message fits one packet.
+When enabled, it adds the same live byte counter under the message box, showing its own hint (e.g. `Meshtastic · 18 / 200 bytes`) and capping typing so the prefixed message fits one packet.
 
 **Settings (Plugins tab)**
 
 | Setting | Description |
 |---------|-------------|
 | Device | Serial device of the Meshtastic radio (e.g. `/dev/ttyUSB0`). In Docker the port must also be passed into the container. |
-| Max packet length | Characters per mesh packet, including the sender-name prefix. Drives the message-box character limit. |
+| Max packet length | UTF-8 bytes per mesh packet, including the sender-name prefix. Drives the message-box byte limit. |
 | Channel index | Which Meshtastic channel to transmit on. |
 | Name separator | Joins the sender name and the message on the mesh. |
 

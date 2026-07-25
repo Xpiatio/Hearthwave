@@ -448,8 +448,8 @@ pass-through, not a block).
 A plugin can also constrain the core message input without the input knowing
 anything about it, by declaring the `tx_composition` field on its manifest. The
 input honours the most restrictive declaration across enabled plugins (live
-character counter + length cap). MeshCore declares one so its packet-length budget
-is enforced as you type.
+byte counter + length cap, counted in UTF-8 bytes to match what the mesh radios
+measure). MeshCore declares one so its packet-length budget is enforced as you type.
 
 ### Examples and built-ins
 

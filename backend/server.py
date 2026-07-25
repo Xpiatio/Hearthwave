@@ -247,6 +247,43 @@ _stt_out_queue: asyncio.Queue = asyncio.Queue()
 _tx_queue: asyncio.Queue = asyncio.Queue()
 _tts_event_queue: asyncio.Queue = asyncio.Queue()
 
+# Payload markers that name a transmission's origin, most specific first — used
+# only to label the log line when a plugin blocks a transmission.
+_TX_KIND_MARKERS = ("_standalone_id", "_voice_tx", "_beacon", "_pre_formatted")
+
+
+def _tx_payload_kind(payload: dict) -> str:
+    """Short label for a TX payload, for diagnostics."""
+    for marker in _TX_KIND_MARKERS:
+        if payload.get(marker):
+            return marker.lstrip("_")
+    return "chat"
+
+
+async def _tx_enqueue(payload: dict) -> bool:
+    """Run the plugin TX gate chain, then queue the transmission.
+
+    The single funnel for every operator-initiated transmission — chat [tx] sends,
+    family check-ins, wall-display quick messages, neighborhood incident reports and
+    street alerts, round-table prompts, standalone IDs, voice TX, and plugin-authored
+    traffic. Routing them all through one place is what lets a forwarding plugin (the
+    MeshCore/Meshtastic bridges) mirror all radio traffic rather than chat alone, and
+    what lets NCS BREAK BREAK hold every kind of transmission.
+
+    Automatic station keeping stays out of the chain and puts to _tx_queue directly:
+    the FCC ID-rule pump (mandated, must never be blockable) and the monitoring beacon
+    (already NCS-aware via should_emit_beacon). So does voice_preview, which is a local
+    audition and never keys the radio.
+
+    Returns False when a plugin blocked TX, in which case nothing was queued.
+    """
+    result = await plugin_registry.dispatch_tx_pre_queue(payload)
+    if result is None:
+        _log.warning("TX blocked by a plugin: %s", _tx_payload_kind(payload))
+        return False
+    await _tx_queue.put(result)
+    return True
+
 # Background tasks — kept alive so they are not GC'd mid-run
 _background_tasks: set[asyncio.Task] = set()
 
@@ -1723,6 +1760,10 @@ async def _lifespan(app: FastAPI):
     _ncs_plugin = NCSPlugin(
         broadcast_fn=_manager.broadcast,
         tx_queue=_tx_queue,
+        # NCS keeps the raw queue (it drains it to abort TX on BREAK BREAK) but
+        # enqueues through the gate chain, so its scripts, round-table prompts and
+        # spot reports reach forwarding plugins like any other transmission.
+        enqueue_fn=_tx_enqueue,
         config_getter=lambda: _config,
         channel_clear_fn=lambda: _channel_clear,
         contacts_getter=lambda: _contacts_store.get_all() if _contacts_store else [],
@@ -1739,7 +1780,9 @@ async def _lifespan(app: FastAPI):
     from backend.plugins.context import PluginContext
 
     async def _enqueue_tx(payload: dict) -> None:
-        await _tx_queue.put(payload)
+        # Through the gate chain, so plugin-authored traffic is mirrored/gated by
+        # the other plugins exactly like operator traffic.
+        await _tx_enqueue(payload)
 
     _plugin_ctx = PluginContext(
         broadcast=_manager.broadcast,
@@ -2453,7 +2496,7 @@ _NEIGHBORHOOD_NET_DAYS = (
 _HHMM_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
-async def _enqueue_family_tts(text: str, state: "ConnectionState") -> None:
+async def _enqueue_family_tts(text: str, state: "ConnectionState") -> bool:
     """Enqueue a pre-formatted family_status phrase for TTS/PTT.
 
     Mirrors the NCS spot-report/net-script enqueue idiom: operator-initiated
@@ -2461,8 +2504,10 @@ async def _enqueue_family_tts(text: str, state: "ConnectionState") -> None:
     Also mirrors tx_message's voice resolution (state.prefs tts_voice/
     tts_length_scale) so "I'm OK" speaks in the sender's own configured
     voice rather than the station default.
+
+    Returns False when a plugin blocked the transmission (see _tx_enqueue).
     """
-    await _tx_queue.put({
+    return await _tx_enqueue({
         "text": text,
         "_pre_formatted": True,
         "_operator_initiated": True,
@@ -2717,7 +2762,7 @@ async def websocket_endpoint(
                     tx_voice = state.prefs.get("tts_voice") or None
                     tx_scale = state.prefs.get("tts_length_scale") or None
                     tx_display = _tx_sender_display
-                tx_payload = await plugin_registry.dispatch_tx_pre_queue({
+                queued = await _tx_enqueue({
                     **data,
                     "_filter_profanity": state.prefs.get("filter_profanity", True),
                     "_voice_name": tx_voice,
@@ -2727,9 +2772,8 @@ async def websocket_endpoint(
                     # Operator pressed Transmit — overrides the channel-busy squelch.
                     "_operator_initiated": True,
                 })
-                if tx_payload is None:
+                if not queued:
                     continue  # TX blocked by a plugin
-                await _tx_queue.put(tx_payload)
                 await _manager.broadcast({"type": "tx_status", "status": "transmitting"})
                 if _presence_store is not None:
                     _presence_store.touch_heard(state.user_id, utc_now_iso())
@@ -3129,8 +3173,7 @@ async def websocket_endpoint(
                     continue
                 if await _check_listen_only(ws, state):
                     continue
-                await _manager.broadcast({"type": "tx_status", "status": "transmitting"})
-                await _tx_queue.put({
+                queued = await _tx_enqueue({
                     "_standalone_id": True,
                     "_operator_initiated": True,
                     "_filter_profanity": state.prefs.get("filter_profanity", True),
@@ -3140,6 +3183,9 @@ async def websocket_endpoint(
                     "_voice_name": state.prefs.get("tts_voice") or None,
                     "_length_scale": state.prefs.get("tts_length_scale") or None,
                 })
+                if not queued:
+                    continue  # TX blocked by a plugin
+                await _manager.broadcast({"type": "tx_status", "status": "transmitting"})
 
             elif msg_type == "voice_preview":
                 # Synthesize a test phrase locally (no PTT keying) so the
@@ -3777,8 +3823,10 @@ async def websocket_endpoint(
                     rec = _users_store.get_public_one(state.user_id) or {}
                     display_name = rec.get("display_name") or ""
 
-                await _manager.broadcast({"type": "tx_status", "status": "transmitting"})
-                await _tx_queue.put({
+                # Raw operator audio: it carries no text, so a forwarding plugin has
+                # nothing to mirror — but it still passes the gate chain so NCS
+                # BREAK BREAK can hold it like any other transmission.
+                queued = await _tx_enqueue({
                     "_voice_tx":     True,
                     "audio_bytes":   audio_bytes,
                     "sample_rate":   16000,
@@ -3786,6 +3834,10 @@ async def websocket_endpoint(
                     "operator":      operator,
                     "_display_name": display_name,
                 })
+                if not queued:
+                    await _manager.send_to(ws, {"type": "voice_tx_error", "detail": "Transmission blocked."})
+                    continue
+                await _manager.broadcast({"type": "tx_status", "status": "transmitting"})
 
             elif msg_type == "voice_tx_cancel":
                 state.voice_tx_active   = False
@@ -3876,7 +3928,7 @@ async def websocket_endpoint(
                 if row is not None:
                     station_callsign = _config.callsign if _config else ""
                     text = f"{row['name']}, you're up. Anything to report? {station_callsign}."
-                    await _tx_queue.put(
+                    await _tx_enqueue(
                         {"text": text, "_pre_formatted": True, "_operator_initiated": True}
                     )
                 await _manager.broadcast(_build_neighborhood_state_msg())
@@ -3966,7 +4018,7 @@ async def websocket_endpoint(
                 # Safety report so it still logs/broadcasts in listen-only mode
                 # (family_status precedent) — listen-only only skips the TX leg.
                 if not state.prefs.get("listen_only", False):
-                    await _tx_queue.put(
+                    await _tx_enqueue(
                         {"text": text, "_pre_formatted": True, "_operator_initiated": True}
                     )
                 ts = utc_now_iso()
@@ -4013,7 +4065,7 @@ async def websocket_endpoint(
                 # Safety broadcast — listen-only only skips the TX leg (same
                 # precedent as neighborhood_incident_report/family_status).
                 if not state.prefs.get("listen_only", False):
-                    await _tx_queue.put(
+                    await _tx_enqueue(
                         {"text": text, "_pre_formatted": True, "_operator_initiated": True}
                     )
                 ts = utc_now_iso()

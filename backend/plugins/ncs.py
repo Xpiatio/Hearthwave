@@ -241,9 +241,15 @@ class NCSPlugin(BasePlugin):
         add_contact_fn: Optional[Callable] = None,
         update_contact_fn: Optional[Callable] = None,
         broadcast_contacts_fn: Optional[Callable] = None,
+        enqueue_fn: Optional[Callable] = None,
     ) -> None:
         self._broadcast = broadcast_fn
+        # The raw queue is still needed to drain pending TX on BREAK BREAK; every
+        # enqueue goes through `enqueue_fn` instead, which runs the plugin gate chain
+        # so NCS-authored text reaches forwarding plugins. Defaults to a bare put so
+        # a caller can construct NCS with just a queue.
         self._tx_queue = tx_queue
+        self._enqueue = enqueue_fn or tx_queue.put
         self._get_config = config_getter
         self._channel_clear = channel_clear_fn
         self._contacts_getter = contacts_getter
@@ -553,7 +559,7 @@ class NCSPlugin(BasePlugin):
         text = self._format_spot_report(payload)
         # Operator-initiated so it keys even over a busy channel (like the
         # Transmit button); BREAK BREAK can still suppress it via on_audio_tx_pre_queue.
-        await self._tx_queue.put(
+        await self._enqueue(
             {"text": text, "_pre_formatted": True, "_operator_initiated": True}
         )
 
@@ -608,7 +614,7 @@ class NCSPlugin(BasePlugin):
         text = _format_net_script(
             template, callsign=callsign, name=config.name, location=config.location
         )
-        await self._tx_queue.put(
+        await self._enqueue(
             {"text": text, "_pre_formatted": True, "_operator_initiated": True}
         )
         await self._chat_echo(text, "NET CONTROL", callsign.upper())
@@ -631,7 +637,7 @@ class NCSPlugin(BasePlugin):
         name = (entry.get("name") or "").strip()
         who = f"{entry['callsign']}, {name}" if name else entry["callsign"]
         text = f"Station {who}, do you have any traffic or comments? {config.callsign}."
-        await self._tx_queue.put(
+        await self._enqueue(
             {"text": text, "_pre_formatted": True, "_operator_initiated": True}
         )
         await self._broadcast_roster()
@@ -739,7 +745,7 @@ class NCSPlugin(BasePlugin):
             if severity in ("Extreme", "Severe") and self._channel_clear():
                 config = self._get_config()
                 text = f"SKYWARN ALERT. {headline}. {config.callsign}."
-                await self._tx_queue.put({"text": text, "_pre_formatted": True})
+                await self._enqueue({"text": text, "_pre_formatted": True})
                 _log.info("NCS auto-TX SKYWARN alert: %s", headline[:60])
 
     # ------------------------------------------------------------------
@@ -759,7 +765,7 @@ class NCSPlugin(BasePlugin):
                         f"{station_name} in {loc}. "
                         f"Calling all stations. {config.callsign}."
                     )
-                    await self._tx_queue.put({"text": text, "_pre_formatted": True})
+                    await self._enqueue({"text": text, "_pre_formatted": True})
                     _log.debug("NCS periodic announcement transmitted")
             except asyncio.CancelledError:
                 return

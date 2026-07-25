@@ -322,16 +322,16 @@ describe('MessageInput', () => {
     })
   })
 
-  describe('character limit (TX composition)', () => {
-    it('shows no counter when maxLength is not set', () => {
+  describe('byte limit (TX composition)', () => {
+    it('shows no counter when maxBytes is not set', () => {
       render(<MessageInput transmitting={false} contacts={[]} onSend={vi.fn()} />)
       expect(screen.queryByText(/\d+\s*\/\s*\d+/)).not.toBeInTheDocument()
     })
 
-    it('renders a live counter with the hint when maxLength is set', async () => {
+    it('renders a live counter with the hint when maxBytes is set', async () => {
       const user = userEvent.setup()
       render(
-        <MessageInput transmitting={false} contacts={[]} onSend={vi.fn()} maxLength={20} composeHint="MeshCore" />
+        <MessageInput transmitting={false} contacts={[]} onSend={vi.fn()} maxBytes={20} composeHint="MeshCore" />
       )
       expect(screen.getByText(/MeshCore/)).toBeInTheDocument()
       expect(screen.getByText(/0\s*\/\s*20/)).toBeInTheDocument()
@@ -339,10 +339,10 @@ describe('MessageInput', () => {
       expect(screen.getByText(/5\s*\/\s*20/)).toBeInTheDocument()
     })
 
-    it('clamps typed text to maxLength', async () => {
+    it('clamps typed text to maxBytes', async () => {
       const user = userEvent.setup()
       render(
-        <MessageInput transmitting={false} contacts={[]} onSend={vi.fn()} maxLength={5} composeHint="MeshCore" />
+        <MessageInput transmitting={false} contacts={[]} onSend={vi.fn()} maxBytes={5} composeHint="MeshCore" />
       )
       const box = screen.getByRole('textbox', { name: /message text/i })
       await user.type(box, '0123456789')
@@ -350,11 +350,11 @@ describe('MessageInput', () => {
       expect(screen.getByText(/5\s*\/\s*5/)).toBeInTheDocument()
     })
 
-    it('does not send more than maxLength characters', async () => {
+    it('does not send more bytes than maxBytes', async () => {
       const user = userEvent.setup()
       const onSend = vi.fn()
       render(
-        <MessageInput transmitting={false} contacts={[]} onSend={onSend} maxLength={5} composeHint="MeshCore" />
+        <MessageInput transmitting={false} contacts={[]} onSend={onSend} maxBytes={5} composeHint="MeshCore" />
       )
       const box = screen.getByRole('textbox', { name: /message text/i })
       await user.type(box, 'abcdefghij')
@@ -362,9 +362,21 @@ describe('MessageInput', () => {
       expect(onSend).toHaveBeenCalledWith('abcde', 'ALL', '')
     })
 
+    it('counts and clamps multibyte characters by their byte cost', async () => {
+      const user = userEvent.setup()
+      render(
+        <MessageInput transmitting={false} contacts={[]} onSend={vi.fn()} maxBytes={5} composeHint="MeshCore" />
+      )
+      const box = screen.getByRole('textbox', { name: /message text/i })
+      // "é" is 2 bytes, so two of them fill 4 of the 5 bytes and the third cannot fit.
+      await user.type(box, 'ééé')
+      expect(box).toHaveValue('éé')
+      expect(screen.getByText(/4\s*\/\s*5/)).toBeInTheDocument()
+    })
+
     it('has no a11y violations with the counter', async () => {
       const { container } = render(
-        <MessageInput transmitting={false} contacts={[]} onSend={vi.fn()} maxLength={20} composeHint="MeshCore" />
+        <MessageInput transmitting={false} contacts={[]} onSend={vi.fn()} maxBytes={20} composeHint="MeshCore" />
       )
       expect(await axe(container)).toHaveNoViolations()
     })
