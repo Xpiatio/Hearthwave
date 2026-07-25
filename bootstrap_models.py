@@ -12,8 +12,12 @@ Usage:
     python bootstrap_models.py --model medium.en     # higher accuracy
 
     # Two-tier RX pipeline — stage the streaming model and the final-pass
-    # model in one run (set whisper_model + whisper_model_final to match):
-    python bootstrap_models.py --model small.en distil-large-v3
+    # model in one run. large-v3-turbo is what the install scripts stage by
+    # default and what whisper_model_final="auto" prefers:
+    python bootstrap_models.py --model small.en large-v3-turbo
+
+    # GPU final pass (HF transformers format, staged at Models/STT/<name>-hf):
+    python bootstrap_models.py --final-model large-v3-turbo --final-backend gpu
 """
 import argparse
 import os

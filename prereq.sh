@@ -6,18 +6,22 @@
 # Requires only docker — no Python or pip needed on the host.
 #
 # Usage:
-#   bash prereq.sh                   # full setup: Whisper small.en + all voices
+#   bash prereq.sh                   # full setup: small.en + large-v3-turbo + all voices
 #   bash prereq.sh --model base.en   # use a smaller/faster Whisper model
 #   bash prereq.sh --model medium.en # use a higher-accuracy Whisper model
-#   bash prereq.sh --final-model distil-large-v3  # also stage the two-tier
-#                                    # final-pass model (set whisper_model_final to match)
+#   bash prereq.sh --final-model distil-large-v3  # stage a different two-tier
+#                                    # final-pass model
+#   bash prereq.sh --final-model none # skip the final-pass model (single-pass RX)
 #   bash prereq.sh --voice-only      # add/update voices only (skip Whisper)
 
 set -euo pipefail
 
 VOICE_ONLY=false
 WHISPER_MODEL="small.en"
-FINAL_MODEL=""
+# Two-tier final-pass model staged by default (~1.6 GB), matching the
+# whisper_model_final="auto" preference order (turbo > distil > large-v3):
+# without it staged, "auto" silently resolves to single-pass.
+FINAL_MODEL="large-v3-turbo"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -28,7 +32,7 @@ while [[ $# -gt 0 ]]; do
       [[ $# -lt 2 ]] && { echo "Error: --final-model requires a value." >&2; exit 1; }
       FINAL_MODEL="$2"; shift 2 ;;
     --voice-only) VOICE_ONLY=true; shift ;;
-    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
     *) echo "Unknown argument: $1  (try --help)" >&2; exit 1 ;;
   esac
 done
@@ -71,6 +75,9 @@ repo_for_model() {
       exit 1 ;;
   esac
 }
+
+# "none"/"off" (and "") mean: single-pass RX, stage no final model.
+[[ "$FINAL_MODEL" == "none" || "$FINAL_MODEL" == "off" ]] && FINAL_MODEL=""
 
 repo_for_model "$WHISPER_MODEL" > /dev/null            # validate primary
 [[ -n "$FINAL_MODEL" ]] && repo_for_model "$FINAL_MODEL" > /dev/null  # validate final

@@ -331,7 +331,7 @@ Hearthwave ships with three deployment profiles. Choose the one that matches you
 | Profile | Compose file | Setup script | Notes |
 |---|---|---|---|
 | **CPU** (default) | `docker-compose.yml` | `setup-cpu.sh` (or `setup.sh`) | Prebuilt image — recommended for most users |
-| **AMD GPU (ROCm)** | `docker-compose.rocm.yml` | `setup-rocm.sh` | Runs the final pass on an AMD GPU; **image built locally** (~28 GB, not published to registry) |
+| **AMD GPU (ROCm)** | `docker-compose.rocm.yml` | `setup-rocm.sh` | Runs the final pass on an AMD GPU; **image built locally** (~16 GB, not published to registry) |
 | **NVIDIA GPU (CUDA)** | `docker-compose.cuda.yml` | `setup-cuda.sh` | **Stub — not yet validated**; structure is in place but untested |
 
 ### CPU install (default)
@@ -369,16 +369,24 @@ your callsign, audio devices, and PTT interface.
 ## Development
 
 ```bash
-# Backend (requires Python 3.11+)
-pip install -r requirements.txt
-uvicorn backend.main:app --reload
+# Backend (Python 3.13 in the images; 3.11+ works)
+pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+uvicorn backend.server:app --reload --port 8765
+cd backend && python -m pytest        # 2027 tests
 
-# Frontend
+# Frontend (Node 22, matching the image builder stage)
 cd frontend
-npm install
-npm run dev        # dev server on :5173
-npm run test       # run test suite
+npm ci
+npm run dev        # dev server on :5173, proxies /ws + /auth to :8765
+npm run test       # vitest, 1035 tests
 npm run build      # production build
+```
+
+The dev server's proxy target is `BACKEND_URL` (default `http://localhost:8765`), so
+you can point a hot-reloading frontend at a backend running in Docker:
+
+```bash
+BACKEND_URL=http://<backend-container-ip>:8765 npm run dev -- --host 0.0.0.0
 ```
 
 ## Plugin system

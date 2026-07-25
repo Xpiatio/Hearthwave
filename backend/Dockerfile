@@ -27,6 +27,24 @@ RUN if [ "$COMPUTE_BACKEND" = "cuda" ]; then \
                /install/lib/python*/site-packages/torchaudio \
                /install/lib/python*/site-packages/torchaudio-*.dist-info \
                /install/lib/python*/site-packages/torchgen && \
+        # The CPU/PyPI torch above dragged in its CUDA runtime dependencies
+        # (~2.7 GB of nvidia-* wheels) plus CUDA triton (~691 MB). The ROCm
+        # torch installed next bundles its own ROCm libs under torch/lib and
+        # never dlopens the nvidia ones. triton goes too: it exists only for
+        # torch.compile/Inductor, which needs a C compiler at runtime, and the
+        # slim runtime stage deliberately ships none ("Failed to find C
+        # compiler"), so neither CUDA triton nor its 862 MB pytorch-triton-rocm
+        # counterpart can ever be used here. Nothing in Hearthwave calls
+        # torch.compile. Verified with all of this removed: torch + torchaudio
+        # import, the GPU is detected, and a GPU matmul runs.
+        # Side effect: `pip check` reports the unsatisfied pytorch-triton-rocm
+        # requirement. That is cosmetic and expected.
+        rm -rf /install/lib/python*/site-packages/nvidia \
+               /install/lib/python*/site-packages/nvidia_*.dist-info \
+               /install/lib/python*/site-packages/cuda \
+               /install/lib/python*/site-packages/cuda_*.dist-info \
+               /install/lib/python*/site-packages/triton \
+               /install/lib/python*/site-packages/triton-*.dist-info && \
         pip install --no-cache-dir --prefix=/install --no-deps \
             --index-url https://download.pytorch.org/whl/rocm6.4 \
             torch torchaudio; \

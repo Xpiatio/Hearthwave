@@ -6,15 +6,22 @@
 # Runs the STT final pass on an AMD GPU (ROCm); streaming stays on CPU.
 #
 # Usage:
-#   bash setup-rocm.sh                                  # small.en + distil-large-v3 final + voices
+#   bash setup-rocm.sh                                  # small.en + large-v3-turbo final + voices
 #   bash setup-rocm.sh --model base.en                 # smaller streaming model
 #   bash setup-rocm.sh --final-model distil-large-v3   # choose the GPU final-pass model
+#   bash setup-rocm.sh --final-model none              # skip the final model (single-pass RX)
 #   bash setup-rocm.sh --skip-voices                   # skip Piper voices
 
 set -euo pipefail
 
 WHISPER_MODEL="small.en"
-FINAL_MODEL="distil-large-v3"      # GPU final pass default
+# GPU final pass default. Matches the whisper_model_final="auto" preference
+# order (large-v3-turbo > distil-large-v3 > large-v3), so a fresh install has
+# the model "auto" actually wants. Staged twice: CT2 (~1.6 GB, CPU fallback)
+# and HF transformers (~1.6 GB, GPU). On the Radeon 680M the design-doc
+# shootout measured distil-large-v3 ~40% faster on long utterances at a WER
+# wash — pass --final-model distil-large-v3 if you want that trade instead.
+FINAL_MODEL="large-v3-turbo"
 SKIP_VOICES=false
 
 while [[ $# -gt 0 ]]; do
@@ -22,7 +29,7 @@ while [[ $# -gt 0 ]]; do
     --model)       [[ $# -lt 2 ]] && { echo "Error: --model needs a value." >&2; exit 1; }; WHISPER_MODEL="$2"; shift 2 ;;
     --final-model) [[ $# -lt 2 ]] && { echo "Error: --final-model needs a value." >&2; exit 1; }; FINAL_MODEL="$2"; shift 2 ;;
     --skip-voices) SKIP_VOICES=true; shift ;;
-    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
     *) echo "Unknown argument: $1  (try --help)" >&2; exit 1 ;;
   esac
 done
@@ -66,6 +73,9 @@ VOICES=(
 [[ -f backend/requirements.txt ]] || { echo "Error: run from the Hearthwave repo root." >&2; exit 1; }
 command -v docker &>/dev/null || { echo "Error: docker not found in PATH." >&2; exit 1; }
 docker info &>/dev/null || { echo "Error: Docker daemon not running or no permission." >&2; exit 1; }
+
+# "none"/"off" (and "") mean: single-pass RX, stage no final model.
+[[ "$FINAL_MODEL" == "none" || "$FINAL_MODEL" == "off" ]] && FINAL_MODEL=""
 
 # Validate model choices early.
 ct2_repo_for "$WHISPER_MODEL" >/dev/null

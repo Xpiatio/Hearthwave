@@ -1,0 +1,11 @@
+# Test/development-only dependencies. Not installed into the runtime images —
+# install alongside requirements.txt when you want to run the test suite:
+#     pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+#     cd backend && python -m pytest
+-r requirements.txt
+
+pytest
+# starlette's TestClient (used by tests/unit/test_auth_routes.py and the plugin
+# endpoint tests) is built on httpx. It arrives transitively today, but the tests
+# import TestClient directly, so declare it rather than rely on that.
+httpx

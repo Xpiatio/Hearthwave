@@ -16,9 +16,12 @@
 #    hearthwave-voices    | Piper ONNX voice files (*.onnx + *.onnx.json)
 #    hearthwave-models    | faster-whisper model dir(s) — streaming + optional final-pass
 #
-#    TWO-TIER (higher RX accuracy): stage a second, larger model for the
-#    full-utterance final pass alongside the streaming model:
-#       bash prereq.sh --final-model distil-large-v3   # or large-v3-turbo
+#    TWO-TIER (higher RX accuracy): prereq.sh stages a second, larger model for
+#    the full-utterance final pass alongside the streaming model. The default is
+#    large-v3-turbo (~1.6 GB) — the model "auto" prefers:
+#       bash prereq.sh                                 # small.en + large-v3-turbo
+#       bash prereq.sh --final-model distil-large-v3   # faster on long overs
+#       bash prereq.sh --final-model none              # single-pass RX
 #    New installs default whisper_model_final="auto" and pick the staged model
 #    up automatically (turbo > distil > large-v3); a persisted "" (explicit
 #    off) stays off until set to "auto" or a model name in Settings.
