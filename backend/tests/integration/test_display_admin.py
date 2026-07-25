@@ -18,6 +18,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from starlette.testclient import TestClient
 
+from backend import server
 from backend.config import ServerConfig
 from backend.persistence.device_tokens import DeviceTokenStore
 from backend.server import app
@@ -104,6 +105,15 @@ def _drain_display_snapshots(ws, limit: int = 8) -> list[dict]:
     return frames
 
 
+@pytest.fixture(autouse=True)
+def _fresh_pair_limiters():
+    """The pairing rate limiters are module-level and would otherwise leak
+    one test's attempts into the next."""
+    server._pair_ip_limiter.reset()
+    server._pair_global_limiter.reset()
+    yield
+
+
 @pytest.fixture
 def device_store(tmp_path):
     """Real (tmp_path-backed) DeviceTokenStore — not a mock — so
@@ -188,7 +198,9 @@ class TestDeviceTokenAdmin:
         admin_ws.send_json({"type": "device_token_list"})
         msg = _next_of_type(admin_ws, "device_tokens")
         assert msg["tokens"] and "token" not in msg["tokens"][0]
-        assert set(msg["tokens"][0].keys()) == {"id", "label", "created_at", "last_seen", "eink"}
+        assert set(msg["tokens"][0].keys()) == {
+            "id", "label", "created_at", "last_seen", "eink", "order",
+        }
 
     def test_create_invalid_label_returns_error(self, admin_ws):
         admin_ws.send_json({"type": "device_token_create", "label": ""})
@@ -227,6 +239,62 @@ class TestDeviceTokenAdmin:
         msg = _next_of_type(user_ws, "error")
         assert msg is not None
         assert "admin" in msg["detail"].lower()
+
+
+class TestPairingCodes:
+    """A display is paired by typing a six-digit code, not a 43-character
+    token. Codes can also be re-issued for an existing display so a browser
+    that lost its storage can re-pair without losing the panel's settings."""
+
+    def test_create_also_returns_a_pairing_code(self, admin_ws):
+        admin_ws.send_json({"type": "device_token_create", "label": "Kitchen"})
+        msg = _next_of_type(admin_ws, "device_token_created")
+        assert msg["pairing_code"].isdigit()
+        assert len(msg["pairing_code"]) == 6
+
+    def test_code_redeems_for_the_token_over_http(self, admin_ws, client):
+        admin_ws.send_json({"type": "device_token_create", "label": "Kitchen"})
+        created = _next_of_type(admin_ws, "device_token_created")
+        res = client.post("/display/pair", json={"code": created["pairing_code"]})
+        assert res.status_code == 200
+        assert res.json()["token"] == created["record"]["token"]
+
+    def test_code_is_single_use_over_http(self, admin_ws, client):
+        admin_ws.send_json({"type": "device_token_create", "label": "Kitchen"})
+        created = _next_of_type(admin_ws, "device_token_created")
+        client.post("/display/pair", json={"code": created["pairing_code"]})
+        assert client.post("/display/pair", json={"code": created["pairing_code"]}).status_code == 404
+
+    def test_admin_can_reissue_a_code_for_an_existing_display(self, admin_ws, client):
+        admin_ws.send_json({"type": "device_token_create", "label": "Kitchen"})
+        created = _next_of_type(admin_ws, "device_token_created")
+        _next_of_type(admin_ws, "device_tokens")
+
+        admin_ws.send_json({"type": "device_token_pair_code", "id": created["record"]["id"]})
+        reissued = _next_of_type(admin_ws, "device_token_pair_code")
+        res = client.post("/display/pair", json={"code": reissued["pairing_code"]})
+        assert res.status_code == 200
+        assert res.json()["token"] == created["record"]["token"]
+
+    def test_reissue_for_unknown_display_errors(self, admin_ws):
+        admin_ws.send_json({"type": "device_token_pair_code", "id": "nope"})
+        msg = _next_of_type(admin_ws, "error")
+        assert msg is not None
+
+    def test_non_admin_cannot_mint_a_code(self, user_ws):
+        user_ws.send_json({"type": "device_token_pair_code", "id": "whatever"})
+        msg = _next_of_type(user_ws, "error")
+        assert msg is not None
+        assert "admin" in msg["detail"].lower()
+
+    def test_guessing_is_rate_limited_per_ip(self, client):
+        # Six digits is only safe because guessing is throttled.
+        statuses = [
+            client.post("/display/pair", json={"code": f"{n:06d}"}).status_code
+            for n in range(10)
+        ]
+        assert statuses[:5] == [404] * 5
+        assert statuses[5:] == [429] * 5
 
 
 # ---------------------------------------------------------------------------

@@ -293,3 +293,38 @@ class TestDisplayHandlersRequireDisplayConnection:
         msg = _next_of_type(admin_ws, "error")
         assert msg is not None
         assert "wall display" in msg["detail"].lower()
+
+    def test_set_order_rejected_from_regular_connection(self, admin_ws):
+        admin_ws.send_json({"type": "display_set_order", "order": ["u1"]})
+        msg = _next_of_type(admin_ws, "error")
+        assert msg is not None
+        assert "wall display" in msg["detail"].lower()
+
+
+class TestDisplaySetOrder:
+    """Tile order is stored per wall panel, on the device token it connected
+    with — so two panels in different rooms can be sorted differently and the
+    order survives a browser that clears its local storage."""
+
+    def test_order_is_persisted_to_the_device_token(self, client, display_token, device_store):
+        with client.websocket_connect(f"/ws?device_token={display_token}") as ws:
+            _drain_display_snapshots(ws)
+            ws.send_json({"type": "display_set_order", "order": ["u2", "u1"]})
+            ack = _next_of_type(ws, "display_ack")
+        assert ack is not None and ack["action"] == "order"
+        assert device_store.list_all()[0]["order"] == ["u2", "u1"]
+
+    def test_stored_order_comes_back_in_display_config(self, client, display_token, device_store):
+        device_store.set_order(device_store.list_all()[0]["id"], ["u3", "u1"])
+        with client.websocket_connect(f"/ws?device_token={display_token}") as ws:
+            cfg = _next_of_type(ws, "display_config")
+        assert cfg is not None
+        assert cfg["order"] == ["u3", "u1"]
+
+    def test_malformed_order_is_rejected_with_an_error(self, client, display_token, device_store):
+        with client.websocket_connect(f"/ws?device_token={display_token}") as ws:
+            _drain_display_snapshots(ws)
+            ws.send_json({"type": "display_set_order", "order": [123]})
+            msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert device_store.list_all()[0]["order"] == []

@@ -96,6 +96,9 @@ interface Props {
   onCreateDeviceToken: (label: string) => void;
   onRevokeDeviceToken: (id: string) => void;
   onSetDeviceTokenEink: (id: string, eink: boolean) => void;
+  /** The most recent pairing code — six digits, single-use, ten minutes. */
+  pairingCode: { id: string; code: string } | null;
+  onRequestPairCode: (id: string) => void;
   children?: React.ReactNode;
   /** When true, render just the form body (no Dialog chrome) for embedding in
    *  a tabbed SettingsDialog. The Save button is kept; Cancel/title are not. */
@@ -135,6 +138,7 @@ function seedFromConfig(config: AdminConfig): string {
 export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPanel(
   { open, onClose, config, voices, voicePreviewBusy, onSave, onPreviewVoice, children,
     deviceTokens, createdToken, onCreateDeviceToken, onRevokeDeviceToken, onSetDeviceTokenEink,
+    pairingCode, onRequestPairCode,
     embedded = false, hideSaveButton = false, onDirtyChange },
   ref
 ) {
@@ -492,6 +496,21 @@ export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPane
                     />
                   </TableCell>
                   <TableCell align="right">
+                    {pairingCode?.id === t.id && (
+                      <Typography
+                        component="span"
+                        sx={{ fontFamily: 'monospace', fontSize: '1.1rem', letterSpacing: '0.2em', mr: 1 }}
+                      >
+                        {pairingCode.code}
+                      </Typography>
+                    )}
+                    <Button
+                      size="small"
+                      aria-label={`Pairing code for ${t.label}`}
+                      onClick={() => onRequestPairCode(t.id)}
+                    >
+                      Pairing code
+                    </Button>
                     <Button
                       size="small"
                       color="error"
@@ -543,7 +562,9 @@ export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPane
                 slotProps={{ htmlInput: { readOnly: true, style: { fontFamily: 'monospace' } } }}
               />
               <Typography variant="caption" color="warning.main">
-                Copy now — it won't be shown again.
+                Copy now — it won't be shown again. Or open{' '}
+                <Box component="span" sx={{ fontFamily: 'monospace' }}>/display</Box> on the
+                display and type the pairing code; it expires in 10 minutes.
               </Typography>
             </Box>
           )}

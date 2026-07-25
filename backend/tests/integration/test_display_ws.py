@@ -148,6 +148,28 @@ class TestDisplayAuth:
             with client.websocket_connect("/ws?device_token=bogus-token") as ws:
                 ws.receive_json()
         assert exc_info.value.code == 4001
+        # The reason is what lets the kiosk tell "revoked" from "restarting";
+        # without it a transient failure un-pairs the display.
+        assert exc_info.value.reason == "device_token_invalid"
+
+    def test_device_token_never_falls_through_to_session_auth(self, client):
+        """With the store missing, a device token must get a retryable 1013.
+
+        The old code fell through to the session-token branch and returned a
+        bare 4001, which the kiosk read as revocation and wiped its pairing.
+        """
+        with patch("backend.server._device_token_store", None):
+            with pytest.raises(WebSocketDisconnect) as exc_info:
+                with client.websocket_connect("/ws?device_token=anything") as ws:
+                    ws.receive_json()
+        assert exc_info.value.code == 1013
+
+    def test_session_auth_failure_uses_its_own_reason(self, client):
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with client.websocket_connect("/ws") as ws:
+                ws.receive_json()
+        assert exc_info.value.code == 4001
+        assert exc_info.value.reason == "auth_required"
 
     def test_revoked_token_cannot_connect(self, client, display_token, device_store):
         rec = device_store.list_all()[0]

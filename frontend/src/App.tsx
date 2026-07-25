@@ -226,6 +226,10 @@ export default function App() {
   // Holds the one-time token immediately after creation; cleared when the
   // settings dialog closes so it never lingers once the admin navigates away.
   const [createdToken, setCreatedToken] = useState<DeviceTokenRecord | null>(null);
+  // Short-lived pairing code for a display, shown alongside the token. Also
+  // re-issued on demand so a display whose browser data was wiped can be
+  // re-paired without revoking (and losing its e-ink flag and tile order).
+  const [pairingCode, setPairingCode] = useState<{ id: string; code: string } | null>(null);
 
   // Dark mode — initialized from localStorage to avoid FOUC; overridden by profile on load
   const [darkMode, setDarkMode] = useState(
@@ -865,6 +869,11 @@ export default function App() {
 
       case 'device_token_created':
         setCreatedToken(msg.record);
+        if (msg.pairing_code) setPairingCode({ id: msg.record.id, code: msg.pairing_code });
+        break;
+
+      case 'device_token_pair_code':
+        setPairingCode({ id: msg.id, code: msg.pairing_code });
         break;
 
       case 'neighborhood_incidents':
@@ -1250,6 +1259,10 @@ export default function App() {
     send({ type: 'device_token_set_eink', id, eink });
   }
 
+  function handleRequestPairCode(id: string) {
+    send({ type: 'device_token_pair_code', id });
+  }
+
   function handleToggleDark() {
     const next = !darkMode;
     setDarkMode(next);
@@ -1451,6 +1464,7 @@ export default function App() {
       }
     } else {
       setCreatedToken(null);
+      setPairingCode(null);
     }
     return next;
   });
@@ -1824,6 +1838,8 @@ export default function App() {
         onCreateDeviceToken={handleCreateDeviceToken}
         onRevokeDeviceToken={handleRevokeDeviceToken}
         onSetDeviceTokenEink={handleSetDeviceTokenEink}
+        pairingCode={pairingCode}
+        onRequestPairCode={handleRequestPairCode}
         serverConfig={serverConfig}
         onServerConfigSave={handleServerConfigSave}
         onRescanVocabulary={handleRescanVocabulary}

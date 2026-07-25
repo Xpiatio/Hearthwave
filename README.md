@@ -44,17 +44,21 @@ browser-based React frontend communicating over WebSocket.
   that ignores the day/dusk theme, no gradients, and every animation switched off. It
   suppresses live word-by-word partials so a message only appears once it's final, and
   pins the layout in place (the burn-in drift that normal panels use is pure ghosting
-  fuel on e-ink) — a low-power, glanceable family board that won't smear or flicker
+  fuel on e-ink) — a low-power, glanceable family board that won't smear or flicker.
+  Drag-to-sort is off on these panels for the same reason
 - **Station ID on safety messages** — "I'm OK" family check-ins, neighborhood
   incident reports, street alerts, and wall-display quick messages all end with
   the call sign and name, so every keyed transmission identifies the station on
   air per GMRS Part 95 (wall displays ID with the station's own license)
-- **Wall display (kiosk)** — point any tablet at `/display` with an admin-issued
-  device token and it becomes a glanceable family board: who's OK, weather and
-  street alerts, a live view of the last five radio-stream messages (received
-  transmissions stream in as they're decoded), the next net, and a clock; tap to
-  mark someone OK or send a household quick message — no login screen, no settings
-  exposed, and every send is server-checked against the admin's allowlist
+- **Wall display (kiosk)** — point any tablet at `/display`, type the six-digit
+  pairing code from Settings, and it becomes a glanceable family board: a scrollable
+  radio log newest-first in the top left (received transmissions stream in as they're
+  decoded), the clock, weather and street alerts and the next net beside it, and the
+  family presence tiles along the bottom, auto-sized to the household and long-press
+  draggable into whatever order suits the room. Tap to mark someone OK or send a
+  household quick message — no login screen, no settings exposed, and every send is
+  server-checked against the admin's allowlist. The pairing survives restarts: a
+  display only unpairs when an operator says so
 - **Hearthwave Home** — the app opens on a home screen of large activity cards
   (Chat, Family, Neighborhood, Net Control) instead of dropping everyone into
   the operator console; a per-user interface level (Simple / Operator) hides

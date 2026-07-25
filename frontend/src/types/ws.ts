@@ -639,6 +639,8 @@ export interface DeviceTokenRecord {
   last_seen: string | null;
   /** E-ink display mode for this wall panel. Absent on legacy records → false. */
   eink?: boolean;
+  /** Hand-sorted tile order for this panel. Absent on legacy records → []. */
+  order?: string[];
   /** Present only in the one-time device_token_created reply. */
   token?: string;
 }
@@ -651,18 +653,29 @@ export interface DeviceTokensMsg {
 export interface DeviceTokenCreatedMsg {
   type: 'device_token_created';
   record: DeviceTokenRecord;
+  /** Six-digit, single-use, ten-minute code the admin reads to the display. */
+  pairing_code?: string;
+}
+
+// A fresh pairing code for an existing display (re-pair without revoking).
+export interface DeviceTokenPairCodeMsg {
+  type: 'device_token_pair_code';
+  id: string;
+  pairing_code: string;
 }
 
 // Kiosk display — per-device config sent once on connect (server → client).
 export interface DisplayConfigMsg {
   type: 'display_config';
   eink: boolean;
+  /** Absent on servers older than this feature → treat as no stored order. */
+  order?: string[];
 }
 
 // Kiosk display — server ack for a display's own actions (server → client).
 export interface DisplayAckMsg {
   type: 'display_ack';
-  action: 'im_ok' | 'quick_message';
+  action: 'im_ok' | 'quick_message' | 'order';
 }
 
 export type WsMessage =
@@ -726,6 +739,7 @@ export type WsMessage =
   | NeighborhoodJournalSavedMsg
   | DeviceTokensMsg
   | DeviceTokenCreatedMsg
+  | DeviceTokenPairCodeMsg
   | DisplayConfigMsg
   | DisplayAckMsg
   | VoiceTxAckMsg

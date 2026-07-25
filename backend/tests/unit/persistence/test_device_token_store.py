@@ -2,6 +2,7 @@
 import json
 import pytest
 
+from backend.persistence import device_tokens
 from backend.persistence.device_tokens import DeviceTokenStore
 
 
@@ -97,6 +98,102 @@ class TestSetEink:
         ]}))
         rec = DeviceTokenStore(path=path).list_all()[0]
         assert rec.get("eink", False) is False
+
+
+class TestSetOrder:
+    def test_create_defaults_to_no_order(self, tmp_path):
+        assert _store(tmp_path).create("Kitchen")["order"] == []
+
+    def test_set_order_persists(self, tmp_path):
+        s = _store(tmp_path)
+        rec = s.create("Kitchen")
+        assert s.set_order(rec["id"], ["u2", "u1"]) is True
+        assert _store(tmp_path).list_all()[0]["order"] == ["u2", "u1"]
+
+    def test_set_order_drops_duplicates(self, tmp_path):
+        s = _store(tmp_path)
+        rec = s.create("Kitchen")
+        s.set_order(rec["id"], ["u1", "u1", "u2"])
+        assert s.list_all()[0]["order"] == ["u1", "u2"]
+
+    def test_set_order_unknown_id_returns_false(self, tmp_path):
+        assert _store(tmp_path).set_order("nope", ["u1"]) is False
+
+    @pytest.mark.parametrize("bad", [
+        "u1",                       # not a list
+        [""],                       # empty id
+        [123],                      # not a string
+        ["x" * 65],                 # over the per-id cap
+        [f"u{i}" for i in range(101)],  # over the list cap
+    ])
+    def test_set_order_rejects_malformed_input(self, tmp_path, bad):
+        s = _store(tmp_path)
+        rec = s.create("Kitchen")
+        with pytest.raises(ValueError):
+            s.set_order(rec["id"], bad)
+
+    def test_legacy_record_without_order_key_loads(self, tmp_path):
+        path = tmp_path / "device_tokens.json"
+        path.write_text(json.dumps({"tokens": [
+            {"id": "abc", "token": "t" * 32, "label": "Old", "created_at": "x", "last_seen": None},
+        ]}))
+        rec = DeviceTokenStore(path=path).list_all()[0]
+        assert rec.get("order", []) == []
+
+
+class TestPairingCodes:
+    def test_code_redeems_to_the_right_token(self, tmp_path):
+        s = _store(tmp_path)
+        rec = s.create("Kitchen")
+        code = s.issue_pairing_code(rec["id"])
+        assert len(code) == 6 and code.isdigit()
+        assert s.redeem_pairing_code(code) == rec["token"]
+
+    def test_code_is_single_use(self, tmp_path):
+        s = _store(tmp_path)
+        rec = s.create("Kitchen")
+        code = s.issue_pairing_code(rec["id"])
+        assert s.redeem_pairing_code(code) == rec["token"]
+        assert s.redeem_pairing_code(code) is None
+
+    def test_unknown_code_returns_none(self, tmp_path):
+        assert _store(tmp_path).redeem_pairing_code("000000") is None
+
+    def test_reissuing_replaces_the_previous_code(self, tmp_path):
+        s = _store(tmp_path)
+        rec = s.create("Kitchen")
+        first = s.issue_pairing_code(rec["id"])
+        second = s.issue_pairing_code(rec["id"])
+        assert s.redeem_pairing_code(first) is None
+        assert s.redeem_pairing_code(second) == rec["token"]
+
+    def test_code_expires(self, tmp_path, monkeypatch):
+        clock = [0.0]
+        monkeypatch.setattr(device_tokens.time, "monotonic", lambda: clock[0])
+        s = _store(tmp_path)
+        rec = s.create("Kitchen")
+        code = s.issue_pairing_code(rec["id"])
+
+        clock[0] = device_tokens.PAIRING_CODE_TTL_S - 1
+        assert s.redeem_pairing_code(code) == rec["token"]
+
+        code = s.issue_pairing_code(rec["id"])
+        clock[0] += device_tokens.PAIRING_CODE_TTL_S + 1
+        assert s.redeem_pairing_code(code) is None
+
+    def test_codes_are_not_persisted(self, tmp_path):
+        s = _store(tmp_path)
+        rec = s.create("Kitchen")
+        code = s.issue_pairing_code(rec["id"])
+        # A restart must not leave a six-digit credential lying around.
+        assert _store(tmp_path).redeem_pairing_code(code) is None
+
+    def test_revoking_a_display_kills_its_code(self, tmp_path):
+        s = _store(tmp_path)
+        rec = s.create("Kitchen")
+        code = s.issue_pairing_code(rec["id"])
+        s.revoke(rec["id"])
+        assert s.redeem_pairing_code(code) is None
 
 
 class TestLoad:
