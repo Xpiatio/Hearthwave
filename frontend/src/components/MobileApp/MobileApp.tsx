@@ -76,6 +76,8 @@ export interface MobileAppProps {
   sendNeighborhoodEnd: () => void;
   sendNeighborhoodCallNext: () => void;
   sendNeighborhoodCallReset: () => void;
+  sendNeighborhoodClearCheckins: () => void;
+  sendNeighborhoodClearIncidents: () => void;
 
   // Core data
   messages: ChatEntry[];
@@ -203,6 +205,8 @@ export function MobileApp({
   sendNeighborhoodEnd,
   sendNeighborhoodCallNext,
   sendNeighborhoodCallReset,
+  sendNeighborhoodClearCheckins,
+  sendNeighborhoodClearIncidents,
   messages,
   contacts,
   transmitting,
@@ -400,9 +404,12 @@ export function MobileApp({
             netDay={neighborhoodState?.net_day ?? ''}
             netTime={neighborhoodState?.net_time ?? ''}
             isCoordinator={isCoordinator}
+            isAdmin={!!profile.is_admin}
             isKid={isKid}
             myUserId={profile.id}
             onCheckin={sendNeighborhoodCheckin}
+            onClearCheckins={sendNeighborhoodClearCheckins}
+            onClearIncidents={sendNeighborhoodClearIncidents}
             onStatusChange={(status) => sendNeighborhoodStatus(status)}
             onIncidentReport={({ category, description, location }) => sendIncidentReport(category, description, location)}
             incidentError={incidentError}

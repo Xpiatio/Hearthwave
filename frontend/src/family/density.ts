@@ -12,7 +12,10 @@
  *  `minmax()`.
  */
 
-export type Density = 'roomy' | 'medium' | 'compact';
+import { densityForCount } from '../ui/density';
+import type { Density, DensityThresholds } from '../ui/density';
+
+export type { Density };
 
 export interface DensitySpec {
   /** Grid column bounds, px — feed `minmax()` in the roster grid. */
@@ -47,12 +50,12 @@ const SPECS: Record<Density, DensitySpec> = {
   },
 };
 
+const THRESHOLDS: DensityThresholds = { roomyMax: 4, mediumMax: 8 };
+
 /** Tier for a roster of `memberCount` members. Thresholds are chosen so a
  *  typical household (up to four) never leaves the roomy tier. */
 export function densityFor(memberCount: number): Density {
-  if (memberCount <= 4) return 'roomy';
-  if (memberCount <= 8) return 'medium';
-  return 'compact';
+  return densityForCount(memberCount, THRESHOLDS);
 }
 
 export function densitySpec(memberCount: number): DensitySpec {

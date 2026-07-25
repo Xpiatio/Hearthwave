@@ -38,6 +38,8 @@ import type {
   NeighborhoodEndPayload,
   NeighborhoodCallNextPayload,
   NeighborhoodCallResetPayload,
+  NeighborhoodClearCheckinsPayload,
+  NeighborhoodClearIncidentsPayload,
   NeighborhoodIncidentReportPayload,
   NeighborhoodStreetAlertPayload,
   SetNeighborhoodCoordinatorPayload,
@@ -1239,6 +1241,14 @@ export default function App() {
     send({ type: 'neighborhood_call_reset' } satisfies NeighborhoodCallResetPayload);
   }
 
+  function sendNeighborhoodClearCheckins() {
+    send({ type: 'neighborhood_clear_checkins' } satisfies NeighborhoodClearCheckinsPayload);
+  }
+
+  function sendNeighborhoodClearIncidents() {
+    send({ type: 'neighborhood_clear_incidents' } satisfies NeighborhoodClearIncidentsPayload);
+  }
+
   function sendSetNeighborhoodCoordinator(userId: string, coordinator: boolean) {
     send({
       type: 'set_neighborhood_coordinator',
@@ -1584,6 +1594,8 @@ export default function App() {
     sendNeighborhoodEnd,
     sendNeighborhoodCallNext,
     sendNeighborhoodCallReset,
+    sendNeighborhoodClearCheckins,
+    sendNeighborhoodClearIncidents,
     sendSetNeighborhoodCoordinator,
     profile: profile!,
     connected,
@@ -1751,9 +1763,13 @@ export default function App() {
           netDay={neighborhoodState?.net_day ?? ''}
           netTime={neighborhoodState?.net_time ?? ''}
           isCoordinator={isCoordinator}
+          // isAdmin is UX-only gating; the server re-checks is_admin on both clears.
+          isAdmin={!!profile.is_admin}
           isKid={isKid}
           myUserId={profile.id}
           onCheckin={sendNeighborhoodCheckin}
+          onClearCheckins={sendNeighborhoodClearCheckins}
+          onClearIncidents={sendNeighborhoodClearIncidents}
           onStatusChange={(status) => sendNeighborhoodStatus(status)}
           onIncidentReport={({ category, description, location }) => sendIncidentReport(category, description, location)}
           incidentError={incidentError}

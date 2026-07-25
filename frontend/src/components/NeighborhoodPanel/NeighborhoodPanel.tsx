@@ -18,9 +18,15 @@ export interface NeighborhoodPanelProps {
   netDay: string;
   netTime: string;
   isCoordinator: boolean;
+  /** Admin-only controls (the two board clears). Stricter than isCoordinator
+   *  on purpose: running a net is a coordinator job, wiping the board is an
+   *  admin one. Server re-checks — this only hides the buttons. */
+  isAdmin: boolean;
   isKid: boolean;
   myUserId: string;
   onCheckin: () => void;
+  onClearCheckins: () => void;
+  onClearIncidents: () => void;
   onStatusChange: (status: 'checked_in' | 'standby') => void;
   onIncidentReport: (p: { category: string; description: string; location: string }) => void;
   incidentError: string | null;
@@ -61,6 +67,8 @@ export function NeighborhoodPanel(props: NeighborhoodPanelProps) {
   const [incidentOpen, setIncidentOpen] = useState(false);
   const [streetAlert, setStreetAlert] = useState('');
   const [alertConfirmOpen, setAlertConfirmOpen] = useState(false);
+  const [clearCheckinsConfirmOpen, setClearCheckinsConfirmOpen] = useState(false);
+  const [clearIncidentsConfirmOpen, setClearIncidentsConfirmOpen] = useState(false);
 
   // Tracks the most recent incidentError the user has already seen and
   // dismissed (via Cancel/backdrop close), so a stale error from a prior
@@ -191,9 +199,13 @@ export function NeighborhoodPanel(props: NeighborhoodPanelProps) {
         currentCall={props.currentCall}
         myUserId={props.myUserId}
         onStatusChange={props.onStatusChange}
+        onClear={props.isAdmin ? () => setClearCheckinsConfirmOpen(true) : undefined}
       />
 
-      <IncidentLog incidents={props.incidents} />
+      <IncidentLog
+        incidents={props.incidents}
+        onClear={props.isAdmin ? () => setClearIncidentsConfirmOpen(true) : undefined}
+      />
 
       {showCoordinatorSection && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
@@ -260,6 +272,30 @@ export function NeighborhoodPanel(props: NeighborhoodPanelProps) {
         destructive
         onConfirm={confirmSendStreetAlert}
         onClose={() => setAlertConfirmOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={clearCheckinsConfirmOpen}
+        title="Clear everyone off the check-in list?"
+        body={
+          props.netActive
+            ? "Everyone will have to check in again. The net keeps running."
+            : "Everyone will have to check in again."
+        }
+        confirmLabel="Yes, clear the check-ins"
+        destructive
+        onConfirm={props.onClearCheckins}
+        onClose={() => setClearCheckinsConfirmOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={clearIncidentsConfirmOpen}
+        title="Clear the incident log?"
+        body="The reports are saved to a journal entry first, then removed from this list."
+        confirmLabel="Yes, clear the log"
+        destructive
+        onConfirm={props.onClearIncidents}
+        onClose={() => setClearIncidentsConfirmOpen(false)}
       />
     </Box>
   );

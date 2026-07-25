@@ -1338,6 +1338,15 @@ If the server rejects a report (for example, a missing location), the form reope
 
 Every report ever sent appears in the **Incident log**, newest first, with a **Filter by category** dropdown (or "All"). Each entry shows the category, the time, the description, the location, and who reported it. The log is shared by every connected user and kept on the server — it's capped at the 500 most recent reports, so the oldest entries roll off automatically rather than growing the file forever.
 
+### Clearing the boards (admin only)
+
+Both lists on this screen grow over time — the roster fills with yesterday's check-ins, the log fills with reports that have been dealt with. An **admin** (not a coordinator — this is deliberately stricter than the other net controls) sees two clear buttons, each next to the list it empties, and each asks for confirmation first:
+
+- **Clear check-ins** — empties the checked-in neighbors list. Everyone has to check in again. If a net is running it **keeps running**; this is not a way to end a net (use **End net** for that, which also saves the journal entry).
+- **Clear incident log** — **saves the whole log to a journal entry first**, then empties it. The cleared reports stay readable in the Journals panel ([section 11](#11-journals)). If that journal can't be saved, nothing is cleared and you get an error instead — a log that vanished without being recorded is the one outcome worth avoiding.
+
+Each button only appears when its list has something in it, and clearing the incident log clears **all** of it, not just the category you're currently filtering to.
+
 ### Street alerts
 
 A **coordinator** (see below) can send a **street alert** — a short message (1–200 characters) meant for everyone, such as a road closure or a suspicious vehicle sighting. Sending one:

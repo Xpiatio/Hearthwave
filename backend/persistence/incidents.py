@@ -75,3 +75,15 @@ class IncidentsStore:
     def list(self) -> list[dict]:
         """Return a newest-first copy of all incident reports."""
         return [dict(e) for e in self._data]
+
+    def clear(self) -> list[dict]:
+        """Delete every incident report, returning what was deleted.
+
+        The returned snapshot is the caller's only copy — the server journals
+        it before calling this, so a cleared log survives on disk as a journal
+        entry even though incidents.json goes empty.
+        """
+        cleared = self.list()
+        self._data = []
+        self._save()
+        return cleared
