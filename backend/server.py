@@ -50,6 +50,10 @@ WebSocket message types (client → server):
     neighborhood_end  — {"type": "neighborhood_end"}  (coordinator-only)
     neighborhood_call_next — {"type": "neighborhood_call_next"}  (coordinator-only)
     neighborhood_call_reset — {"type": "neighborhood_call_reset"}  (coordinator-only)
+    neighborhood_clear_checkins — {"type": "neighborhood_clear_checkins"}  (admin-only;
+                          empties the roster, leaves an in-progress net running)
+    neighborhood_clear_incidents — {"type": "neighborhood_clear_incidents"}  (admin-only;
+                          journals the log first, and skips the wipe if that save fails)
     neighborhood_incident_report — {"type": "neighborhood_incident_report", "category": str,
                           "description": str, "location": str}  (kid → error)
     neighborhood_list_incidents — {"type": "neighborhood_list_incidents"}  (any role)
@@ -3884,6 +3888,55 @@ async def websocket_endpoint(
                 if _neighborhood is not None:
                     _neighborhood.call_reset()
                 await _manager.broadcast(_build_neighborhood_state_msg())
+
+            elif msg_type == "neighborhood_clear_checkins":
+                # Admin-only, deliberately stricter than the coordinator gate on
+                # the rest of the net controls: running a net is a coordinator
+                # job, wiping the household's board is an admin one.
+                if not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
+                    continue
+                if _neighborhood is not None:
+                    _neighborhood.clear_checkins()
+                await _manager.broadcast(_build_neighborhood_state_msg())
+
+            elif msg_type == "neighborhood_clear_incidents":
+                if not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
+                    continue
+                snapshot = _incidents_store.list() if _incidents_store else []
+                # Journal BEFORE wiping, and abort the wipe if the journal
+                # cannot be written — an incident log is safety history, so
+                # "cleared but unrecorded" is the one outcome to avoid.
+                if snapshot and _config is not None:
+                    date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+                    lines = "\n".join(
+                        f"  {e.get('ts', '')} — {e.get('category', '')} — {e.get('description', '')}"
+                        f" — {e.get('location', '')} — reported by {e.get('reporter', '')}"
+                        for e in snapshot
+                    )
+                    try:
+                        path = save_journal(
+                            title=f"Neighborhood incident log {date_str}",
+                            summary=(
+                                f"Incident log cleared by an admin.\n\n"
+                                f"{len(snapshot)} report{'s' if len(snapshot) != 1 else ''}:\n{lines}"
+                            ),
+                            callsigns_with_locations=[],
+                            transcript=lines,
+                            journals_dir=_config.journals_dir,
+                        )
+                        await _manager.broadcast({"type": "neighborhood_journal_saved", "path": path})
+                    except Exception as exc:
+                        _log.error("Incident log journal save failed, not clearing: %s", exc)
+                        await _manager.send_to(ws, {
+                            "type": "error",
+                            "detail": "Could not save the incident log to a journal — nothing was cleared.",
+                        })
+                        continue
+                if _incidents_store is not None:
+                    _incidents_store.clear()
+                await _manager.broadcast(_build_neighborhood_incidents_msg())
 
             elif msg_type == "neighborhood_incident_report":
                 # Reporting an incident keys the radio, so it follows the

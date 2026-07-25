@@ -42,9 +42,12 @@ function makeProps(overrides: Partial<NeighborhoodPanelProps> = {}): Neighborhoo
     netDay: 'tue',
     netTime: '19:00',
     isCoordinator: false,
+    isAdmin: false,
     isKid: false,
     myUserId: 'u2',
     onCheckin: vi.fn(),
+    onClearCheckins: vi.fn(),
+    onClearIncidents: vi.fn(),
     onStatusChange: vi.fn(),
     onIncidentReport: vi.fn(),
     incidentError: null,
@@ -341,6 +344,31 @@ describe('NeighborhoodPanel', () => {
       expect(within(rows[1]).queryByRole('button')).not.toBeInTheDocument();
     });
 
+    it('renders every card of a busy incident log (density tiering must not drop reports)', () => {
+      const many = Array.from({ length: 14 }, (_, i) => ({
+        ...incidents[0],
+        id: `i${i}`,
+        description: `Incident ${i}`,
+      }));
+      render(<NeighborhoodPanel {...makeProps({ incidents: many })} />);
+      const list = screen.getByRole('list', { name: 'Incident reports' });
+      expect(within(list).getAllByRole('listitem')).toHaveLength(14);
+      expect(screen.getByText('Incident 13')).toBeInTheDocument();
+    });
+
+    it('renders every row of a big net (density tiering must not drop neighbors)', () => {
+      const big = Array.from({ length: 18 }, (_, i) => ({
+        ...roster[0],
+        user_id: `n${i}`,
+        name: `Neighbor ${i}`,
+        callsign: `WX${i}`,
+      }));
+      render(<NeighborhoodPanel {...makeProps({ roster: big })} />);
+      const list = screen.getByRole('list', { name: 'Checked-in neighbors' });
+      expect(within(list).getAllByRole('listitem')).toHaveLength(18);
+      expect(screen.getByText('Neighbor 17')).toBeInTheDocument();
+    });
+
     it('shows "I\'m back" on the viewer\'s own row when currently on standby', () => {
       const props = makeProps({ myUserId: 'u3' });
       render(<NeighborhoodPanel {...props} />);
@@ -351,6 +379,74 @@ describe('NeighborhoodPanel', () => {
       fireEvent.click(imBack);
       expect(props.onStatusChange).toHaveBeenCalledWith('checked_in');
       expect(within(rows[0]).queryByRole('button')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('admin board clears', () => {
+    it('hides both clear buttons from a non-admin, coordinator included', () => {
+      render(<NeighborhoodPanel {...makeProps({ isCoordinator: true, isAdmin: false })} />);
+      expect(screen.queryByRole('button', { name: 'Clear check-ins' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Clear incident log' })).not.toBeInTheDocument();
+    });
+
+    it('hides each clear button when its board is already empty', () => {
+      render(<NeighborhoodPanel {...makeProps({ isAdmin: true, roster: [], incidents: [] })} />);
+      expect(screen.queryByRole('button', { name: 'Clear check-ins' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Clear incident log' })).not.toBeInTheDocument();
+    });
+
+    it('clearing check-ins asks first and only fires on confirm', () => {
+      const props = makeProps({ isAdmin: true });
+      render(<NeighborhoodPanel {...props} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Clear check-ins' }));
+      expect(screen.getByText('Clear everyone off the check-in list?')).toBeInTheDocument();
+      expect(props.onClearCheckins).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole('button', { name: /Yes, clear the check-ins/ }));
+      expect(props.onClearCheckins).toHaveBeenCalledTimes(1);
+    });
+
+    it('backing out of the check-in clear fires nothing', () => {
+      const props = makeProps({ isAdmin: true });
+      render(<NeighborhoodPanel {...props} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Clear check-ins' }));
+      fireEvent.click(screen.getByRole('button', { name: /No, go back/ }));
+      expect(props.onClearCheckins).not.toHaveBeenCalled();
+    });
+
+    it('the check-in confirm says the net keeps running when one is active', () => {
+      render(<NeighborhoodPanel {...makeProps({ isAdmin: true, netActive: true })} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Clear check-ins' }));
+      expect(screen.getByText(/The net keeps running/)).toBeInTheDocument();
+    });
+
+    it('clearing the incident log asks first, promising the journal, and fires on confirm', () => {
+      const props = makeProps({ isAdmin: true });
+      render(<NeighborhoodPanel {...props} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Clear incident log' }));
+      expect(screen.getByText('Clear the incident log?')).toBeInTheDocument();
+      expect(screen.getByText(/saved to a journal entry first/)).toBeInTheDocument();
+      expect(props.onClearIncidents).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole('button', { name: /Yes, clear the log/ }));
+      expect(props.onClearIncidents).toHaveBeenCalledTimes(1);
+    });
+
+    it('offers the log clear even while a category filter hides some reports', async () => {
+      const user = userEvent.setup();
+      const props = makeProps({ isAdmin: true });
+      render(<NeighborhoodPanel {...props} />);
+
+      await user.click(screen.getByRole('combobox', { name: 'Filter by category' }));
+      await user.click(await screen.findByRole('option', { name: 'Lost pet or person' }));
+      expect(within(screen.getByRole('list', { name: 'Incident reports' })).getAllByRole('listitem'))
+        .toHaveLength(1);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Clear incident log' }));
+      fireEvent.click(screen.getByRole('button', { name: /Yes, clear the log/ }));
+      expect(props.onClearIncidents).toHaveBeenCalledTimes(1);
     });
   });
 

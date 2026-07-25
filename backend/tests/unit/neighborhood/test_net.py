@@ -182,3 +182,37 @@ def test_remove_leaves_current_call_alone_when_it_points_elsewhere():
     assert n.current_call == "u1"
     n.remove("u2")
     assert n.current_call == "u1"
+
+
+def test_clear_checkins_empties_the_roster_and_reports_the_count():
+    n = NeighborhoodNet()
+    n.start()
+    n.checkin("u1", "A", "Ann", "")
+    n.checkin("u2", "B", "Bob", "")
+    assert n.clear_checkins() == 2
+    assert n.roster() == []
+
+
+def test_clear_checkins_on_an_empty_roster_is_a_noop_returning_zero():
+    n = NeighborhoodNet()
+    assert n.clear_checkins() == 0
+    assert n.roster() == []
+
+
+def test_clear_checkins_drops_current_call_with_the_rows():
+    n = NeighborhoodNet()
+    n.start()
+    n.checkin("u1", "A", "Ann", "")
+    n.call_next()
+    assert n.current_call == "u1"
+    n.clear_checkins()
+    assert n.current_call is None
+
+
+def test_clear_checkins_leaves_a_running_net_running():
+    # Unlike end(), clearing the board is not a way to close the net.
+    n = NeighborhoodNet()
+    n.start()
+    n.checkin("u1", "A", "Ann", "")
+    n.clear_checkins()
+    assert n.active is True

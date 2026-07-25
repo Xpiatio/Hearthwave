@@ -114,6 +114,20 @@ class NeighborhoodNet:
             row["called"] = False
         self.current_call = None
 
+    def clear_checkins(self) -> int:
+        """Drop every roster row, returning how many were removed.
+
+        Unlike `end()`, this leaves `active` alone: an admin wiping a board
+        that filled up with yesterday's check-ins (or a test run) should not
+        also close a net that is currently running. Round-table progress goes
+        with the rows, since `current_call` would otherwise point at a row
+        that no longer exists.
+        """
+        removed = len(self._roster)
+        self._roster = {}
+        self.current_call = None
+        return removed
+
     def remove(self, user_id: str) -> bool:
         """Remove a user's roster row entirely (e.g. on account deletion).
 

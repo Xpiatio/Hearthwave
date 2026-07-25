@@ -852,6 +852,18 @@ export interface NeighborhoodCallResetPayload {
   type: 'neighborhood_call_reset';
 }
 
+/** Admin-only (stricter than the coordinator gate on the other net
+ *  controls): empties the roster, leaving an in-progress net running. */
+export interface NeighborhoodClearCheckinsPayload {
+  type: 'neighborhood_clear_checkins';
+}
+
+/** Admin-only: the server journals the log before wiping it, and refuses to
+ *  wipe if that journal save fails. */
+export interface NeighborhoodClearIncidentsPayload {
+  type: 'neighborhood_clear_incidents';
+}
+
 export interface NeighborhoodIncidentReportPayload {
   type: 'neighborhood_incident_report';
   category: string;

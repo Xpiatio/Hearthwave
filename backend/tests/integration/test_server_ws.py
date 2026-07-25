@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 import threading
-from contextlib import contextmanager
+from contextlib import contextmanager, ExitStack
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -4596,3 +4596,129 @@ class TestNeighborhoodStreetAlert:
         assert "text" not in captured
         journals_dir = tmp_path / "journals"
         assert not journals_dir.exists() or not list(journals_dir.glob("*.json"))
+
+
+@contextmanager
+def _neighborhood_ws(tmp_path, *, is_admin: bool, journals: bool = False, save_journal=None):
+    """Connect one drained WS as an admin (or plain adult) for clear-board tests.
+
+    Coordinator is granted either way, so a refusal proves the *admin* gate is
+    doing the work rather than the coordinator gate the other net controls use.
+    """
+    cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+        tmp_path, role="admin" if is_admin else "adult", is_admin=is_admin,
+        coordinator=True, journals=journals,
+    )
+    with ExitStack() as stack:
+        stack.enter_context(patch("backend.server.ServerConfig.load", return_value=cfg))
+        stack.enter_context(patch("backend.server.STTWorker", return_value=mock_stt))
+        stack.enter_context(patch("backend.server.TTSSynthesizer", return_value=mock_tts))
+        stack.enter_context(patch("backend.server.UsersStore", return_value=mock_users))
+        stack.enter_context(patch("backend.server.TokenStore", return_value=mock_tokens))
+        stack.enter_context(patch("backend.auth_routes.init"))
+        if save_journal is not None:
+            stack.enter_context(patch("backend.server.save_journal", save_journal))
+        tc = stack.enter_context(TestClient(app))
+        ws = stack.enter_context(tc.websocket_connect(WS_URL))
+        _drain_initial(ws)
+        yield ws
+
+
+class TestNeighborhoodAdminClear:
+    """Admin-only wipes of the two Neighborhood boards. Deliberately stricter
+    than the coordinator gate on the rest of the net controls: running a net
+    is a coordinator job, clearing the household's board is an admin one."""
+
+    def test_admin_clear_checkins_empties_the_roster(self, tmp_path):
+        with _neighborhood_ws(tmp_path, is_admin=True) as ws:
+            ws.send_json({"type": "neighborhood_checkin"})
+            checked_in = _next_of_type(ws, "neighborhood_state")
+            assert checked_in is not None and len(checked_in["roster"]) == 1
+
+            ws.send_json({"type": "neighborhood_clear_checkins"})
+            cleared = _next_of_type(ws, "neighborhood_state")
+        assert cleared is not None
+        assert cleared["roster"] == []
+        assert cleared["current_call"] is None
+
+    def test_admin_clear_checkins_leaves_a_running_net_running(self, tmp_path):
+        with _neighborhood_ws(tmp_path, is_admin=True) as ws:
+            ws.send_json({"type": "neighborhood_start"})
+            _next_of_type(ws, "neighborhood_state")
+            ws.send_json({"type": "neighborhood_checkin"})
+            _next_of_type(ws, "neighborhood_state")
+            ws.send_json({"type": "neighborhood_clear_checkins"})
+            cleared = _next_of_type(ws, "neighborhood_state")
+        assert cleared is not None
+        assert cleared["roster"] == []
+        assert cleared["active"] is True
+
+    def test_non_admin_coordinator_cannot_clear_checkins(self, tmp_path):
+        with _neighborhood_ws(tmp_path, is_admin=False) as ws:
+            ws.send_json({"type": "neighborhood_checkin"})
+            _next_of_type(ws, "neighborhood_state")
+            ws.send_json({"type": "neighborhood_clear_checkins"})
+            err = _next_of_type(ws, "error")
+            assert err is not None and err["detail"] == "Admin access required."
+
+            # Roster untouched — ask for state again rather than trusting silence.
+            ws.send_json({"type": "neighborhood_get_state"})
+            state = _next_of_type(ws, "neighborhood_state")
+        assert state is not None
+        assert len(state["roster"]) == 1
+
+    def test_admin_clear_incidents_journals_the_log_then_empties_it(self, tmp_path):
+        saved = {}
+
+        def fake_save_journal(**kwargs):
+            saved.update(kwargs)
+            return str(tmp_path / "journals" / "incidents.json")
+
+        with _neighborhood_ws(
+            tmp_path, is_admin=True, journals=True, save_journal=fake_save_journal
+        ) as ws:
+            ws.send_json({
+                "type": "neighborhood_incident_report",
+                "category": "hazard", "description": "Tree down", "location": "Elm St",
+            })
+            reported = _next_of_type(ws, "neighborhood_incidents", limit=30)
+            assert reported is not None and len(reported["incidents"]) == 1
+
+            ws.send_json({"type": "neighborhood_clear_incidents"})
+            cleared = _next_of_type(ws, "neighborhood_incidents", limit=30)
+        assert cleared is not None
+        assert cleared["incidents"] == []
+        # The log survives on disk as a journal entry, contents and all.
+        assert "Tree down" in saved["transcript"]
+        assert "Elm St" in saved["transcript"]
+        assert "1 report" in saved["summary"]
+
+    def test_clear_incidents_keeps_the_log_when_the_journal_save_fails(self, tmp_path):
+        def boom(**kwargs):
+            raise OSError("disk full")
+
+        with _neighborhood_ws(
+            tmp_path, is_admin=True, journals=True, save_journal=boom
+        ) as ws:
+            ws.send_json({
+                "type": "neighborhood_incident_report",
+                "category": "hazard", "description": "Tree down", "location": "Elm St",
+            })
+            _next_of_type(ws, "neighborhood_incidents", limit=30)
+
+            ws.send_json({"type": "neighborhood_clear_incidents"})
+            err = _next_of_type(ws, "error", limit=30)
+            assert err is not None
+            assert "nothing was cleared" in err["detail"]
+
+            ws.send_json({"type": "neighborhood_list_incidents"})
+            still_there = _next_of_type(ws, "neighborhood_incidents", limit=30)
+        assert still_there is not None
+        assert len(still_there["incidents"]) == 1
+
+    def test_non_admin_coordinator_cannot_clear_incidents(self, tmp_path):
+        with _neighborhood_ws(tmp_path, is_admin=False) as ws:
+            ws.send_json({"type": "neighborhood_clear_incidents"})
+            err = _next_of_type(ws, "error")
+        assert err is not None
+        assert err["detail"] == "Admin access required."

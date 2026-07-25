@@ -30,3 +30,27 @@ def test_caps_at_500(tmp_path):
 def test_corrupt_file_recovers_empty(tmp_path):
     p = tmp_path / "incidents.json"; p.write_text("{not json")
     assert IncidentsStore(str(p)).list() == []
+
+
+def test_clear_returns_what_it_deleted_and_empties_the_feed(tmp_path):
+    p = tmp_path / "incidents.json"
+    s = IncidentsStore(str(p))
+    s.add({"category": "hazard", "description": "Tree down", "location": "Elm", "reporter": "Ann", "ts": "t1"})
+    s.add({"category": "lost", "description": "Cat", "location": "Oak", "reporter": "Bob", "ts": "t2"})
+    cleared = s.clear()
+    assert [e["description"] for e in cleared] == ["Cat", "Tree down"]  # newest-first
+    assert s.list() == []
+
+
+def test_clear_persists_the_empty_feed_across_a_reload(tmp_path):
+    p = tmp_path / "incidents.json"
+    s = IncidentsStore(str(p))
+    s.add({"category": "hazard", "description": "Tree down", "location": "Elm", "reporter": "Ann", "ts": "t1"})
+    s.clear()
+    assert IncidentsStore(str(p)).list() == []
+
+
+def test_clear_on_an_empty_feed_is_a_noop(tmp_path):
+    s = IncidentsStore(str(tmp_path / "incidents.json"))
+    assert s.clear() == []
+    assert s.list() == []
