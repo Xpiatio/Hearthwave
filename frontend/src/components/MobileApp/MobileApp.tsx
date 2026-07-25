@@ -363,7 +363,7 @@ export function MobileApp({
               onSend={onSend}
               onChat={onChat}
               onStandaloneId={onStandaloneId}
-              maxLength={txComposition?.maxLength}
+              maxBytes={txComposition?.maxBytes}
               composeHint={txComposition?.hint}
             />
           )}

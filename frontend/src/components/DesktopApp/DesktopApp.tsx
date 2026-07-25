@@ -396,7 +396,7 @@ export function DesktopApp({
           onSend={onSend}
           onChat={onChat}
           onStandaloneId={onStandaloneId}
-          maxLength={txComposition?.maxLength}
+          maxBytes={txComposition?.maxBytes}
           composeHint={txComposition?.hint}
         />
       )}

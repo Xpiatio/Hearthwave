@@ -36,6 +36,13 @@ real, working plugins — read them alongside this guide.
   - A server restart always reloads everything cleanly as a fallback.
 - A plugin that fails to import or set up does **not** crash the server — its error
   is shown in the Plugins page.
+- The bundled examples (`meshcore`, `meshtastic`) are seeded into the plugins dir on
+  first run and **refreshed on upgrade** — but only while they still match the copy
+  the previous image seeded. Once you edit a seeded example, it is yours: upgrades
+  leave it alone and log `example plugin <id> differs from the shipped copy`. To go
+  back to the shipped version, uninstall it from the Plugins page and restart.
+  Installs seeded before this bookkeeping existed also count as edited, so their
+  examples need that same uninstall-and-restart once to pick up newer copies.
 
 ### Packaging for upload
 Zip the plugin so the archive contains `<id>/plugin.py` (a top-level folder), e.g.
@@ -77,7 +84,7 @@ All hooks are optional no-ops; override what you need.
 | `async on_audio_rx_start()` | squelch opens (incoming transmission) |
 | `on_audio_rx_chunk(chunk)` | each raw audio chunk (**sync, hot path** — be fast) |
 | `async on_rx_final(text)` | each finalized receive transcript |
-| `async on_audio_tx_pre_queue(payload) -> dict \| None` | before a transmission is synthesized; return the payload to allow, `None` to block |
+| `async on_audio_tx_pre_queue(payload) -> dict \| None` | before a transmission is synthesized (see the surface list below); return the payload to allow, `None` to block |
 
 Active hooks fire only while your plugin is **enabled**. `on_config_changed` is the
 exception — it **always** fires, even when you're disabled, so you can tear down on
@@ -106,6 +113,31 @@ registration order and the **first to return `None` wins**. The fields you may
 modify are `text`, `_filter_profanity`, `_voice_name`, and `_length_scale`. This
 hook must never block the radio — keep it fast and best-effort (the mesh examples
 enqueue onto their own queue and return immediately).
+
+Which transmissions reach the hook:
+
+| Surface | Reaches the hook? |
+|---------|-------------------|
+| Chat `[tx]` sends (`tx_message`) | yes |
+| Family check-ins ("I'm OK"), including from the wall display | yes |
+| Wall-display quick messages | yes |
+| Neighborhood incident reports and street alerts | yes |
+| Net scripts, round-table prompts, SKYWARN spot reports (NCS) | yes |
+| Anything a plugin sends with `ctx.enqueue_tx` | yes |
+| Standalone station ID ("This is" button) | yes |
+| Voice TX (raw operator audio) | yes |
+| Voice preview (local audition, never keys the radio) | no |
+| The FCC ID-rule announcement (mandated, never blockable) | no |
+| The monitoring beacon (automatic; already skipped during a net) | no |
+
+Because a returned `None` blocks safety traffic too — a family check-in, an
+incident report, a street alert — **only** block deliberately, and never as a
+side effect of an error. The block is logged as `TX blocked by a plugin: <kind>`.
+
+**Not every payload has text.** Voice TX carries `audio_bytes` and a `_voice_tx`
+marker; a standalone ID carries `_standalone_id` plus raw `callsign`/`operator`
+fields, with the phrase built later. If your plugin forwards or logs text, skip
+payloads where `payload.get("text")` is empty (both mesh examples do).
 
 ### `PluginContext` — `self.ctx`
 Bound before `setup()`. Your only door to core services:

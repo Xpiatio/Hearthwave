@@ -35,9 +35,9 @@ describe('foldCompositions', () => {
     expect(foldCompositions([null, null])).toBeNull();
   });
 
-  it('picks the most restrictive (smallest maxLength)', () => {
-    const a: TxComposition = { maxLength: 100, hint: 'A' };
-    const b: TxComposition = { maxLength: 60, hint: 'B' };
+  it('picks the most restrictive (smallest maxBytes)', () => {
+    const a: TxComposition = { maxBytes: 100, hint: 'A' };
+    const b: TxComposition = { maxBytes: 60, hint: 'B' };
     expect(foldCompositions([a, b, null])).toBe(b);
   });
 });
@@ -54,29 +54,35 @@ describe('resolveTxComposition (declarative)', () => {
 
   it('budgets max length minus the "Name: " prefix', () => {
     // "Ben" (3) + ": " (2) = 5 → 140 - 5 = 135
-    expect(resolveTxComposition([meshPlugin()], profile())).toEqual({ maxLength: 135, hint: 'MeshCore' });
+    expect(resolveTxComposition([meshPlugin()], profile())).toEqual({ maxBytes: 135, hint: 'MeshCore' });
   });
 
   it('falls back operator_name → callsign when no display_name', () => {
     const r = resolveTxComposition([meshPlugin({ config: { max_packet_length: 100, prefix_separator: ': ' } })],
       profile({ display_name: '' }));
-    expect(r?.maxLength).toBe(90); // "Benjamin"(8)+": "(2)=10 → 90
+    expect(r?.maxBytes).toBe(90); // "Benjamin"(8)+": "(2)=10 → 90
   });
 
   it('uses the full budget when there is no sender name', () => {
     const r = resolveTxComposition([meshPlugin({ config: { max_packet_length: 50, prefix_separator: ': ' } })], null);
-    expect(r?.maxLength).toBe(50);
+    expect(r?.maxBytes).toBe(50);
   });
 
   it('never returns a non-positive budget', () => {
     const r = resolveTxComposition([meshPlugin({ config: { max_packet_length: 2, prefix_separator: ': ' } })], profile());
-    expect(r?.maxLength).toBe(1);
+    expect(r?.maxBytes).toBe(1);
+  });
+
+  it('charges a multibyte sender name its real byte cost', () => {
+    // "Renée" is 5 characters but 6 UTF-8 bytes; + ": " (2) = 8 → 140 - 8 = 132.
+    const r = resolveTxComposition([meshPlugin()], profile({ display_name: 'Renée' }));
+    expect(r?.maxBytes).toBe(132);
   });
 
   it('folds multiple enabled mesh plugins to the most restrictive', () => {
     const wide = meshPlugin({ id: 'a', config: { max_packet_length: 200, prefix_separator: ': ' } });
     const tight = meshPlugin({ id: 'b', config: { max_packet_length: 50, prefix_separator: ': ' } });
-    expect(resolveTxComposition([wide, tight], null)).toEqual({ maxLength: 50, hint: 'MeshCore' });
+    expect(resolveTxComposition([wide, tight], null)).toEqual({ maxBytes: 50, hint: 'MeshCore' });
   });
 });
 

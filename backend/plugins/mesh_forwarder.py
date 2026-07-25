@@ -155,6 +155,11 @@ class MeshForwarderPlugin(BasePlugin):
 
     # -- TX forwarding (never blocks the radio path) -------------------
     async def on_audio_tx_pre_queue(self, payload: dict) -> dict | None:
+        # Not every transmission carries text: voice TX is raw operator audio, and a
+        # standalone ID has its phrase built later in the TX worker. There is nothing
+        # to put on the mesh for those, so skip rather than forward a bare name prefix.
+        if not payload.get("text"):
+            return payload
         try:
             cfg = self._read_config(self.ctx.get_config())
             if (

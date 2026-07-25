@@ -1231,6 +1231,42 @@ class TestNetScriptHandler:
         assert "NET CLOSED" in item["text"].upper()
 
 
+class TestEnqueueFn:
+    """NCS-authored text goes out through the injected enqueue_fn, which the server
+    wires to the plugin gate chain — otherwise net scripts, round-table prompts and
+    spot reports would be invisible to forwarding plugins."""
+
+    def make_with_enqueue(self, config=None):
+        sent: list[dict] = []
+
+        async def _enqueue(payload):
+            sent.append(payload)
+            return True
+
+        ncs = NCSPlugin(
+            broadcast_fn=AsyncMock(),
+            tx_queue=asyncio.Queue(),
+            config_getter=MagicMock(return_value=config or make_config()),
+            channel_clear_fn=MagicMock(return_value=True),
+            enqueue_fn=_enqueue,
+        )
+        return ncs, sent
+
+    async def test_script_goes_through_the_injected_enqueue(self):
+        ncs, sent = self.make_with_enqueue(make_config(ncs_preamble_text="Welcome, {callsign}."))
+        ncs._active = True
+        await ncs._handle_read_script("preamble", AsyncMock())
+        assert len(sent) == 1
+        assert sent[0]["_pre_formatted"] is True
+        # The raw queue is untouched — the funnel owns the put now.
+        assert ncs._tx_queue.empty()
+
+    def test_defaults_to_a_bare_queue_put(self):
+        """Constructing without enqueue_fn keeps the plain queue behaviour."""
+        ncs = make_ncs()
+        assert ncs._enqueue == ncs._tx_queue.put
+
+
 # ---------------------------------------------------------------------------
 # Round-table caller
 # ---------------------------------------------------------------------------
