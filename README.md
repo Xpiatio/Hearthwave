@@ -298,6 +298,7 @@ disclosed — see [Legality & FCC compliance](https://xpiatio.github.io/Hearthwa
 |---|---|
 | Server | x86 mini PC or NUC (e.g. Intel N100; N305 or better recommended when running the two-tier final pass); ARM not supported |
 | RAM | 8 GB minimum, 16 GB recommended — Whisper STT is memory-intensive, and the optional two-tier final-pass model adds ~1.5 GB while active |
+| Disk | ~15 GB free for the CPU path: backend image ~5.8 GB, staged Whisper models ~2.1 GB (`small.en` + `large-v3-turbo`), Piper voices ~0.7 GB, plus journals and Docker build cache. The ROCm path needs ~40 GB — its image is built locally (~15.6 GB) and the final-pass model is staged twice, CT2 and HF transformers, ~1.6 GB each |
 | GPU (optional) | AMD GPU with amdgpu / ROCm kernel driver — offloads the final pass to the GPU, eliminating CPU contention during transcription. CPU-only operation is fully supported without a GPU |
 | Audio | A two-way audio path to the radio's combo (speaker/mic) jack — either the computer's built-in 3.5 mm jack or a USB audio adapter (see [Connecting the radio](#connecting-the-radio)) |
 | PTT | VOX (no wiring — uses the VOX primer tone), or a USB serial dongle (RTS/DTR) |

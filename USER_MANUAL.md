@@ -840,7 +840,7 @@ The final-pass model is not bundled in the images, but **every install script st
 
 ```bash
 bash setup-cpu.sh          # Docker, CPU
-bash setup-rocm.sh         # Docker, AMD GPU (stages CT2 + HF formats)
+bash setup-rocm.sh         # Docker, AMD GPU (stages CT2 + HF formats, ~1.6 GB each)
 bash prereq.sh             # Portainer (named volumes)
 bash install.sh            # native install
 ```
