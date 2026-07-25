@@ -4,15 +4,18 @@
 #   docker compose -f docker-compose.yml up --build
 #
 # Usage:
-#   bash setup-cpu.sh                                  # small.en + voices
+#   bash setup-cpu.sh                                  # small.en + large-v3-turbo + voices
 #   bash setup-cpu.sh --model base.en                 # smaller/faster Whisper
-#   bash setup-cpu.sh --final-model distil-large-v3   # also stage two-tier final model (CPU)
+#   bash setup-cpu.sh --final-model distil-large-v3   # stage a different final model (CPU)
+#   bash setup-cpu.sh --final-model none              # skip the final model (single-pass RX)
 #   bash setup-cpu.sh --skip-voices
 
 set -euo pipefail
 
 WHISPER_MODEL="small.en"
-FINAL_MODEL=""
+# Two-tier final-pass model staged by default (~1.6 GB). whisper_model_final="auto"
+# prefers large-v3-turbo, so staging it here is what lets "auto" resolve at all.
+FINAL_MODEL="large-v3-turbo"
 SKIP_VOICES=false
 
 while [[ $# -gt 0 ]]; do
@@ -20,7 +23,7 @@ while [[ $# -gt 0 ]]; do
     --model)       [[ $# -lt 2 ]] && { echo "Error: --model needs a value." >&2; exit 1; }; WHISPER_MODEL="$2"; shift 2 ;;
     --final-model) [[ $# -lt 2 ]] && { echo "Error: --final-model needs a value." >&2; exit 1; }; FINAL_MODEL="$2"; shift 2 ;;
     --skip-voices) SKIP_VOICES=true; shift ;;
-    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
     *) echo "Unknown argument: $1  (try --help)" >&2; exit 1 ;;
   esac
 done
@@ -53,6 +56,9 @@ VOICES=(
 [[ -f backend/requirements.txt ]] || { echo "Error: run from the Hearthwave repo root." >&2; exit 1; }
 command -v docker &>/dev/null || { echo "Error: docker not found in PATH." >&2; exit 1; }
 docker info &>/dev/null || { echo "Error: Docker daemon not running or no permission." >&2; exit 1; }
+
+# "none"/"off" (and "") mean: single-pass RX, stage no final model.
+[[ "$FINAL_MODEL" == "none" || "$FINAL_MODEL" == "off" ]] && FINAL_MODEL=""
 
 ct2_repo_for "$WHISPER_MODEL" >/dev/null
 [[ -n "$FINAL_MODEL" ]] && ct2_repo_for "$FINAL_MODEL" >/dev/null

@@ -3,24 +3,35 @@
 # Creates a Python venv at .venv/, installs all deps, and validates the setup.
 #
 # Usage:
-#   bash install.sh                            # full install
+#   bash install.sh                            # full install (small.en + large-v3-turbo)
 #   bash install.sh --no-models                # skip model download (copy Models/ manually)
-#   bash install.sh --final-model distil-large-v3   # also stage the two-tier
-#                                              # final-pass model (set whisper_model_final to match)
+#   bash install.sh --final-model distil-large-v3   # stage a different two-tier
+#                                              # final-pass model
+#   bash install.sh --final-model none         # skip the final-pass model (single-pass RX)
+#   bash install.sh --dev                      # also install test deps (pytest, httpx)
 
 set -euo pipefail
 
 MODELS=true
-FINAL_MODEL=""
+DEV=false
+# Two-tier final-pass model staged by default. whisper_model_final="auto" (the
+# fresh-install default) resolves to the best staged model, and its preference
+# order puts large-v3-turbo first — so staging turbo here is what makes "auto"
+# resolve to anything at all on a new install.
+FINAL_MODEL="large-v3-turbo"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --no-models) MODELS=false; shift ;;
+    --dev) DEV=true; shift ;;
     --final-model)
       [[ $# -lt 2 ]] && { echo "Error: --final-model requires a value." >&2; exit 1; }
       FINAL_MODEL="$2"; shift 2 ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
 done
+
+# "none"/"off" (and "") mean: single-pass RX, stage no final model.
+[[ "$FINAL_MODEL" == "none" || "$FINAL_MODEL" == "off" ]] && FINAL_MODEL=""
 
 # ── 1. System packages ───────────────────────────────────────────────────────
 
@@ -71,15 +82,22 @@ source .venv/bin/activate
 
 echo "==> Installing Python packages (this will take a few minutes)..."
 pip install --upgrade pip --quiet
-pip install -r backend/requirements.txt
+if $DEV; then
+    pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+    echo "    Test deps installed — run the suite with: cd backend && python -m pytest"
+else
+    pip install -r backend/requirements.txt
+fi
 
 # ── 5. Models ────────────────────────────────────────────────────────────────
 
 if $MODELS; then
     if [[ -n "$FINAL_MODEL" ]]; then
-        echo "==> Downloading Whisper STT models (small.en + ${FINAL_MODEL})..."
+        echo "==> Downloading Whisper STT models (small.en ~464 MB + ${FINAL_MODEL} ~1.6 GB)..."
         python bootstrap_models.py --model small.en "$FINAL_MODEL"
-        echo "    Set whisper_model_final=\"${FINAL_MODEL}\" in data/config.json to enable two-tier."
+        echo "    whisper_model_final=\"auto\" (new-install default) picks this up automatically."
+        echo "    If data/config.json has whisper_model_final=\"\" (explicit off), set it to \"auto\""
+        echo "    or \"${FINAL_MODEL}\" to enable the two-tier pass."
     else
         echo "==> Downloading Whisper STT model (small.en, ~464 MB)..."
         python bootstrap_models.py --model small.en

@@ -14,9 +14,12 @@ services:
     volumes:
       - ./data:/data
       - ./Voices:/app/Voices:ro
-      # All Whisper models live here, including the optional two-tier
-      # final-pass model. Stage both in one run:
-      #   bash setup.sh --final-model distil-large-v3   # or large-v3-turbo
+      # All Whisper models live here, including the two-tier final-pass model.
+      # setup-cpu.sh stages both in one run and defaults the final model to
+      # large-v3-turbo (~1.6 GB) — the one "auto" prefers:
+      #   bash setup-cpu.sh                                # small.en + large-v3-turbo
+      #   bash setup-cpu.sh --final-model distil-large-v3  # faster on long overs
+      #   bash setup-cpu.sh --final-model none             # single-pass RX
       # New installs default whisper_model_final="auto" and pick the staged
       # model up automatically (turbo > distil > large-v3); a persisted ""
       # (explicit off) stays off until set to "auto" or a model name in the

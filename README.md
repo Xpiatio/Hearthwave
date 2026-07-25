@@ -298,6 +298,7 @@ disclosed — see [Legality & FCC compliance](https://xpiatio.github.io/Hearthwa
 |---|---|
 | Server | x86 mini PC or NUC (e.g. Intel N100; N305 or better recommended when running the two-tier final pass); ARM not supported |
 | RAM | 8 GB minimum, 16 GB recommended — Whisper STT is memory-intensive, and the optional two-tier final-pass model adds ~1.5 GB while active |
+| Disk | ~15 GB free for the CPU path: backend image ~5.8 GB, staged Whisper models ~2.1 GB (`small.en` + `large-v3-turbo`), Piper voices ~0.7 GB, plus journals and Docker build cache. The ROCm path needs ~40 GB — its image is built locally (~15.6 GB) and the final-pass model is staged twice, CT2 and HF transformers, ~1.6 GB each |
 | GPU (optional) | AMD GPU with amdgpu / ROCm kernel driver — offloads the final pass to the GPU, eliminating CPU contention during transcription. CPU-only operation is fully supported without a GPU |
 | Audio | A two-way audio path to the radio's combo (speaker/mic) jack — either the computer's built-in 3.5 mm jack or a USB audio adapter (see [Connecting the radio](#connecting-the-radio)) |
 | PTT | VOX (no wiring — uses the VOX primer tone), or a USB serial dongle (RTS/DTR) |
@@ -331,7 +332,7 @@ Hearthwave ships with three deployment profiles. Choose the one that matches you
 | Profile | Compose file | Setup script | Notes |
 |---|---|---|---|
 | **CPU** (default) | `docker-compose.yml` | `setup-cpu.sh` (or `setup.sh`) | Prebuilt image — recommended for most users |
-| **AMD GPU (ROCm)** | `docker-compose.rocm.yml` | `setup-rocm.sh` | Runs the final pass on an AMD GPU; **image built locally** (~28 GB, not published to registry) |
+| **AMD GPU (ROCm)** | `docker-compose.rocm.yml` | `setup-rocm.sh` | Runs the final pass on an AMD GPU; **image built locally** (~16 GB, not published to registry) |
 | **NVIDIA GPU (CUDA)** | `docker-compose.cuda.yml` | `setup-cuda.sh` | **Stub — not yet validated**; structure is in place but untested |
 
 ### CPU install (default)
@@ -369,16 +370,24 @@ your callsign, audio devices, and PTT interface.
 ## Development
 
 ```bash
-# Backend (requires Python 3.11+)
-pip install -r requirements.txt
-uvicorn backend.main:app --reload
+# Backend (Python 3.13 in the images; 3.11+ works)
+pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+uvicorn backend.server:app --reload --port 8765
+cd backend && python -m pytest        # 2027 tests
 
-# Frontend
+# Frontend (Node 22, matching the image builder stage)
 cd frontend
-npm install
-npm run dev        # dev server on :5173
-npm run test       # run test suite
+npm ci
+npm run dev        # dev server on :5173, proxies /ws + /auth to :8765
+npm run test       # vitest, 1035 tests
 npm run build      # production build
+```
+
+The dev server's proxy target is `BACKEND_URL` (default `http://localhost:8765`), so
+you can point a hot-reloading frontend at a backend running in Docker:
+
+```bash
+BACKEND_URL=http://<backend-container-ip>:8765 npm run dev -- --host 0.0.0.0
 ```
 
 ## Plugin system

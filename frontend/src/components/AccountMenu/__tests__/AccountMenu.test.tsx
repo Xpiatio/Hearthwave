@@ -1,4 +1,4 @@
-import { render as rtlRender, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render as rtlRender, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ThemeProvider } from '@mui/material/styles'
 import { makeTheme } from '../../../theme'
@@ -171,7 +171,9 @@ describe('AccountMenu', () => {
 
     it('opens edit profile dialog when Edit Profile clicked', async () => {
       await openEditDialog()
-      expect(screen.getByText('Edit Profile')).toBeInTheDocument()
+      // Scope to the dialog: the Menu's exit transition can still be running,
+      // leaving the "Edit Profile" MenuItem in the DOM alongside the title.
+      expect(within(screen.getByRole('dialog')).getByText('Edit Profile')).toBeInTheDocument()
     })
 
     it('prefills form fields with current profile', async () => {

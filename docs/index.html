@@ -853,7 +853,7 @@ html[data-theme="dusk"] .theme-toggle .i-moon{ display:none; }
         <div class="frow lead-row">
           <span class="big">2-pass</span>
           <b>Two-tier transcription</b>
-          <p>A fast local pass shows words as they arrive; a second, more careful pass cleans up longer messages and callsigns. Tuned to handle static and squelch tails — and it configures itself: stage a final-pass model and the station picks it up automatically.</p>
+          <p>A fast local pass shows words as they arrive; a second, more careful pass cleans up longer messages and callsigns. Tuned to handle static and squelch tails — and it configures itself: setup stages the second-pass model for you, and the station picks it up automatically.</p>
         </div>
         <div class="frow"><b>Live transcription</b><p>Speech-to-text on every transmission, the moment it lands.</p></div>
         <div class="frow"><b>Voice &amp; keyboard PTT</b><p>Push to talk from a key, a button, or speak — your choice.</p></div>
@@ -1001,7 +1001,8 @@ html[data-theme="dusk"] .theme-toggle .i-moon{ display:none; }
 <span class="p">$</span> git clone https://github.com/Xpiatio/Hearthwave
 <span class="p">$</span> cd Hearthwave
 
-<span class="c"># 2. Run setup (creates .env)</span>
+<span class="c"># 2. Run setup (creates .env, downloads</span>
+<span class="c">#    the speech models — about 2 GB)</span>
 <span class="p">$</span> ./setup.sh
 
 <span class="c"># 3. Start the stack</span>

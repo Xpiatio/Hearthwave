@@ -836,18 +836,25 @@ These settings live in the **Settings** dialog, opened from the **Settings** ent
 
 ### Staging the final-pass model
 
-The final-pass model is not bundled — download it once on an internet-connected machine, then it loads automatically on the first finished transmission:
+The final-pass model is not bundled in the images, but **every install script stages `large-v3-turbo` (~1.6 GB) by default** — the model Auto prefers — so a normal install already has it:
 
 ```bash
-# Docker (host volumes):
-bash setup.sh --final-model distil-large-v3
-# Portainer (named volumes):
-bash prereq.sh --final-model distil-large-v3
-# Native install:
-python bootstrap_models.py --model small.en distil-large-v3
+bash setup-cpu.sh          # Docker, CPU
+bash setup-rocm.sh         # Docker, AMD GPU (stages CT2 + HF formats, ~1.6 GB each)
+bash prereq.sh             # Portainer (named volumes)
+bash install.sh            # native install
 ```
 
-With **Final-pass model** set to `auto` (the default on new installs) the staged model is picked up on the next Listen toggle — nothing else to configure. `large-v3-turbo` is also available (`--final-model large-v3-turbo`): near `large-v3` accuracy at a fraction of the decode cost, preferred by Auto when staged. On a CPU-only host a long transmission may take roughly its own duration to produce the improved final; live partials are unaffected.
+To stage a different one, or none:
+
+```bash
+bash setup-cpu.sh --final-model distil-large-v3   # ~40% faster on long utterances
+bash setup-cpu.sh --final-model none              # single-pass RX, no final model
+# Native, by hand:
+python bootstrap_models.py --model small.en large-v3-turbo
+```
+
+With **Final-pass model** set to `auto` (the default on new installs) the staged model is picked up on the next Listen toggle — nothing else to configure. `large-v3-turbo` gives near `large-v3` accuracy at a fraction of the decode cost and is what Auto picks first when staged; `distil-large-v3` decodes long utterances faster at roughly equal WER. On a CPU-only host a long transmission may take roughly its own duration to produce the improved final; live partials are unaffected.
 
 > **Upgrading from an earlier version?** Installs that ever saved server settings have `whisper_model_final: ""` (explicit **Off**) persisted in `config.json`, and stay off — deliberately, so an operator who turned the second pass off doesn't get it back after an upgrade. Set the panel to **Auto** once to opt in.
 
@@ -1025,7 +1032,7 @@ Hearthwave ships with three Docker deployment profiles. The profile you choose d
 | Profile | Compose file | Setup script | Image source |
 |---|---|---|---|
 | **CPU** (default) | `docker-compose.yml` | `setup.sh` / `setup-cpu.sh` | Prebuilt — pulled from registry |
-| **AMD GPU (ROCm)** | `docker-compose.rocm.yml` | `setup-rocm.sh` | Built locally (~28 GB) — **not published** |
+| **AMD GPU (ROCm)** | `docker-compose.rocm.yml` | `setup-rocm.sh` | Built locally (~16 GB) — **not published** |
 | **NVIDIA GPU (CUDA)** | `docker-compose.cuda.yml` | `setup-cuda.sh` | **Stub only — not yet validated** |
 
 The CPU profile is recommended for most users. The ROCm profile is available for servers with a supported AMD GPU and requires building the Docker image locally — it is not available as a prebuilt download.
@@ -1058,7 +1065,7 @@ To use the ROCm profile your server must meet these requirements:
 - The host user running Docker must be in the **`render` group** (the container uses `/dev/kfd` for GPU access)
 - **`HSA_OVERRIDE_GFX_VERSION`** — set by `setup-rocm.sh` to `10.3.0` by default. This override is required for GPUs not officially listed in ROCm's supported-hardware table (such as the Radeon 680M / gfx1035). Adjust if your GPU uses a different GFX version.
 
-The ROCm Docker image is built locally by `setup-rocm.sh`. This takes considerable time and disk space (~28 GB) and is a one-time operation. The image is not pushed to any registry; it stays on your machine.
+The ROCm Docker image is built locally by `setup-rocm.sh`. This takes considerable time and disk space (~16 GB) and is a one-time operation. The image is not pushed to any registry; it stays on your machine. Nearly all of that is the ROCm PyTorch wheel itself, which bundles the ROCm runtime libraries. The build deletes what the ROCm image can't use: the CUDA runtime wheels PyPI's `torch` pulls in (~2.7 GB) and triton (~691 MB), which only serves `torch.compile` — and `torch.compile` needs a C compiler at runtime that the slim image doesn't ship.
 
 ### Starting with the ROCm profile
 
@@ -1070,7 +1077,7 @@ The ROCm Docker image is built locally by `setup-rocm.sh`. This takes considerab
 docker compose -f docker-compose.rocm.yml up -d
 ```
 
-The final-pass model (`distil-large-v3`) is staged in HF transformers format by `setup-rocm.sh` alongside the CT2 model used by the CPU path.
+The final-pass model (`large-v3-turbo` by default, or whatever `--final-model` names) is staged in HF transformers format by `setup-rocm.sh` alongside the CT2 model used by the CPU path.
 
 ### Automatic fallback
 

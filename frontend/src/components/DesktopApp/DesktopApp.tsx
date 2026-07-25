@@ -160,10 +160,11 @@ export interface DesktopAppProps {
   onAddPending: (station: PendingStation) => void;
   onDismissPending: (callsign: string) => void;
   onDismissAllPending: () => void;
-  // Spectrogram ref (owned by App.tsx because the WS handler pushes rows to it)
-  spectroRef: React.RefObject<SpectrogramHandle>;
+  // Spectrogram ref (owned by App.tsx because the WS handler pushes rows to it).
+  // Nullable: React 19's useRef<T>(null) yields RefObject<T | null>.
+  spectroRef: React.RefObject<SpectrogramHandle | null>;
   // RX level meter ref (owned by App.tsx; fed from the same spectrogram_row stream)
-  levelMeterRef: React.RefObject<AudioLevelMeterHandle>;
+  levelMeterRef: React.RefObject<AudioLevelMeterHandle | null>;
 
   // Snackbars
   publishSnack: string | null;

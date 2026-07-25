@@ -14,6 +14,9 @@ export default defineConfig({
       '/auth': { target: backendUrl },
       '/journal': { target: backendUrl },
       '/display/pair': { target: backendUrl },
+      // Mirror the nginx.conf proxy set so dev matches production.
+      '/health': { target: backendUrl },
+      '/plugins/': { target: backendUrl },
     },
   },
 });
