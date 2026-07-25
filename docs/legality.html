@@ -308,6 +308,7 @@ html[data-theme="dusk"] .theme-toggle .i-moon{ display:none; }
       <a href="#rules">The rules</a>
       <a href="#map">Rule map</a>
       <a href="#autotx">Automated functions</a>
+      <a href="#mesh">Mesh bridge</a>
       <a href="#duties">Responsibilities</a>
     </div>
     <div class="nav-cta">
@@ -437,10 +438,10 @@ html[data-theme="dusk"] .theme-toggle .i-moon{ display:none; }
       <figure class="rule reveal">
         <span class="cite">§ 95.1733 — Prohibited GMRS uses (excerpts)</span>
         <blockquote>
-          <p>"(a) In addition to the prohibited uses outlined in § 95.333 of this chapter, GMRS stations must not communicate: … (8) Messages which are both conveyed by a wireline control link and transmitted by a GMRS station; … (10) Continuous or uninterrupted transmissions, except for communications involving the immediate safety of life or property; …"</p>
+          <p>"(a) In addition to the prohibited uses outlined in § 95.333 of this chapter, GMRS stations must not communicate: … (8) Messages which are both conveyed by a wireline control link and transmitted by a GMRS station; (9) Messages (except emergency messages) to any station in the Amateur Radio Service, to any unauthorized station, or to any foreign station; (10) Continuous or uninterrupted transmissions, except for communications involving the immediate safety of life or property; …"</p>
           <p>"(b) GMRS stations must not be used for one-way communications other than those listed in § 95.1731(b). Initial transmissions to establish two-way communications and data transmissions listed in § 95.1731(d) are not considered to be one-way communications for the purposes of this section."</p>
         </blockquote>
-        <p class="gloss"><b>What it means here — read honestly:</b> paragraph (a)(8) is the linking rule. The FCC's published guidance applies it to using a network to carry traffic <b>between stations</b> — linking repeaters over the internet so a distant transmitter retransmits your message and extends your range. That is what the FCC has said violates §§ 95.1733(a)(8) and 95.1749. It has to be read alongside §§ 95.1745/95.1749, which in the same subpart expressly allow the operator's own control connection to the station — otherwise remote control would be permitted and impossible at the same time. Hearthwave sits squarely on the permitted side: one licensee's control link to one station, with no second station, no retransmission, and no range extension anywhere in the system. Paragraph (a)(10) is enforced in code by a hard transmit-duration watchdog that forcibly unkeys the radio.</p>
+        <p class="gloss"><b>What it means here — read honestly:</b> paragraph (a)(8) is the linking rule. The FCC's published guidance applies it to using a network to carry traffic <b>between stations</b> — linking repeaters over the internet so a distant transmitter retransmits your message and extends your range. That is what the FCC has said violates §§ 95.1733(a)(8) and 95.1749. It has to be read alongside §§ 95.1745/95.1749, which in the same subpart expressly allow the operator's own control connection to the station — otherwise remote control would be permitted and impossible at the same time. Hearthwave sits squarely on the permitted side: one licensee's control link to one station, with no second station, no retransmission, and no range extension anywhere in the system. Paragraph (a)(9) is why a GMRS transmission here is always addressed to your own household's stations; the optional <a href="#mesh">mesh bridge</a> sends its copy on a separate unlicensed radio, not over GMRS. Paragraph (a)(10) is enforced in code by a hard transmit-duration watchdog that forcibly unkeys the radio.</p>
         <a class="src" href="https://www.ecfr.gov/current/title-47/chapter-I/subchapter-D/part-95/subpart-E/section-95.1733" target="_blank" rel="noopener">Read § 95.1733 on eCFR →</a>
       </figure>
 
@@ -512,6 +513,11 @@ html[data-theme="dusk"] .theme-toggle .i-moon{ display:none; }
             <td>That is the entire product: family members exchanging plain spoken English on their own channel. Text-to-speech output is ordinary analog FM voice from a certified radio — no digital voice modes, no encryption, nothing hidden in the audio.</td>
           </tr>
           <tr>
+            <td>§ 95.1733(a)(8)<br>§ 95.1747<br>47 CFR Part 15</td>
+            <td><b>Mesh bridge</b> — an optional LoRa copy of outgoing traffic must not become a relay, a control path, or an unauthorized radiator.</td>
+            <td>The MeshCore and Meshtastic plugins implement the <b>transmit hook only</b> — there is no receive hook, so nothing heard on the radio is forwarded, and nothing arriving from the mesh can key the transmitter. The LoRa copy is a second transmission of your own message on unlicensed spectrum, so the licensee's remaining duties are Part 15 hardware duties. Both plugins ship disabled and are mutually exclusive. <a href="#mesh">Full disclosure →</a></td>
+          </tr>
+          <tr>
             <td>Accountability</td>
             <td>The licensee answers for everything the station transmits.</td>
             <td>Every transmission is written to an audit log with the account, callsign, and message text; net sessions are journaled with rosters and transcripts. If a question is ever raised, the licensee can show <b>who transmitted what, and when</b>.</td>
@@ -567,6 +573,49 @@ html[data-theme="dusk"] .theme-toggle .i-moon{ display:none; }
   </div>
 </section>
 
+<!-- ═══════════ MESH BRIDGE ═══════════ -->
+<section id="mesh">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">Cross-service disclosure</span>
+      <h2>The mesh bridge sends a copy, <span class="ember">never a relay.</span></h2>
+      <p class="lead">Two optional example plugins — MeshCore and Meshtastic — mirror what your station says onto an unlicensed LoRa mesh, so household members out of radio range still get the message. That puts two radio services in one product, so it deserves its own accounting. Both are <b>off by default</b>, and only one can run at a time. The shape that keeps this simple: the mesh gets a <b>second, independent transmission of your own outgoing message</b> — it is never a path into your GMRS transmitter, and it never carries anyone else's traffic.</p>
+    </div>
+    <div class="three">
+      <div class="pill reveal">
+        <span class="cite">47 CFR §§ 95.1749 · 95.349</span>
+        <h3>Not a network connection to the station</h3>
+        <p>§ 95.349 prohibits operation "connected with the public switched network." A LoRa mesh is neither the telephone network nor your control link — your browser is that. The mesh radio is <b>downstream of the hub</b>: it receives a copy of an outgoing message and has <b>no path back</b> to key the GMRS radio. Nothing arriving from the mesh can transmit on GMRS, because no such code path exists.</p>
+      </div>
+      <div class="pill reveal">
+        <span class="cite">47 CFR § 95.1733(a)(8) · (a)(9)</span>
+        <h3>A copy, not a retransmission</h3>
+        <p>The linking rule is about carrying messages <b>between stations</b> so a distant transmitter retransmits them and extends your range. There is no second GMRS transmitter here and no range extension on GMRS: your over reaches your own GMRS stations exactly as far as your radio reaches. The LoRa copy is a separate Part 15 transmission on its own band — the mesh nodes are not recipients of your GMRS transmission, and the mesh path is not a wireline control link.</p>
+      </div>
+      <div class="pill reveal">
+        <span class="cite">47 U.S.C. § 605</span>
+        <h3>Only your own traffic leaves</h3>
+        <p>The bridge is <b>outbound only, by construction</b>: the mesh plugins implement the transmit hook and no receive hook at all, so a transmission <i>heard</i> from another operator is never put on the mesh. Received traffic is transcribed to your own screens and nowhere else. That keeps the station clear of divulging the contents of radio communications it wasn't addressed with, and keeps the bridge from becoming a station-extension relay.</p>
+      </div>
+    </div>
+
+    <div class="sec-head reveal" style="margin-top:52px">
+      <h2 style="font-size:clamp(22px,2.6vw,30px)">What the mesh side asks of you</h2>
+      <p class="lead">On GMRS, the licensee is the station. On the LoRa side there is no license to hold — the duties attach to the <b>hardware</b> instead, under Part 15:</p>
+    </div>
+    <ul class="checks reveal">
+      <li><span class="ck">✓</span><div><b>Use an authorized LoRa device</b><span>An intentional radiator needs equipment authorization (§ 15.201). Most commercial mesh boards carry a module FCC ID — check that yours does. The home-built exemption (§ 15.23) covers only devices that are not marketed, not built from a kit, and built in quantities of five or fewer for personal use.</span></div></li>
+      <li><span class="ck">✓</span><div><b>Accept the Part 15 bargain</b><span>Unlicensed operation gets no protection from interference and must not cause harmful interference; you must stop on notification (§ 15.5). A mesh is a convenience path, never the one your household's safety depends on.</span></div></li>
+      <li><span class="ck">✓</span><div><b>Leave the radio as certified</b><span>Run the US band plan and the power the device is certified for. Adding an amplifier or swapping in a high-gain antenna beyond the authorized configuration voids the authorization — the firmware letting you raise power is not the FCC letting you.</span></div></li>
+      <li><span class="ck">✓</span><div><b>Keep the copy honest</b><span>Everything the bridge forwards is prefixed with the sender's name and clamped to one packet. Mesh channel encryption is a LoRa-side feature and is fine there — but your GMRS transmission stays plain spoken English, because § 95.1733(a)(3) prohibits coded messages or hidden meanings <i>on GMRS</i>.</span></div></li>
+    </ul>
+
+    <div class="note reveal" style="margin-top:30px">
+      <b>Two things we will not build.</b> First, <b>mesh&nbsp;→&nbsp;GMRS transmit</b>: auto-keying the radio with something that arrived from the mesh would hand an unlicensed link, carrying traffic from anyone in range, control of a licensed transmitter — and Part 95E allows automatic (unattended) control only for repeater stations (§ 95.1747). Second, <b>forwarding received traffic to the mesh</b>: that is the station-extension relay this page's whole architecture avoids. If you write your own plugin, these are the two lines to stay behind.
+    </div>
+  </div>
+</section>
+
 <!-- ═══════════ OPERATOR DUTIES ═══════════ -->
 <section id="duties">
   <div class="wrap">
@@ -598,10 +647,12 @@ html[data-theme="dusk"] .theme-toggle .i-moon{ display:none; }
       <li><a href="https://www.ecfr.gov/current/title-47/chapter-I/subchapter-D/part-95/subpart-E" target="_blank" rel="noopener">47 CFR Part 95, Subpart E — General Mobile Radio Service</a> (eCFR, current text)</li>
       <li><a href="https://www.govinfo.gov/content/pkg/CFR-2025-title47-vol5/pdf/CFR-2025-title47-vol5-sec95-1733.pdf" target="_blank" rel="noopener">§ 95.1733 as printed in the 2025 CFR</a> (GPO, authenticated PDF)</li>
       <li><a href="https://www.fcc.gov/wireless/bureau-divisions/mobility-division/general-mobile-radio-service-gmrs" target="_blank" rel="noopener">FCC — General Mobile Radio Service overview</a> (licensing, permitted uses, and the Commission's guidance on network connections and repeater linking)</li>
+      <li><a href="https://www.ecfr.gov/current/title-47/chapter-I/subchapter-A/part-15" target="_blank" rel="noopener">47 CFR Part 15 — Radio frequency devices</a> (eCFR) — the unlicensed side of the mesh bridge, in particular <a href="https://www.ecfr.gov/current/title-47/chapter-I/subchapter-A/part-15/subpart-A/section-15.5" target="_blank" rel="noopener">§ 15.5</a> (conditions of operation), <a href="https://www.ecfr.gov/current/title-47/chapter-I/subchapter-A/part-15/subpart-A/section-15.23" target="_blank" rel="noopener">§ 15.23</a> (home-built devices), and <a href="https://www.ecfr.gov/current/title-47/chapter-I/subchapter-A/part-15/subpart-A/section-15.201" target="_blank" rel="noopener">§ 15.201</a> (equipment authorization)</li>
+      <li><a href="https://www.law.cornell.edu/uscode/text/47/605" target="_blank" rel="noopener">47 U.S.C. § 605 — Unauthorized publication or use of communications</a> (Cornell LII) — why received traffic is never bridged anywhere</li>
       <li><a href="https://github.com/Xpiatio/Hearthwave" target="_blank" rel="noopener">Hearthwave source code</a> — every claim on this page about behavior is verifiable in the repository</li>
     </ul>
     <div class="note reveal" style="margin-top:30px">
-      <b>This page is information, not legal advice.</b> It reflects our good-faith reading of Part 95E and the FCC's published guidance as of <b>July 2026</b>. Regulations and interpretations change; the eCFR links above always show the current text. You — the licensee — are responsible for your station's operation. If you have a compliance question the rules don't clearly answer, ask the FCC or a communications attorney, not a website.
+      <b>This page is information, not legal advice.</b> It reflects our good-faith reading of Part 95E, Part 15 (for the optional mesh bridge), and the FCC's published guidance as of <b>July 2026</b>. Regulations and interpretations change; the eCFR links above always show the current text. You — the licensee — are responsible for your station's operation. If you have a compliance question the rules don't clearly answer, ask the FCC or a communications attorney, not a website.
     </div>
   </div>
 </section>
@@ -638,7 +689,7 @@ html[data-theme="dusk"] .theme-toggle .i-moon{ display:none; }
         <p style="font-size:14px;margin:0">The family airwaves, open to everyone. Self-hosted, accessible GMRS — built so no one is left off the channel.</p>
       </div>
       <div class="foot-links">
-        <div><b>Legal</b><a href="#rules">The rules</a><a href="#autotx">Automated functions</a><a href="https://www.fcc.gov/wireless/bureau-divisions/mobility-division/general-mobile-radio-service-gmrs" target="_blank" rel="noopener">Get a license</a></div>
+        <div><b>Legal</b><a href="#rules">The rules</a><a href="#autotx">Automated functions</a><a href="#mesh">Mesh bridge</a><a href="https://www.fcc.gov/wireless/bureau-divisions/mobility-division/general-mobile-radio-service-gmrs" target="_blank" rel="noopener">Get a license</a></div>
         <div><b>Project</b><a href="index.html">Hearthwave home</a><a href="https://github.com/Xpiatio/Hearthwave" target="_blank" rel="noopener">GitHub</a><a href="https://github.com/Xpiatio/Hearthwave#readme" target="_blank" rel="noopener">User manual</a></div>
       </div>
     </div>
