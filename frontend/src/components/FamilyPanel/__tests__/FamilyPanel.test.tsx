@@ -55,6 +55,18 @@ describe('FamilyPanel', () => {
     expect(within(items[1]).getByText('Missed check-in')).toBeInTheDocument();
   });
 
+  it('renders every member of a big roster (density tiering must not drop cards)', () => {
+    const big = Array.from({ length: 12 }, (_, i) => ({
+      ...entries[0],
+      user_id: `big${i}`,
+      display_name: `Member ${i}`,
+    }));
+    render(<FamilyPanel {...makeProps({ entries: big, reminders: {} })} />);
+    const board = screen.getByRole('list', { name: 'Family members' });
+    expect(within(board).getAllByRole('listitem')).toHaveLength(12);
+    expect(screen.getByText('Member 11')).toBeInTheDocument();
+  });
+
   it("giant I'm OK button fires onImOk", () => {
     const props = makeProps();
     render(<FamilyPanel {...props} />);
