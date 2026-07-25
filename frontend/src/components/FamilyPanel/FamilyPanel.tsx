@@ -104,6 +104,13 @@ export function FamilyPanel(props: FamilyPanelProps) {
           <Typography variant="subtitle2" color="text.secondary">
             Check-in reminders
           </Typography>
+          {/* mt: -1 pulls the blurb up against its header, past the stack's gap: 2. */}
+          <Typography variant="caption" sx={{ mt: -1, color: 'text.secondary' }}>
+            Set a daily time for each person. If they haven&apos;t tapped &quot;I&apos;m OK&quot; by
+            then, their card here shows &quot;Missed check-in&quot;, the Family card on Home raises
+            an alert, and (if notifications are on) this device gets a notification. Use the
+            switch to pause a reminder without clearing its time.
+          </Typography>
           {props.entries.map((entry) => {
             const reminder = props.reminders[entry.user_id] ?? { time: '', enabled: false };
             return (
