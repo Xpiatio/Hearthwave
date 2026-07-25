@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Box, Paper, Typography, useTheme } from '@mui/material';
 import { alpha, type Theme } from '@mui/material/styles';
 import type { ChatEntry } from '../ChatDisplay/ChatDisplay';
@@ -6,12 +7,12 @@ interface Props {
   messages: ChatEntry[];
   /** E-ink wall panels: finalized-only, outlined black-on-white, no animation. */
   eink: boolean;
-  /** Right-aligned header meta — "Net running now" / next-net label / ''. */
-  netLabel: string;
 }
 
-// How many recent messages the wall shows at once.
-const SHOWN = 5;
+// How far from the top still counts as "reading the newest traffic". Past this
+// the operator has scrolled back through history and must not be yanked
+// forward when something new arrives.
+const STICK_TO_TOP_PX = 24;
 
 // Short direction pill per entry — CW distinguishes morse RX from voice RX.
 function badgeLabel(m: ChatEntry): string {
@@ -45,16 +46,32 @@ function kindMain(palette: Theme['palette'], kind: ChatEntry['kind']): string {
   }
 }
 
-export function DisplayChatConsole({ messages, eink, netLabel }: Props) {
+export function DisplayChatConsole({ messages, eink }: Props) {
   const theme = useTheme();
   // E-ink shows finalized text only; partials would fight the slow refresh.
-  const shown = (eink ? messages.filter((m) => !m.partial) : messages).slice(-SHOWN);
+  // Newest first: on a wall panel the eye starts at the top, and it means new
+  // traffic never pushes older lines out of view mid-read.
+  const shown = (eink ? messages.filter((m) => !m.partial) : messages).slice().reverse();
+
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const headId = shown[0]?.id;
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el && el.scrollTop < STICK_TO_TOP_PX) el.scrollTop = 0;
+  }, [headId]);
 
   return (
     <Paper
       component="section"
       aria-label="Radio log"
-      sx={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', ...(eink ? {} : { boxShadow: 3 }) }}
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        height: '100%',
+        minHeight: 0,
+        ...(eink ? {} : { boxShadow: 3 }),
+      }}
     >
       <Box
         sx={{
@@ -89,19 +106,27 @@ export function DisplayChatConsole({ messages, eink, netLabel }: Props) {
           }
         />
         <Typography sx={{ fontSize: '1.15rem', fontWeight: 600 }}>Radio log</Typography>
-        {netLabel && (
-          <Typography sx={{ ml: 'auto', fontSize: '1.15rem', color: eink ? 'text.primary' : 'warning.main' }}>
-            {netLabel}
-          </Typography>
-        )}
+        <Typography sx={{ ml: 'auto', fontSize: '0.9rem', color: 'text.secondary' }}>
+          newest first
+        </Typography>
       </Box>
 
       <Box
+        ref={scrollRef}
         role="log"
         aria-label="Radio log messages"
         aria-live="polite"
         aria-relevant="additions"
-        sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, px: 2, py: 1.5, flexGrow: 1 }}
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1.5,
+          px: 2,
+          py: 1.5,
+          flexGrow: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+        }}
       >
         {shown.length === 0 && (
           <Typography sx={{ color: 'text.secondary', fontStyle: 'italic', fontSize: '1.1rem' }}>

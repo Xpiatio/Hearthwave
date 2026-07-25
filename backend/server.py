@@ -125,7 +125,8 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import (
-    FastAPI, File, Header, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect,
+    FastAPI, File, Header, HTTPException, Query, Request, UploadFile, WebSocket,
+    WebSocketDisconnect,
 )
 from fastapi.responses import FileResponse, Response
 
@@ -169,7 +170,7 @@ from backend.persistence.contacts import (
 )
 from backend.persistence.audit import AuditLog
 from backend.persistence.device_tokens import DeviceTokenStore
-from backend.auth_ratelimit import _extract_ip, get_client_ip
+from backend.auth_ratelimit import LoginRateLimiter, _extract_ip, get_client_ip
 from backend.family.reminders import is_checkin_missed
 from backend.persistence.family import FamilyStore
 from backend.persistence.incidents import IncidentsStore
@@ -639,6 +640,7 @@ def _build_device_tokens_msg() -> dict:
             {
                 **{k: r[k] for k in ("id", "label", "created_at", "last_seen")},
                 "eink": r.get("eink", False),
+                "order": r.get("order", []),
             }
             for r in tokens
         ],
@@ -1810,6 +1812,56 @@ async def health() -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Wall-display pairing.
+#
+# A six-digit code is only safe as a credential because it is single-use,
+# short-lived, and rate limited — all three are load-bearing. Per-IP stops a
+# single scanner; the global limiter stops a distributed sweep of the 10^6
+# space, at the cost of a household-wide pairing pause after 20 bad guesses.
+# ---------------------------------------------------------------------------
+
+_pair_ip_limiter = LoginRateLimiter(max_attempts=5, window_seconds=60)
+_pair_global_limiter = LoginRateLimiter(max_attempts=20, window_seconds=300)
+
+
+@app.post("/display/pair")
+async def display_pair(request: Request) -> dict:
+    ip = get_client_ip(request)
+    allowed, retry_after = _pair_ip_limiter.check(ip)
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many attempts — try again later.",
+            headers={"Retry-After": str(retry_after)},
+        )
+    if _device_token_store is None:
+        raise HTTPException(status_code=503, detail="Pairing is not available yet.")
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    code = str((body or {}).get("code") or "").strip()
+
+    token = _device_token_store.redeem_pairing_code(code) if code else None
+    if not token:
+        global_ok, global_retry = _pair_global_limiter.check("global")
+        if not global_ok:
+            raise HTTPException(
+                status_code=429,
+                detail="Pairing is temporarily locked. Ask an admin for a new code.",
+                headers={"Retry-After": str(global_retry)},
+            )
+        if _audit_log:
+            _audit_log.log("display_pair_failed", user_id=None, ip=ip)
+        raise HTTPException(status_code=404, detail="That code is not valid. Ask for a new one.")
+
+    if _audit_log:
+        _audit_log.log("display_pair", user_id=None, ip=ip)
+    return {"token": token}
+
+
+# ---------------------------------------------------------------------------
 # Plugin install / reload / uninstall (admin only).
 #
 # Plugins run with full server privileges — these endpoints are admin-gated and a
@@ -2372,7 +2424,7 @@ def _aac_grid_texts(grid) -> set[str]:
 # no admin surface, no TX — just a small allowlist of self-serve messages
 # (handlers land in Task 3/4). Everything else gets rejected before it can
 # reach plugin dispatch or the generic message handlers below.
-_DISPLAY_ALLOWED_MSGS = {"display_im_ok", "display_quick_message"}
+_DISPLAY_ALLOWED_MSGS = {"display_im_ok", "display_quick_message", "display_set_order"}
 
 
 def _is_display(state: "ConnectionState") -> bool:
@@ -2458,13 +2510,25 @@ async def websocket_endpoint(
 
     # Device tokens (wall display) are a separate identity class: no user
     # profile, hard-scoped message allowlist, role="display". Checked first
-    # so a device_token never falls through to the session-token auth block.
+    # so a device_token never falls through to the session-token auth block —
+    # that fall-through handed the kiosk a bare 4001 during startup, which it
+    # read as "revoked" and un-paired itself over.
     display_rec = None
-    if _device_token_store and device_token:
+    if device_token:
+        if _device_token_store is None:
+            _log.warning(
+                "device_token presented before the token store was ready — "
+                "refusing with 1013 so the display retries instead of un-pairing"
+            )
+            await ws.accept()
+            await ws.close(code=1013)  # try again later
+            return
         display_rec = _device_token_store.validate(device_token)
         if not display_rec:
             await ws.accept()
-            await ws.close(code=4001)
+            # The reason is load-bearing: it is the only signal that tells the
+            # kiosk this token is genuinely dead rather than briefly unlucky.
+            await ws.close(code=4001, reason="device_token_invalid")
             return
 
     if display_rec is None:
@@ -2480,7 +2544,7 @@ async def websocket_endpoint(
         profile = _users_store.get(user_id) if (_users_store and user_id) else None
         if not user_id or not profile:
             await ws.accept()
-            await ws.close(code=4001)
+            await ws.close(code=4001, reason="auth_required")
             return
 
     await ws.accept()
@@ -2502,7 +2566,11 @@ async def websocket_endpoint(
             _audit_log.log("display_connect", user_id=state.user_id, ip=client_ip)
 
         await _manager.send_to(ws, _build_status())
-        await _manager.send_to(ws, {"type": "display_config", "eink": display_rec.get("eink", False)})
+        await _manager.send_to(ws, {
+            "type": "display_config",
+            "eink": display_rec.get("eink", False),
+            "order": display_rec.get("order", []),
+        })
         await _manager.send_to(ws, _build_family_presence_msg())
         await _manager.send_to(ws, _build_neighborhood_state_msg())
         await _manager.send_to(ws, {"type": "chat_history", "messages": history_msgs})
@@ -2756,6 +2824,22 @@ async def websocket_endpoint(
                 await _broadcast_family_chat(text, state.display_label or "Wall display")
                 await _manager.send_to(ws, {"type": "display_ack", "action": "quick_message"})
 
+            elif msg_type == "display_set_order":
+                # Tile order is per wall panel, so it is keyed by the device
+                # token this connection authenticated with, not by any user.
+                if not _is_display(state):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Only available on wall display"})
+                    continue
+                if _device_token_store is None:
+                    continue
+                token_id = state.user_id.split(":", 1)[1] if ":" in state.user_id else ""
+                try:
+                    _device_token_store.set_order(token_id, data.get("order") or [])
+                except ValueError as exc:
+                    await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
+                    continue
+                await _manager.send_to(ws, {"type": "display_ack", "action": "order"})
+
             elif msg_type == "set_family_reminder":
                 if not state.is_admin:
                     await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
@@ -2792,7 +2876,14 @@ async def websocket_endpoint(
                 except ValueError as exc:
                     await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
                     continue
-                await _manager.send_to(ws, {"type": "device_token_created", "record": rec})
+                # The code is the part an admin reads aloud; the raw token is
+                # still returned for scripted setups and the ?token= URL.
+                pairing_code = _device_token_store.issue_pairing_code(rec["id"])
+                await _manager.send_to(ws, {
+                    "type": "device_token_created",
+                    "record": rec,
+                    "pairing_code": pairing_code,
+                })
                 await _manager.send_to(ws, _build_device_tokens_msg())
 
             elif msg_type == "device_token_list":
@@ -2813,6 +2904,24 @@ async def websocket_endpoint(
                 if _device_token_store.revoke(token_id):
                     await _manager.disconnect_user(f"display:{token_id}")
                 await _manager.send_to(ws, _build_device_tokens_msg())
+
+            elif msg_type == "device_token_pair_code":
+                # Re-pair an existing display (browser data wiped, new tablet)
+                # without revoking the token and losing its order/e-ink setup.
+                if not state.is_admin:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Admin access required."})
+                    continue
+                if _device_token_store is None:
+                    continue
+                token_id = data.get("id") or ""
+                if not any(r["id"] == token_id for r in _device_token_store.list_all()):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Unknown display."})
+                    continue
+                await _manager.send_to(ws, {
+                    "type": "device_token_pair_code",
+                    "id": token_id,
+                    "pairing_code": _device_token_store.issue_pairing_code(token_id),
+                })
 
             elif msg_type == "device_token_set_eink":
                 if not state.is_admin:

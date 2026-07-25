@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import { ThemeProvider } from '@mui/material/styles';
 import { DisplayChatConsole } from './DisplayChatConsole';
@@ -11,10 +11,10 @@ function entry(over: Partial<ChatEntry>): ChatEntry {
   return { ...base, ...over };
 }
 
-function renderConsole(messages: ChatEntry[], eink = false, netLabel = '') {
+function renderConsole(messages: ChatEntry[], eink = false) {
   return render(
     <ThemeProvider theme={makeTheme(false, { eink })}>
-      <DisplayChatConsole messages={messages} eink={eink} netLabel={netLabel} />
+      <DisplayChatConsole messages={messages} eink={eink} />
     </ThemeProvider>,
   );
 }
@@ -53,20 +53,26 @@ describe('DisplayChatConsole', () => {
     expect(screen.getByText('copy')).toBeInTheDocument();
   });
 
-  it('shows only the latest 5 messages', () => {
+  it('keeps every message — the log scrolls rather than truncating', () => {
     const msgs = Array.from({ length: 8 }, (_, i) => entry({ id: `m${i}`, kind: 'chat', text: `msg ${i}` }));
     renderConsole(msgs);
-    expect(screen.queryByText('msg 2')).not.toBeInTheDocument();
-    expect(screen.getByText('msg 3')).toBeInTheDocument();
-    expect(screen.getByText('msg 7')).toBeInTheDocument();
+    for (let i = 0; i < 8; i += 1) {
+      expect(screen.getByText(`msg ${i}`)).toBeInTheDocument();
+    }
   });
 
-  it('shows the net label in the header', () => {
-    renderConsole([], false, 'Net running now');
+  it('renders newest first', () => {
+    renderConsole([
+      entry({ id: 'a', kind: 'chat', text: 'oldest' }),
+      entry({ id: 'b', kind: 'chat', text: 'middle' }),
+      entry({ id: 'c', kind: 'chat', text: 'newest' }),
+    ]);
     const log = screen.getByRole('log', { name: /radio log messages/i });
-    // The label sits in the header, not the message body.
-    expect(within(log).queryByText('Net running now')).not.toBeInTheDocument();
-    expect(screen.getByText('Net running now')).toBeInTheDocument();
+    const rendered = ['oldest', 'middle', 'newest']
+      .map((t) => screen.getByText(t))
+      .map((el) => Array.from(log.querySelectorAll('*')).indexOf(el));
+    expect(rendered[2]).toBeLessThan(rendered[1]);
+    expect(rendered[1]).toBeLessThan(rendered[0]);
   });
 
   it('e-ink suppresses partials and shows finalized only', () => {

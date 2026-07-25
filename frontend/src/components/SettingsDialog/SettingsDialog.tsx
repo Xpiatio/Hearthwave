@@ -63,6 +63,8 @@ interface Props {
   onCreateDeviceToken: (label: string) => void;
   onRevokeDeviceToken: (id: string) => void;
   onSetDeviceTokenEink: (id: string, eink: boolean) => void;
+  pairingCode: { id: string; code: string } | null;
+  onRequestPairCode: (id: string) => void;
 
   // System tab (admin only)
   serverConfig: React.ComponentProps<typeof ServerConfigPanel>['config'];
@@ -245,6 +247,7 @@ export function SettingsDialog(props: Props) {
               deviceTokens={props.deviceTokens} createdToken={props.createdToken}
               onCreateDeviceToken={props.onCreateDeviceToken} onRevokeDeviceToken={props.onRevokeDeviceToken}
               onSetDeviceTokenEink={props.onSetDeviceTokenEink}
+              pairingCode={props.pairingCode} onRequestPairCode={props.onRequestPairCode}
               onDirtyChange={setAdminDirty}
             >
               {props.usersPanel}

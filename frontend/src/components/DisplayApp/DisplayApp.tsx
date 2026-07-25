@@ -1,17 +1,38 @@
-import { useEffect, useState } from 'react';
-import { Alert, Box, Button, Chip, Paper, Snackbar, TextField, Typography } from '@mui/material';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Box, Button, Chip, Link, Paper, Snackbar, TextField, Typography } from '@mui/material';
 import { ThemeProvider } from '@mui/material/styles';
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  rectSortingStrategy,
+  sortableKeyboardCoordinates,
+} from '@dnd-kit/sortable';
 import { useDisplaySocket } from '../../hooks/useDisplaySocket';
 import type { UseDisplaySocketResult } from '../../hooks/useDisplaySocket';
 import { isDuskDark } from '../../display/autoDark';
 import { makeTheme } from '../../theme';
 import { nextNetLabel } from '../../neighborhood/schedule';
+import { tileMetrics } from '../../display/tileSize';
+import { applyTileOrder, reorderIds } from '../../display/tileOrder';
 import { PresenceTile } from './PresenceTile';
+import { SortablePresenceTile } from './SortablePresenceTile';
 import { ConfirmOkDialog } from './ConfirmOkDialog';
 import { DisplayChatConsole } from './DisplayChatConsole';
 import type { DisplayImOkPayload, DisplayQuickMessagePayload, FamilyPresenceEntry } from '../../types/ws';
 
 const DEVICE_TOKEN_KEY = 'radio_tty_device_token';
+
+// A long-press, not a tap: short taps still belong to "Mark OK".
+const DRAG_DELAY_MS = 350;
+const DRAG_TOLERANCE_PX = 8;
 
 const CLOCK_TICK_MS = 30_000;
 const DRIFT_TICK_MS = 60_000;
@@ -35,9 +56,44 @@ function formatDate(d: Date): string {
   return d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
+/** Read the pairing token from `?token=`, then scrub it from the address bar.
+ *
+ *  A bookmarked `/display?token=…` is the kiosk's belt-and-braces pairing: it
+ *  survives a browser that clears site data between sessions, which plain
+ *  localStorage does not. The trade-off is that the token lands in bookmarks
+ *  and history, so it is stripped from the visible URL immediately.
+ */
+function takeTokenFromUrl(): string | null {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = (params.get('token') || '').trim();
+    if (!fromUrl) return null;
+    params.delete('token');
+    const query = params.toString();
+    window.history.replaceState(
+      null,
+      '',
+      `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`,
+    );
+    return fromUrl;
+  } catch {
+    return null;
+  }
+}
+
 export function DisplayApp() {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem(DEVICE_TOKEN_KEY));
+  const [token, setToken] = useState<string | null>(() => {
+    const fromUrl = takeTokenFromUrl();
+    if (fromUrl) {
+      localStorage.setItem(DEVICE_TOKEN_KEY, fromUrl);
+      return fromUrl;
+    }
+    return localStorage.getItem(DEVICE_TOKEN_KEY);
+  });
+  const [codeInput, setCodeInput] = useState('');
   const [tokenInput, setTokenInput] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [pairing, setPairing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Single socket for the component's lifetime — the connected layout below
@@ -45,22 +101,57 @@ export function DisplayApp() {
   const socket = useDisplaySocket(token);
   const { authFailed } = socket;
 
-  // Auth failure: the stored token is no longer valid (revoked/bad) — drop
-  // it and fall back to the entry screen with an explanatory error.
-  useEffect(() => {
-    if (authFailed) {
-      localStorage.removeItem(DEVICE_TOKEN_KEY);
-      setToken(null);
-      setError('That device token was not accepted. Ask an admin for a new one.');
-    }
-  }, [authFailed]);
+  // Auth failure no longer wipes the pairing on its own. The hook only raises
+  // this for an explicit "device_token_invalid", and even then the operator
+  // decides — a kiosk that un-pairs itself is how this display ended up
+  // asking for a token on every visit.
+  function handleRepair() {
+    localStorage.removeItem(DEVICE_TOKEN_KEY);
+    setToken(null);
+    setCodeInput('');
+    setTokenInput('');
+    setError('This display was unpaired. Ask an admin for a new pairing code.');
+  }
+
+  function storeToken(value: string) {
+    localStorage.setItem(DEVICE_TOKEN_KEY, value);
+    setError(null);
+    setToken(value);
+  }
 
   function handleConnect() {
     const trimmed = tokenInput.trim();
     if (!trimmed) return;
-    localStorage.setItem(DEVICE_TOKEN_KEY, trimmed);
+    storeToken(trimmed);
+  }
+
+  async function handlePair() {
+    const code = codeInput.trim();
+    if (!code || pairing) return;
+    setPairing(true);
     setError(null);
-    setToken(trimmed);
+    try {
+      const res = await fetch('/display/pair', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => null);
+        setError(detail?.detail || 'That code is not valid. Ask for a new one.');
+        return;
+      }
+      const data = (await res.json()) as { token?: string };
+      if (!data.token) {
+        setError('The server did not return a token. Ask an admin to try again.');
+        return;
+      }
+      storeToken(data.token);
+    } catch {
+      setError('Could not reach the radio. Check the connection and try again.');
+    } finally {
+      setPairing(false);
+    }
   }
 
   if (!token) {
@@ -80,20 +171,27 @@ export function DisplayApp() {
             Hearthwave Display
           </Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', mb: 3 }}>
-            Enter this device's token to connect
+            Enter the pairing code from Settings → Station → Wall displays
           </Typography>
 
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
           <TextField
-            label="Device token"
-            value={tokenInput}
-            onChange={(e) => setTokenInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleConnect(); }}
+            label="Pairing code"
+            value={codeInput}
+            onChange={(e) => setCodeInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            onKeyDown={(e) => { if (e.key === 'Enter') void handlePair(); }}
             fullWidth
             autoFocus
             slotProps={{
-              htmlInput: { autoCapitalize: 'off', autoCorrect: 'off', spellCheck: false },
+              htmlInput: {
+                inputMode: 'numeric',
+                autoComplete: 'one-time-code',
+                autoCapitalize: 'off',
+                autoCorrect: 'off',
+                spellCheck: false,
+                style: { fontSize: '2rem', letterSpacing: '0.4em', textAlign: 'center' },
+              },
               inputLabel: { shrink: true },
             }}
             sx={{ mb: 2 }}
@@ -103,21 +201,67 @@ export function DisplayApp() {
             variant="contained"
             fullWidth
             size="large"
-            disabled={!tokenInput.trim()}
-            onClick={handleConnect}
+            disabled={codeInput.trim().length < 6 || pairing}
+            onClick={() => void handlePair()}
           >
-            Connect
+            {pairing ? 'Pairing…' : 'Pair this display'}
           </Button>
+
+          <Box sx={{ mt: 3, textAlign: 'center' }}>
+            <Link
+              component="button"
+              type="button"
+              underline="hover"
+              variant="body2"
+              onClick={() => setShowAdvanced((v) => !v)}
+            >
+              {showAdvanced ? 'Hide' : 'Paste a device token instead'}
+            </Link>
+          </Box>
+
+          {showAdvanced && (
+            <Box sx={{ mt: 2 }}>
+              <TextField
+                label="Device token"
+                value={tokenInput}
+                onChange={(e) => setTokenInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleConnect(); }}
+                fullWidth
+                slotProps={{
+                  htmlInput: { autoCapitalize: 'off', autoCorrect: 'off', spellCheck: false },
+                  inputLabel: { shrink: true },
+                }}
+                sx={{ mb: 2 }}
+              />
+              <Button
+                variant="outlined"
+                fullWidth
+                size="large"
+                disabled={!tokenInput.trim()}
+                onClick={handleConnect}
+              >
+                Connect
+              </Button>
+            </Box>
+          )}
         </Paper>
       </Box>
     );
   }
 
-  return <ConnectedDisplay socket={socket} />;
+  return <ConnectedDisplay socket={socket} unpaired={authFailed} onRepair={handleRepair} />;
 }
 
-function ConnectedDisplay({ socket }: { socket: UseDisplaySocketResult }) {
-  const { connected, presence, neighborhood, messages, alert, status, lastAck, eink, send } = socket;
+function ConnectedDisplay({
+  socket,
+  unpaired,
+  onRepair,
+}: {
+  socket: UseDisplaySocketResult;
+  unpaired: boolean;
+  onRepair: () => void;
+}) {
+  const { connected, presence, neighborhood, messages, alert, status, lastAck, eink, order, send } = socket;
   const [now, setNow] = useState(() => new Date());
   const [driftIndex, setDriftIndex] = useState(0);
 
@@ -129,7 +273,49 @@ function ConnectedDisplay({ socket }: { socket: UseDisplaySocketResult }) {
   const [confirmEntry, setConfirmEntry] = useState<FamilyPresenceEntry | null>(null);
   const [sentSnackOpen, setSentSnackOpen] = useState(false);
 
+  // Local order wins after a drag; the server's copy is the fallback and the
+  // source of truth on a fresh connect.
+  const [localOrder, setLocalOrder] = useState<string[] | null>(null);
+  const serverOrderRef = useRef<string[]>(order);
+  useEffect(() => {
+    // A reconnect re-delivers display_config; adopt it and drop the local
+    // copy so a revoked-then-restored panel doesn't keep a stale order.
+    if (serverOrderRef.current !== order) {
+      serverOrderRef.current = order;
+      setLocalOrder(null);
+    }
+  }, [order]);
+
   const interactive = awakeUntil > nowMs;
+
+  const orderedPresence = useMemo(
+    () => applyTileOrder(presence, localOrder ?? order),
+    [presence, localOrder, order],
+  );
+  const metrics = tileMetrics(orderedPresence.length);
+
+  // Long-press to drag so a short tap still means "Mark OK"; keyboard sorting
+  // comes along for free, which matters for the switch-scanning work.
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { delay: DRAG_DELAY_MS, tolerance: DRAG_TOLERANCE_PX },
+    }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  // E-ink smears on movement — no drag animation on those panels.
+  const sortable = interactive && !eink;
+
+  // The people board fills what's left of the right-hand column under the
+  // clock: tiles shrink to a floor, then the board scrolls.
+  const peopleBoardSx = {
+    display: 'grid',
+    gap: 2,
+    flexGrow: 1,
+    minHeight: 0,
+    overflowY: 'auto',
+    gridTemplateColumns: `repeat(auto-fit, minmax(${metrics.minWidth}px, 1fr))`,
+    alignContent: 'start',
+  } as const;
 
   function wake() {
     setAwakeUntil(Date.now() + WAKE_WINDOW_MS);
@@ -188,6 +374,18 @@ function ConnectedDisplay({ socket }: { socket: UseDisplaySocketResult }) {
     send(payload);
   }
 
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over) return;
+    const current = orderedPresence.map((e) => e.user_id);
+    const next = reorderIds(current, String(active.id), String(over.id));
+    if (next === current) return;
+    // Optimistic: the wall reflects the drag immediately, and the server
+    // echoes nothing back for order — the device token is the record.
+    setLocalOrder(next);
+    send({ type: 'display_set_order', order: next });
+  }
+
   const theme = makeTheme(eink ? false : isDuskDark(now), { fontScale: 1.25, eink });
   // E-ink has no OLED-style burn-in and smears on movement — pin at origin.
   const drift = eink ? { x: 0, y: 0 } : DRIFT_OFFSETS[driftIndex];
@@ -214,38 +412,96 @@ function ConnectedDisplay({ socket }: { socket: UseDisplaySocketResult }) {
           transform: `translate(${drift.x}px, ${drift.y}px)`,
         }}
       >
-        <Box component="header" sx={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
-          <Typography sx={{ fontSize: '4rem', fontWeight: 700 }}>{formatClock(now)}</Typography>
-          <Typography sx={{ fontSize: '1.5rem', color: 'text.secondary' }}>{formatDate(now)}</Typography>
-          {!connected && <Chip color="error" label="Reconnecting…" />}
-        </Box>
-
-        {alert && (
-          <Alert
-            severity={alert.kind === 'weather' ? 'warning' : 'error'}
-            role="alert"
-            sx={{ fontSize: '1.4rem' }}
-          >
-            {alert.message}
-          </Alert>
-        )}
-
         <Box
-          role="list"
-          aria-label="Family"
           sx={{
             display: 'grid',
             gap: 2,
             flexGrow: 1,
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            alignContent: 'start',
+            minHeight: 0,
+            // The right column carries the people board as well as the clock,
+            // so it needs room for two tiles side by side at the largest tier.
+            gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1.4fr) minmax(320px, 1fr)' },
           }}
         >
-          {presence.map((e) => (
-            <Box role="listitem" key={e.user_id}>
-              <PresenceTile entry={e} now={now} interactive={interactive} onImOk={handleImOk} />
-            </Box>
-          ))}
+          <DisplayChatConsole messages={messages} eink={eink} />
+
+          <Box
+            component="header"
+            sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, minWidth: 0, minHeight: 0 }}
+          >
+            <Typography sx={{ fontSize: '4rem', fontWeight: 700, lineHeight: 1 }}>
+              {formatClock(now)}
+            </Typography>
+            <Typography sx={{ fontSize: '1.5rem', color: 'text.secondary' }}>
+              {formatDate(now)}
+            </Typography>
+            {!connected && <Chip color="error" label="Reconnecting…" sx={{ alignSelf: 'flex-start' }} />}
+
+            {unpaired && (
+              <Alert
+                severity="error"
+                role="alert"
+                action={<Button color="inherit" size="small" onClick={onRepair}>Re-pair</Button>}
+              >
+                This display is no longer paired. Ask an admin for a new pairing code.
+              </Alert>
+            )}
+
+            {alert && (
+              <Alert
+                severity={alert.kind === 'weather' ? 'warning' : 'error'}
+                role="alert"
+                sx={{ fontSize: '1.4rem' }}
+              >
+                {alert.message}
+              </Alert>
+            )}
+
+            {netLabel && (
+              <Typography sx={{ fontSize: '1.25rem', color: eink ? 'text.primary' : 'warning.main' }}>
+                {netLabel}
+              </Typography>
+            )}
+
+            {/* The DndContext must sit OUTSIDE role="list" — it renders its
+                own screen-reader live region, which is not a permitted list
+                child. */}
+            {sortable ? (
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <Box role="list" aria-label="Family" sx={peopleBoardSx}>
+                  <SortableContext
+                    items={orderedPresence.map((e) => e.user_id)}
+                    strategy={rectSortingStrategy}
+                  >
+                    {orderedPresence.map((e) => (
+                      <SortablePresenceTile
+                        key={e.user_id}
+                        entry={e}
+                        now={now}
+                        interactive
+                        onImOk={handleImOk}
+                        metrics={metrics}
+                      />
+                    ))}
+                  </SortableContext>
+                </Box>
+              </DndContext>
+            ) : (
+              <Box role="list" aria-label="Family" sx={peopleBoardSx}>
+                {orderedPresence.map((e) => (
+                  <Box role="listitem" key={e.user_id}>
+                    <PresenceTile
+                      entry={e}
+                      now={now}
+                      interactive={interactive}
+                      onImOk={handleImOk}
+                      metrics={metrics}
+                    />
+                  </Box>
+                ))}
+              </Box>
+            )}
+          </Box>
         </Box>
 
         {interactive && quickMessages.length > 0 && (
@@ -262,10 +518,6 @@ function ConnectedDisplay({ socket }: { socket: UseDisplaySocketResult }) {
             ))}
           </Box>
         )}
-
-        <Box component="footer">
-          <DisplayChatConsole messages={messages} eink={eink} netLabel={netLabel} />
-        </Box>
 
         <ConfirmOkDialog
           entry={confirmEntry}

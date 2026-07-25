@@ -2,6 +2,7 @@ import { Box, ButtonBase, Chip, Paper, Typography } from '@mui/material';
 import type { ChipProps } from '@mui/material';
 import type { FamilyPresenceEntry } from '../../types/ws';
 import { deriveStatus } from '../../family/presence';
+import { tileMetrics, type TileMetrics } from '../../display/tileSize';
 
 export interface PresenceTileProps {
   entry: FamilyPresenceEntry;
@@ -10,6 +11,8 @@ export interface PresenceTileProps {
   // becomes a tap target that calls onImOk(entry) to open the confirm dialog.
   interactive?: boolean;
   onImOk?: (entry: FamilyPresenceEntry) => void;
+  /** Sizing for the current household size; defaults to the largest tier. */
+  metrics?: TileMetrics;
 }
 
 // Status label/color mapping: missed_checkin takes priority over
@@ -26,14 +29,15 @@ function statusChip(entry: FamilyPresenceEntry, now: Date): { label: string; col
 /** Presence tile for the kiosk display: avatar emoji, name, and a status
  *  chip. In interactive mode (Task 7's tap-to-wake window), the tile becomes
  *  a tap target that opens the "Mark OK?" confirm dialog for this member. */
-export function PresenceTile({ entry, now, interactive, onImOk }: PresenceTileProps) {
+export function PresenceTile({ entry, now, interactive, onImOk, metrics }: PresenceTileProps) {
   const chip = statusChip(entry, now);
+  const size = metrics ?? tileMetrics(1);
 
   const card = (
     <Paper
       elevation={2}
       sx={{
-        p: 2,
+        p: size.padding,
         minHeight: 48,
         display: 'flex',
         flexDirection: 'column',
@@ -42,13 +46,16 @@ export function PresenceTile({ entry, now, interactive, onImOk }: PresenceTilePr
         textAlign: 'center',
       }}
     >
-      <Box component="span" aria-hidden sx={{ fontSize: '2.5rem', lineHeight: 1 }}>
+      <Box component="span" aria-hidden sx={{ fontSize: `${size.emojiRem}rem`, lineHeight: 1 }}>
         {entry.avatar_emoji}
       </Box>
-      <Typography variant="h6" sx={{ fontWeight: 700 }}>
+      <Typography
+        variant="h6"
+        sx={{ fontWeight: 700, fontSize: `${Math.max(0.95, size.emojiRem * 0.45)}rem` }}
+      >
         {entry.display_name}
       </Typography>
-      <Chip label={chip.label} color={chip.color} size="medium" />
+      <Chip label={chip.label} color={chip.color} size={size.chipSize} />
     </Paper>
   );
 

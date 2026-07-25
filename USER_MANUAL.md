@@ -1377,16 +1377,27 @@ A wall display turns a spare tablet — the one on the kitchen counter, say — 
 
 1. Open **Settings → Station tab** (admin only) and scroll to **Wall displays**.
 2. Type a name for the tablet (e.g. "Kitchen") and click **Add display**.
-3. The new device's token is shown **once**, in a copyable field. Copy it now — Hearthwave does not show it again. If it's lost before the tablet is set up, the only fix is to revoke that display and add a new one.
-4. On the tablet itself, browse to `http://<host>/display` and paste the token into the connect screen. The token is then remembered on that device (stored in the browser's local storage), so the tablet reconnects on its own after a reboot or a power cut — no re-pairing needed.
+3. Hearthwave shows two things: a **six-digit pairing code**, and the device's full **token** in a copyable field. The token is shown **once** and never again.
+4. On the tablet itself, browse to `http://<host>/display` and type the six-digit code. The code is single-use and expires after **10 minutes**; if it runs out, click **Pairing code** next to that display in the table for a fresh one.
 
-The **Wall displays** table lists every paired device with when it was created and when it was last seen, an **E-ink** toggle (see [E-ink displays](#e-ink-displays) below), and a **Revoke** button. Revoking disconnects that display immediately; it will have to be re-paired with a fresh token to come back online.
+The token itself is still there when you need it. Two other ways to pair:
+
+- **Paste a device token instead** — the link under the pairing field opens a box for the full token. Useful for scripted setups.
+- **Bookmark `http://<host>/display?token=<token>`** — the page reads the token out of the URL, saves it, and immediately strips it from the address bar. This is the sturdiest option for a kiosk browser that clears its site data between sessions, because the bookmark re-supplies the token on every launch. The trade-off: the token is then sitting in the tablet's bookmarks and history, and in the access log of any reverse proxy in front of Hearthwave. On a household LAN that is usually a fair trade; on a shared or exposed network, prefer the pairing code.
+
+Once paired, the token is remembered on that device (in the browser's local storage), so the tablet reconnects on its own after a reboot or a power cut.
+
+If a display ever shows **"This display is no longer paired"**, the server has rejected its token — normally because it was revoked. The display keeps the token and keeps retrying until someone taps **Re-pair**; it will not silently forget its pairing over a server restart or a brief network drop.
+
+The **Wall displays** table lists every paired device with when it was created and when it was last seen, an **E-ink** toggle (see [E-ink displays](#e-ink-displays) below), a **Pairing code** button, and a **Revoke** button. Re-issuing a pairing code keeps the display's settings — its e-ink flag and tile order — so use that rather than revoking when a tablet simply lost its browser data. Revoking disconnects that display immediately and discards its settings; it will have to be paired again from scratch.
 
 ### What it shows
 
-- **Family presence tiles** — one per household member, with the same status chips as the [Family activity](#30-family-activity): **OK**, **On air**, **No word**, or **Missed check-in**.
+The screen is in two parts. The **radio log** fills the top left, with the clock, date, alerts, and net status in a column beside it; the **family presence tiles** run along the bottom.
+
+- The **radio log** (transmitted, received, and chat), **newest message at the top**, scrollable back through the last 50. Received transmissions stream in as they're decoded — an in-progress line shows dimmed and updates in place, then settles when the final transcript arrives. If you scroll back to read something, new traffic won't yank you to the top; scroll back up to follow along live again.
+- **Family presence tiles** — one per household member, with the same status chips as the [Family activity](#30-family-activity): **OK**, **On air**, **No word**, or **Missed check-in**. Tiles size themselves to the household: a family of four gets big cards, and they step down as more people are added. Past about a dozen they stop shrinking and the band scrolls instead, so a name never becomes unreadable across the room.
 - A **weather / street alert banner**, when one is active.
-- The **last five messages in the radio stream** (transmitted, received, and chat). Received transmissions stream in as they're decoded — an in-progress line shows dimmed and updates in place, then settles when the final transcript arrives.
 - The **next scheduled net** (or "Net running now" while one is in progress).
 - A large **clock**.
 
@@ -1398,6 +1409,9 @@ The display is normally passive — nothing on it responds to touch. Tapping any
 
 - **Tapping a family member's tile** brings up a large **"Mark {name} as OK?"** confirmation with **Yes** / **No**. Tapping **Yes** does the same three things the Family activity's I'm OK button does: speaks it on the air, posts it to chat, and updates that person's presence.
 - A row of **household quick-message** buttons appears, if any are configured (see below). Tapping one sends that exact message.
+- **Press and hold a tile for about half a second and you can drag it** to re-sort the board — put the people you check on most on the left. A quick tap is still "Mark OK"; only a long press starts a drag. With a keyboard, tab to a tile, press **Space**, move it with the arrow keys, and press **Space** again to drop it.
+
+The order is saved on the server against that display's own pairing, so it survives a reload and a browser that has forgotten everything else — and each wall panel can be sorted differently. Someone added to the household later joins the end of the board rather than disappearing.
 
 If nothing is tapped again, the display reverts to its passive glance layout after the 45 seconds run out.
 
@@ -1413,6 +1427,7 @@ If the wall panel is a real **e-ink** screen (the low-power, paper-like kind), t
 - **No animation** — every transition and fade is switched off.
 - **Finalised messages only** — the live, word-by-word partial transcripts are suppressed; a received message appears once, complete, instead of rewriting itself as it decodes.
 - **No layout drift** — e-ink has none of the burn-in that the drift protects against, and the movement would only add ghosting, so the layout stays pinned in place.
+- **No drag-to-sort** — dragging smears an e-ink panel, so tiles stay put. Sort the board on a normal tablet paired to the same household if you want a custom order there.
 
 The toggle takes effect on that display's next reconnect (reload the `/display` page on the tablet). It's per-device: a normal LCD tablet and an e-ink panel can be paired at the same time, each rendering in its own mode. Turning it back off returns that display to the standard dusk-aware, animated view.
 

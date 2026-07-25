@@ -13,6 +13,7 @@ export default defineConfig({
       },
       '/auth': { target: backendUrl },
       '/journal': { target: backendUrl },
+      '/display/pair': { target: backendUrl },
     },
   },
 });

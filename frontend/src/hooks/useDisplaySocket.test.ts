@@ -17,7 +17,7 @@ type FakeWSInstance = {
   send: (data: string) => void;
   _triggerOpen: () => void;
   _triggerMessage: (data: unknown) => void;
-  _triggerClose: (code?: number) => void;
+  _triggerClose: (code?: number, reason?: string) => void;
   _sentMessages: string[];
 };
 
@@ -64,10 +64,14 @@ class FakeWebSocket {
     }
   }
 
-  _triggerClose(code?: number) {
+  _triggerClose(code?: number, reason = '') {
     this.readyState = FakeWebSocket.CLOSED;
     if (this.onclose) {
-      this.onclose(new CloseEvent('close', { code: code ?? 1000, wasClean: code === undefined || code === 1000 }));
+      this.onclose(new CloseEvent('close', {
+        code: code ?? 1000,
+        reason,
+        wasClean: code === undefined || code === 1000,
+      }));
     }
   }
 }
@@ -87,10 +91,10 @@ function mockServerSend(data: unknown): void {
   inst._triggerMessage(data);
 }
 
-function mockServerClose(code?: number): void {
+function mockServerClose(code?: number, reason = ''): void {
   const inst = instances.at(-1);
   if (!inst) throw new Error('no socket instance to close');
-  inst._triggerClose(code);
+  inst._triggerClose(code, reason);
 }
 
 describe('useDisplaySocket', () => {
@@ -118,22 +122,52 @@ describe('useDisplaySocket', () => {
     expect(result.current.neighborhood?.active).toBe(false);
   });
 
-  it('caps message history at 20', () => {
+  it('caps message history at 50', () => {
     const { result } = renderHook(() => useDisplaySocket('tok123'));
     act(() => {
-      for (let i = 0; i < 30; i++) {
+      for (let i = 0; i < 60; i++) {
         mockServerSend({ type: 'chat_echo', ts: `t${i}`, display_name: 'A', text: `m${i}` });
       }
     });
-    expect(result.current.messages).toHaveLength(20);
-    expect(result.current.messages.at(-1)?.text).toBe('m29');
+    expect(result.current.messages).toHaveLength(50);
+    expect(result.current.messages.at(-1)?.text).toBe('m59');
   });
 
-  it('sets authFailed on close 4001 and does not reconnect', () => {
+  it('sets authFailed on 4001 device_token_invalid and does not reconnect', () => {
     const { result } = renderHook(() => useDisplaySocket('bad'));
-    act(() => mockServerClose(4001));
+    act(() => mockServerClose(4001, 'device_token_invalid'));
     expect(result.current.authFailed).toBe(true);
     expect(socketCount()).toBe(1);
+  });
+
+  it('reconnects on a reasonless 4001 rather than un-pairing', () => {
+    // An older server, or the session-auth fall-through — the token may still
+    // be perfectly good, so the kiosk must not treat this as revocation.
+    const { result } = renderHook(() => useDisplaySocket('tok123'));
+    act(() => mockServerClose(4001));
+    expect(result.current.authFailed).toBe(false);
+    act(() => { vi.advanceTimersByTime(1100); });
+    expect(socketCount()).toBe(2);
+  });
+
+  it('reconnects on 1013 (server not ready) rather than un-pairing', () => {
+    const { result } = renderHook(() => useDisplaySocket('tok123'));
+    act(() => mockServerClose(1013));
+    expect(result.current.authFailed).toBe(false);
+    act(() => { vi.advanceTimersByTime(1100); });
+    expect(socketCount()).toBe(2);
+  });
+
+  it('takes the tile order from display_config', () => {
+    const { result } = renderHook(() => useDisplaySocket('tok123'));
+    act(() => mockServerSend({ type: 'display_config', eink: false, order: ['u2', 'u1'] }));
+    expect(result.current.order).toEqual(['u2', 'u1']);
+  });
+
+  it('treats a display_config with no order as no stored order', () => {
+    const { result } = renderHook(() => useDisplaySocket('tok123'));
+    act(() => mockServerSend({ type: 'display_config', eink: true }));
+    expect(result.current.order).toEqual([]);
   });
 
   it('surfaces latest alert from ncs_alert and neighborhood_alert', () => {

@@ -11,9 +11,16 @@ import type { ChatEntry } from '../components/ChatDisplay/ChatDisplay';
 
 const MIN_BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 30000;
-// Memory-bounded for overnight running — the kiosk display shows only the
-// last 5 anyway; 20 gives a little headroom without growing unbounded.
-const MESSAGE_CAP = 20;
+// Memory-bounded for overnight running. The log is scrollable now, so this is
+// the wall's scrollback depth as well as its memory ceiling — roughly an hour
+// of a busy net.
+const MESSAGE_CAP = 50;
+
+// The one close reason that means "this token is dead", as opposed to a server
+// that is merely restarting. Anything else must reconnect rather than un-pair:
+// silently dropping the pairing on a transient failure is what forced operators
+// to re-enter the token on every visit.
+export const FATAL_AUTH_REASON = 'device_token_invalid';
 
 export interface DisplayAlert {
   kind: 'weather' | 'street';
@@ -39,6 +46,8 @@ export interface UseDisplaySocketResult {
   alert: DisplayAlert | null;
   lastAck: DisplayAckEvent | null;
   eink: boolean;
+  /** Hand-sorted tile order for this panel, as stored on its device token. */
+  order: string[];
   send: (msg: object) => void;
 }
 
@@ -109,6 +118,7 @@ export function useDisplaySocket(token: string | null): UseDisplaySocketResult {
   const [alert, setAlert] = useState<DisplayAlert | null>(null);
   const [lastAck, setLastAck] = useState<DisplayAckEvent | null>(null);
   const [eink, setEink] = useState(false);
+  const [order, setOrder] = useState<string[]>([]);
 
   const wsRef = useRef<WebSocket | null>(null);
   // Maps an in-progress utterance_id to its ChatEntry id so streaming rx
@@ -131,6 +141,7 @@ export function useDisplaySocket(token: string | null): UseDisplaySocketResult {
         break;
       case 'display_config':
         setEink(msg.eink);
+        setOrder(msg.order ?? []);
         break;
       case 'family_presence':
         setPresence(msg.entries);
@@ -240,8 +251,10 @@ export function useDisplaySocket(token: string | null): UseDisplaySocketResult {
     ws.onclose = (event) => {
       setConnected(false);
       if (unmountedRef.current) return;
-      // 4001 = auth failure — don't reconnect
-      if (event.code === 4001) {
+      // Only an explicit "this token is invalid" stops the retry loop. A bare
+      // 4001 (an older server, or the session-auth path) and 1013 "try again
+      // later" both mean the pairing may still be good — keep reconnecting.
+      if (event.code === 4001 && event.reason === FATAL_AUTH_REASON) {
         setAuthFailed(true);
         return;
       }
@@ -289,5 +302,5 @@ export function useDisplaySocket(token: string | null): UseDisplaySocketResult {
     }
   }, []);
 
-  return { connected, authFailed, status, presence, neighborhood, messages, alert, lastAck, eink, send };
+  return { connected, authFailed, status, presence, neighborhood, messages, alert, lastAck, eink, order, send };
 }
