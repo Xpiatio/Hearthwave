@@ -48,7 +48,10 @@ class NeighborhoodNet:
     def end(self) -> dict:
         """Close the net, snapshot the roster for journaling, then clear it.
 
-        The summary's roster reflects the full just-ended roster. The live
+        Returns a dict with ``roster``, ``duration_seconds``, ``started_at``,
+        and ``ended_at``. The summary's roster reflects the full just-ended
+        roster. ``started_at``/``ended_at`` are ISO-8601 UTC strings
+        (``started_at`` is blank if the net was never `start()`ed). The live
         roster is cleared afterward so `roster()` / `neighborhood_state`
         go empty immediately, and the next `start()` begins from a clean
         slate (aside from any new early check-ins that land before it).
@@ -99,7 +102,7 @@ class NeighborhoodNet:
         return row
 
     def set_status(self, user_id: str, status: str) -> None:
-        """Set a roster row's status ('checked_in' or 'standby'); no-op if unknown user."""
+        """Set a roster row's status ('checked_in', 'standby', or 'checked_out'); no-op if unknown user."""
         row = self._roster.get(user_id)
         if row is not None:
             row["status"] = status
