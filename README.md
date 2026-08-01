@@ -39,6 +39,11 @@ browser-based React frontend communicating over WebSocket.
 
 ## Features
 
+- **Net session history** — every net that ends is recorded as a structured roster
+  under `/data/net_sessions`. Browse past nets, per-station attendance (totals,
+  recent turnout, streaks), and export any net or the whole history as CSV from the
+  **Past Nets** tab of the Journal panel. Records are private and never published to
+  the public journal page. Deleting a record requires an admin.
 - **The careful second pass is on from the first install** — every setup script now
   stages `large-v3-turbo` alongside the streaming model, so the two-tier transcription
   that cleans up long overs and callsigns works out of the box instead of waiting for

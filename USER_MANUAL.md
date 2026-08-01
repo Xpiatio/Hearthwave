@@ -410,6 +410,8 @@ The **Journals** panel lets you generate and save AI-written session summaries. 
 
 **Publishing to the family journal:** Select a saved journal, then click the **PUBLISH TO FAMILY JOURNAL** button that appears in the detail view. Click once to arm, click again to confirm. A snackbar confirms publication. You can also publish directly from the list using the **publish icon** (⬆) next to each entry. See [Family journal](#12-family-journal-public-page).
 
+**Past Nets:** Every time a net ends, its roster is saved automatically alongside the journal. To review it: open the Journal panel, click the **Past Nets** tab, and pick a date from the list to see that net's roster and (for NCS nets) its transcript. Click **DOWNLOAD CSV** in the detail view to export just that net, or **EXPORT ALL (CSV)** at the bottom of the list to export the entire history, one row per station per net. The **attendance** list — total nets, recent turnout, and check-in streaks per station — sits below the roster. Deleting a record requires an admin account. These records are private: unlike journals, they are never published to the public `/journal` page. Storage location defaults to `/data/net_sessions` and can be changed with `net_sessions_dir` in `config.json`.
+
 ---
 
 ## 12. Family journal (public page)
