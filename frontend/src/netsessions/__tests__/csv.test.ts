@@ -26,7 +26,7 @@ const SESSION: NetSessionDetail = {
 describe('sessionToCsv', () => {
   it('writes a header and one row per check-in', () => {
     const lines = sessionToCsv(SESSION).split('\n')
-    expect(lines[0]).toBe('callsign,name,location,status,traffic,checkin_time')
+    expect(lines[0]).toBe('callsign,name,location,status,traffic,checkin_time,via')
     expect(lines).toHaveLength(3)
     expect(lines[1]).toContain('"KD8ABC"')
     expect(lines[1]).toContain('"Routine"')
@@ -43,7 +43,24 @@ describe('sessionToCsv', () => {
 
   it('returns just the header for an empty roster', () => {
     const empty = { ...SESSION, roster: [] }
-    expect(sessionToCsv(empty)).toBe('callsign,name,location,status,traffic,checkin_time')
+    expect(sessionToCsv(empty)).toBe('callsign,name,location,status,traffic,checkin_time,via')
+  })
+
+  it('includes a via column so radio check-ins are identifiable in a spreadsheet', () => {
+    const csv = sessionToCsv({
+      id: 'x', net_type: 'neighborhood', started_at: '', ended_at: '',
+      duration_seconds: 0, transcript: '',
+      roster: [
+        { callsign: 'WRAB123', name: 'Maria', location: 'Maple St', status: 'CheckedIn',
+          traffic: null, checkin_time: '2026-08-01T19:30:00Z', verified: false, via: 'radio' },
+        { callsign: 'WRAA111', name: 'Ann', location: '1st St', status: 'CheckedIn',
+          traffic: null, checkin_time: '2026-08-01T19:31:00Z', verified: false },
+      ],
+    } as NetSessionDetail)
+    const [header, maria, ann] = csv.split('\n')
+    expect(header).toBe('callsign,name,location,status,traffic,checkin_time,via')
+    expect(maria.endsWith('"radio"')).toBe(true)
+    expect(ann.endsWith('""')).toBe(true)
   })
 })
 
@@ -76,5 +93,11 @@ describe('allSessionsToCsv', () => {
 
   it('returns just the header when there are no sessions', () => {
     expect(allSessionsToCsv([])).toBe('net_id,net_type,net_date,callsign,name')
+  })
+
+  it('leaves the all-sessions export unchanged', () => {
+    // Summaries only carry callsign+name per station, so this export has no via
+    // column to fill.
+    expect(allSessionsToCsv([]).split('\n')[0]).toBe('net_id,net_type,net_date,callsign,name')
   })
 })

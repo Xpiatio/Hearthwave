@@ -166,10 +166,27 @@ describe('PastNetsTab', () => {
     expect(mime).toBe('text/csv')
 
     const lines = content.split('\n')
-    expect(lines[0]).toBe('callsign,name,location,status,traffic,checkin_time')
+    expect(lines[0]).toBe('callsign,name,location,status,traffic,checkin_time,via')
     expect(lines).toHaveLength(1 + DETAIL.roster.length)
     expect(lines[1]).toBe(
-      '"KD8ABC","Maria","Holland","CheckedIn","Routine","2026-08-02T19:01:00Z"'
+      '"KD8ABC","Maria","Holland","CheckedIn","Routine","2026-08-02T19:01:00Z",""'
     )
+  })
+
+  it("shows how each station reached the roster", () => {
+    const detailWithVia: NetSessionDetail = {
+      ...DETAIL,
+      roster: [
+        DETAIL.roster[0],
+        {
+          callsign: 'WRAB123', name: 'Sam', location: 'Zeeland',
+          status: 'CheckedIn', traffic: null,
+          checkin_time: '2026-08-02T19:02:00Z', verified: false, via: 'radio',
+        },
+      ],
+    }
+    render(<PastNetsTab {...props({ selected: detailWithVia })} />)
+    expect(screen.getByText('Via')).toBeInTheDocument()
+    expect(screen.getByText('radio')).toBeInTheDocument()
   })
 })

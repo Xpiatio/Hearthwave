@@ -35,12 +35,12 @@ import { sessionToCsv, allSessionsToCsv } from '../../netsessions/csv';
 import { useRosterSort } from '../../netsessions/rosterView';
 import { netDate, netDateTime } from '../../netsessions/dates';
 
-type RosterColumn = 'callsign' | 'name' | 'location' | 'status' | 'traffic';
+type RosterColumn = 'callsign' | 'name' | 'location' | 'status' | 'traffic' | 'via';
 
 /** Fields this table renders — a filter query should never match a hidden
  *  field (e.g. the raw checkin_time) the user can't see in this view. */
 const PAST_NETS_SEARCH_FIELDS: (keyof NetSessionRosterRow)[] = [
-  'callsign', 'name', 'location', 'status', 'traffic',
+  'callsign', 'name', 'location', 'status', 'traffic', 'via',
 ];
 
 interface Props {
@@ -239,12 +239,21 @@ export function PastNetsTab({
                         Traffic
                       </TableSortLabel>
                     </TableCell>
+                    <TableCell scope="col" sx={{ fontWeight: 700 }}>
+                      <TableSortLabel
+                        active={sortColumn === 'via'}
+                        direction={sortColumn === 'via' ? sortDirection : 'asc'}
+                        onClick={() => handleSort('via')}
+                      >
+                        Via
+                      </TableSortLabel>
+                    </TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {visibleRoster.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} sx={{ color: 'text.secondary' }}>
+                      <TableCell colSpan={6} sx={{ color: 'text.secondary' }}>
                         No stations match your filter.
                       </TableCell>
                     </TableRow>
@@ -256,6 +265,7 @@ export function PastNetsTab({
                         <TableCell>{r.location}</TableCell>
                         <TableCell>{r.status}</TableCell>
                         <TableCell>{r.traffic ?? ''}</TableCell>
+                        <TableCell>{r.via ?? ''}</TableCell>
                       </TableRow>
                     ))
                   )}
