@@ -3220,8 +3220,12 @@ async def websocket_endpoint(
                             "admin_action", user_id=state.user_id, ip=client_ip,
                             detail=f"delete_net_session {session_id}",
                         )
-                except (ValueError, OSError) as exc:
-                    await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
+                except (ValueError, OSError):
+                    # Deliberately generic: the store's exceptions carry the
+                    # absolute path on disk, which no client needs to see.
+                    await _manager.send_to(ws, {
+                        "type": "error", "detail": "Session not found.",
+                    })
 
             elif msg_type == "standalone_id":
                 # "This is" button — transmit a NATO-phonetic station ID.

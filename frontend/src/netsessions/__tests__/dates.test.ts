@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { netDate } from '../dates';
+import { netDate, netDateTime } from '../dates';
 
 describe('netDate', () => {
   it('returns an empty string for a blank input', () => {
@@ -39,5 +39,26 @@ describe('netDate', () => {
       // Host is at or behind UTC — 23:30 UTC is still the same local day.
       expect(local).toBe(utcSlice);
     }
+  });
+});
+
+describe('netDateTime', () => {
+  it('returns an empty string for a blank input', () => {
+    expect(netDateTime('')).toBe('');
+  });
+
+  it('returns the input unchanged when it cannot be parsed', () => {
+    expect(netDateTime('not a timestamp')).toBe('not a timestamp');
+  });
+
+  it('renders the clock time, not just the date', () => {
+    // The start→end caption is the one place the time of day is the point.
+    const rendered = netDateTime('2026-08-01T19:30:00Z');
+    expect(rendered).toBe(new Date('2026-08-01T19:30:00Z').toLocaleString());
+    expect(rendered).not.toBe(netDate('2026-08-01T19:30:00Z'));
+  });
+
+  it('resolves the same instant from either UTC encoding', () => {
+    expect(netDateTime('2026-08-01T19:30:00Z')).toBe(netDateTime('2026-08-01T19:30:00+00:00'));
   });
 });

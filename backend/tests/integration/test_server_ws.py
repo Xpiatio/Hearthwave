@@ -5136,3 +5136,26 @@ class TestNetSessionHistoryHandlers:
                     msg = _next_of_type(ws, "error")
         assert msg is not None
         assert decoy.exists()
+
+    def test_delete_net_session_error_hides_server_path(self, tmp_path):
+        sessions_dir = tmp_path / "net_sessions"
+        sessions_dir.mkdir(parents=True, exist_ok=True)
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, net_sessions_dir=sessions_dir, is_admin=True,
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "delete_net_session", "id": "20260101_000000_ncs"})
+                    msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert msg["detail"] == "Session not found."
+        assert str(sessions_dir) not in msg["detail"]

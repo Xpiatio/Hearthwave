@@ -33,7 +33,7 @@ import type {
 import { downloadText } from '../../utils/download';
 import { sessionToCsv, allSessionsToCsv } from '../../netsessions/csv';
 import { useRosterSort } from '../../netsessions/rosterView';
-import { netDate } from '../../netsessions/dates';
+import { netDate, netDateTime } from '../../netsessions/dates';
 
 type RosterColumn = 'callsign' | 'name' | 'location' | 'status' | 'traffic';
 
@@ -170,7 +170,7 @@ export function PastNetsTab({
         {selected ? (
           <Box sx={{ mb: 3 }}>
             <Typography variant="caption" color="text.secondary">
-              {selected.started_at} → {selected.ended_at}
+              {netDateTime(selected.started_at)} → {netDateTime(selected.ended_at)}
             </Typography>
             <Typography variant="h5" sx={{ mt: 0.5, mb: 2 }}>
               {NET_TYPE_LABELS[selected.net_type] ?? selected.net_type} net —{' '}
@@ -316,8 +316,10 @@ export function PastNetsTab({
           <Box>
             <Typography variant="h6" sx={{ mb: 1 }}>ATTENDANCE</Typography>
             <List dense disablePadding aria-label="Attendance statistics">
+              {/* A GMRS family shares one callsign, so the callsign alone is
+                  not unique across attendance rows — the name completes it. */}
               {stats.map((row) => (
-                <ListItem key={row.callsign} disableGutters>
+                <ListItem key={`${row.callsign}-${row.name}`} disableGutters>
                   <ListItemText
                     primary={`${row.name || row.callsign} (${row.callsign})`}
                     secondary={`${row.total_nets} nets · ${row.attended_of_recent} of last ${row.recent_window} · streak ${row.current_streak}`}

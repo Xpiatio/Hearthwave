@@ -16,3 +16,18 @@ export function netDate(iso: string): string {
   if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
   return d.toLocaleDateString('en-CA');
 }
+
+/**
+ * Local date *and* clock time for a net session timestamp.
+ *
+ * The start→end caption is the one place the time of day carries the
+ * information ("7:02 PM to 7:48 PM"), so `netDate` alone would render the
+ * same date twice. Same timezone reasoning as `netDate`; the viewer's own
+ * locale formats it, since this string is read, not sorted or parsed.
+ */
+export function netDateTime(iso: string): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString();
+}

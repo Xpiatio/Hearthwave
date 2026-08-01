@@ -16,61 +16,69 @@ def compute_attendance_stats(
 ) -> list[dict]:
     """Aggregate per-station attendance, busiest station first.
 
+    A station is ``(callsign, name)``, not callsign alone: on GMRS a whole
+    family shares one licensed callsign, so keying on callsign would collapse
+    the whole household into one row — the opposite of what a family net wants.
+
     ``summaries`` must be newest-first, which is what the store returns —
     ``current_streak`` and ``last_seen`` both depend on that ordering.
     """
     index = index_contacts_by_callsign(contacts or [])
-    # Precompute one callsign set per session: streak and recent-window checks
-    # both scan the whole list, and re-deriving the sets each time is wasteful.
-    per_session = [_station_calls(s) for s in summaries]
+    # Precompute one station map per session: streak and recent-window checks
+    # both scan the whole list, and re-deriving the keys each time is wasteful.
+    per_session = [_station_names(s) for s in summaries]
     recent = per_session[:_RECENT_WINDOW]
 
-    totals: dict[str, int] = {}
-    names: dict[str, str] = {}
-    last_seen: dict[str, str] = {}
+    totals: dict[tuple[str, str], int] = {}
+    display: dict[tuple[str, str], str] = {}
+    last_seen: dict[tuple[str, str], str] = {}
 
-    for session, calls in zip(summaries, per_session):
-        for cs in calls:
-            totals[cs] = totals.get(cs, 0) + 1
-            # Newest-first means the first sighting is the most recent one.
-            last_seen.setdefault(cs, session.get("started_at", ""))
-        for station in session.get("stations") or []:
-            cs = normalize_callsign(station.get("callsign", ""))
-            name = (station.get("name") or "").strip()
-            if cs and name:
-                names.setdefault(cs, name)
+    for session, stations in zip(summaries, per_session):
+        for key, name in stations.items():
+            totals[key] = totals.get(key, 0) + 1
+            # Newest-first means the first sighting is the most recent one, so
+            # both the timestamp and the name spelling come from the newest net.
+            last_seen.setdefault(key, session.get("started_at", ""))
+            if name:
+                display.setdefault(key, name)
 
     rows = [
         {
-            "callsign": cs,
-            "name": names.get(cs) or _contact_name(index, cs),
+            "callsign": key[0],
+            "name": display.get(key) or _contact_name(index, key[0]),
             "total_nets": total,
-            "attended_of_recent": sum(1 for calls in recent if cs in calls),
+            "attended_of_recent": sum(1 for stations in recent if key in stations),
             "recent_window": len(recent),
-            "current_streak": _streak(per_session, cs),
-            "last_seen": last_seen.get(cs, ""),
+            "current_streak": _streak(per_session, key),
+            "last_seen": last_seen.get(key, ""),
         }
-        for cs, total in totals.items()
+        for key, total in totals.items()
     ]
-    rows.sort(key=lambda r: (-r["total_nets"], r["callsign"]))
+    rows.sort(key=lambda r: (-r["total_nets"], r["callsign"], r["name"]))
     return rows
 
 
-def _station_calls(session: dict) -> set[str]:
-    """Normalized callsigns present in one session summary."""
-    calls = set()
+def _station_names(session: dict) -> dict[tuple[str, str], str]:
+    """Stations in one session summary, keyed ``(callsign, folded name)``.
+
+    The value is the name as it was typed; the key folds case and surrounding
+    whitespace so "Maria" and "maria " are the same person across nets.
+    """
+    stations: dict[tuple[str, str], str] = {}
     for station in session.get("stations") or []:
         cs = normalize_callsign(station.get("callsign", ""))
-        if cs:
-            calls.add(cs)
-    return calls
+        if not cs:
+            continue
+        name = (station.get("name") or "").strip()
+        stations.setdefault((cs, name.casefold()), name)
+    return stations
 
 
-def _streak(per_session: list[set[str]], callsign: str) -> int:
-    """Consecutive most-recent sessions containing callsign."""
+def _streak(per_session: list[dict[tuple[str, str], str]], key: tuple[str, str]) -> int:
+    """Consecutive most-recent sessions containing this station."""
     streak = 0
-    for calls in per_session:
-        if callsign not in calls:
+    for stations in per_session:
+        if key not in stations:
             break
         streak += 1
     return streak
