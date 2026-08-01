@@ -717,18 +717,16 @@ class NCSPlugin(BasePlugin):
         be reported as still running because history could not be written.
         """
         from backend.persistence.net_sessions import NET_TYPE_NCS, save_session
-        config = self._get_config()
-        now = datetime.datetime.now(tz=datetime.timezone.utc)
-        started = self._started_at
         try:
+            config = self._get_config()
+            now = datetime.datetime.now(tz=datetime.timezone.utc)
+            started = self._started_at
             path = save_session(
                 net_type=NET_TYPE_NCS,
-                started_at=(
-                    datetime.datetime.fromtimestamp(started, tz=datetime.timezone.utc)
-                    .isoformat(timespec="seconds")
-                    if started else ""
-                ),
-                ended_at=now.isoformat(timespec="seconds"),
+                # save_session's _iso() normalizes a raw unix timestamp (or
+                # None -> "") itself; no need to pre-format here.
+                started_at=started or "",
+                ended_at=now.timestamp(),
                 duration_seconds=round(now.timestamp() - started) if started else 0,
                 roster=list(self._roster.values()),
                 transcript="\n".join(self._session_rx),

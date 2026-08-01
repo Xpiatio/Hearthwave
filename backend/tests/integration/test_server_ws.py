@@ -3871,7 +3871,7 @@ class TestDeleteProfileCleansUpFamilyData:
 def _neighborhood_server(tmp_path, *, role: str = "adult", is_admin: bool = False,
                           coordinator: bool = False, mock_tts=None, profile: dict | None = None,
                           journals: bool = False, listen_only: bool = False,
-                          net_sessions_dir: str | None = None):
+                          net_sessions_dir: Path | None = None):
     """Context manager yielding (TestClient, cfg) wired for neighborhood-net tests."""
     cfg = _minimal_cfg(tmp_path, listen_only=listen_only)
     if journals:
@@ -4281,8 +4281,12 @@ class TestNeighborhoodNetHandlers:
         entry = json.loads(session_files[0].read_text())
         assert entry["net_type"] == "neighborhood"
         assert entry["roster"][0]["callsign"] == "W5CRD"
-        assert entry["started_at"].endswith("Z")
-        assert entry["ended_at"].endswith("Z")
+        # I4: net_sessions.save_session normalizes the neighborhood net's
+        # "Z"-suffixed strings to the same canonical "+00:00" encoding NCS
+        # sessions use, so on-disk records don't carry two encodings of the
+        # same field depending on which net type wrote them.
+        assert entry["started_at"].endswith("+00:00")
+        assert entry["ended_at"].endswith("+00:00")
         assert entry["duration_seconds"] >= 0
         assert "W5CRD" in entry["transcript"]
 

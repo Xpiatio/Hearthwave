@@ -9,11 +9,14 @@ NeighborhoodNet) are flattened here so one reader handles both.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
 
 from backend.persistence._utils import atomic_json_write
+
+_log = logging.getLogger(__name__)
 
 NET_TYPE_NCS = "ncs"
 NET_TYPE_NEIGHBORHOOD = "neighborhood"
@@ -29,10 +32,29 @@ _STATUS_MAP = {
 
 
 def _iso(value: object) -> str:
-    """Coerce a unix timestamp (NCS) or ISO string (neighborhood) to ISO-8601 UTC."""
+    """Coerce a unix timestamp (NCS) or ISO string (neighborhood) to one
+    canonical ISO-8601 UTC encoding.
+
+    Callers disagree on string format: NCS builds its string with a ``Z``
+    suffix, the neighborhood net's ``.isoformat()`` calls produce a
+    ``+00:00`` suffix. Both mean the same instant, but without normalizing
+    here, on-disk records would carry two different encodings of the same
+    field depending on which net type wrote them. Blank/unparsable input is
+    passed through unchanged rather than raised on, since a session save
+    must never fail on a timestamp formatting quirk.
+    """
     if isinstance(value, (int, float)):
         return datetime.fromtimestamp(value, tz=timezone.utc).isoformat(timespec="seconds")
-    return str(value or "")
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return text
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).isoformat(timespec="seconds")
 
 
 def normalize_roster(rows: list[dict]) -> list[dict]:
@@ -57,14 +79,19 @@ def normalize_roster(rows: list[dict]) -> list[dict]:
 
 def save_session(
     net_type: str,
-    started_at: str,
-    ended_at: str,
+    started_at: str | float | int,
+    ended_at: str | float | int,
     duration_seconds: int,
     roster: list[dict],
     transcript: str,
     sessions_dir: Path,
 ) -> str:
-    """Write one completed net session and return its file path."""
+    """Write one completed net session and return its file path.
+
+    ``started_at``/``ended_at`` accept either a unix timestamp or an
+    ISO-8601 string and are run through `_iso` so every stored record uses
+    the same encoding no matter which net type produced it.
+    """
     sessions_dir = Path(sessions_dir)
     sessions_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -73,8 +100,8 @@ def save_session(
     atomic_json_write(path, {
         "id": session_id,
         "net_type": net_type,
-        "started_at": started_at,
-        "ended_at": ended_at,
+        "started_at": _iso(started_at),
+        "ended_at": _iso(ended_at),
         "duration_seconds": int(duration_seconds),
         "roster": normalize_roster(roster),
         "transcript": transcript,
@@ -100,7 +127,8 @@ def load_session_summaries(sessions_dir: Path) -> list[dict]:
         try:
             with open(sessions_dir / name, encoding="utf-8") as fh:
                 entry = json.load(fh)
-        except (OSError, json.JSONDecodeError):
+        except (OSError, json.JSONDecodeError) as exc:
+            _log.warning("Skipping unreadable net session file %s: %s", name, exc)
             continue
         roster = entry.get("roster") or []
         summaries.append({
@@ -126,7 +154,8 @@ def load_session(session_id: str, sessions_dir: Path) -> dict | None:
     try:
         with open(path, encoding="utf-8") as fh:
             return json.load(fh)
-    except (OSError, json.JSONDecodeError):
+    except (OSError, json.JSONDecodeError) as exc:
+        _log.warning("Failed to read net session %s: %s", path, exc)
         return None
 
 

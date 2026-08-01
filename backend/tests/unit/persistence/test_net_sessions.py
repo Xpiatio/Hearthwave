@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,7 @@ import pytest
 from backend.persistence.net_sessions import (
     NET_TYPE_NCS,
     NET_TYPE_NEIGHBORHOOD,
+    _iso,
     delete_session,
     load_session,
     load_session_summaries,
@@ -47,7 +49,11 @@ class TestNormalizeRoster:
         result = normalize_roster(rows)
         assert result[0]["status"] == "CheckedIn"
         assert result[0]["traffic"] is None
-        assert result[0]["checkin_time"] == "2026-08-01T19:30:00Z"
+        # I4: checkin_time is an ISO string too, so it goes through the same
+        # _iso() normalization as started_at/ended_at — the "Z" the
+        # neighborhood net wrote it with converges to the canonical
+        # "+00:00" encoding, matching what an NCS-sourced row would produce.
+        assert result[0]["checkin_time"] == "2026-08-01T19:30:00+00:00"
 
     def test_standby_and_checked_out_map(self):
         rows = [{"status": "standby"}, {"status": "checked_out"}]
@@ -55,6 +61,24 @@ class TestNormalizeRoster:
 
     def test_unknown_status_passes_through(self):
         assert normalize_roster([{"status": "Weird"}])[0]["status"] == "Weird"
+
+
+class TestIso:
+    """I4: NCS's ``Z``-suffixed strings and the neighborhood net's
+    ``+00:00``-suffixed strings must converge to one on-disk encoding."""
+
+    def test_z_suffix_and_offset_suffix_converge(self):
+        assert _iso("2026-08-01T19:30:00Z") == _iso("2026-08-01T19:30:00+00:00")
+
+    def test_unix_timestamp_matches_equivalent_iso_string(self):
+        assert _iso(1_700_000_000.0) == _iso("2023-11-14T22:13:20Z")
+
+    def test_blank_and_none_pass_through_as_empty_string(self):
+        assert _iso("") == ""
+        assert _iso(None) == ""
+
+    def test_unparsable_string_passes_through_unchanged(self):
+        assert _iso("not a timestamp") == "not a timestamp"
 
 
 class TestSaveSession:
@@ -75,6 +99,24 @@ class TestSaveSession:
         assert data["id"].endswith("_ncs")
         assert data["roster"][0]["callsign"] == "KD8ABC"
         assert data["transcript"] == "KD8ABC: nothing to report"
+
+    def test_normalizes_z_and_offset_suffixes_to_the_same_encoding(self, sessions_dir: Path):
+        # I4: NCS passes "...Z"; the neighborhood net passes "...+00:00" (via
+        # datetime.isoformat()). Both must land on disk in the same form.
+        path_a = save_session(
+            net_type=NET_TYPE_NCS, started_at="2026-08-01T19:00:00Z",
+            ended_at="2026-08-01T19:52:00Z", duration_seconds=0,
+            roster=[], transcript="", sessions_dir=sessions_dir,
+        )
+        path_b = save_session(
+            net_type=NET_TYPE_NEIGHBORHOOD, started_at="2026-08-01T19:00:00+00:00",
+            ended_at="2026-08-01T19:52:00+00:00", duration_seconds=0,
+            roster=[], transcript="", sessions_dir=sessions_dir,
+        )
+        data_a = json.loads(Path(path_a).read_text(encoding="utf-8"))
+        data_b = json.loads(Path(path_b).read_text(encoding="utf-8"))
+        assert data_a["started_at"] == data_b["started_at"]
+        assert data_a["ended_at"] == data_b["ended_at"]
 
     def test_creates_directory_when_missing(self, tmp_path: Path):
         target = tmp_path / "nested" / "sessions"
@@ -110,6 +152,12 @@ class TestLoadSessionSummaries:
         (sessions_dir / "20260801_190000_ncs.json").write_text("{not json", encoding="utf-8")
         assert load_session_summaries(sessions_dir) == []
 
+    def test_logs_corrupt_file_instead_of_swallowing_silently(self, sessions_dir: Path, caplog):
+        (sessions_dir / "20260801_190000_ncs.json").write_text("{not json", encoding="utf-8")
+        with caplog.at_level(logging.WARNING):
+            load_session_summaries(sessions_dir)
+        assert "20260801_190000_ncs.json" in caplog.text
+
 
 class TestLoadSession:
     def test_returns_full_entry(self, sessions_dir: Path):
@@ -125,6 +173,12 @@ class TestLoadSession:
 
     def test_rejects_path_traversal(self, sessions_dir: Path):
         assert load_session("../../etc/passwd", sessions_dir) is None
+
+    def test_logs_unreadable_file_instead_of_swallowing_silently(self, sessions_dir: Path, caplog):
+        (sessions_dir / "20260801_190000_ncs.json").write_text("{not json", encoding="utf-8")
+        with caplog.at_level(logging.WARNING):
+            assert load_session("20260801_190000_ncs", sessions_dir) is None
+        assert "20260801_190000_ncs" in caplog.text
 
 
 class TestDeleteSession:
