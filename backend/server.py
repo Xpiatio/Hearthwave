@@ -3940,9 +3940,12 @@ async def websocket_endpoint(
                 if not _is_coordinator(state):
                     await _manager.send_to(ws, {"type": "error", "detail": "Coordinator access required"})
                     continue
-                callsign = normalize_callsign(data.get("callsign") or "")[:16]
-                name = (data.get("name") or "").strip()[:64]
-                location = (data.get("location") or "").strip()[:64]
+                # str() first: these are raw client fields, and a non-string
+                # value (e.g. {"name": 123}) would raise out of the handler and
+                # take the whole connection down with it.
+                callsign = normalize_callsign(str(data.get("callsign") or ""))[:16]
+                name = str(data.get("name") or "").strip()[:64]
+                location = str(data.get("location") or "").strip()[:64]
                 # Name is required here even though neighborhood_checkin falls
                 # back to "Operator": attendance keys on (callsign, name), and
                 # neighborhood_call_next speaks the name on the air.
@@ -3962,22 +3965,33 @@ async def websocket_endpoint(
                             ws, {"type": "error", "detail": "Contacts store not initialised."}
                         )
                         continue
-                    try:
-                        updated = _contacts_store.add_contact(
-                            {"callsign": callsign, "name": name, "location": location}
-                        )
-                        await _manager.broadcast({"type": "contacts", "contacts": updated})
-                        # Saving the contact also biases Whisper toward this
-                        # neighbor's callsign on the air.
-                        _rebuild_stt_vocabulary()
-                    except ValueError as exc:
-                        await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
+                    if callsign in known_callsigns(_contacts_store.get_all()):
+                        # Already in the book: no write, no error (spec). Not
+                        # merely redundant — add_contact dedups last-write-wins,
+                        # so writing the bare three fields over an existing rich
+                        # contact would silently drop its verified/ham_callsign/
+                        # fcc_* data. The frontend hides the checkbox for a known
+                        # callsign; this is the server-side half of that rule.
+                        pass
+                    else:
+                        try:
+                            updated = _contacts_store.add_contact(
+                                {"callsign": callsign, "name": name, "location": location}
+                            )
+                            await _manager.broadcast({"type": "contacts", "contacts": updated})
+                            # Saving the contact also biases Whisper toward this
+                            # neighbor's callsign on the air.
+                            _rebuild_stt_vocabulary()
+                        except (ValueError, OSError) as exc:
+                            # OSError too: a failed disk write must cost the
+                            # coordinator an error message, not the connection.
+                            await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
 
             elif msg_type == "neighborhood_remove_station":
                 if not _is_coordinator(state):
                     await _manager.send_to(ws, {"type": "error", "detail": "Coordinator access required"})
                     continue
-                target_id = data.get("user_id") or ""
+                target_id = str(data.get("user_id") or "")
                 if not target_id.startswith(RADIO_KEY_PREFIX):
                     await _manager.send_to(
                         ws, {"type": "error", "detail": "Only radio check-ins can be removed."}

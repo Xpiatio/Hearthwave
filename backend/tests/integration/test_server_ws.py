@@ -4270,6 +4270,11 @@ class TestNeighborhoodNetHandlers:
                     _next_of_type(ws, "neighborhood_state")
                     ws.send_json({"type": "neighborhood_checkin"})
                     _next_of_type(ws, "neighborhood_state")
+                    ws.send_json({
+                        "type": "neighborhood_checkin_radio",
+                        "callsign": "WRAB123", "name": "Maria", "location": "Maple St",
+                    })
+                    _next_of_type(ws, "neighborhood_state")
                     ws.send_json({"type": "neighborhood_end"})
                     saved = _next_of_type(ws, "neighborhood_journal_saved")
         assert saved is not None
@@ -4281,6 +4286,13 @@ class TestNeighborhoodNetHandlers:
         entry = json.loads(session_files[0].read_text())
         assert entry["net_type"] == "neighborhood"
         assert entry["roster"][0]["callsign"] == "W5CRD"
+        # The one cross-task seam that reaches disk: a radio row must land in
+        # the private session record marked via="radio", beside the account
+        # row's via="".
+        by_callsign = {r["callsign"]: r for r in entry["roster"]}
+        assert by_callsign["W5CRD"]["via"] == ""
+        assert by_callsign["WRAB123"]["via"] == "radio"
+        assert by_callsign["WRAB123"]["name"] == "Maria"
         # I4: net_sessions.save_session normalizes the neighborhood net's
         # "Z"-suffixed strings to the same canonical "+00:00" encoding NCS
         # sessions use, so on-disk records don't carry two encodings of the
@@ -4477,6 +4489,126 @@ class TestNeighborhoodRadioCheckin:
         assert "WRAB123" in callsigns
         stored = json.loads(cfg.contacts_file.read_text())
         assert any(c["callsign"] == "WRAB123" for c in stored)
+
+    def test_radio_checkin_does_not_clobber_an_existing_contact(self, tmp_path):
+        """Spec error table: 'save_contact on a callsign already in the book →
+        no contact write, no error'. The frontend hides the checkbox, but a
+        hand-built frame (or a stale contacts list) still reaches here, and
+        ContactsStore.add_contact dedups last-write-wins — so an unguarded
+        write would replace a rich contact with the bare three fields, losing
+        verified/ham_callsign/fcc_* silently."""
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, coordinator=True,
+        )
+        cfg.contacts_file.write_text(json.dumps([{
+            "callsign": "WRAB123",
+            "name": "Maria",
+            "location": "Maple St",
+            "ham_callsign": "K8ABC",
+            "verified": True,
+            "verified_at": "2026-07-01T00:00:00Z",
+            "fcc_name": "MARIA LOPEZ",
+        }]), encoding="utf-8")
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({
+                        "type": "neighborhood_checkin_radio",
+                        "callsign": "WRAB123", "name": "Maria", "location": "Oak St",
+                        "save_contact": True,
+                    })
+                    state_msg = _next_of_type(ws, "neighborhood_state")
+                    # Nothing (contacts broadcast or error) may sit between the
+                    # check-in broadcast and this echo.
+                    ws.send_json({"type": "neighborhood_get_state"})
+                    followup = ws.receive_json()
+        assert state_msg is not None
+        assert state_msg["roster"][0]["callsign"] == "WRAB123"  # check-in stands
+        assert followup["type"] == "neighborhood_state"
+        stored = json.loads(cfg.contacts_file.read_text())
+        assert len(stored) == 1
+        assert stored[0]["ham_callsign"] == "K8ABC"
+        assert stored[0]["verified"] is True
+        assert stored[0]["fcc_name"] == "MARIA LOPEZ"
+        assert stored[0]["location"] == "Maple St"  # untouched, not overwritten
+
+    def test_radio_checkin_survives_a_contacts_oserror(self, tmp_path):
+        """Spec error table: 'contacts store raises → check-in stands, error to
+        that socket only'. An OSError from the atomic write must not unwind to
+        the endpoint's except-Exception and drop the connection."""
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, coordinator=True,
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    with patch(
+                        "backend.server._contacts_store.add_contact",
+                        side_effect=OSError("disk full"),
+                    ):
+                        ws.send_json({
+                            "type": "neighborhood_checkin_radio",
+                            "callsign": "WRAB123", "name": "Maria", "location": "Maple St",
+                            "save_contact": True,
+                        })
+                        state_msg = _next_of_type(ws, "neighborhood_state")
+                        err = _next_of_type(ws, "error")
+                    # Socket still alive after the failure.
+                    ws.send_json({"type": "neighborhood_get_state"})
+                    still_alive = _next_of_type(ws, "neighborhood_state")
+        assert state_msg is not None
+        assert state_msg["roster"][0]["callsign"] == "WRAB123"
+        assert err is not None and "disk full" in err["detail"]
+        assert still_alive is not None
+
+    def test_radio_checkin_ignores_non_string_fields(self, tmp_path):
+        """A non-string field value must not raise out of the handler and drop
+        the connection: `.strip()`/`.startswith` on an int is an
+        AttributeError that the endpoint's except-Exception turns into a
+        disconnect."""
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, coordinator=True,
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({
+                        "type": "neighborhood_checkin_radio",
+                        "callsign": 123, "name": None, "location": 7,
+                    })
+                    err = _next_of_type(ws, "error")
+                    ws.send_json({"type": "neighborhood_remove_station", "user_id": 123})
+                    err2 = _next_of_type(ws, "error")
+                    ws.send_json({"type": "neighborhood_get_state"})
+                    still_alive = _next_of_type(ws, "neighborhood_state")
+        assert err is not None and err["detail"] == "Callsign and name are required."
+        assert err2 is not None and err2["detail"] == "Only radio check-ins can be removed."
+        assert still_alive is not None
+        assert still_alive["roster"] == []
 
     def test_radio_checkin_survives_a_contacts_failure(self, tmp_path):
         cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
