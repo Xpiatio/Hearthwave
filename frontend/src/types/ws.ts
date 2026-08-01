@@ -247,6 +247,67 @@ export interface JournalUnpublishedMsg {
   file_path: string;
 }
 
+export interface NetSessionStation {
+  callsign: string;
+  name: string;
+}
+
+export interface NetSessionSummary {
+  id: string;
+  net_type: string;
+  started_at: string;
+  ended_at: string;
+  duration_seconds: number;
+  checkin_count: number;
+  stations: NetSessionStation[];
+}
+
+export interface NetSessionRosterRow {
+  callsign: string;
+  name: string;
+  location: string;
+  status: string;
+  traffic: string | null;
+  checkin_time: string;
+  verified: boolean;
+}
+
+export interface NetSessionDetail {
+  id: string;
+  net_type: string;
+  started_at: string;
+  ended_at: string;
+  duration_seconds: number;
+  roster: NetSessionRosterRow[];
+  transcript: string;
+}
+
+export interface AttendanceStatRow {
+  callsign: string;
+  name: string;
+  total_nets: number;
+  attended_of_recent: number;
+  recent_window: number;
+  current_streak: number;
+  last_seen: string;
+}
+
+export interface NetSessionsMsg {
+  type: 'net_sessions';
+  sessions: NetSessionSummary[];
+  stats: AttendanceStatRow[];
+}
+
+export interface NetSessionMsg {
+  type: 'net_session';
+  session: NetSessionDetail | null;
+}
+
+export interface NetSessionDeletedMsg {
+  type: 'net_session_deleted';
+  id: string;
+}
+
 // FCC & callsign features (server → client)
 export interface PendingStationsMsg {
   type: 'pending_stations';
@@ -746,6 +807,9 @@ export type WsMessage =
   | VoiceTxErrorMsg
   | { type: 'voice_preview_done' }
   | { type: 'error'; detail?: string }
+  | NetSessionsMsg
+  | NetSessionMsg
+  | NetSessionDeletedMsg
   | VoiceTxAckMsg
   | VoiceTxErrorMsg;
 

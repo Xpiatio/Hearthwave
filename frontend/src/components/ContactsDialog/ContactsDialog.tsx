@@ -24,6 +24,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import type { Contact, FccLookupResultMsg } from '../../types/ws';
+import { downloadText } from '../../utils/download';
 
 interface Props {
   open: boolean;
@@ -92,16 +93,6 @@ function parseCsv(text: string): FormData[] {
       ham_callsign: cols[idx('ham_callsign')] ?? '',
     };
   }).filter((r) => r.callsign.trim());
-}
-
-function downloadText(text: string, filename: string, mime: string) {
-  const blob = new Blob([text], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
 }
 
 export function ContactsDialog({
