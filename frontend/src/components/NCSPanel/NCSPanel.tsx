@@ -388,7 +388,7 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
             placeholder="Filter roster"
             value={rosterQuery}
             onChange={(e) => setRosterQuery(e.target.value)}
-            aria-label="Filter roster"
+            slotProps={{ htmlInput: { 'aria-label': 'Filter roster' } }}
           />
         </Box>
       )}

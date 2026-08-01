@@ -54,6 +54,23 @@ const DETAIL: NetSessionDetail = {
   }],
 }
 
+const DETAIL_MULTI_ROW: NetSessionDetail = {
+  ...DETAIL,
+  roster: [
+    ...DETAIL.roster,
+    {
+      callsign: 'WRAB123', name: 'Sam', location: 'Zeeland',
+      status: 'CheckedIn', traffic: 'Routine',
+      checkin_time: '2026-08-02T19:02:00Z', verified: false,
+    },
+    {
+      callsign: 'KE8XYZ', name: 'Alex', location: 'Holland',
+      status: 'Standby', traffic: 'Priority',
+      checkin_time: '2026-08-02T19:03:00Z', verified: false,
+    },
+  ],
+}
+
 function props(overrides = {}) {
   return {
     sessions: SESSIONS, stats: STATS, selected: null, isAdmin: false,
@@ -91,6 +108,16 @@ describe('PastNetsTab', () => {
     expect(screen.getByText('KD8ABC')).toBeInTheDocument()
     expect(screen.getByText('Holland')).toBeInTheDocument()
     expect(screen.getByText('Routine')).toBeInTheDocument()
+  })
+
+  it('hides non-matching rows when a callsign is typed into the roster filter', () => {
+    render(<PastNetsTab {...props({ selected: DETAIL_MULTI_ROW })} />)
+    const filter = screen.getByLabelText(/filter roster/i)
+    fireEvent.change(filter, { target: { value: 'KE8XYZ' } })
+
+    expect(screen.getByText('KE8XYZ')).toBeInTheDocument()
+    expect(screen.queryByText('KD8ABC')).not.toBeInTheDocument()
+    expect(screen.queryByText('WRAB123')).not.toBeInTheDocument()
   })
 
   it('shows attendance stats', () => {

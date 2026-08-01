@@ -380,6 +380,25 @@ describe('NeighborhoodPanel', () => {
       expect(props.onStatusChange).toHaveBeenCalledWith('checked_in');
       expect(within(rows[0]).queryByRole('button')).not.toBeInTheDocument();
     });
+
+    it('hides non-matching rows when a name is typed into the roster filter', () => {
+      const threeRoster: NeighborhoodRosterRow[] = [
+        ...roster,
+        {
+          user_id: 'u4', callsign: 'W3DEF', name: 'Carol', location: 'Pine St',
+          status: 'checked_in', checkin_time: new Date().toISOString(), called: false,
+        },
+      ];
+      render(<NeighborhoodPanel {...makeProps({ roster: threeRoster })} />);
+
+      const filter = screen.getByLabelText(/filter roster/i);
+      fireEvent.change(filter, { target: { value: 'Carol' } });
+
+      const list = screen.getByRole('list', { name: 'Checked-in neighbors' });
+      expect(within(list).getByText('Carol')).toBeInTheDocument();
+      expect(within(list).queryByText('Alice')).not.toBeInTheDocument();
+      expect(within(list).queryByText('Bob')).not.toBeInTheDocument();
+    });
   });
 
   describe('admin board clears', () => {

@@ -81,7 +81,7 @@ export function RosterList({ roster, currentCall, myUserId, onStatusChange, onCl
             placeholder="Filter roster"
             value={rosterQuery}
             onChange={(e) => setRosterQuery(e.target.value)}
-            aria-label="Filter roster"
+            slotProps={{ htmlInput: { 'aria-label': 'Filter roster' } }}
             sx={{ flex: 1, minWidth: 160 }}
           />
           <FormControl size="small" sx={{ minWidth: 140 }}>
