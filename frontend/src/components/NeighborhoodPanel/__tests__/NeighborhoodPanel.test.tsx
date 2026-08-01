@@ -369,16 +369,32 @@ describe('NeighborhoodPanel', () => {
       expect(screen.getByText('Neighbor 17')).toBeInTheDocument();
     });
 
-    it('shows "I\'m back" on the viewer\'s own row when currently on standby', () => {
+    it('shows "Check out" on the viewer\'s own row when currently on standby', () => {
       const props = makeProps({ myUserId: 'u3' });
       render(<NeighborhoodPanel {...props} />);
       const list = screen.getByRole('list', { name: 'Checked-in neighbors' });
       const rows = within(list).getAllByRole('listitem');
 
+      const checkOut = within(rows[1]).getByRole('button', { name: 'Check out' });
+      fireEvent.click(checkOut);
+      expect(props.onStatusChange).toHaveBeenCalledWith('checked_out');
+      expect(within(rows[0]).queryByRole('button')).not.toBeInTheDocument();
+    });
+
+    it('shows "Checked out" status and an "I\'m back" button on the viewer\'s own row when checked out', () => {
+      const checkedOutRoster: NeighborhoodRosterRow[] = [
+        roster[0],
+        { ...roster[1], status: 'checked_out' },
+      ];
+      const props = makeProps({ roster: checkedOutRoster, myUserId: 'u3' });
+      render(<NeighborhoodPanel {...props} />);
+      const list = screen.getByRole('list', { name: 'Checked-in neighbors' });
+      const rows = within(list).getAllByRole('listitem');
+
+      expect(within(rows[1]).getByText('Checked out')).toBeInTheDocument();
       const imBack = within(rows[1]).getByRole('button', { name: "I'm back" });
       fireEvent.click(imBack);
       expect(props.onStatusChange).toHaveBeenCalledWith('checked_in');
-      expect(within(rows[0]).queryByRole('button')).not.toBeInTheDocument();
     });
 
     it('hides non-matching rows when a name is typed into the roster filter', () => {

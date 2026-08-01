@@ -27,7 +27,7 @@ export interface NeighborhoodPanelProps {
   onCheckin: () => void;
   onClearCheckins: () => void;
   onClearIncidents: () => void;
-  onStatusChange: (status: 'checked_in' | 'standby') => void;
+  onStatusChange: (status: 'checked_in' | 'standby' | 'checked_out') => void;
   onIncidentReport: (p: { category: string; description: string; location: string }) => void;
   incidentError: string | null;
   onStreetAlert: (message: string) => void;

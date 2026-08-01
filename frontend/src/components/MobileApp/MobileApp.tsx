@@ -72,7 +72,7 @@ export interface MobileAppProps {
   neighborhoodAlerts: NeighborhoodAlertMsg[];
   incidentError: string | null;
   sendNeighborhoodCheckin: () => void;
-  sendNeighborhoodStatus: (status: 'checked_in' | 'standby', userId?: string) => void;
+  sendNeighborhoodStatus: (status: 'checked_in' | 'standby' | 'checked_out', userId?: string) => void;
   sendIncidentReport: (category: string, description: string, location: string) => void;
   sendStreetAlert: (message: string) => void;
   sendNeighborhoodStart: () => void;

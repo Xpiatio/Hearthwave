@@ -638,7 +638,7 @@ export interface NeighborhoodRosterRow {
   callsign: string;
   name: string;
   location: string;
-  status: 'checked_in' | 'standby';
+  status: 'checked_in' | 'standby' | 'checked_out';
   checkin_time: string;
   called: boolean;
 }
@@ -896,7 +896,7 @@ export interface NeighborhoodCheckinPayload {
 
 export interface NeighborhoodStatusPayload {
   type: 'neighborhood_status';
-  status: 'checked_in' | 'standby';
+  status: 'checked_in' | 'standby' | 'checked_out';
   user_id?: string;
 }
 

@@ -1,4 +1,3 @@
-import { useMemo, useState } from 'react';
 import {
   Box,
   Button,
@@ -17,22 +16,50 @@ import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import type { NeighborhoodRosterRow } from '../../types/ws';
 import { rosterDensitySpec } from '../../neighborhood/density';
-import { filterRoster, sortRoster, type SortDirection } from '../../netsessions/rosterView';
+import { useRosterSort } from '../../netsessions/rosterView';
 
 type RosterSortColumn = 'name' | 'callsign' | 'location' | 'status';
+
+/** Fields this table actually renders — a filter query should never match a
+ *  hidden field the user can't see. */
+const ROSTER_SEARCH_FIELDS: (keyof NeighborhoodRosterRow)[] = ['name', 'callsign', 'location'];
 
 export interface RosterListProps {
   roster: NeighborhoodRosterRow[];
   currentCall: string | null;
   myUserId: string;
-  onStatusChange: (status: 'checked_in' | 'standby') => void;
+  onStatusChange: (status: 'checked_in' | 'standby' | 'checked_out') => void;
   /** Admin-only board wipe. Omitted (not disabled) for everyone else, so a
    *  control that can't succeed never appears. */
   onClear?: () => void;
 }
 
-function statusLabel(status: NeighborhoodRosterRow['status']): string {
-  return status === 'checked_in' ? 'Checked in' : 'Standby';
+const STATUS_LABELS: Record<NeighborhoodRosterRow['status'], string> = {
+  checked_in: 'Checked in',
+  standby: 'Standby',
+  checked_out: 'Checked out',
+};
+
+const STATUS_COLORS: Record<NeighborhoodRosterRow['status'], 'success' | 'warning' | 'info'> = {
+  checked_in: 'success',
+  standby: 'warning',
+  checked_out: 'info',
+};
+
+/** Self-toggle cycle: checked in -> standby -> checked out -> checked in.
+ *  Mirrors NCSPanel's CheckedIn/Standby/CheckedOut cycle for the same
+ *  reasons — "step away" and "check out" are distinct signals of presence. */
+const STATUS_CYCLE: NeighborhoodRosterRow['status'][] = ['checked_in', 'standby', 'checked_out'];
+
+const NEXT_ACTION_LABEL: Record<NeighborhoodRosterRow['status'], string> = {
+  checked_in: 'Step away',
+  standby: 'Check out',
+  checked_out: "I'm back",
+};
+
+function nextStatus(status: NeighborhoodRosterRow['status']): NeighborhoodRosterRow['status'] {
+  const at = STATUS_CYCLE.indexOf(status);
+  return STATUS_CYCLE[(at + 1) % STATUS_CYCLE.length];
 }
 
 /** Checked-in-neighbors roster: name, callsign, location, status, and a
@@ -41,10 +68,11 @@ function statusLabel(status: NeighborhoodRosterRow['status']): string {
  *  color-only) so the highlight reads the same to a screen reader or in
  *  grayscale as it does at a glance.
  *
- *  The status toggle ("Step away" / "I'm back") only ever appears on the
- *  viewer's own row — the server already restricts cross-user status
- *  changes to coordinators (see neighborhood_status), so the UI mirrors
- *  that by only exposing the control where it can succeed unassisted.
+ *  The status toggle ("Step away" / "Check out" / "I'm back") only ever
+ *  appears on the viewer's own row — the server already restricts
+ *  cross-user status changes to coordinators (see neighborhood_status), so
+ *  the UI mirrors that by only exposing the control where it can succeed
+ *  unassisted.
  *
  *  Rows sit in an auto-fit grid whose card size comes from the head count, so
  *  a six-person net stays big and glanceable while a twenty-person net still
@@ -52,14 +80,16 @@ function statusLabel(status: NeighborhoodRosterRow['status']): string {
 export function RosterList({ roster, currentCall, myUserId, onStatusChange, onClear }: RosterListProps) {
   const density = rosterDensitySpec(roster.length);
 
-  const [rosterQuery, setRosterQuery] = useState('');
-  const [sortColumn, setSortColumn] = useState<RosterSortColumn | ''>('');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-
-  const visibleRoster = useMemo(
-    () => sortRoster(filterRoster(roster, rosterQuery), sortColumn || null, sortDirection),
-    [roster, rosterQuery, sortColumn, sortDirection],
-  );
+  const {
+    rosterQuery,
+    setRosterQuery,
+    sortColumn,
+    setSortColumn,
+    sortDirection,
+    setSortDirection,
+    visibleRoster,
+    showFilterInput,
+  } = useRosterSort<NeighborhoodRosterRow, RosterSortColumn>(roster, ROSTER_SEARCH_FIELDS);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -74,7 +104,7 @@ export function RosterList({ roster, currentCall, myUserId, onStatusChange, onCl
         )}
       </Box>
 
-      {roster.length > 2 && (
+      {showFilterInput && (
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
           <TextField
             size="small"
@@ -89,8 +119,8 @@ export function RosterList({ roster, currentCall, myUserId, onStatusChange, onCl
             <Select
               labelId="roster-sort-label"
               label="Sort by"
-              value={sortColumn}
-              onChange={(e) => setSortColumn(e.target.value as RosterSortColumn | '')}
+              value={sortColumn ?? ''}
+              onChange={(e) => setSortColumn((e.target.value || null) as RosterSortColumn | null)}
             >
               <MenuItem value="">None</MenuItem>
               <MenuItem value="name">Name</MenuItem>
@@ -171,14 +201,14 @@ export function RosterList({ roster, currentCall, myUserId, onStatusChange, onCl
                 </Typography>
 
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: density.gap, mt: 'auto' }}>
-                  <Typography variant={density.detailVariant}>{statusLabel(row.status)}</Typography>
+                  <Chip size="small" color={STATUS_COLORS[row.status]} label={STATUS_LABELS[row.status]} />
                   {isSelf && (
                     <Button
                       size="small"
                       variant="text"
-                      onClick={() => onStatusChange(row.status === 'checked_in' ? 'standby' : 'checked_in')}
+                      onClick={() => onStatusChange(nextStatus(row.status))}
                     >
-                      {row.status === 'checked_in' ? 'Step away' : "I'm back"}
+                      {NEXT_ACTION_LABEL[row.status]}
                     </Button>
                   )}
                 </Box>

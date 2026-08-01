@@ -1222,7 +1222,7 @@ export default function App() {
     send({ type: 'neighborhood_checkin' } satisfies NeighborhoodCheckinPayload);
   }
 
-  function sendNeighborhoodStatus(status: 'checked_in' | 'standby', userId?: string) {
+  function sendNeighborhoodStatus(status: 'checked_in' | 'standby' | 'checked_out', userId?: string) {
     send({
       type: 'neighborhood_status',
       status,
