@@ -4939,3 +4939,196 @@ class TestPluginTxGateCoverage:
         assert len(tx_spy.seen) == 2, "the hook must have run for both check-ins"
         assert len(synthesized) == 1, "a blocked transmission must not be synthesized"
         assert any("TX blocked by a plugin" in r.message for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# Task 5 — net session history WebSocket handlers
+# ---------------------------------------------------------------------------
+
+def _write_net_session(sessions_dir: Path, session_id: str, *, roster=None, transcript="") -> Path:
+    """Write a net-session JSON fixture directly (bypassing the store's
+    clock-based id) so list-ordering tests are deterministic."""
+    sessions_dir.mkdir(parents=True, exist_ok=True)
+    path = sessions_dir / f"{session_id}.json"
+    path.write_text(json.dumps({
+        "id": session_id,
+        "net_type": "neighborhood",
+        "started_at": "2026-01-01T00:00:00+00:00",
+        "ended_at": "2026-01-01T00:30:00+00:00",
+        "duration_seconds": 1800,
+        "roster": roster if roster is not None else [
+            {
+                "callsign": "W5CRD", "name": "Coord Op", "location": "Front St",
+                "status": "CheckedOut", "traffic": None,
+                "checkin_time": "2026-01-01T00:05:00+00:00", "verified": True,
+            },
+        ],
+        "transcript": transcript,
+    }), encoding="utf-8")
+    return path
+
+
+class TestNetSessionHistoryHandlers:
+    """Task 5: list_net_sessions / get_net_session / delete_net_session."""
+
+    def test_list_net_sessions_returns_newest_first_with_stats(self, tmp_path):
+        sessions_dir = tmp_path / "net_sessions"
+        _write_net_session(sessions_dir, "20260101_000000_neighborhood")
+        _write_net_session(sessions_dir, "20260102_000000_neighborhood")
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, net_sessions_dir=sessions_dir,
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "list_net_sessions"})
+                    msg = _next_of_type(ws, "net_sessions")
+        assert msg is not None
+        ids = [s["id"] for s in msg["sessions"]]
+        assert ids == ["20260102_000000_neighborhood", "20260101_000000_neighborhood"]
+        assert all("transcript" not in s for s in msg["sessions"])
+        assert msg["stats"] and msg["stats"][0]["callsign"] == "W5CRD"
+        assert msg["stats"][0]["total_nets"] == 2
+
+    def test_list_net_sessions_empty_returns_empty_lists(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, net_sessions_dir=tmp_path / "net_sessions",
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "list_net_sessions"})
+                    msg = _next_of_type(ws, "net_sessions")
+        assert msg == {"type": "net_sessions", "sessions": [], "stats": []}
+
+    def test_get_net_session_returns_full_record_with_transcript(self, tmp_path):
+        sessions_dir = tmp_path / "net_sessions"
+        _write_net_session(sessions_dir, "20260101_000000_neighborhood", transcript="W5CRD: testing")
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, net_sessions_dir=sessions_dir,
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "get_net_session", "id": "20260101_000000_neighborhood"})
+                    msg = _next_of_type(ws, "net_session")
+        assert msg is not None
+        assert msg["session"]["id"] == "20260101_000000_neighborhood"
+        assert msg["session"]["transcript"] == "W5CRD: testing"
+
+    def test_get_net_session_unknown_id_returns_none(self, tmp_path):
+        sessions_dir = tmp_path / "net_sessions"
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, net_sessions_dir=sessions_dir,
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "get_net_session", "id": "does_not_exist"})
+                    msg = _next_of_type(ws, "net_session")
+        assert msg == {"type": "net_session", "session": None}
+
+    def test_delete_net_session_admin_removes_file(self, tmp_path):
+        sessions_dir = tmp_path / "net_sessions"
+        _write_net_session(sessions_dir, "20260101_000000_neighborhood")
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, net_sessions_dir=sessions_dir, is_admin=True,
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "delete_net_session", "id": "20260101_000000_neighborhood"})
+                    msg = _next_of_type(ws, "net_session_deleted")
+        assert msg == {"type": "net_session_deleted", "id": "20260101_000000_neighborhood"}
+        assert not (sessions_dir / "20260101_000000_neighborhood.json").exists()
+
+    def test_delete_net_session_non_admin_rejected_file_survives(self, tmp_path):
+        sessions_dir = tmp_path / "net_sessions"
+        target = _write_net_session(sessions_dir, "20260101_000000_neighborhood")
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, net_sessions_dir=sessions_dir, is_admin=False,
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "delete_net_session", "id": "20260101_000000_neighborhood"})
+                    msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert msg["detail"] == "Admin access required."
+        # The important assertion: the file must still be on disk, not just
+        # that some error came back.
+        assert target.exists()
+
+    def test_delete_net_session_traversal_id_rejected(self, tmp_path):
+        sessions_dir = tmp_path / "net_sessions"
+        sessions_dir.mkdir(parents=True, exist_ok=True)
+        # Decoy file at the path a naive `sessions_dir / (id + ".json")` join
+        # would target if the directory-escape check were missing.
+        decoy = tmp_path / "foo.json"
+        decoy.write_text("{}", encoding="utf-8")
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, net_sessions_dir=sessions_dir, is_admin=True,
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "delete_net_session", "id": "../foo"})
+                    msg = _next_of_type(ws, "error")
+        assert msg is not None
+        assert decoy.exists()

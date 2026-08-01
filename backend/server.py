@@ -181,8 +181,12 @@ from backend.persistence.incidents import IncidentsStore
 from backend.persistence.journal import delete_journal, load_journals, load_published_manifest, publish_journal, save_journal, unpublish_journal
 from backend.persistence.net_sessions import (
     NET_TYPE_NEIGHBORHOOD,
+    delete_session as delete_net_session,
+    load_session as load_net_session,
+    load_session_summaries as load_net_session_summaries,
     save_session as save_net_session,
 )
+from backend.persistence.net_stats import compute_attendance_stats
 from backend.persistence.presence import PresenceStore
 from backend.persistence.tokens import TokenStore
 from backend.persistence.users import (
@@ -3167,6 +3171,55 @@ async def websocket_endpoint(
                         "type": "journal_unpublished",
                         "file_path": file_path,
                     })
+                except (ValueError, OSError) as exc:
+                    await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
+
+            elif msg_type == "list_net_sessions":
+                if _config is None:
+                    await _manager.send_to(ws, {
+                        "type": "net_sessions", "sessions": [], "stats": [],
+                    })
+                    continue
+                summaries = load_net_session_summaries(_config.net_sessions_dir)
+                contacts = _contacts_store.get_all() if _contacts_store else []
+                await _manager.send_to(ws, {
+                    "type": "net_sessions",
+                    "sessions": summaries,
+                    "stats": compute_attendance_stats(summaries, contacts),
+                })
+
+            elif msg_type == "get_net_session":
+                if _config is None:
+                    await _manager.send_to(ws, {"type": "net_session", "session": None})
+                    continue
+                session_id = (data.get("id") or "").strip()
+                await _manager.send_to(ws, {
+                    "type": "net_session",
+                    "session": load_net_session(session_id, _config.net_sessions_dir),
+                })
+
+            elif msg_type == "delete_net_session":
+                # Admin-gated: net history is the household's record of who was
+                # on the air, so deleting it is a stricter act than reading it.
+                if not state.is_admin:
+                    await _manager.send_to(ws, {
+                        "type": "error", "detail": "Admin access required.",
+                    })
+                    continue
+                if _config is None:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Server not ready."})
+                    continue
+                session_id = (data.get("id") or "").strip()
+                try:
+                    delete_net_session(session_id, _config.net_sessions_dir)
+                    await _manager.send_to(ws, {
+                        "type": "net_session_deleted", "id": session_id,
+                    })
+                    if _audit_log:
+                        _audit_log.log(
+                            "admin_action", user_id=state.user_id, ip=client_ip,
+                            detail=f"delete_net_session {session_id}",
+                        )
                 except (ValueError, OSError) as exc:
                     await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
 
