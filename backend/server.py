@@ -44,7 +44,7 @@ WebSocket message types (client → server):
     neighborhood_get_state — {"type": "neighborhood_get_state"}
     neighborhood_checkin — {"type": "neighborhood_checkin"}  (identity comes from the
                           connection's own profile, not client-supplied fields)
-    neighborhood_status — {"type": "neighborhood_status", "status": "checked_in"|"standby",
+    neighborhood_status — {"type": "neighborhood_status", "status": "checked_in"|"standby"|"checked_out",
                           "user_id"?: str}  (own user_id only unless coordinator)
     neighborhood_start — {"type": "neighborhood_start"}  (coordinator-only)
     neighborhood_end  — {"type": "neighborhood_end"}  (coordinator-only)
@@ -3929,7 +3929,7 @@ async def websocket_endpoint(
                     await _manager.send_to(ws, {"type": "error", "detail": "Coordinator access required"})
                     continue
                 status = data.get("status")
-                if status not in ("checked_in", "standby"):
+                if status not in ("checked_in", "standby", "checked_out"):
                     await _manager.send_to(ws, {"type": "error", "detail": "Invalid status."})
                     continue
                 if _neighborhood is not None:

@@ -506,7 +506,7 @@ export interface RxAudioMsg {
 // NCS — Net Control Station plugin messages (server → client)
 export interface NCSEntry {
   callsign: string;
-  status: 'CheckedIn' | 'Standby' | 'LoggedOut';
+  status: 'CheckedIn' | 'Standby' | 'CheckedOut' | 'LoggedOut';
   traffic: 'Routine' | 'Priority' | 'Emergency' | 'General' | 'Short Term' | 'IN-n-Out';
   name: string;
   location: string;

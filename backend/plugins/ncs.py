@@ -315,7 +315,7 @@ class NCSPlugin(BasePlugin):
             entry_name = (payload.get("name") or "").strip()
             new_status = payload.get("status")
             key = _roster_key(cs, entry_name)
-            if cs and key in self._roster and new_status in ("CheckedIn", "Standby", "LoggedOut"):
+            if cs and key in self._roster and new_status in ("CheckedIn", "Standby", "CheckedOut", "LoggedOut"):
                 self._roster[key]["status"] = new_status
                 await self._broadcast_roster()
 

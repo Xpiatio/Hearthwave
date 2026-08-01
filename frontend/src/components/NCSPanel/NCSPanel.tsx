@@ -31,7 +31,7 @@ import type { NCSEntry, NCSAlert, NCSSpotReportPayload } from '../../types/ws';
 import { SpotReportDialog } from './SpotReportDialog';
 
 type TrafficLevel = 'Routine' | 'Priority' | 'Emergency' | 'General' | 'Short Term' | 'IN-n-Out';
-type StationStatus = 'CheckedIn' | 'Standby' | 'LoggedOut';
+type StationStatus = 'CheckedIn' | 'Standby' | 'CheckedOut' | 'LoggedOut';
 
 const TRAFFIC_COLORS: Record<TrafficLevel, 'default' | 'warning' | 'error'> = {
   Routine: 'default',
@@ -45,8 +45,16 @@ const TRAFFIC_COLORS: Record<TrafficLevel, 'default' | 'warning' | 'error'> = {
 const STATUS_LABELS: Record<StationStatus, string> = {
   CheckedIn: '✓ In',
   Standby: 'Stby',
+  CheckedOut: 'C/O',
   LoggedOut: 'Out',
 };
+
+const STATUS_CYCLE: StationStatus[] = ['CheckedIn', 'Standby', 'CheckedOut'];
+
+function nextStatus(current: string): StationStatus {
+  const at = STATUS_CYCLE.indexOf(current as StationStatus);
+  return STATUS_CYCLE[(at + 1) % STATUS_CYCLE.length];
+}
 
 function playPcmAudio(b64: string, sampleRate: number): void {
   if (!b64) return;
@@ -180,8 +188,12 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
   }, [callsignInput, nameInput, locationInput, trafficInput, send]);
 
   const handleStatusToggle = useCallback((entry: NCSEntry) => {
-    const next: StationStatus = entry.status === 'CheckedIn' ? 'Standby' : 'CheckedIn';
-    send({ type: 'ncs_status_update', callsign: entry.callsign, name: entry.name ?? '', status: next });
+    send({
+      type: 'ncs_status_update',
+      callsign: entry.callsign,
+      name: entry.name ?? '',
+      status: nextStatus(entry.status),
+    });
   }, [send]);
 
   const handleRemove = useCallback((entry: NCSEntry) => {
@@ -385,11 +397,11 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
                     )}
                   </TableCell>
                   <TableCell sx={{ py: 0.5 }}>
-                    <Tooltip title={`Click to toggle ${entry.status === 'CheckedIn' ? 'Standby' : 'CheckedIn'}`}>
+                    <Tooltip title={`Click to set ${nextStatus(entry.status)}`}>
                       <Chip
                         label={STATUS_LABELS[entry.status as StationStatus] ?? entry.status}
                         size="small"
-                        color={entry.status === 'CheckedIn' ? 'success' : entry.status === 'Standby' ? 'warning' : 'default'}
+                        color={entry.status === 'CheckedIn' ? 'success' : entry.status === 'Standby' ? 'warning' : entry.status === 'CheckedOut' ? 'info' : 'default'}
                         onClick={() => handleStatusToggle(entry)}
                         clickable
                         sx={{ fontWeight: 700, minWidth: 48 }}

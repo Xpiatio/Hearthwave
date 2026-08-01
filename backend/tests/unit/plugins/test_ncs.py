@@ -1414,3 +1414,37 @@ class TestNCSNetSessionSave:
         await ncs._handle_start()
         await ncs._handle_end()
         assert list(tmp_path.glob("*.json")) == []
+
+
+class TestCheckedOutStatus:
+    @pytest.mark.asyncio
+    async def test_status_update_accepts_checked_out(self):
+        ncs = make_ncs(config=make_config(ncs_zone=""))
+        ncs._roster["KD8ABC|Maria"] = {
+            "callsign": "KD8ABC", "status": "CheckedIn", "traffic": "Routine",
+            "name": "Maria", "location": "", "checkin_time": 0.0,
+            "verified": False, "called": False,
+        }
+        await ncs.on_client_message_received({
+            "type": "ncs_status_update", "callsign": "KD8ABC",
+            "name": "Maria", "status": "CheckedOut",
+        })
+        assert ncs._roster["KD8ABC|Maria"]["status"] == "CheckedOut"
+
+    @pytest.mark.asyncio
+    async def test_call_next_skips_checked_out(self):
+        ncs = make_ncs(config=make_config(ncs_zone=""))
+        await ncs._handle_start()
+        ncs._roster["KD8ABC|Maria"] = {
+            "callsign": "KD8ABC", "status": "CheckedOut", "traffic": "Routine",
+            "name": "Maria", "location": "", "checkin_time": 0.0,
+            "verified": False, "called": False,
+        }
+        ncs._roster["WRAB123|Sam"] = {
+            "callsign": "WRAB123", "status": "CheckedIn", "traffic": "Routine",
+            "name": "Sam", "location": "", "checkin_time": 0.0,
+            "verified": False, "called": False,
+        }
+        await ncs._handle_call_next()
+        assert ncs._roster["KD8ABC|Maria"]["called"] is False
+        assert ncs._roster["WRAB123|Sam"]["called"] is True

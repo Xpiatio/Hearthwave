@@ -346,6 +346,12 @@ describe('NCSPanel', () => {
       expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'ncs_status_update', callsign: 'W1AAA', status: 'Standby' }))
     })
 
+    it('sends ncs_status_update with CheckedOut when a Standby chip is clicked', () => {
+      const send = renderWithRoster()
+      fireEvent.click(screen.getByText('Stby')) // Standby -> CheckedOut
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'ncs_status_update', callsign: 'KD9ZZZ', status: 'CheckedOut' }))
+    })
+
     it('sends ncs_remove when delete button clicked', () => {
       const send = renderWithRoster()
       fireEvent.click(screen.getByRole('button', { name: /remove w1aaa/i }))
