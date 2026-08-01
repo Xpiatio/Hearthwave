@@ -150,4 +150,54 @@ describe('RosterList', () => {
     );
     expect(await axe(container)).toHaveNoViolations();
   });
+
+  it('gives a coordinator a Call button on every row and fires onCallStation', async () => {
+    const user = userEvent.setup();
+    const onCallStation = vi.fn();
+    render(
+      <RosterList
+        {...makeProps({ roster: [accountRow, radioRow], isCoordinator: true, onCallStation })}
+      />
+    );
+    const callButtons = screen.getAllByRole('button', { name: /^Call\b/ });
+    expect(callButtons).toHaveLength(2);
+    await user.click(callButtons[0]);
+    expect(onCallStation).toHaveBeenCalledWith('u1');
+  });
+
+  it('hides Call on the current-turn row and shows No answer there instead', async () => {
+    const user = userEvent.setup();
+    const onNoAnswer = vi.fn();
+    render(
+      <RosterList
+        {...makeProps({
+          roster: [accountRow], currentCall: 'u1', isCoordinator: true,
+          onCallStation: vi.fn(), onNoAnswer,
+        })}
+      />
+    );
+    expect(screen.queryByRole('button', { name: /^Call\b/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'No answer' }));
+    expect(onNoAnswer).toHaveBeenCalledWith('u1', true);
+  });
+
+  it('shows a No answer chip instead of Called ✓ and lets a coordinator clear it', async () => {
+    const user = userEvent.setup();
+    const onNoAnswer = vi.fn();
+    const flagged = { ...accountRow, called: true, no_answer: true };
+    render(
+      <RosterList {...makeProps({ roster: [flagged], isCoordinator: true, onNoAnswer })} />
+    );
+    expect(screen.queryByText('Called ✓')).not.toBeInTheDocument();
+    await user.click(screen.getByText('No answer'));
+    expect(onNoAnswer).toHaveBeenCalledWith('u1', false);
+  });
+
+  it('shows participants the No answer chip but no coordinator controls', () => {
+    const flagged = { ...accountRow, called: true, no_answer: true };
+    render(<RosterList {...makeProps({ roster: [flagged, radioRow] })} />);
+    expect(screen.getByText('No answer')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Call\b/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'No answer' })).not.toBeInTheDocument();
+  });
 });

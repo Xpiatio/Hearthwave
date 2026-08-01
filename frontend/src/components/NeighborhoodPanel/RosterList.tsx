@@ -46,6 +46,10 @@ export interface RosterListProps {
   isCoordinator?: boolean;
   onStationStatusChange?: (userId: string, status: 'checked_in' | 'standby' | 'checked_out') => void;
   onRemoveStation?: (userId: string) => void;
+  /** Coordinator-only: call this station out of order (round-table). */
+  onCallStation?: (userId: string) => void;
+  /** Coordinator-only: flag/unflag a station the round couldn't raise. */
+  onNoAnswer?: (userId: string, noAnswer: boolean) => void;
 }
 
 const STATUS_LABELS: Record<NeighborhoodRosterRow['status'], string> = {
@@ -100,6 +104,14 @@ function nextStatus(status: NeighborhoodRosterRow['status']): NeighborhoodRoster
  *  the UI mirrors that by only exposing each control where it can succeed
  *  unassisted.
  *
+ *  A coordinator running the round-table also gets a Call button on every
+ *  row that isn't the current turn, and a No answer button on the current
+ *  row instead of Call, to flag a station the round couldn't raise
+ *  (neighborhood_call_station / neighborhood_no_answer). A flagged row shows
+ *  a warning-colored "No answer" chip in place of "Called ✓" — chip
+ *  precedence per row is Current turn > No answer > Called ✓ — and a
+ *  coordinator can click that chip to clear the flag.
+ *
  *  Rows sit in an auto-fit grid whose card size comes from the head count, so
  *  a six-person net stays big and glanceable while a twenty-person net still
  *  fits on one screen instead of becoming a scroll. See neighborhood/density.ts. */
@@ -112,6 +124,8 @@ export function RosterList({
   isCoordinator,
   onStationStatusChange,
   onRemoveStation,
+  onCallStation,
+  onNoAnswer,
 }: RosterListProps) {
   const density = rosterDensitySpec(roster.length);
 
@@ -204,6 +218,7 @@ export function RosterList({
             const isSelf = row.user_id === myUserId;
             const isRadio = row.via === 'radio';
             const canOperate = isRadio && !!isCoordinator;
+            const coordinatorControls = !!isCoordinator;
             return (
               <Paper
                 key={row.user_id}
@@ -231,7 +246,23 @@ export function RosterList({
                   </Typography>
                   {isRadio && <Chip size="small" variant="outlined" label="By radio" sx={{ maxWidth: '100%' }} />}
                   {isCurrent && <Chip size="small" color="primary" label="Current turn" sx={{ maxWidth: '100%' }} />}
-                  {row.called && <Chip size="small" label="Called ✓" sx={{ maxWidth: '100%' }} />}
+                  {row.no_answer ? (
+                    <Chip
+                      size="small"
+                      color="warning"
+                      label="No answer"
+                      sx={{ maxWidth: '100%' }}
+                      // Clickable only where clicking can succeed: the server
+                      // restricts the flag to coordinators.
+                      onClick={
+                        coordinatorControls && onNoAnswer
+                          ? () => onNoAnswer(row.user_id, false)
+                          : undefined
+                      }
+                    />
+                  ) : (
+                    row.called && <Chip size="small" label="Called ✓" sx={{ maxWidth: '100%' }} />
+                  )}
                 </Box>
 
                 <Typography variant={density.detailVariant} color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
@@ -272,6 +303,26 @@ export function RosterList({
                           <DeleteOutlineIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
+                    )}
+                    {coordinatorControls && onCallStation && !isCurrent && (
+                      <Button
+                        size="small"
+                        variant="text"
+                        aria-label={`Call ${row.name}`}
+                        onClick={() => onCallStation(row.user_id)}
+                      >
+                        Call
+                      </Button>
+                    )}
+                    {coordinatorControls && onNoAnswer && isCurrent && !row.no_answer && (
+                      <Button
+                        size="small"
+                        variant="text"
+                        color="warning"
+                        onClick={() => onNoAnswer(row.user_id, true)}
+                      >
+                        No answer
+                      </Button>
                     )}
                   </Box>
                 </Box>

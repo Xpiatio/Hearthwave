@@ -649,6 +649,9 @@ export interface NeighborhoodRosterRow {
   called: boolean;
   /** Present only on stations a coordinator checked in off the air. */
   via?: 'radio';
+  /** True when the round-table called this station and got no reply.
+   *  Optional so older server payloads (or NCS-shaped rows) still typecheck. */
+  no_answer?: boolean;
 }
 
 export interface NeighborhoodStateMsg {
