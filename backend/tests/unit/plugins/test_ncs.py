@@ -759,6 +759,29 @@ class TestHandleStartEnd:
         with patch.object(asyncio, "create_task", side_effect=_close_and_return):
             await ncs._handle_end()
         assert "ncs-journal" in created_tasks
+        # The net-session save must be wired into _handle_end alongside the
+        # journal save — this is the production dispatch path, distinct from
+        # the tests in TestNCSNetSessionSave that call _save_net_session()
+        # directly and never actually exercise this asyncio.create_task line.
+        assert "ncs-net-session" in created_tasks
+
+    async def test_handle_end_creates_no_tasks_when_no_data(self):
+        """An empty net (no roster, no RX lines) should skip both the
+        journal task and the net-session task."""
+        ncs = make_ncs()
+        ncs._active = True
+        assert not ncs._session_rx
+        assert not ncs._roster
+        created_tasks = []
+        def _close_and_return(coro, **kwargs):
+            coro.close()
+            m = MagicMock()
+            created_tasks.append(kwargs.get("name"))
+            return m
+        with patch.object(asyncio, "create_task", side_effect=_close_and_return):
+            await ncs._handle_end()
+        assert "ncs-journal" not in created_tasks
+        assert "ncs-net-session" not in created_tasks
 
 
 # ---------------------------------------------------------------------------
