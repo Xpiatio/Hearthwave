@@ -193,3 +193,22 @@ class TestDeleteSession:
     def test_rejects_path_traversal(self, sessions_dir: Path):
         with pytest.raises(ValueError):
             delete_session("../secrets", sessions_dir)
+
+
+def test_normalize_roster_carries_the_radio_marker():
+    rows = normalize_roster([
+        {"callsign": "wrab123", "name": "Maria", "location": "Maple St",
+         "status": "checked_in", "checkin_time": "2026-08-01T19:30:00Z",
+         "via": "radio"},
+    ])
+    assert rows[0]["via"] == "radio"
+
+
+def test_normalize_roster_defaults_via_to_blank():
+    # Account rows and NCS rows have no `via` key at all; a stored record
+    # should still have the column so a reader never has to guess.
+    rows = normalize_roster([
+        {"callsign": "WRAA111", "name": "Ann", "location": "1st St",
+         "status": "checked_in", "checkin_time": "2026-08-01T19:30:00Z"},
+    ])
+    assert rows[0]["via"] == ""

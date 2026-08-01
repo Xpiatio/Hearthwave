@@ -61,7 +61,8 @@ def normalize_roster(rows: list[dict]) -> list[dict]:
     """Flatten NCS or neighborhood roster rows into the stored shape.
 
     Round-table bookkeeping (``called``, ``user_id``) is dropped — it describes
-    a net in progress, not what happened.
+    a net in progress, not what happened. ``via`` is kept: how a station got
+    onto the board is part of what happened.
     """
     return [
         {
@@ -72,6 +73,9 @@ def normalize_roster(rows: list[dict]) -> list[dict]:
             "traffic": row.get("traffic"),
             "checkin_time": _iso(row.get("checkin_time")),
             "verified": bool(row.get("verified", False)),
+            # "radio" for a station a coordinator checked in off the air,
+            # blank for anyone who checked themselves in.
+            "via": (row.get("via") or "").strip(),
         }
         for row in rows
     ]
