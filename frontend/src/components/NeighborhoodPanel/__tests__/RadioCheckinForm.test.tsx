@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { ThemeProvider } from '@mui/material/styles';
 import { makeTheme } from '../../../theme';
 import { describe, it, expect, vi } from 'vitest';
+import { axe } from 'jest-axe';
 import { RadioCheckinForm } from '../RadioCheckinForm';
 
 function render(ui: React.ReactElement) {
@@ -42,6 +43,52 @@ describe('RadioCheckinForm', () => {
     expect(screen.getByLabelText(/callsign/i)).toHaveValue('WRAB123');
     expect(screen.getByLabelText(/^name/i)).toHaveValue('Maria');
     expect(screen.getByLabelText(/location/i)).toHaveValue('Maple St');
+  });
+
+  it('prefills the right person when two contacts share a callsign', async () => {
+    // A GMRS family shares one licensed callsign, which is the case this
+    // feature is built around. Keying the menu on the callsign alone made
+    // both rows the same option value, so picking Diego prefilled Maria —
+    // and the coordinator retyped, which is the retype this form exists to
+    // eliminate.
+    const family = [
+      { callsign: 'WRAB123', name: 'Maria', location: 'Maple St' },
+      { callsign: 'WRAB123', name: 'Diego', location: 'Maple St' },
+    ];
+    const user = userEvent.setup();
+    render(<RadioCheckinForm contacts={family} onCheckin={vi.fn()} />);
+    await user.click(screen.getByLabelText(/pick a neighbor/i));
+    await user.click(screen.getByRole('option', { name: /WRAB123 — Diego/ }));
+    expect(screen.getByLabelText(/^name/i)).toHaveValue('Diego');
+    expect(screen.getByLabelText(/callsign/i)).toHaveValue('WRAB123');
+  });
+
+  it('treats a gmrs_callsign or ham_callsign as already in the book', async () => {
+    // The backend's known_callsigns() checks all three callsign fields, so a
+    // client that only checks the primary one offers a save that the server
+    // then declines — a checkbox that silently does nothing.
+    const user = userEvent.setup();
+    render(
+      <RadioCheckinForm
+        contacts={[{ callsign: 'WRAB123', name: 'Maria', gmrs_callsign: 'WRAG777', ham_callsign: 'K8ABC' }]}
+        onCheckin={vi.fn()}
+      />
+    );
+    await user.type(screen.getByLabelText(/callsign/i), 'wrag777');
+    expect(screen.queryByLabelText(/save to contacts/i)).not.toBeInTheDocument();
+    await user.clear(screen.getByLabelText(/callsign/i));
+    await user.type(screen.getByLabelText(/callsign/i), 'k8abc');
+    expect(screen.queryByLabelText(/save to contacts/i)).not.toBeInTheDocument();
+    await user.clear(screen.getByLabelText(/callsign/i));
+    await user.type(screen.getByLabelText(/callsign/i), 'WRAZ999');
+    expect(screen.getByLabelText(/save to contacts/i)).toBeInTheDocument();
+  });
+
+  it('has no axe violations', async () => {
+    const { container } = render(
+      <RadioCheckinForm contacts={CONTACTS} onCheckin={vi.fn()} />
+    );
+    expect(await axe(container)).toHaveNoViolations();
   });
 
   it('offers "save to contacts" only for a callsign the book does not have', async () => {

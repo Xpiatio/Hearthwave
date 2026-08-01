@@ -43,12 +43,22 @@ export function RadioCheckinForm({ contacts, onCheckin }: RadioCheckinFormProps)
   const [saveContact, setSaveContact] = useState(false);
 
   const normalized = callsign.trim().toUpperCase();
-  const known = contacts.some((c) => (c.callsign || '').toUpperCase() === normalized);
+  // Mirror the backend's known_callsigns(), which reads all three callsign
+  // fields — checking only the primary one would offer a save the server then
+  // declines, i.e. a checkbox that silently does nothing.
+  const known = contacts.some((c) =>
+    [c.callsign, c.gmrs_callsign, c.ham_callsign].some(
+      (cs) => (cs || '').trim().toUpperCase() === normalized
+    )
+  );
   const canSubmit = normalized.length > 0 && name.trim().length > 0;
 
   function handlePick(value: string) {
     setPicked(value);
-    const contact = contacts.find((c) => c.callsign === value);
+    // Options are keyed by list index, not callsign: a GMRS family shares one
+    // licensed callsign, so callsign-keyed options would collide (and a
+    // blank-callsign contact would collide with "Someone new").
+    const contact = contacts[Number(value)];
     if (!contact) return;
     setCallsign(contact.callsign || '');
     setName(contact.name || '');
@@ -87,8 +97,8 @@ export function RadioCheckinForm({ contacts, onCheckin }: RadioCheckinFormProps)
           onChange={(e) => handlePick(e.target.value)}
         >
           <MenuItem value="">Someone new</MenuItem>
-          {contacts.map((c) => (
-            <MenuItem key={c.callsign} value={c.callsign}>
+          {contacts.map((c, i) => (
+            <MenuItem key={`${c.callsign}|${c.name ?? ''}|${i}`} value={String(i)}>
               {c.callsign} — {c.name || 'unnamed'}
             </MenuItem>
           ))}
