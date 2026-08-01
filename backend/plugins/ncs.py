@@ -261,6 +261,8 @@ class NCSPlugin(BasePlugin):
         # Roster: callsign → {callsign, status, traffic, name, location, checkin_time, called}
         self._roster: dict[str, dict] = {}
         self._session_rx: list[str] = []
+        # Wall-clock start of the current net, for the saved session record.
+        self._started_at: float | None = None
 
         # Round-table caller: roster key of the station currently being called.
         self._current_call_key: str | None = None
@@ -404,6 +406,7 @@ class NCSPlugin(BasePlugin):
         self._session_rx.clear()
         self._seen_alerts.clear()
         self._current_call_key = None
+        self._started_at = datetime.datetime.now(tz=datetime.timezone.utc).timestamp()
         config = self._get_config()
         if config.ncs_zone:
             self._nws_task = asyncio.create_task(self._nws_poll_loop(), name="ncs-nws-poll")
@@ -426,6 +429,7 @@ class NCSPlugin(BasePlugin):
         self._announce_task = None
         if self._session_rx or self._roster:
             asyncio.create_task(self._save_ncs_journal(), name="ncs-journal")
+            asyncio.create_task(self._save_net_session(), name="ncs-net-session")
         await self._broadcast(self._build_state_msg())
         _log.info("NCS mode ended; %d stations checked in, %d RX lines", len(self._roster), len(self._session_rx))
 
@@ -705,6 +709,34 @@ class NCSPlugin(BasePlugin):
             _log.info("NCS journal saved: %s", path)
         except Exception as exc:
             _log.error("NCS journal save failed: %s", exc)
+
+    async def _save_net_session(self) -> None:
+        """Write the structured session record alongside the narrative journal.
+
+        Failure is logged and swallowed — a net that has already ended must not
+        be reported as still running because history could not be written.
+        """
+        from backend.persistence.net_sessions import NET_TYPE_NCS, save_session
+        config = self._get_config()
+        now = datetime.datetime.now(tz=datetime.timezone.utc)
+        started = self._started_at
+        try:
+            path = save_session(
+                net_type=NET_TYPE_NCS,
+                started_at=(
+                    datetime.datetime.fromtimestamp(started, tz=datetime.timezone.utc)
+                    .isoformat(timespec="seconds")
+                    if started else ""
+                ),
+                ended_at=now.isoformat(timespec="seconds"),
+                duration_seconds=round(now.timestamp() - started) if started else 0,
+                roster=list(self._roster.values()),
+                transcript="\n".join(self._session_rx),
+                sessions_dir=config.net_sessions_dir,
+            )
+            _log.info("NCS net session saved: %s", path)
+        except Exception as exc:
+            _log.error("NCS net session save failed: %s", exc)
 
     # ------------------------------------------------------------------
     # NWS polling loop

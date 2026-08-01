@@ -33,6 +33,7 @@ def make_config(**kwargs) -> SimpleNamespace:
         location="West Michigan",
         name="Test NCS",
         journals_dir="/tmp/journals",
+        net_sessions_dir="/tmp/net_sessions",
     )
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
@@ -1335,3 +1336,58 @@ class TestRoundTableCaller:
         ncs = make_ncs()
         msg = ncs._build_state_msg()
         assert "current_call" in msg
+
+
+class TestNCSNetSessionSave:
+    @pytest.mark.asyncio
+    async def test_end_saves_session_with_roster_and_transcript(self, tmp_path):
+        ncs = make_ncs(config=make_config(net_sessions_dir=tmp_path, ncs_zone=""))
+        await ncs._handle_start()
+        ncs._roster["KD8ABC|Maria"] = {
+            "callsign": "KD8ABC", "status": "CheckedIn", "traffic": "Routine",
+            "name": "Maria", "location": "Holland", "checkin_time": 1_700_000_000.0,
+            "verified": True, "called": False,
+        }
+        ncs._session_rx.append("KD8ABC: nothing to report")
+
+        await ncs._handle_end()
+        await ncs._save_net_session()
+
+        files = list(tmp_path.glob("*_ncs.json"))
+        assert len(files) == 1
+        data = json.loads(files[0].read_text(encoding="utf-8"))
+        assert data["net_type"] == "ncs"
+        assert data["roster"][0]["callsign"] == "KD8ABC"
+        assert data["roster"][0]["traffic"] == "Routine"
+        assert "KD8ABC: nothing to report" in data["transcript"]
+        assert data["duration_seconds"] >= 0
+        assert data["started_at"]
+
+    @pytest.mark.asyncio
+    async def test_start_records_started_at(self):
+        ncs = make_ncs(config=make_config(ncs_zone=""))
+        assert ncs._started_at is None
+        await ncs._handle_start()
+        assert ncs._started_at is not None
+
+    @pytest.mark.asyncio
+    async def test_save_failure_does_not_raise(self, tmp_path):
+        # A file where the directory should be makes mkdir fail.
+        blocked = tmp_path / "blocked"
+        blocked.write_text("not a directory", encoding="utf-8")
+        ncs = make_ncs(config=make_config(net_sessions_dir=blocked, ncs_zone=""))
+        await ncs._handle_start()
+        ncs._roster["KD8ABC|"] = {
+            "callsign": "KD8ABC", "status": "CheckedIn", "traffic": "Routine",
+            "name": "", "location": "", "checkin_time": 1_700_000_000.0,
+            "verified": False, "called": False,
+        }
+        await ncs._handle_end()
+        await ncs._save_net_session()  # must not raise
+
+    @pytest.mark.asyncio
+    async def test_empty_net_saves_nothing(self, tmp_path):
+        ncs = make_ncs(config=make_config(net_sessions_dir=tmp_path, ncs_zone=""))
+        await ncs._handle_start()
+        await ncs._handle_end()
+        assert list(tmp_path.glob("*.json")) == []
