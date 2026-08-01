@@ -1,4 +1,5 @@
 import type { NetSessionDetail, NetSessionSummary } from '../types/ws';
+import { netDate } from './dates';
 
 function quote(value: string | number | null): string {
   return `"${String(value ?? '').replace(/"/g, '""')}"`;
@@ -20,7 +21,7 @@ export function allSessionsToCsv(sessions: NetSessionSummary[]): string {
   const header = 'net_id,net_type,net_date,callsign,name';
   const rows = sessions.flatMap((s) =>
     s.stations.map((station) =>
-      [s.id, s.net_type, s.started_at.slice(0, 10), station.callsign, station.name]
+      [s.id, s.net_type, netDate(s.started_at), station.callsign, station.name]
         .map(quote)
         .join(',')
     )

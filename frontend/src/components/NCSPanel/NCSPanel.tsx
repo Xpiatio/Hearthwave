@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Button,
@@ -30,7 +30,7 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import type { PluginProps } from '../../plugins';
 import type { NCSEntry, NCSAlert, NCSSpotReportPayload } from '../../types/ws';
 import { SpotReportDialog } from './SpotReportDialog';
-import { filterRoster, sortRoster, type SortDirection } from '../../netsessions/rosterView';
+import { useRosterSort } from '../../netsessions/rosterView';
 
 type TrafficLevel = 'Routine' | 'Priority' | 'Emergency' | 'General' | 'Short Term' | 'IN-n-Out';
 type StationStatus = 'CheckedIn' | 'Standby' | 'CheckedOut' | 'LoggedOut';
@@ -52,6 +52,10 @@ const STATUS_LABELS: Record<StationStatus, string> = {
 };
 
 const STATUS_CYCLE: StationStatus[] = ['CheckedIn', 'Standby', 'CheckedOut'];
+
+/** Fields the roster table actually renders — kept in sync with the columns
+ *  below so a filter query never matches on a field the user can't see. */
+const NCS_SEARCH_FIELDS: (keyof NCSEntry)[] = ['callsign', 'name', 'status', 'traffic'];
 
 function nextStatus(current: string): StationStatus {
   const at = STATUS_CYCLE.indexOf(current as StationStatus);
@@ -204,23 +208,15 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
 
   type RosterColumn = 'callsign' | 'status' | 'traffic';
 
-  const [rosterQuery, setRosterQuery] = useState('');
-  const [sortColumn, setSortColumn] = useState<RosterColumn | null>(null);
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-
-  const handleSort = useCallback((column: RosterColumn) => {
-    if (sortColumn === column) {
-      setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'));
-    } else {
-      setSortColumn(column);
-      setSortDirection('asc');
-    }
-  }, [sortColumn]);
-
-  const visibleRoster = useMemo(
-    () => sortRoster(filterRoster(roster, rosterQuery), sortColumn, sortDirection),
-    [roster, rosterQuery, sortColumn, sortDirection],
-  );
+  const {
+    rosterQuery,
+    setRosterQuery,
+    sortColumn,
+    sortDirection,
+    handleSort,
+    visibleRoster,
+    showFilterInput,
+  } = useRosterSort<NCSEntry, RosterColumn>(roster, NCS_SEARCH_FIELDS);
 
   return (
     <Paper elevation={0} square sx={{ borderBottom: 1, borderColor: 'divider', minWidth: 320 }}>
@@ -380,7 +376,7 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
       </Box>
 
       {/* Roster table */}
-      {roster.length > 2 && (
+      {showFilterInput && (
         <Box sx={{ px: 2, pb: 1 }}>
           <TextField
             size="small"
@@ -429,6 +425,13 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
               </TableRow>
             </TableHead>
             <TableBody>
+              {visibleRoster.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} sx={{ py: 1.5, color: 'text.secondary' }}>
+                    <Typography variant="caption">No stations match your filter.</Typography>
+                  </TableCell>
+                </TableRow>
+              )}
               {visibleRoster.map((entry) => (
                 <TableRow
                   key={`${entry.callsign}|${entry.name ?? ''}`}

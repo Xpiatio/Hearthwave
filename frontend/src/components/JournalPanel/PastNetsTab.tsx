@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import {
   Box,
   Paper,
@@ -27,13 +27,21 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import type {
   AttendanceStatRow,
   NetSessionDetail,
+  NetSessionRosterRow,
   NetSessionSummary,
 } from '../../types/ws';
 import { downloadText } from '../../utils/download';
 import { sessionToCsv, allSessionsToCsv } from '../../netsessions/csv';
-import { filterRoster, sortRoster, type SortDirection } from '../../netsessions/rosterView';
+import { useRosterSort } from '../../netsessions/rosterView';
+import { netDate } from '../../netsessions/dates';
 
 type RosterColumn = 'callsign' | 'name' | 'location' | 'status' | 'traffic';
+
+/** Fields this table renders — a filter query should never match a hidden
+ *  field (e.g. the raw checkin_time) the user can't see in this view. */
+const PAST_NETS_SEARCH_FIELDS: (keyof NetSessionRosterRow)[] = [
+  'callsign', 'name', 'location', 'status', 'traffic',
+];
 
 interface Props {
   sessions: NetSessionSummary[];
@@ -64,18 +72,24 @@ export function PastNetsTab({
 }: Props) {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
-  const [rosterQuery, setRosterQuery] = useState('');
-  const [sortColumn, setSortColumn] = useState<RosterColumn | null>(null);
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-
-  function handleSort(column: RosterColumn) {
-    if (sortColumn === column) {
-      setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'));
-    } else {
-      setSortColumn(column);
-      setSortDirection('asc');
-    }
-  }
+  // Filtering/sorting only ever changes what's displayed here — CSV export
+  // and delete both operate on `selected` (the full session), never on this
+  // derived view. resetKey clears the query/sort whenever the selected
+  // session changes, so a filter that emptied one net's roster can't also
+  // silently hide rows in the next net you pick.
+  const {
+    rosterQuery,
+    setRosterQuery,
+    sortColumn,
+    handleSort,
+    sortDirection,
+    visibleRoster,
+    showFilterInput,
+  } = useRosterSort<NetSessionRosterRow, RosterColumn>(
+    selected?.roster ?? [],
+    PAST_NETS_SEARCH_FIELDS,
+    selected?.id ?? null,
+  );
 
   function handleDelete(id: string) {
     if (confirmDelete === id) {
@@ -85,14 +99,6 @@ export function PastNetsTab({
       setConfirmDelete(id);
     }
   }
-
-  // Filtering/sorting only ever changes what's displayed here — CSV export
-  // and delete both operate on `selected` (the full session), never on this
-  // derived view.
-  const visibleRoster = useMemo(
-    () => sortRoster(filterRoster(selected?.roster ?? [], rosterQuery), sortColumn, sortDirection),
-    [selected, rosterQuery, sortColumn, sortDirection],
-  );
 
   return (
     <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
@@ -125,7 +131,7 @@ export function PastNetsTab({
                     onClick={() => onSelect(s.id)}
                   >
                     <ListItemText
-                      primary={s.started_at.slice(0, 10)}
+                      primary={netDate(s.started_at)}
                       secondary={`${NET_TYPE_LABELS[s.net_type] ?? s.net_type} · ${s.checkin_count} check-ins · ${formatDuration(s.duration_seconds)}`}
                       slotProps={{
                         primary: {
@@ -168,10 +174,10 @@ export function PastNetsTab({
             </Typography>
             <Typography variant="h5" sx={{ mt: 0.5, mb: 2 }}>
               {NET_TYPE_LABELS[selected.net_type] ?? selected.net_type} net —{' '}
-              {selected.started_at.slice(0, 10)}
+              {netDate(selected.started_at)}
             </Typography>
 
-            {selected.roster.length > 2 && (
+            {showFilterInput && (
               <Box sx={{ mb: 1 }}>
                 <TextField
                   size="small"
@@ -236,15 +242,23 @@ export function PastNetsTab({
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {visibleRoster.map((r, i) => (
-                    <TableRow key={`${r.callsign}-${r.name}-${i}`}>
-                      <TableCell>{r.callsign}</TableCell>
-                      <TableCell>{r.name}</TableCell>
-                      <TableCell>{r.location}</TableCell>
-                      <TableCell>{r.status}</TableCell>
-                      <TableCell>{r.traffic ?? ''}</TableCell>
+                  {visibleRoster.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} sx={{ color: 'text.secondary' }}>
+                        No stations match your filter.
+                      </TableCell>
                     </TableRow>
-                  ))}
+                  ) : (
+                    visibleRoster.map((r, i) => (
+                      <TableRow key={`${r.callsign}-${r.name}-${i}`}>
+                        <TableCell>{r.callsign}</TableCell>
+                        <TableCell>{r.name}</TableCell>
+                        <TableCell>{r.location}</TableCell>
+                        <TableCell>{r.status}</TableCell>
+                        <TableCell>{r.traffic ?? ''}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </TableContainer>

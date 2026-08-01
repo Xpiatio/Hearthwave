@@ -377,7 +377,7 @@ describe('NCSPanel', () => {
 
     it('hides non-matching rows when a callsign is typed into the roster filter', () => {
       renderWithRoster()
-      const filter = screen.getByPlaceholderText('Filter roster')
+      const filter = screen.getByLabelText(/filter roster/i)
       fireEvent.change(filter, { target: { value: 'KD9ZZZ' } })
       expect(screen.getByText('KD9ZZZ')).toBeInTheDocument()
       expect(screen.queryByText('W1AAA')).not.toBeInTheDocument()
