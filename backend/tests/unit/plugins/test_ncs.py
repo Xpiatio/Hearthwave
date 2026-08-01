@@ -1448,3 +1448,35 @@ class TestCheckedOutStatus:
         await ncs._handle_call_next()
         assert ncs._roster["KD8ABC|Maria"]["called"] is False
         assert ncs._roster["WRAB123|Sam"]["called"] is True
+
+    @pytest.mark.asyncio
+    async def test_call_next_skips_station_checked_out_via_message_handler(self):
+        """Regression pin for this task's actual code change: the accepted-statuses
+        tuple in on_client_message_received. Drives the CheckedOut transition through
+        the real ncs_status_update handler (not a direct dict write), then verifies
+        _handle_call_next skips that station and calls a CheckedIn one instead.
+
+        Reverting the accepted-statuses tuple (removing "CheckedOut") makes this
+        test fail: the status update would be rejected, KD8ABC would stay
+        CheckedIn, and it would be the one called instead of WRAB123.
+        """
+        ncs = make_ncs(config=make_config(ncs_zone=""))
+        await ncs._handle_start()
+        ncs._roster["KD8ABC|Maria"] = {
+            "callsign": "KD8ABC", "status": "CheckedIn", "traffic": "Routine",
+            "name": "Maria", "location": "", "checkin_time": 0.0,
+            "verified": False, "called": False,
+        }
+        ncs._roster["WRAB123|Sam"] = {
+            "callsign": "WRAB123", "status": "CheckedIn", "traffic": "Routine",
+            "name": "Sam", "location": "", "checkin_time": 0.0,
+            "verified": False, "called": False,
+        }
+        await ncs.on_client_message_received({
+            "type": "ncs_status_update", "callsign": "KD8ABC",
+            "name": "Maria", "status": "CheckedOut",
+        })
+        await ncs._handle_call_next()
+        assert ncs._roster["KD8ABC|Maria"]["status"] == "CheckedOut"
+        assert ncs._roster["KD8ABC|Maria"]["called"] is False
+        assert ncs._roster["WRAB123|Sam"]["called"] is True
