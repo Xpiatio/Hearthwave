@@ -234,3 +234,143 @@ class TestEndTimestamps:
         summary = net.end()
         assert summary["started_at"] == ""
         assert summary["duration_seconds"] == 0
+
+
+def test_checkin_radio_creates_a_marked_row_with_a_deterministic_key():
+    net = NeighborhoodNet()
+    row = net.checkin_radio("wrab123", "Maria", "Maple St")
+    assert row["user_id"] == "radio:WRAB123:maria"
+    assert row["callsign"] == "WRAB123"
+    assert row["name"] == "Maria"
+    assert row["location"] == "Maple St"
+    assert row["via"] == "radio"
+    assert row["status"] == "checked_in"
+    assert row["called"] is False
+
+
+def test_checkin_radio_is_idempotent_per_station():
+    net = NeighborhoodNet()
+    net.checkin_radio("WRAB123", "Maria", "Maple St")
+    net.checkin_radio("wrab123", "  maria ", "Oak St")
+    roster = net.roster()
+    assert len(roster) == 1
+    # Latest check-in wins on the mutable fields, key stays stable.
+    assert roster[0]["location"] == "Oak St"
+
+
+def test_same_callsign_different_names_are_two_stations():
+    # A GMRS family shares one licensed callsign — two people on it are two
+    # stations, not one row overwriting the other.
+    net = NeighborhoodNet()
+    net.checkin_radio("WRAB123", "Maria", "Maple St")
+    net.checkin_radio("WRAB123", "Diego", "Maple St")
+    assert len(net.roster()) == 2
+
+
+def test_roster_interleaves_radio_and_account_rows_in_checkin_order():
+    net = NeighborhoodNet()
+    net.checkin("u1", "WRAA111", "Ann", "1st St")
+    net.checkin_radio("WRAB123", "Maria", "Maple St")
+    net.checkin("u2", "WRAC333", "Cy", "3rd St")
+    assert [r["name"] for r in net.roster()] == ["Ann", "Maria", "Cy"]
+
+
+def test_re_checkin_does_not_reorder_the_roster():
+    net = NeighborhoodNet()
+    net.checkin("u1", "WRAA111", "Ann", "1st St")
+    net.checkin_radio("WRAB123", "Maria", "Maple St")
+    net.checkin("u1", "WRAA111", "Ann", "1st St")
+    assert [r["name"] for r in net.roster()] == ["Ann", "Maria"]
+
+
+def test_call_next_walks_radio_and_account_rows_in_the_same_order():
+    net = NeighborhoodNet()
+    net.checkin("u1", "WRAA111", "Ann", "1st St")
+    net.checkin_radio("WRAB123", "Maria", "Maple St")
+    net.start()
+    assert net.call_next()["name"] == "Ann"
+    second = net.call_next()
+    assert second["name"] == "Maria"
+    assert net.current_call == "radio:WRAB123:maria"
+    assert net.call_next() is None
+
+
+def test_set_status_reaches_a_radio_row():
+    net = NeighborhoodNet()
+    key = net.checkin_radio("WRAB123", "Maria", "Maple St")["user_id"]
+    net.set_status(key, "checked_out")
+    assert net.roster()[0]["status"] == "checked_out"
+    # And a checked-out radio row is skipped by the round table.
+    net.start()
+    assert net.call_next() is None
+
+
+def test_call_reset_clears_called_on_radio_rows():
+    net = NeighborhoodNet()
+    net.checkin_radio("WRAB123", "Maria", "Maple St")
+    net.start()
+    net.call_next()
+    net.call_reset()
+    assert net.roster()[0]["called"] is False
+    assert net.current_call is None
+
+
+def test_start_resets_called_on_radio_rows():
+    net = NeighborhoodNet()
+    net.checkin_radio("WRAB123", "Maria", "Maple St")
+    net.start()
+    net.call_next()
+    net.start()
+    assert net.roster()[0]["called"] is False
+
+
+def test_remove_station_removes_only_radio_rows():
+    net = NeighborhoodNet()
+    net.checkin("u1", "WRAA111", "Ann", "1st St")
+    key = net.checkin_radio("WRAB123", "Maria", "Maple St")["user_id"]
+    assert net.remove_station("u1") is False
+    assert net.remove_station("radio:NOPE:nobody") is False
+    assert net.remove_station(key) is True
+    assert [r["name"] for r in net.roster()] == ["Ann"]
+
+
+def test_remove_station_clears_a_current_call_that_pointed_at_it():
+    net = NeighborhoodNet()
+    key = net.checkin_radio("WRAB123", "Maria", "Maple St")["user_id"]
+    net.start()
+    net.call_next()
+    assert net.current_call == key
+    net.remove_station(key)
+    assert net.current_call is None
+
+
+def test_remove_leaves_radio_rows_alone():
+    # remove() is the account-deletion path; a radio key is not an account.
+    net = NeighborhoodNet()
+    key = net.checkin_radio("WRAB123", "Maria", "Maple St")["user_id"]
+    assert net.remove(key) is False
+    assert len(net.roster()) == 1
+
+
+def test_end_includes_radio_rows_then_clears_both_stores():
+    net = NeighborhoodNet()
+    net.checkin("u1", "WRAA111", "Ann", "1st St")
+    net.checkin_radio("WRAB123", "Maria", "Maple St")
+    net.start()
+    summary = net.end()
+    assert [r["name"] for r in summary["roster"]] == ["Ann", "Maria"]
+    assert net.roster() == []
+
+
+def test_clear_checkins_clears_both_stores():
+    net = NeighborhoodNet()
+    net.checkin("u1", "WRAA111", "Ann", "1st St")
+    net.checkin_radio("WRAB123", "Maria", "Maple St")
+    assert net.clear_checkins() == 2
+    assert net.roster() == []
+
+
+def test_roster_rows_do_not_leak_the_internal_sequence_field():
+    net = NeighborhoodNet()
+    net.checkin_radio("WRAB123", "Maria", "Maple St")
+    assert "seq" not in net.roster()[0]
