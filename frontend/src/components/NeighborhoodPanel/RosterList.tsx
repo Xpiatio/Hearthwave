@@ -26,7 +26,12 @@ type RosterSortColumn = 'name' | 'callsign' | 'location' | 'status';
 
 /** Fields this table actually renders — a filter query should never match a
  *  hidden field the user can't see. */
-const ROSTER_SEARCH_FIELDS: (keyof NeighborhoodRosterRow)[] = ['name', 'callsign', 'location'];
+const ROSTER_SEARCH_FIELDS: (keyof NeighborhoodRosterRow)[] = [
+  'name', 'callsign', 'location',
+  // `via` renders as the "By radio" chip, so it is visible text and has to be
+  // searchable — same list PastNetsTab uses.
+  'via',
+];
 
 export interface RosterListProps {
   roster: NeighborhoodRosterRow[];

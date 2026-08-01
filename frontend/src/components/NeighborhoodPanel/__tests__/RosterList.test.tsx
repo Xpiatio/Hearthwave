@@ -37,6 +37,18 @@ describe('RosterList', () => {
     expect(screen.getAllByText('By radio')).toHaveLength(1);
   });
 
+  it('filters on "radio", the By-radio chip the user can actually see', async () => {
+    // The filter deliberately only searches rendered fields, so `via` has to
+    // be in that list now that "By radio" is on-screen text — otherwise typing
+    // what you see returns nothing.
+    const user = userEvent.setup();
+    const thirdRow = { ...accountRow, user_id: 'u3', callsign: 'WRAC333', name: 'Cy' };
+    render(<RosterList {...makeProps({ roster: [accountRow, radioRow, thirdRow] })} />);
+    await user.type(screen.getByLabelText('Filter roster'), 'radio');
+    expect(screen.getByText('Maria')).toBeInTheDocument();
+    expect(screen.queryByText('Ann')).not.toBeInTheDocument();
+  });
+
   it('gives a coordinator a status control on a radio row', async () => {
     const user = userEvent.setup();
     const onStationStatusChange = vi.fn();
