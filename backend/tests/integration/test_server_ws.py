@@ -3870,11 +3870,14 @@ class TestDeleteProfileCleansUpFamilyData:
 
 def _neighborhood_server(tmp_path, *, role: str = "adult", is_admin: bool = False,
                           coordinator: bool = False, mock_tts=None, profile: dict | None = None,
-                          journals: bool = False, listen_only: bool = False):
+                          journals: bool = False, listen_only: bool = False,
+                          net_sessions_dir: str | None = None):
     """Context manager yielding (TestClient, cfg) wired for neighborhood-net tests."""
     cfg = _minimal_cfg(tmp_path, listen_only=listen_only)
     if journals:
         cfg["journals_dir"] = str(tmp_path / "journals")
+    if net_sessions_dir is not None:
+        cfg["net_sessions_dir"] = str(net_sessions_dir)
     mock_stt, default_tts = _make_mocks()
     tts = mock_tts if mock_tts is not None else default_tts
     mock_users, mock_tokens = _make_auth_mocks(
@@ -4242,6 +4245,83 @@ class TestNeighborhoodNetHandlers:
                     ws.send_json({"type": "neighborhood_end"})
                     msg = _next_of_type(ws, "neighborhood_state")
         assert msg is not None and msg["active"] is False
+
+    def test_end_with_nonempty_roster_saves_session_alongside_journal(self, tmp_path):
+        """Task 4: ending a neighborhood net must also write a private net
+        session record (net_sessions store), additive to the existing
+        journal write — the journal write must keep working unchanged."""
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, coordinator=True, journals=True,
+            net_sessions_dir=tmp_path / "net_sessions",
+            profile={"display_name": "Coord Op", "callsign": "W5CRD", "location": "Front St"},
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_start"})
+                    _next_of_type(ws, "neighborhood_state")
+                    ws.send_json({"type": "neighborhood_checkin"})
+                    _next_of_type(ws, "neighborhood_state")
+                    ws.send_json({"type": "neighborhood_end"})
+                    saved = _next_of_type(ws, "neighborhood_journal_saved")
+        assert saved is not None
+        journal_files = list((tmp_path / "journals").glob("*.json"))
+        assert len(journal_files) == 1  # existing journal write unaffected
+
+        session_files = list((tmp_path / "net_sessions").glob("*_neighborhood.json"))
+        assert len(session_files) == 1
+        entry = json.loads(session_files[0].read_text())
+        assert entry["net_type"] == "neighborhood"
+        assert entry["roster"][0]["callsign"] == "W5CRD"
+        assert entry["started_at"].endswith("Z")
+        assert entry["ended_at"].endswith("Z")
+        assert entry["duration_seconds"] >= 0
+        assert "W5CRD" in entry["transcript"]
+
+    def test_session_save_failure_does_not_block_journal_or_further_messages(self, tmp_path):
+        """Global constraint: a session-save failure must never block ending
+        a net. A file where the sessions directory should be makes the
+        store's mkdir raise; the journal write and the live connection must
+        keep working regardless."""
+        blocked = tmp_path / "blocked_sessions"
+        blocked.write_text("not a directory", encoding="utf-8")
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, coordinator=True, journals=True,
+            net_sessions_dir=blocked,
+            profile={"display_name": "Coord Op", "callsign": "W5CRD", "location": "Front St"},
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_start"})
+                    _next_of_type(ws, "neighborhood_state")
+                    ws.send_json({"type": "neighborhood_checkin"})
+                    _next_of_type(ws, "neighborhood_state")
+                    ws.send_json({"type": "neighborhood_end"})
+                    saved = _next_of_type(ws, "neighborhood_journal_saved")
+                    # connection must still be alive for further messages
+                    ws.send_json({"type": "neighborhood_start"})
+                    msg = _next_of_type(ws, "neighborhood_state")
+        assert saved is not None  # journal save unaffected by the session failure
+        journal_files = list((tmp_path / "journals").glob("*.json"))
+        assert len(journal_files) == 1
+        assert msg is not None and msg["active"] is True
 
 
 # ---------------------------------------------------------------------------

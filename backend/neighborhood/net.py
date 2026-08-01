@@ -6,6 +6,7 @@ plain dicts for the server to act on.
 """
 from __future__ import annotations
 
+import datetime
 import time
 from typing import Optional
 
@@ -54,12 +55,20 @@ class NeighborhoodNet:
         """
         self.active = False
         self.current_call = None
-        duration_seconds = (time.time() - self._started_at) if self._started_at else 0.0
+        started_at = self._started_at
+        duration_seconds = (time.time() - started_at) if started_at else 0.0
         summary = {
             "roster": self.roster(),
             "duration_seconds": round(duration_seconds),
+            "started_at": (
+                datetime.datetime.fromtimestamp(started_at, datetime.timezone.utc)
+                .strftime("%Y-%m-%dT%H:%M:%SZ")
+                if started_at else ""
+            ),
+            "ended_at": utc_now_iso(),
         }
         self._roster = {}
+        self._started_at = None
         return summary
 
     def checkin(self, user_id: str, callsign: str, name: str, location: str) -> dict:

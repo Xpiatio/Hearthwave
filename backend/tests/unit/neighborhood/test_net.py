@@ -216,3 +216,21 @@ def test_clear_checkins_leaves_a_running_net_running():
     n.checkin("u1", "A", "Ann", "")
     n.clear_checkins()
     assert n.active is True
+
+
+class TestEndTimestamps:
+    def test_end_reports_start_and_end_times(self):
+        net = NeighborhoodNet()
+        net.checkin("u1", "WRAB123", "Sam", "Zeeland")
+        net.start()
+        summary = net.end()
+        assert summary["started_at"].endswith("Z")
+        assert summary["ended_at"].endswith("Z")
+        assert summary["ended_at"] >= summary["started_at"]
+
+    def test_end_without_start_has_blank_started_at(self):
+        net = NeighborhoodNet()
+        net.checkin("u1", "WRAB123", "Sam", "Zeeland")
+        summary = net.end()
+        assert summary["started_at"] == ""
+        assert summary["duration_seconds"] == 0

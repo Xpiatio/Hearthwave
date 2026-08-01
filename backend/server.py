@@ -179,6 +179,10 @@ from backend.family.reminders import is_checkin_missed
 from backend.persistence.family import FamilyStore
 from backend.persistence.incidents import IncidentsStore
 from backend.persistence.journal import delete_journal, load_journals, load_published_manifest, publish_journal, save_journal, unpublish_journal
+from backend.persistence.net_sessions import (
+    NET_TYPE_NEIGHBORHOOD,
+    save_session as save_net_session,
+)
 from backend.persistence.presence import PresenceStore
 from backend.persistence.tokens import TokenStore
 from backend.persistence.users import (
@@ -3919,6 +3923,20 @@ async def websocket_endpoint(
                         await _manager.broadcast({"type": "neighborhood_journal_saved", "path": path})
                     except Exception as exc:
                         _log.error("Neighborhood net journal save failed: %s", exc)
+
+                    try:
+                        session_path = save_net_session(
+                            net_type=NET_TYPE_NEIGHBORHOOD,
+                            started_at=summary.get("started_at", ""),
+                            ended_at=summary.get("ended_at", ""),
+                            duration_seconds=summary.get("duration_seconds", 0),
+                            roster=roster_snapshot,
+                            transcript=roster_lines,
+                            sessions_dir=_config.net_sessions_dir,
+                        )
+                        _log.info("Neighborhood net session saved: %s", session_path)
+                    except Exception as exc:
+                        _log.error("Neighborhood net session save failed: %s", exc)
 
             elif msg_type == "neighborhood_call_next":
                 if not _is_coordinator(state):
