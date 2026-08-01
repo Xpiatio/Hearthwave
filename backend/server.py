@@ -52,6 +52,8 @@ WebSocket message types (client → server):
     neighborhood_end  — {"type": "neighborhood_end"}  (coordinator-only)
     neighborhood_call_next — {"type": "neighborhood_call_next"}  (coordinator-only)
     neighborhood_call_reset — {"type": "neighborhood_call_reset"}  (coordinator-only)
+    neighborhood_no_answer      (coordinator) flag/unflag a station the round couldn't raise
+    neighborhood_call_station   (coordinator) call a specific station out of order
     neighborhood_clear_checkins — {"type": "neighborhood_clear_checkins"}  (admin-only;
                           empties the roster, leaves an in-progress net running)
     neighborhood_clear_incidents — {"type": "neighborhood_clear_incidents"}  (admin-only;
@@ -4088,6 +4090,33 @@ async def websocket_endpoint(
                     continue
                 if _neighborhood is not None:
                     _neighborhood.call_reset()
+                await _manager.broadcast(_build_neighborhood_state_msg())
+
+            elif msg_type == "neighborhood_no_answer":
+                if not _is_coordinator(state):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Coordinator access required"})
+                    continue
+                target_id = str(data.get("user_id") or "")
+                if _neighborhood is not None:
+                    # Unknown ids no-op (row may have been removed mid-click);
+                    # broadcasting anyway keeps every client's state converged.
+                    _neighborhood.set_no_answer(target_id, bool(data.get("no_answer", True)))
+                await _manager.broadcast(_build_neighborhood_state_msg())
+
+            elif msg_type == "neighborhood_call_station":
+                if not _is_coordinator(state):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Coordinator access required"})
+                    continue
+                target_id = str(data.get("user_id") or "")
+                row = _neighborhood.call_station(target_id) if _neighborhood is not None else None
+                if row is not None:
+                    # Same on-air announcement as neighborhood_call_next: an
+                    # out-of-order call is still a call.
+                    station_callsign = _config.callsign if _config else ""
+                    text = f"{row['name']}, you're up. Anything to report? {station_callsign}."
+                    await _tx_enqueue(
+                        {"text": text, "_pre_formatted": True, "_operator_initiated": True}
+                    )
                 await _manager.broadcast(_build_neighborhood_state_msg())
 
             elif msg_type == "neighborhood_clear_checkins":
