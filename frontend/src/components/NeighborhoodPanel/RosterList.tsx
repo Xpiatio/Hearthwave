@@ -14,6 +14,10 @@ import {
 } from '@mui/material';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+// The bare "DeleteOutline" module doesn't exist in the installed
+// @mui/icons-material version; DeleteOutlineOutlined is the same
+// outline-trash-can glyph the codebase actually ships.
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import type { NeighborhoodRosterRow } from '../../types/ws';
 import { rosterDensitySpec } from '../../neighborhood/density';
 import { useRosterSort } from '../../netsessions/rosterView';
@@ -32,6 +36,11 @@ export interface RosterListProps {
   /** Admin-only board wipe. Omitted (not disabled) for everyone else, so a
    *  control that can't succeed never appears. */
   onClear?: () => void;
+  /** Coordinator-only radio-row controls. A radio caller has no browser, so
+   *  the coordinator is the only one who can move their status. */
+  isCoordinator?: boolean;
+  onStationStatusChange?: (userId: string, status: 'checked_in' | 'standby' | 'checked_out') => void;
+  onRemoveStation?: (userId: string) => void;
 }
 
 const STATUS_LABELS: Record<NeighborhoodRosterRow['status'], string> = {
@@ -57,6 +66,15 @@ const NEXT_ACTION_LABEL: Record<NeighborhoodRosterRow['status'], string> = {
   checked_out: "I'm back",
 };
 
+/** The self-toggle copy above is first-person and reads wrong when a
+ *  coordinator moves someone else's station, so radio rows get their own
+ *  labels over the same STATUS_CYCLE. */
+const STATION_ACTION_LABEL: Record<NeighborhoodRosterRow['status'], string> = {
+  checked_in: 'Standby',
+  standby: 'Check out',
+  checked_out: 'Check back in',
+};
+
 function nextStatus(status: NeighborhoodRosterRow['status']): NeighborhoodRosterRow['status'] {
   const at = STATUS_CYCLE.indexOf(status);
   return STATUS_CYCLE[(at + 1) % STATUS_CYCLE.length];
@@ -68,16 +86,28 @@ function nextStatus(status: NeighborhoodRosterRow['status']): NeighborhoodRoster
  *  color-only) so the highlight reads the same to a screen reader or in
  *  grayscale as it does at a glance.
  *
- *  The status toggle ("Step away" / "Check out" / "I'm back") only ever
- *  appears on the viewer's own row — the server already restricts
+ *  The status toggle appears in two forms: the first-person "Step away" /
+ *  "Check out" / "I'm back" copy on the viewer's own row, and — for a
+ *  coordinator only — third-person "Standby" / "Check out" / "Check back in"
+ *  copy plus a remove control on radio rows, since a radio caller has no
+ *  browser to operate their own row. The server already restricts
  *  cross-user status changes to coordinators (see neighborhood_status), so
- *  the UI mirrors that by only exposing the control where it can succeed
+ *  the UI mirrors that by only exposing each control where it can succeed
  *  unassisted.
  *
  *  Rows sit in an auto-fit grid whose card size comes from the head count, so
  *  a six-person net stays big and glanceable while a twenty-person net still
  *  fits on one screen instead of becoming a scroll. See neighborhood/density.ts. */
-export function RosterList({ roster, currentCall, myUserId, onStatusChange, onClear }: RosterListProps) {
+export function RosterList({
+  roster,
+  currentCall,
+  myUserId,
+  onStatusChange,
+  onClear,
+  isCoordinator,
+  onStationStatusChange,
+  onRemoveStation,
+}: RosterListProps) {
   const density = rosterDensitySpec(roster.length);
 
   const {
@@ -167,6 +197,8 @@ export function RosterList({ roster, currentCall, myUserId, onStatusChange, onCl
           {visibleRoster.map((row) => {
             const isCurrent = row.user_id === currentCall;
             const isSelf = row.user_id === myUserId;
+            const isRadio = row.via === 'radio';
+            const canOperate = isRadio && !!isCoordinator;
             return (
               <Paper
                 key={row.user_id}
@@ -192,6 +224,7 @@ export function RosterList({ roster, currentCall, myUserId, onStatusChange, onCl
                   <Typography variant={density.detailVariant} color="text.secondary">
                     {row.callsign}
                   </Typography>
+                  {isRadio && <Chip size="small" variant="outlined" label="By radio" sx={{ maxWidth: '100%' }} />}
                   {isCurrent && <Chip size="small" color="primary" label="Current turn" sx={{ maxWidth: '100%' }} />}
                   {row.called && <Chip size="small" label="Called ✓" sx={{ maxWidth: '100%' }} />}
                 </Box>
@@ -202,15 +235,40 @@ export function RosterList({ roster, currentCall, myUserId, onStatusChange, onCl
 
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: density.gap, mt: 'auto' }}>
                   <Chip size="small" color={STATUS_COLORS[row.status]} label={STATUS_LABELS[row.status]} />
-                  {isSelf && (
-                    <Button
-                      size="small"
-                      variant="text"
-                      onClick={() => onStatusChange(nextStatus(row.status))}
-                    >
-                      {NEXT_ACTION_LABEL[row.status]}
-                    </Button>
-                  )}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: density.gap }}>
+                    {isSelf && (
+                      <Button
+                        size="small"
+                        variant="text"
+                        onClick={() => onStatusChange(nextStatus(row.status))}
+                      >
+                        {NEXT_ACTION_LABEL[row.status]}
+                      </Button>
+                    )}
+                    {canOperate && onStationStatusChange && (
+                      <Button
+                        size="small"
+                        variant="text"
+                        onClick={() => onStationStatusChange(row.user_id, nextStatus(row.status))}
+                      >
+                        {STATION_ACTION_LABEL[row.status]}
+                      </Button>
+                    )}
+                    {canOperate && onRemoveStation && (
+                      // No confirm: this row is a coordinator's typo that never
+                      // reached disk, and re-adding it costs one pick. Confirms
+                      // stay for the board wipe and street alerts.
+                      <Tooltip title={`Remove ${row.name}`}>
+                        <IconButton
+                          size="small"
+                          aria-label={`Remove ${row.name}`}
+                          onClick={() => onRemoveStation(row.user_id)}
+                        >
+                          <DeleteOutlineIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </Box>
                 </Box>
               </Paper>
             );
