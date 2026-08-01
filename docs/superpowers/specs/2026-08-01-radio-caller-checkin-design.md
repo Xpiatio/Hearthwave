@@ -47,10 +47,10 @@ exactly like an account holder.
 This design touches `backend/persistence/net_sessions.py`,
 `frontend/src/netsessions/csv.ts`, and the Past Nets tab — **all of which exist only
 on the unmerged `feat/net-session-history` branch** (`247aef1`, 25 commits off
-master). Implementation therefore starts **after** that branch is smoke-tested and
-merged, on a fresh `feat/radio-caller-checkin` off master. If it turns out this work
-must start first, it branches off `feat/net-session-history` instead and the record/CSV
-items ride along with it — but the default is: merge that first.
+master). **Decision (2026-08-01):** rather than wait, `feat/radio-caller-checkin` branches off
+`feat/net-session-history` at `247aef1`. The record/CSV work therefore builds on the
+unmerged branch and merges after it. Consequence to accept: if the net-session-history
+smoke test forces changes to `normalize_roster` or `csv.ts`, this branch rebases.
 
 ## Architecture
 
@@ -188,6 +188,11 @@ just doesn't thread it to this panel.
   radio rows when the viewer is coordinator — nobody else can press it for a caller
   with no browser. Other account holders' rows stay untouched: a coordinator still
   cannot toggle another account from this list.
+- The existing `NEXT_ACTION_LABEL` copy is first-person (`Step away`, `Check out`,
+  `I'm back`) and reads wrong for a station the coordinator is operating on someone
+  else's behalf. Radio rows use a third-person label map instead —
+  `checked_in` → `Standby`, `standby` → `Check out`, `checked_out` → `Check back in` —
+  driving the same `STATUS_CYCLE`. Account rows keep the existing copy verbatim.
 - Remove is a small icon button on radio rows, coordinator-only, **with no confirm
   dialog**: the row is a typo that never reached disk and re-adding costs one Select
   click. Confirms stay for the genuinely destructive controls (`Clear check-ins`,
