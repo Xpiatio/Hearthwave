@@ -258,6 +258,20 @@ def test_checkin_radio_is_idempotent_per_station():
     assert roster[0]["location"] == "Oak St"
 
 
+def test_checkin_radio_stores_the_name_the_key_was_built_from():
+    # The station key collapses internal whitespace, so the stored name must
+    # too. Attendance history keys on (callsign, name.strip().casefold())
+    # WITHOUT collapsing internal runs (backend/persistence/net_stats.py), so a
+    # stored "Maria  Lopez" would be a different person from last week's
+    # "Maria Lopez" — exactly the streak fragmentation Decision 2 exists to
+    # prevent.
+    net = NeighborhoodNet()
+    row = net.checkin_radio("wrab123", "  Maria   Lopez ", "Maple St")
+    assert row["name"] == "Maria Lopez"
+    assert row["user_id"] == "radio:WRAB123:maria lopez"
+    assert net.roster()[0]["name"] == "Maria Lopez"
+
+
 def test_same_callsign_different_names_are_two_stations():
     # A GMRS family shares one licensed callsign — two people on it are two
     # stations, not one row overwriting the other.

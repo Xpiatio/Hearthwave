@@ -156,10 +156,15 @@ class NeighborhoodNet:
         profile — see the `neighborhood_checkin_radio` handler in
         backend/server.py for why that is safe here.
         """
-        key = radio_station_key(callsign, name)
+        # Normalize first, then key off the normalized fields, so the stored
+        # name is exactly what the key was built from. Attendance history keys
+        # on (callsign, name) without collapsing internal whitespace, so a row
+        # storing "Maria  Lopez" under a "maria lopez" key would fragment that
+        # neighbor's streak across nets.
         callsign = (callsign or "").strip().upper()
-        name = (name or "").strip()
+        name = " ".join((name or "").split())
         location = (location or "").strip()
+        key = radio_station_key(callsign, name)
         row = self._radio.get(key)
         now = utc_now_iso()
         if row is None:
