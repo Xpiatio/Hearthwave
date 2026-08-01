@@ -73,6 +73,8 @@ export interface MobileAppProps {
   incidentError: string | null;
   sendNeighborhoodCheckin: () => void;
   sendNeighborhoodStatus: (status: 'checked_in' | 'standby' | 'checked_out', userId?: string) => void;
+  sendNeighborhoodRadioCheckin: (p: { callsign: string; name: string; location: string; saveContact: boolean }) => void;
+  sendNeighborhoodRemoveStation: (userId: string) => void;
   sendIncidentReport: (category: string, description: string, location: string) => void;
   sendStreetAlert: (message: string) => void;
   sendNeighborhoodStart: () => void;
@@ -208,6 +210,8 @@ export function MobileApp({
   incidentError,
   sendNeighborhoodCheckin,
   sendNeighborhoodStatus,
+  sendNeighborhoodRadioCheckin,
+  sendNeighborhoodRemoveStation,
   sendIncidentReport,
   sendStreetAlert,
   sendNeighborhoodStart,
@@ -434,6 +438,10 @@ export function MobileApp({
             onCallNext={sendNeighborhoodCallNext}
             onNewRound={sendNeighborhoodCallReset}
             onGoHome={() => setTab('chat')}
+            contacts={contacts}
+            onRadioCheckin={sendNeighborhoodRadioCheckin}
+            onStationStatusChange={(userId, status) => sendNeighborhoodStatus(status, userId)}
+            onRemoveStation={sendNeighborhoodRemoveStation}
           />
         </Box>
       )}

@@ -6,7 +6,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { axe } from 'jest-axe';
 import { NeighborhoodPanel } from '../NeighborhoodPanel';
 import type { NeighborhoodPanelProps } from '../NeighborhoodPanel';
-import type { IncidentEntry, NeighborhoodAlertMsg, NeighborhoodRosterRow } from '../../../types/ws';
+import type { Contact, IncidentEntry, NeighborhoodAlertMsg, NeighborhoodRosterRow } from '../../../types/ws';
 
 function render(ui: React.ReactElement) {
   return rtlRender(<ThemeProvider theme={makeTheme(false)}>{ui}</ThemeProvider>);
@@ -31,6 +31,8 @@ const incidents: IncidentEntry[] = [
 const alerts: NeighborhoodAlertMsg[] = [
   { type: 'neighborhood_alert', id: 'a1', message: 'Boil water advisory', issued_by: 'Coordinator', ts: new Date().toISOString() },
 ];
+
+const contacts: Contact[] = [];
 
 function makeProps(overrides: Partial<NeighborhoodPanelProps> = {}): NeighborhoodPanelProps {
   return {
@@ -57,6 +59,10 @@ function makeProps(overrides: Partial<NeighborhoodPanelProps> = {}): Neighborhoo
     onCallNext: vi.fn(),
     onNewRound: vi.fn(),
     onGoHome: vi.fn(),
+    contacts,
+    onRadioCheckin: vi.fn(),
+    onStationStatusChange: vi.fn(),
+    onRemoveStation: vi.fn(),
     ...overrides,
   };
 }
@@ -262,6 +268,40 @@ describe('NeighborhoodPanel', () => {
     );
     expect(screen.getByText('Current turn:')).toBeInTheDocument();
     expect(screen.queryByText(/unknown-user/)).not.toBeInTheDocument();
+  });
+
+  describe('radio check-in', () => {
+    it('offers the radio check-in form to a coordinator', () => {
+      render(<NeighborhoodPanel {...makeProps({ isCoordinator: true })} />);
+      expect(screen.getByRole('button', { name: 'Check in station' })).toBeInTheDocument();
+    });
+
+    it('hides the radio check-in form from a non-coordinator', () => {
+      render(<NeighborhoodPanel {...makeProps({ isCoordinator: false })} />);
+      expect(screen.queryByRole('button', { name: 'Check in station' })).not.toBeInTheDocument();
+    });
+
+    it('hides the radio check-in form from a kid holding the grant', () => {
+      render(<NeighborhoodPanel {...makeProps({ isCoordinator: true, isKid: true })} />);
+      expect(screen.queryByRole('button', { name: 'Check in station' })).not.toBeInTheDocument();
+    });
+
+    it('passes a radio check-in through to onRadioCheckin', async () => {
+      const user = userEvent.setup();
+      const props = makeProps({ isCoordinator: true });
+      render(<NeighborhoodPanel {...props} />);
+
+      await user.type(screen.getByLabelText('Callsign'), 'WRAZ999');
+      await user.type(screen.getByLabelText('Name'), 'Sam');
+      await user.click(screen.getByRole('button', { name: 'Check in station' }));
+
+      expect(props.onRadioCheckin).toHaveBeenCalledWith({
+        callsign: 'WRAZ999',
+        name: 'Sam',
+        location: '',
+        saveContact: false,
+      });
+    });
   });
 
   describe('street alert', () => {

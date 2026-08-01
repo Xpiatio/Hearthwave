@@ -36,6 +36,8 @@ import type {
   IncidentEntry,
   NeighborhoodAlertMsg,
   NeighborhoodCheckinPayload,
+  NeighborhoodCheckinRadioPayload,
+  NeighborhoodRemoveStationPayload,
   NeighborhoodStatusPayload,
   NeighborhoodStartPayload,
   NeighborhoodEndPayload,
@@ -1230,6 +1232,25 @@ export default function App() {
     } satisfies NeighborhoodStatusPayload);
   }
 
+  function sendNeighborhoodRadioCheckin(p: {
+    callsign: string;
+    name: string;
+    location: string;
+    saveContact: boolean;
+  }) {
+    send({
+      type: 'neighborhood_checkin_radio',
+      callsign: p.callsign,
+      name: p.name,
+      location: p.location,
+      ...(p.saveContact ? { save_contact: true } : {}),
+    } satisfies NeighborhoodCheckinRadioPayload);
+  }
+
+  function sendNeighborhoodRemoveStation(userId: string) {
+    send({ type: 'neighborhood_remove_station', user_id: userId } satisfies NeighborhoodRemoveStationPayload);
+  }
+
   function sendIncidentReport(category: string, description: string, location: string) {
     // Reset before each attempt so a rejection always arrives as a
     // null -> string transition, even when the error text is identical
@@ -1622,6 +1643,8 @@ export default function App() {
     sendSetUserQuickMessages,
     sendNeighborhoodCheckin,
     sendNeighborhoodStatus,
+    sendNeighborhoodRadioCheckin,
+    sendNeighborhoodRemoveStation,
     sendIncidentReport,
     sendStreetAlert,
     sendNeighborhoodStart,
@@ -1819,6 +1842,10 @@ export default function App() {
           onCallNext={sendNeighborhoodCallNext}
           onNewRound={sendNeighborhoodCallReset}
           onGoHome={handleGoHome}
+          contacts={contacts}
+          onRadioCheckin={sendNeighborhoodRadioCheckin}
+          onStationStatusChange={(userId, status) => sendNeighborhoodStatus(status, userId)}
+          onRemoveStation={sendNeighborhoodRemoveStation}
         />
       ) : (
         <DesktopApp

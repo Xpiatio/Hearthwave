@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Box, Button, ButtonBase, Chip, IconButton, TextField, Tooltip, Typography } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import type { IncidentEntry, NeighborhoodAlertMsg, NeighborhoodRosterRow } from '../../types/ws';
+import type { Contact, IncidentEntry, NeighborhoodAlertMsg, NeighborhoodRosterRow } from '../../types/ws';
 import { useEscapeToHome } from '../../hooks/useEscapeToHome';
 import { nextNetLabel } from '../../neighborhood/schedule';
 import { IncidentDialog } from './IncidentDialog';
 import { IncidentLog } from './IncidentLog';
 import { RosterList } from './RosterList';
+import { RadioCheckinForm } from './RadioCheckinForm';
 import { ConfirmDialog } from '../ConfirmDialog';
 
 export interface NeighborhoodPanelProps {
@@ -36,6 +37,11 @@ export interface NeighborhoodPanelProps {
   onCallNext: () => void;
   onNewRound: () => void;
   onGoHome: () => void;
+  /** Contact book, used to prefill the radio check-in form. */
+  contacts: Contact[];
+  onRadioCheckin: (p: { callsign: string; name: string; location: string; saveContact: boolean }) => void;
+  onStationStatusChange: (userId: string, status: 'checked_in' | 'standby' | 'checked_out') => void;
+  onRemoveStation: (userId: string) => void;
 }
 
 const STREET_ALERT_MAX = 200;
@@ -200,6 +206,9 @@ export function NeighborhoodPanel(props: NeighborhoodPanelProps) {
         myUserId={props.myUserId}
         onStatusChange={props.onStatusChange}
         onClear={props.isAdmin ? () => setClearCheckinsConfirmOpen(true) : undefined}
+        isCoordinator={showCoordinatorSection}
+        onStationStatusChange={props.onStationStatusChange}
+        onRemoveStation={props.onRemoveStation}
       />
 
       <IncidentLog
@@ -233,6 +242,8 @@ export function NeighborhoodPanel(props: NeighborhoodPanelProps) {
               New round
             </Button>
           </Box>
+
+          <RadioCheckinForm contacts={props.contacts} onCheckin={props.onRadioCheckin} />
 
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             <TextField
