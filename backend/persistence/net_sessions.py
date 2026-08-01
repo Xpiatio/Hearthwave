@@ -86,8 +86,9 @@ def load_session_summaries(sessions_dir: Path) -> list[dict]:
     """Return every session newest-first, without transcripts.
 
     Summaries carry each roster row's identity (``stations``) because both the
-    list UI and the attendance stats need it. The transcript is the only large
-    field and stays on disk until a caller asks for one specific session.
+    list UI and the attendance stats need it. Each session file is read as one
+    complete JSON record, but the transcript field is excluded from returned
+    summaries, ensuring transcript text never reaches the caller or frontend.
     """
     sessions_dir = Path(sessions_dir)
     if not sessions_dir.is_dir():
