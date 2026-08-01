@@ -59,6 +59,13 @@ function makeProps(overrides: Partial<Parameters<typeof JournalPanel>[0]> = {}) 
     onPublish: vi.fn(),
     onUnpublish: vi.fn(),
     onDismissResult: vi.fn(),
+    netSessions: [],
+    attendanceStats: [],
+    selectedNetSession: null,
+    isAdmin: false,
+    onListNetSessions: vi.fn(),
+    onSelectNetSession: vi.fn(),
+    onDeleteNetSession: vi.fn(),
     ...overrides,
   }
 }
@@ -309,5 +316,20 @@ describe('JournalPanel', () => {
       render(<JournalPanel {...makeProps({ journals })} />)
       expect(screen.getByText('(untitled)')).toBeInTheDocument()
     })
+  })
+})
+
+describe('JournalPanel tabs', () => {
+  it('shows the journal list by default', () => {
+    render(<JournalPanel {...makeProps()} />)
+    expect(screen.getByText('JOURNALS')).toBeInTheDocument()
+  })
+
+  it('switches to past nets and requests the list', async () => {
+    const onListNetSessions = vi.fn()
+    render(<JournalPanel {...makeProps({ onListNetSessions })} />)
+    await userEvent.click(screen.getByRole('tab', { name: /past nets/i }))
+    expect(screen.getByText(/No nets recorded yet/i)).toBeInTheDocument()
+    expect(onListNetSessions).toHaveBeenCalled()
   })
 })

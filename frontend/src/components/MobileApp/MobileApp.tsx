@@ -38,6 +38,9 @@ import type {
   NeighborhoodStateMsg,
   IncidentEntry,
   NeighborhoodAlertMsg,
+  NetSessionSummary,
+  AttendanceStatRow,
+  NetSessionDetail,
 } from '../../types/ws';
 import type { AdminConfig, JournalResultDraft, PendingStation } from '../../types/appTypes';
 
@@ -110,6 +113,12 @@ export interface MobileAppProps {
   onPublishJournal: (file_path: string) => void;
   onUnpublishJournal: (file_path: string) => void;
   onDismissJournalResult: () => void;
+  netSessions: NetSessionSummary[];
+  attendanceStats: AttendanceStatRow[];
+  selectedNetSession: NetSessionDetail | null;
+  onListNetSessions: () => void;
+  onSelectNetSession: (id: string) => void;
+  onDeleteNetSession: (id: string) => void;
 
   // TX / PTT
   listenOnly: boolean;
@@ -225,6 +234,12 @@ export function MobileApp({
   onPublishJournal,
   onUnpublishJournal,
   onDismissJournalResult,
+  netSessions,
+  attendanceStats,
+  selectedNetSession,
+  onListNetSessions,
+  onSelectNetSession,
+  onDeleteNetSession,
   listenOnly,
   onSend,
   onChat,
@@ -450,6 +465,13 @@ export function MobileApp({
             onPublish={onPublishJournal}
             onUnpublish={onUnpublishJournal}
             onDismissResult={onDismissJournalResult}
+            netSessions={netSessions}
+            attendanceStats={attendanceStats}
+            selectedNetSession={selectedNetSession}
+            isAdmin={!!profile.is_admin}
+            onListNetSessions={onListNetSessions}
+            onSelectNetSession={onSelectNetSession}
+            onDeleteNetSession={onDeleteNetSession}
           />
         </Box>
       )}
