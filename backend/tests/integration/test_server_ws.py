@@ -4329,6 +4329,319 @@ class TestNeighborhoodNetHandlers:
 
 
 # ---------------------------------------------------------------------------
+# Task 2 — neighborhood_checkin_radio / neighborhood_remove_station: a
+# coordinator checking in (and removing) a station that called in over the
+# air with no account here.
+# ---------------------------------------------------------------------------
+
+class TestNeighborhoodRadioCheckin:
+    def test_radio_checkin_rejected_for_adult_without_coordinator_pref(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(tmp_path)
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({
+                        "type": "neighborhood_checkin_radio",
+                        "callsign": "WRAB123", "name": "Maria", "location": "Maple St",
+                    })
+                    err = _next_of_type(ws, "error")
+                    ws.send_json({"type": "neighborhood_get_state"})
+                    state = _next_of_type(ws, "neighborhood_state")
+        assert err is not None
+        assert err["detail"] == "Coordinator access required"
+        assert state["roster"] == []
+
+    def test_coordinator_checks_in_a_radio_station(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, coordinator=True,
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({
+                        "type": "neighborhood_checkin_radio",
+                        "callsign": "wrab123", "name": "Maria", "location": "Maple St",
+                    })
+                    msg = _next_of_type(ws, "neighborhood_state")
+        assert msg is not None
+        assert len(msg["roster"]) == 1
+        row = msg["roster"][0]
+        assert row["user_id"] == "radio:WRAB123:maria"
+        assert row["callsign"] == "WRAB123"
+        assert row["name"] == "Maria"
+        assert row["location"] == "Maple St"
+        assert row["via"] == "radio"
+        assert row["status"] == "checked_in"
+        assert "seq" not in row
+
+    def test_radio_checkin_rejects_a_blank_callsign_or_name(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, coordinator=True,
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({
+                        "type": "neighborhood_checkin_radio",
+                        "callsign": "", "name": "Maria", "location": "Maple St",
+                    })
+                    err1 = _next_of_type(ws, "error")
+                    ws.send_json({
+                        "type": "neighborhood_checkin_radio",
+                        "callsign": "WRAB123", "name": "   ", "location": "Maple St",
+                    })
+                    err2 = _next_of_type(ws, "error")
+                    ws.send_json({"type": "neighborhood_get_state"})
+                    state = _next_of_type(ws, "neighborhood_state")
+        assert err1 is not None
+        assert err1["detail"] == "Callsign and name are required."
+        assert err2 is not None
+        assert err2["detail"] == "Callsign and name are required."
+        assert state is not None
+        assert state["roster"] == []
+
+    def test_radio_checkin_truncates_over_long_fields(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, coordinator=True,
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({
+                        "type": "neighborhood_checkin_radio",
+                        "callsign": "A" * 40, "name": "B" * 200, "location": "C" * 200,
+                    })
+                    msg = ws.receive_json()
+        assert msg["type"] == "neighborhood_state"  # no error slipped in first
+        row = msg["roster"][0]
+        assert len(row["callsign"]) == 16
+        assert len(row["name"]) == 64
+        assert len(row["location"]) == 64
+
+    def test_radio_checkin_saves_a_contact_when_asked(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, coordinator=True,
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({
+                        "type": "neighborhood_checkin_radio",
+                        "callsign": "WRAB123", "name": "Maria", "location": "Maple St",
+                        "save_contact": True,
+                    })
+                    _next_of_type(ws, "neighborhood_state")
+                    contacts_msg = _next_of_type(ws, "contacts")
+        assert contacts_msg is not None
+        callsigns = [c["callsign"] for c in contacts_msg["contacts"]]
+        assert "WRAB123" in callsigns
+        stored = json.loads(cfg.contacts_file.read_text())
+        assert any(c["callsign"] == "WRAB123" for c in stored)
+
+    def test_radio_checkin_survives_a_contacts_failure(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, coordinator=True,
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    with patch(
+                        "backend.server._contacts_store.add_contact",
+                        side_effect=ValueError("boom"),
+                    ):
+                        ws.send_json({
+                            "type": "neighborhood_checkin_radio",
+                            "callsign": "WRAB123", "name": "Maria", "location": "Maple St",
+                            "save_contact": True,
+                        })
+                        state_msg = _next_of_type(ws, "neighborhood_state")
+                        err = _next_of_type(ws, "error")
+        assert state_msg is not None
+        assert len(state_msg["roster"]) == 1
+        assert state_msg["roster"][0]["callsign"] == "WRAB123"
+        assert err is not None
+        assert err["detail"] == "boom"
+
+    def test_radio_checkin_without_save_contact_writes_no_contact(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, coordinator=True,
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({
+                        "type": "neighborhood_checkin_radio",
+                        "callsign": "WRAB123", "name": "Maria", "location": "Maple St",
+                    })
+                    msg = ws.receive_json()
+        assert msg["type"] == "neighborhood_state"  # no contacts broadcast followed
+        stored = json.loads(cfg.contacts_file.read_text())
+        assert stored == []
+
+    def test_coordinator_can_change_a_radio_station_status(self, tmp_path):
+        """Regression guard: set_status already resolves radio keys via
+        NeighborhoodNet._find, so neighborhood_status needs no handler change
+        to reach a radio check-in row."""
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, coordinator=True,
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({
+                        "type": "neighborhood_checkin_radio",
+                        "callsign": "WRAB123", "name": "Maria", "location": "Maple St",
+                    })
+                    msg = _next_of_type(ws, "neighborhood_state")
+                    radio_id = msg["roster"][0]["user_id"]
+                    ws.send_json({
+                        "type": "neighborhood_status", "user_id": radio_id, "status": "checked_out",
+                    })
+                    msg2 = _next_of_type(ws, "neighborhood_state")
+        assert msg2 is not None
+        assert msg2["roster"][0]["status"] == "checked_out"
+
+    def test_remove_station_refuses_an_account_user_id(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, coordinator=True,
+            profile={"display_name": "Coord Op", "callsign": "W5CRD", "location": "Front St"},
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_checkin"})
+                    msg = _next_of_type(ws, "neighborhood_state")
+                    account_id = msg["roster"][0]["user_id"]
+                    ws.send_json({"type": "neighborhood_remove_station", "user_id": account_id})
+                    err = _next_of_type(ws, "error")
+                    ws.send_json({"type": "neighborhood_get_state"})
+                    state = _next_of_type(ws, "neighborhood_state")
+        assert err is not None
+        assert err["detail"] == "Only radio check-ins can be removed."
+        assert state is not None
+        assert len(state["roster"]) == 1
+        assert state["roster"][0]["user_id"] == account_id
+
+    def test_remove_station_requires_coordinator(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(tmp_path)
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({
+                        "type": "neighborhood_remove_station", "user_id": "radio:WRAB123:maria",
+                    })
+                    err = _next_of_type(ws, "error")
+        assert err is not None
+        assert err["detail"] == "Coordinator access required"
+
+    def test_coordinator_removes_a_radio_station(self, tmp_path):
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, coordinator=True,
+        )
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({
+                        "type": "neighborhood_checkin_radio",
+                        "callsign": "WRAB123", "name": "Maria", "location": "Maple St",
+                    })
+                    msg = _next_of_type(ws, "neighborhood_state")
+                    radio_id = msg["roster"][0]["user_id"]
+                    ws.send_json({"type": "neighborhood_remove_station", "user_id": radio_id})
+                    msg2 = _next_of_type(ws, "neighborhood_state")
+        assert msg2 is not None
+        assert msg2["roster"] == []
+
+
+# ---------------------------------------------------------------------------
 # Phase 3 Task 6 review fix — set_admin_config must rebroadcast
 # neighborhood_state when it touches the net schedule, else already-connected
 # clients keep showing a stale next-net day/time until they reconnect.
