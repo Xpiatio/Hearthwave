@@ -1373,7 +1373,18 @@ class TestNCSNetSessionSave:
         }
         ncs._session_rx.append("KD8ABC: nothing to report")
 
-        await ncs._handle_end()
+        # _handle_end() would spawn real "ncs-journal"/"ncs-net-session" tasks
+        # via asyncio.create_task; left unpatched those tasks (a) race the
+        # explicit _save_net_session() call below for the same-second
+        # filename, making `len(files) == 1` pass only by luck, and (b) are
+        # never awaited, so the event loop reports them as destroyed pending
+        # tasks at teardown. Patching create_task here means the explicit
+        # call below is the only write this test performs.
+        def _close_and_return(coro, **kwargs):
+            coro.close()
+            return MagicMock()
+        with patch.object(asyncio, "create_task", side_effect=_close_and_return):
+            await ncs._handle_end()
         await ncs._save_net_session()
 
         files = list(tmp_path.glob("*_ncs.json"))
@@ -1405,7 +1416,14 @@ class TestNCSNetSessionSave:
             "name": "", "location": "", "checkin_time": 1_700_000_000.0,
             "verified": False, "called": False,
         }
-        await ncs._handle_end()
+        # Same reasoning as test_end_saves_session_with_roster_and_transcript:
+        # patch create_task so _handle_end() doesn't leave a real
+        # "ncs-net-session" task pending at teardown.
+        def _close_and_return(coro, **kwargs):
+            coro.close()
+            return MagicMock()
+        with patch.object(asyncio, "create_task", side_effect=_close_and_return):
+            await ncs._handle_end()
         await ncs._save_net_session()  # must not raise
 
     @pytest.mark.asyncio
