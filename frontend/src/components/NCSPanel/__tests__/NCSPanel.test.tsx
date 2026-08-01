@@ -374,6 +374,15 @@ describe('NCSPanel', () => {
       render(<NCSPanel {...makeProps()} />)
       expect(screen.queryByText(/no stations checked in/i)).not.toBeInTheDocument()
     })
+
+    it('hides non-matching rows when a callsign is typed into the roster filter', () => {
+      renderWithRoster()
+      const filter = screen.getByPlaceholderText('Filter roster')
+      fireEvent.change(filter, { target: { value: 'KD9ZZZ' } })
+      expect(screen.getByText('KD9ZZZ')).toBeInTheDocument()
+      expect(screen.queryByText('W1AAA')).not.toBeInTheDocument()
+      expect(screen.queryByText('N0CALL')).not.toBeInTheDocument()
+    })
   })
 
   describe('SKYWARN spot report', () => {

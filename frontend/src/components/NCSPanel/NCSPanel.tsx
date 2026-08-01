@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Box,
   Button,
@@ -15,6 +15,7 @@ import {
   TableCell,
   TableHead,
   TableRow,
+  TableSortLabel,
   TextField,
   Tooltip,
   Typography,
@@ -29,6 +30,7 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import type { PluginProps } from '../../plugins';
 import type { NCSEntry, NCSAlert, NCSSpotReportPayload } from '../../types/ws';
 import { SpotReportDialog } from './SpotReportDialog';
+import { filterRoster, sortRoster, type SortDirection } from '../../netsessions/rosterView';
 
 type TrafficLevel = 'Routine' | 'Priority' | 'Emergency' | 'General' | 'Short Term' | 'IN-n-Out';
 type StationStatus = 'CheckedIn' | 'Standby' | 'CheckedOut' | 'LoggedOut';
@@ -200,6 +202,26 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
     send({ type: 'ncs_remove', callsign: entry.callsign, name: entry.name ?? '' });
   }, [send]);
 
+  type RosterColumn = 'callsign' | 'status' | 'traffic';
+
+  const [rosterQuery, setRosterQuery] = useState('');
+  const [sortColumn, setSortColumn] = useState<RosterColumn | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+  const handleSort = useCallback((column: RosterColumn) => {
+    if (sortColumn === column) {
+      setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  }, [sortColumn]);
+
+  const visibleRoster = useMemo(
+    () => sortRoster(filterRoster(roster, rosterQuery), sortColumn, sortDirection),
+    [roster, rosterQuery, sortColumn, sortDirection],
+  );
+
   return (
     <Paper elevation={0} square sx={{ borderBottom: 1, borderColor: 'divider', minWidth: 320 }}>
       {/* Header */}
@@ -358,20 +380,56 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
       </Box>
 
       {/* Roster table */}
+      {roster.length > 2 && (
+        <Box sx={{ px: 2, pb: 1 }}>
+          <TextField
+            size="small"
+            fullWidth
+            placeholder="Filter roster"
+            value={rosterQuery}
+            onChange={(e) => setRosterQuery(e.target.value)}
+            aria-label="Filter roster"
+          />
+        </Box>
+      )}
       {roster.length > 0 ? (
         <Box sx={{ overflowX: 'auto', maxHeight: 260, overflowY: 'auto' }}>
           <Table size="small" stickyHeader aria-label="NCS roster">
             <TableHead>
               <TableRow>
-                <TableCell sx={{ fontWeight: 700, py: 0.5 }}>Callsign</TableCell>
-                <TableCell sx={{ fontWeight: 700, py: 0.5 }}>Status</TableCell>
-                <TableCell sx={{ fontWeight: 700, py: 0.5 }}>Traffic</TableCell>
+                <TableCell sx={{ fontWeight: 700, py: 0.5 }}>
+                  <TableSortLabel
+                    active={sortColumn === 'callsign'}
+                    direction={sortColumn === 'callsign' ? sortDirection : 'asc'}
+                    onClick={() => handleSort('callsign')}
+                  >
+                    Callsign
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell sx={{ fontWeight: 700, py: 0.5 }}>
+                  <TableSortLabel
+                    active={sortColumn === 'status'}
+                    direction={sortColumn === 'status' ? sortDirection : 'asc'}
+                    onClick={() => handleSort('status')}
+                  >
+                    Status
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell sx={{ fontWeight: 700, py: 0.5 }}>
+                  <TableSortLabel
+                    active={sortColumn === 'traffic'}
+                    direction={sortColumn === 'traffic' ? sortDirection : 'asc'}
+                    onClick={() => handleSort('traffic')}
+                  >
+                    Traffic
+                  </TableSortLabel>
+                </TableCell>
                 <TableCell sx={{ fontWeight: 700, py: 0.5 }}>Time</TableCell>
                 <TableCell sx={{ py: 0.5 }} />
               </TableRow>
             </TableHead>
             <TableBody>
-              {roster.map((entry) => (
+              {visibleRoster.map((entry) => (
                 <TableRow
                   key={`${entry.callsign}|${entry.name ?? ''}`}
                   hover

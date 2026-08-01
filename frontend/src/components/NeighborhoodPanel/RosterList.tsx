@@ -1,6 +1,25 @@
-import { Box, Button, Chip, Paper, Typography } from '@mui/material';
+import { useMemo, useState } from 'react';
+import {
+  Box,
+  Button,
+  Chip,
+  FormControl,
+  IconButton,
+  InputLabel,
+  MenuItem,
+  Paper,
+  Select,
+  TextField,
+  Tooltip,
+  Typography,
+} from '@mui/material';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import type { NeighborhoodRosterRow } from '../../types/ws';
 import { rosterDensitySpec } from '../../neighborhood/density';
+import { filterRoster, sortRoster, type SortDirection } from '../../netsessions/rosterView';
+
+type RosterSortColumn = 'name' | 'callsign' | 'location' | 'status';
 
 export interface RosterListProps {
   roster: NeighborhoodRosterRow[];
@@ -33,6 +52,15 @@ function statusLabel(status: NeighborhoodRosterRow['status']): string {
 export function RosterList({ roster, currentCall, myUserId, onStatusChange, onClear }: RosterListProps) {
   const density = rosterDensitySpec(roster.length);
 
+  const [rosterQuery, setRosterQuery] = useState('');
+  const [sortColumn, setSortColumn] = useState<RosterSortColumn | ''>('');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+  const visibleRoster = useMemo(
+    () => sortRoster(filterRoster(roster, rosterQuery), sortColumn || null, sortDirection),
+    [roster, rosterQuery, sortColumn, sortDirection],
+  );
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap' }}>
@@ -46,9 +74,52 @@ export function RosterList({ roster, currentCall, myUserId, onStatusChange, onCl
         )}
       </Box>
 
+      {roster.length > 2 && (
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+          <TextField
+            size="small"
+            placeholder="Filter roster"
+            value={rosterQuery}
+            onChange={(e) => setRosterQuery(e.target.value)}
+            aria-label="Filter roster"
+            sx={{ flex: 1, minWidth: 160 }}
+          />
+          <FormControl size="small" sx={{ minWidth: 140 }}>
+            <InputLabel id="roster-sort-label">Sort by</InputLabel>
+            <Select
+              labelId="roster-sort-label"
+              label="Sort by"
+              value={sortColumn}
+              onChange={(e) => setSortColumn(e.target.value as RosterSortColumn | '')}
+            >
+              <MenuItem value="">None</MenuItem>
+              <MenuItem value="name">Name</MenuItem>
+              <MenuItem value="callsign">Callsign</MenuItem>
+              <MenuItem value="location">Location</MenuItem>
+              <MenuItem value="status">Status</MenuItem>
+            </Select>
+          </FormControl>
+          {sortColumn && (
+            <Tooltip title={sortDirection === 'asc' ? 'Sorting ascending' : 'Sorting descending'}>
+              <IconButton
+                size="small"
+                onClick={() => setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'))}
+                aria-label="Toggle sort direction"
+              >
+                {sortDirection === 'asc' ? <ArrowUpwardIcon fontSize="small" /> : <ArrowDownwardIcon fontSize="small" />}
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
+      )}
+
       {roster.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
           No one checked in yet.
+        </Typography>
+      ) : visibleRoster.length === 0 ? (
+        <Typography variant="body2" color="text.secondary">
+          No neighbors match your filter.
         </Typography>
       ) : (
         <Box
@@ -63,7 +134,7 @@ export function RosterList({ roster, currentCall, myUserId, onStatusChange, onCl
               `repeat(auto-fit, minmax(min(${density.minColumnPx}px, 100%), ${density.maxColumnPx}px))`,
           }}
         >
-          {roster.map((row) => {
+          {visibleRoster.map((row) => {
             const isCurrent = row.user_id === currentCall;
             const isSelf = row.user_id === myUserId;
             return (

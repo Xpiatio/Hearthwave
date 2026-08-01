@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Box,
   Paper,
@@ -15,6 +15,8 @@ import {
   TableBody,
   TableRow,
   TableCell,
+  TableSortLabel,
+  TextField,
   Accordion,
   AccordionSummary,
   AccordionDetails,
@@ -29,6 +31,9 @@ import type {
 } from '../../types/ws';
 import { downloadText } from '../../utils/download';
 import { sessionToCsv, allSessionsToCsv } from '../../netsessions/csv';
+import { filterRoster, sortRoster, type SortDirection } from '../../netsessions/rosterView';
+
+type RosterColumn = 'callsign' | 'name' | 'location' | 'status' | 'traffic';
 
 interface Props {
   sessions: NetSessionSummary[];
@@ -59,6 +64,19 @@ export function PastNetsTab({
 }: Props) {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
+  const [rosterQuery, setRosterQuery] = useState('');
+  const [sortColumn, setSortColumn] = useState<RosterColumn | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+  function handleSort(column: RosterColumn) {
+    if (sortColumn === column) {
+      setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  }
+
   function handleDelete(id: string) {
     if (confirmDelete === id) {
       onDelete(id);
@@ -67,6 +85,14 @@ export function PastNetsTab({
       setConfirmDelete(id);
     }
   }
+
+  // Filtering/sorting only ever changes what's displayed here — CSV export
+  // and delete both operate on `selected` (the full session), never on this
+  // derived view.
+  const visibleRoster = useMemo(
+    () => sortRoster(filterRoster(selected?.roster ?? [], rosterQuery), sortColumn, sortDirection),
+    [selected, rosterQuery, sortColumn, sortDirection],
+  );
 
   return (
     <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
@@ -145,19 +171,72 @@ export function PastNetsTab({
               {selected.started_at.slice(0, 10)}
             </Typography>
 
+            {selected.roster.length > 2 && (
+              <Box sx={{ mb: 1 }}>
+                <TextField
+                  size="small"
+                  fullWidth
+                  placeholder="Filter roster"
+                  value={rosterQuery}
+                  onChange={(e) => setRosterQuery(e.target.value)}
+                  aria-label="Filter roster"
+                />
+              </Box>
+            )}
+
             <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell scope="col" sx={{ fontWeight: 700 }}>Callsign</TableCell>
-                    <TableCell scope="col" sx={{ fontWeight: 700 }}>Name</TableCell>
-                    <TableCell scope="col" sx={{ fontWeight: 700 }}>Location</TableCell>
-                    <TableCell scope="col" sx={{ fontWeight: 700 }}>Status</TableCell>
-                    <TableCell scope="col" sx={{ fontWeight: 700 }}>Traffic</TableCell>
+                    <TableCell scope="col" sx={{ fontWeight: 700 }}>
+                      <TableSortLabel
+                        active={sortColumn === 'callsign'}
+                        direction={sortColumn === 'callsign' ? sortDirection : 'asc'}
+                        onClick={() => handleSort('callsign')}
+                      >
+                        Callsign
+                      </TableSortLabel>
+                    </TableCell>
+                    <TableCell scope="col" sx={{ fontWeight: 700 }}>
+                      <TableSortLabel
+                        active={sortColumn === 'name'}
+                        direction={sortColumn === 'name' ? sortDirection : 'asc'}
+                        onClick={() => handleSort('name')}
+                      >
+                        Name
+                      </TableSortLabel>
+                    </TableCell>
+                    <TableCell scope="col" sx={{ fontWeight: 700 }}>
+                      <TableSortLabel
+                        active={sortColumn === 'location'}
+                        direction={sortColumn === 'location' ? sortDirection : 'asc'}
+                        onClick={() => handleSort('location')}
+                      >
+                        Location
+                      </TableSortLabel>
+                    </TableCell>
+                    <TableCell scope="col" sx={{ fontWeight: 700 }}>
+                      <TableSortLabel
+                        active={sortColumn === 'status'}
+                        direction={sortColumn === 'status' ? sortDirection : 'asc'}
+                        onClick={() => handleSort('status')}
+                      >
+                        Status
+                      </TableSortLabel>
+                    </TableCell>
+                    <TableCell scope="col" sx={{ fontWeight: 700 }}>
+                      <TableSortLabel
+                        active={sortColumn === 'traffic'}
+                        direction={sortColumn === 'traffic' ? sortDirection : 'asc'}
+                        onClick={() => handleSort('traffic')}
+                      >
+                        Traffic
+                      </TableSortLabel>
+                    </TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {selected.roster.map((r, i) => (
+                  {visibleRoster.map((r, i) => (
                     <TableRow key={`${r.callsign}-${r.name}-${i}`}>
                       <TableCell>{r.callsign}</TableCell>
                       <TableCell>{r.name}</TableCell>
