@@ -35,12 +35,12 @@ import { sessionToCsv, allSessionsToCsv } from '../../netsessions/csv';
 import { useRosterSort } from '../../netsessions/rosterView';
 import { netDate, netDateTime } from '../../netsessions/dates';
 
-type RosterColumn = 'callsign' | 'name' | 'location' | 'status' | 'traffic' | 'via';
+type RosterColumn = 'callsign' | 'name' | 'location' | 'status' | 'traffic' | 'via' | 'no_answer';
 
 /** Fields this table renders — a filter query should never match a hidden
  *  field (e.g. the raw checkin_time) the user can't see in this view. */
 const PAST_NETS_SEARCH_FIELDS: (keyof NetSessionRosterRow)[] = [
-  'callsign', 'name', 'location', 'status', 'traffic', 'via',
+  'callsign', 'name', 'location', 'status', 'traffic', 'via', 'no_answer',
 ];
 
 interface Props {
@@ -248,12 +248,21 @@ export function PastNetsTab({
                         Via
                       </TableSortLabel>
                     </TableCell>
+                    <TableCell scope="col" sx={{ fontWeight: 700 }}>
+                      <TableSortLabel
+                        active={sortColumn === 'no_answer'}
+                        direction={sortColumn === 'no_answer' ? sortDirection : 'asc'}
+                        onClick={() => handleSort('no_answer')}
+                      >
+                        No answer
+                      </TableSortLabel>
+                    </TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {visibleRoster.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} sx={{ color: 'text.secondary' }}>
+                      <TableCell colSpan={7} sx={{ color: 'text.secondary' }}>
                         No stations match your filter.
                       </TableCell>
                     </TableRow>
@@ -266,6 +275,7 @@ export function PastNetsTab({
                         <TableCell>{r.status}</TableCell>
                         <TableCell>{r.traffic ?? ''}</TableCell>
                         <TableCell>{r.via ?? ''}</TableCell>
+                        <TableCell>{r.no_answer ? 'yes' : ''}</TableCell>
                       </TableRow>
                     ))
                   )}

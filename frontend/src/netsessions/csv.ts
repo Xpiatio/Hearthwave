@@ -7,9 +7,12 @@ function quote(value: string | number | null): string {
 
 /** One session's roster: header plus one row per check-in. */
 export function sessionToCsv(session: NetSessionDetail): string {
-  const header = 'callsign,name,location,status,traffic,checkin_time,via';
+  const header = 'callsign,name,location,status,traffic,checkin_time,via,no_answer';
   const rows = session.roster.map((r) =>
-    [r.callsign, r.name, r.location, r.status, r.traffic ?? '', r.checkin_time, r.via ?? '']
+    [
+      r.callsign, r.name, r.location, r.status, r.traffic ?? '', r.checkin_time,
+      r.via ?? '', r.no_answer ? 'yes' : '',
+    ]
       .map(quote)
       .join(',')
   );

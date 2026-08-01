@@ -26,7 +26,7 @@ const SESSION: NetSessionDetail = {
 describe('sessionToCsv', () => {
   it('writes a header and one row per check-in', () => {
     const lines = sessionToCsv(SESSION).split('\n')
-    expect(lines[0]).toBe('callsign,name,location,status,traffic,checkin_time,via')
+    expect(lines[0]).toBe('callsign,name,location,status,traffic,checkin_time,via,no_answer')
     expect(lines).toHaveLength(3)
     expect(lines[1]).toContain('"KD8ABC"')
     expect(lines[1]).toContain('"Routine"')
@@ -43,7 +43,7 @@ describe('sessionToCsv', () => {
 
   it('returns just the header for an empty roster', () => {
     const empty = { ...SESSION, roster: [] }
-    expect(sessionToCsv(empty)).toBe('callsign,name,location,status,traffic,checkin_time,via')
+    expect(sessionToCsv(empty)).toBe('callsign,name,location,status,traffic,checkin_time,via,no_answer')
   })
 
   it('includes a via column so radio check-ins are identifiable in a spreadsheet', () => {
@@ -58,9 +58,27 @@ describe('sessionToCsv', () => {
       ],
     } as NetSessionDetail)
     const [header, maria, ann] = csv.split('\n')
-    expect(header).toBe('callsign,name,location,status,traffic,checkin_time,via')
-    expect(maria.endsWith('"radio"')).toBe(true)
-    expect(ann.endsWith('""')).toBe(true)
+    expect(header).toBe('callsign,name,location,status,traffic,checkin_time,via,no_answer')
+    expect(maria.endsWith(',"radio",""')).toBe(true)
+    expect(ann.endsWith(',"",""')).toBe(true)
+  })
+
+  it('emits a no_answer column, yes for flagged rows and blank otherwise', () => {
+    const session: NetSessionDetail = {
+      id: 'x', net_type: 'neighborhood', started_at: '', ended_at: '',
+      duration_seconds: 0, transcript: '',
+      roster: [
+        { callsign: 'WRAA111', name: 'Ann', location: '1st St', status: 'CheckedIn',
+          traffic: null, checkin_time: '2026-08-01T19:31:00Z', verified: false, no_answer: true },
+        { callsign: 'WRAB222', name: 'Bea', location: '2nd St', status: 'CheckedIn',
+          traffic: null, checkin_time: '2026-08-01T19:32:00Z', verified: false },
+      ],
+    }
+    const csv = sessionToCsv(session)
+    const [header, row1, row2] = csv.split('\n')
+    expect(header).toBe('callsign,name,location,status,traffic,checkin_time,via,no_answer')
+    expect(row1.endsWith(',"yes"')).toBe(true)
+    expect(row2.endsWith(',""')).toBe(true)
   })
 })
 

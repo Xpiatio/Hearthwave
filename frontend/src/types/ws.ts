@@ -273,6 +273,9 @@ export interface NetSessionRosterRow {
   /** "radio" for a coordinator-entered station, "" for a self check-in.
    *  Optional because records written before this field existed lack it. */
   via?: string;
+  /** True when the round-table called this station and got no reply.
+   *  Optional because records written before this field existed lack it. */
+  no_answer?: boolean;
 }
 
 export interface NetSessionDetail {
