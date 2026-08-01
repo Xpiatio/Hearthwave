@@ -388,3 +388,91 @@ def test_roster_rows_do_not_leak_the_internal_sequence_field():
     net = NeighborhoodNet()
     net.checkin_radio("WRAB123", "Maria", "Maple St")
     assert "seq" not in net.roster()[0]
+
+
+def test_rows_carry_no_answer_false_by_default():
+    n = NeighborhoodNet()
+    n.checkin("u1", "A", "Ann", "5th St")
+    n.checkin_radio("WRAB123", "Maria", "Maple St")
+    assert [r["no_answer"] for r in n.roster()] == [False, False]
+
+
+def test_set_no_answer_flags_row_and_marks_it_called():
+    n = NeighborhoodNet()
+    n.start()
+    n.checkin("u1", "A", "Ann", "5th St")
+    assert n.set_no_answer("u1", True) is True
+    row = n.roster()[0]
+    assert row["no_answer"] is True
+    assert row["called"] is True
+
+
+def test_set_no_answer_never_touches_current_call():
+    n = NeighborhoodNet()
+    n.start()
+    n.checkin("u1", "A", "Ann", "5th St")
+    n.checkin("u2", "B", "Bea", "6th St")
+    n.call_next()  # u1 becomes current
+    n.set_no_answer("u1", True)
+    assert n.current_call == "u1"
+
+
+def test_clearing_no_answer_leaves_called_alone():
+    n = NeighborhoodNet()
+    n.start()
+    n.checkin("u1", "A", "Ann", "5th St")
+    n.set_no_answer("u1", True)
+    assert n.set_no_answer("u1", False) is True
+    row = n.roster()[0]
+    assert row["no_answer"] is False
+    assert row["called"] is True  # they still burned their turn this round
+
+
+def test_set_no_answer_unknown_key_returns_false():
+    n = NeighborhoodNet()
+    assert n.set_no_answer("nobody", True) is False
+
+
+def test_call_next_skips_no_answer_rows():
+    n = NeighborhoodNet()
+    n.start()
+    n.checkin("u1", "A", "Ann", "5th St")
+    n.checkin("u2", "B", "Bea", "6th St")
+    n.set_no_answer("u1", True)
+    row = n.call_next()
+    assert row is not None and row["user_id"] == "u2"
+
+
+def test_call_station_calls_out_of_order_and_clears_no_answer():
+    n = NeighborhoodNet()
+    n.start()
+    n.checkin("u1", "A", "Ann", "5th St")
+    n.checkin_radio("WRAB123", "Maria", "Maple St")
+    radio_key = n.roster()[1]["user_id"]
+    n.set_no_answer(radio_key, True)
+    row = n.call_station(radio_key)
+    assert row is not None
+    assert n.current_call == radio_key
+    assert row["called"] is True
+    assert row["no_answer"] is False
+
+
+def test_call_station_unknown_key_returns_none_and_leaves_current_call():
+    n = NeighborhoodNet()
+    n.start()
+    n.checkin("u1", "A", "Ann", "5th St")
+    n.call_next()
+    assert n.call_station("nobody") is None
+    assert n.current_call == "u1"
+
+
+def test_start_and_call_reset_clear_no_answer():
+    n = NeighborhoodNet()
+    n.start()
+    n.checkin("u1", "A", "Ann", "5th St")
+    n.set_no_answer("u1", True)
+    n.call_reset()
+    assert n.roster()[0]["no_answer"] is False
+    n.set_no_answer("u1", True)
+    n.start()
+    assert n.roster()[0]["no_answer"] is False

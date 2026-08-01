@@ -30,7 +30,7 @@ class NeighborhoodNet:
     """Tracks the roster and call order for an in-progress (or just-ended) net.
 
     Roster rows are keyed by user_id and shaped:
-        {"user_id", "callsign", "name", "location", "status", "checkin_time", "called"}
+        {"user_id", "callsign", "name", "location", "status", "checkin_time", "called", "no_answer"}
     status is "checked_in" (default) or "standby".
 
     Two stores back the roster: `_roster` holds account holders keyed by their
@@ -89,6 +89,7 @@ class NeighborhoodNet:
         self.current_call = None
         for row in self._ordered_rows():
             row["called"] = False
+            row["no_answer"] = False
         self._started_at = time.time()
 
     def end(self) -> dict:
@@ -139,6 +140,7 @@ class NeighborhoodNet:
                 "status": "checked_in",
                 "checkin_time": now,
                 "called": False,
+                "no_answer": False,
                 "seq": self._next_seq(),
             }
             self._roster[user_id] = row
@@ -176,6 +178,7 @@ class NeighborhoodNet:
                 "status": "checked_in",
                 "checkin_time": now,
                 "called": False,
+                "no_answer": False,
                 "via": "radio",
                 "seq": self._next_seq(),
             }
@@ -213,7 +216,40 @@ class NeighborhoodNet:
         """Clear all called flags and the current call, starting a fresh round."""
         for row in self._ordered_rows():
             row["called"] = False
+            row["no_answer"] = False
         self.current_call = None
+
+    def set_no_answer(self, key: str, no_answer: bool) -> bool:
+        """Flag (or unflag) a station the round-table reached but couldn't raise.
+
+        Setting the flag also marks the row `called`, so `call_next` skips it
+        for the rest of the round — re-calling a no-answer station is a manual
+        `call_station`, never automatic. Clearing the flag leaves `called`
+        alone (the turn was still spent), and neither direction touches
+        `current_call`. Returns False for an unknown key.
+        """
+        row = self._find(key)
+        if row is None:
+            return False
+        row["no_answer"] = no_answer
+        if no_answer:
+            row["called"] = True
+        return True
+
+    def call_station(self, key: str) -> Optional[dict]:
+        """Call a specific station out of order (e.g. retrying a no-answer row).
+
+        Marks it called, clears any no-answer flag (they're being given a
+        fresh chance to answer), and makes it the current call. Returns the
+        row, or None for an unknown key.
+        """
+        row = self._find(key)
+        if row is None:
+            return None
+        row["called"] = True
+        row["no_answer"] = False
+        self.current_call = row["user_id"]
+        return row
 
     def clear_checkins(self) -> int:
         """Drop every roster row, account and radio alike, returning how many were removed.
