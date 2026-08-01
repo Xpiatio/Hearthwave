@@ -212,3 +212,13 @@ def test_normalize_roster_defaults_via_to_blank():
          "status": "checked_in", "checkin_time": "2026-08-01T19:30:00Z"},
     ])
     assert rows[0]["via"] == ""
+
+
+def test_normalize_roster_carries_no_answer_defaulting_false():
+    rows = [
+        {"callsign": "wraa111", "name": "Ann", "no_answer": True},
+        {"callsign": "wrab222", "name": "Bea"},  # pre-flag record / NCS row
+    ]
+    result = normalize_roster(rows)
+    assert result[0]["no_answer"] is True
+    assert result[1]["no_answer"] is False

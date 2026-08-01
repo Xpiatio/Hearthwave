@@ -76,6 +76,10 @@ def normalize_roster(rows: list[dict]) -> list[dict]:
             # "radio" for a station a coordinator checked in off the air,
             # blank for anyone who checked themselves in.
             "via": (row.get("via") or "").strip(),
+            # A station the round-table reached but couldn't raise. Unlike
+            # `called` (dropped above as in-progress bookkeeping), this is
+            # part of what happened: checked in, never reached.
+            "no_answer": bool(row.get("no_answer", False)),
         }
         for row in rows
     ]
