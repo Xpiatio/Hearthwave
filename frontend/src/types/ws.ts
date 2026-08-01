@@ -270,6 +270,9 @@ export interface NetSessionRosterRow {
   traffic: string | null;
   checkin_time: string;
   verified: boolean;
+  /** "radio" for a coordinator-entered station, "" for a self check-in.
+   *  Optional because records written before this field existed lack it. */
+  via?: string;
 }
 
 export interface NetSessionDetail {
@@ -641,6 +644,8 @@ export interface NeighborhoodRosterRow {
   status: 'checked_in' | 'standby' | 'checked_out';
   checkin_time: string;
   called: boolean;
+  /** Present only on stations a coordinator checked in off the air. */
+  via?: 'radio';
 }
 
 export interface NeighborhoodStateMsg {
@@ -926,6 +931,24 @@ export interface NeighborhoodClearCheckinsPayload {
  *  wipe if that journal save fails. */
 export interface NeighborhoodClearIncidentsPayload {
   type: 'neighborhood_clear_incidents';
+}
+
+/** Coordinator-only: check in a neighbor who called in over the air and has
+ *  no account here. Unlike neighborhood_checkin, the identity is supplied by
+ *  the client — the server gates on the coordinator grant instead. */
+export interface NeighborhoodCheckinRadioPayload {
+  type: 'neighborhood_checkin_radio';
+  callsign: string;
+  name: string;
+  location: string;
+  save_contact?: boolean;
+}
+
+/** Coordinator-only: drop a radio check-in row. The server refuses any
+ *  user_id that isn't a radio station key. */
+export interface NeighborhoodRemoveStationPayload {
+  type: 'neighborhood_remove_station';
+  user_id: string;
 }
 
 export interface NeighborhoodIncidentReportPayload {
