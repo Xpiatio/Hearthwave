@@ -138,6 +138,11 @@ function makeProps(overrides: Partial<MobileAppProps> = {}): MobileAppProps {
     incidentError: null,
     sendNeighborhoodCheckin: vi.fn(),
     sendNeighborhoodStatus: vi.fn(),
+    // Minimal additions for the new coordinator radio-check-in test below —
+    // not backfilling this builder's other long-standing missing required
+    // MobileAppProps fields (a separate, pre-existing gap).
+    sendNeighborhoodRadioCheckin: vi.fn(),
+    sendNeighborhoodRemoveStation: vi.fn(),
     sendIncidentReport: vi.fn(),
     sendStreetAlert: vi.fn(),
     sendNeighborhoodStart: vi.fn(),
@@ -283,5 +288,35 @@ describe('MobileApp — Neighborhood tab', () => {
       </ThemeProvider>
     )
     expect(screen.getByRole('heading', { name: 'Neighborhood' })).toBeInTheDocument()
+  })
+})
+
+describe('MobileApp — coordinator radio check-in', () => {
+  it('reaches the radio check-in form from the Neighborhood tab and fires its callback', () => {
+    const props = makeProps({ isCoordinator: true, uiLevel: 'operator' })
+    render(<MobileApp {...props} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Neighborhood' }))
+
+    expect(screen.getByRole('button', { name: 'Check in station' })).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Callsign'), { target: { value: 'WRAZ997' } })
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Jamie' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Check in station' }))
+
+    expect(props.sendNeighborhoodRadioCheckin).toHaveBeenCalledWith({
+      callsign: 'WRAZ997',
+      name: 'Jamie',
+      location: '',
+      saveContact: false,
+    })
+  })
+
+  it('hides the radio check-in form when isCoordinator is false', () => {
+    render(<MobileApp {...makeProps({ isCoordinator: false, uiLevel: 'operator' })} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Neighborhood' }))
+
+    expect(screen.queryByRole('button', { name: 'Check in station' })).not.toBeInTheDocument()
   })
 })
