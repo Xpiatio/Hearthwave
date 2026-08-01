@@ -1,9 +1,16 @@
 import { render as rtlRender, screen, fireEvent } from '@testing-library/react'
 import { ThemeProvider } from '@mui/material/styles'
 import { makeTheme } from '../../../theme'
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { PastNetsTab } from '../PastNetsTab'
+import { downloadText } from '../../../utils/download'
 import type { NetSessionSummary, NetSessionDetail, AttendanceStatRow } from '../../../types/ws'
+
+// Spy on the download helper while letting the real CSV builders run, so
+// assertions below cover both the button wiring and the CSV builder output.
+vi.mock('../../../utils/download', () => ({
+  downloadText: vi.fn(),
+}))
 
 function render(ui: React.ReactElement) {
   return rtlRender(<ThemeProvider theme={makeTheme(false)}>{ui}</ThemeProvider>)
@@ -56,6 +63,10 @@ function props(overrides = {}) {
 }
 
 describe('PastNetsTab', () => {
+  beforeEach(() => {
+    vi.mocked(downloadText).mockClear()
+  })
+
   it('lists every session with its date and check-in count', () => {
     render(<PastNetsTab {...props()} />)
     expect(screen.getByText('2026-08-02')).toBeInTheDocument()
@@ -101,5 +112,37 @@ describe('PastNetsTab', () => {
     expect(onDelete).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: /confirm delete/i }))
     expect(onDelete).toHaveBeenCalledWith('20260802_190000_ncs')
+  })
+
+  it('exports all sessions as CSV when EXPORT ALL (CSV) is clicked', () => {
+    render(<PastNetsTab {...props()} />)
+    fireEvent.click(screen.getByText('EXPORT ALL (CSV)'))
+
+    expect(downloadText).toHaveBeenCalledTimes(1)
+    const [content, filename, mime] = vi.mocked(downloadText).mock.calls[0]
+    expect(filename).toBe('net-history.csv')
+    expect(mime).toBe('text/csv')
+
+    const lines = content.split('\n')
+    expect(lines[0]).toBe('net_id,net_type,net_date,callsign,name')
+    expect(lines).toHaveLength(1 + SESSIONS.reduce((n, s) => n + s.stations.length, 0))
+    expect(lines[1]).toBe('"20260802_190000_ncs","ncs","2026-08-02","KD8ABC","Maria"')
+  })
+
+  it('downloads the selected session as CSV when DOWNLOAD CSV is clicked', () => {
+    render(<PastNetsTab {...props({ selected: DETAIL })} />)
+    fireEvent.click(screen.getByText('DOWNLOAD CSV'))
+
+    expect(downloadText).toHaveBeenCalledTimes(1)
+    const [content, filename, mime] = vi.mocked(downloadText).mock.calls[0]
+    expect(filename).toBe(`${DETAIL.id}.csv`)
+    expect(mime).toBe('text/csv')
+
+    const lines = content.split('\n')
+    expect(lines[0]).toBe('callsign,name,location,status,traffic,checkin_time')
+    expect(lines).toHaveLength(1 + DETAIL.roster.length)
+    expect(lines[1]).toBe(
+      '"KD8ABC","Maria","Holland","CheckedIn","Routine","2026-08-02T19:01:00Z"'
+    )
   })
 })
