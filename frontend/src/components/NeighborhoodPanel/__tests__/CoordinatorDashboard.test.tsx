@@ -1,8 +1,9 @@
-import { render as rtlRender, screen } from '@testing-library/react';
+import { render as rtlRender, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ThemeProvider } from '@mui/material/styles';
 import { makeTheme } from '../../../theme';
 import { describe, it, expect, vi } from 'vitest';
+import { axe } from 'jest-axe';
 import { CoordinatorDashboard } from '../CoordinatorDashboard';
 import type { CoordinatorDashboardProps } from '../CoordinatorDashboard';
 
@@ -32,8 +33,8 @@ function makeDashProps(overrides: Partial<CoordinatorDashboardProps> = {}): Coor
 }
 
 describe('CoordinatorDashboard', () => {
-  it('renders every ops zone on one screen', () => {
-    render(<CoordinatorDashboard {...makeDashProps()} />);
+  it('renders every ops zone on one screen', async () => {
+    const { container } = render(<CoordinatorDashboard {...makeDashProps()} />);
     expect(screen.getByRole('button', { name: 'End net' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Call next neighbor' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'New round' })).toBeInTheDocument();
@@ -42,6 +43,7 @@ describe('CoordinatorDashboard', () => {
     expect(screen.getByText('Incident log')).toBeInTheDocument();           // IncidentLog
     expect(screen.getByLabelText('Callsign')).toBeInTheDocument();          // RadioCheckinForm
     expect(screen.getByRole('button', { name: 'Report an incident' })).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
   });
 
   it('opens the street-alert dialog and sends through the existing confirm flow', async () => {
@@ -64,6 +66,36 @@ describe('CoordinatorDashboard', () => {
     render(<CoordinatorDashboard {...makeDashProps({ onCheckin })} />);
     await user.click(screen.getByRole('button', { name: 'Check in' }));
     expect(onCheckin).toHaveBeenCalled();
+  });
+
+  it('renders the checked-in chip as genuinely inert, not a cosmetically-disabled button', () => {
+    const onCheckin = vi.fn();
+    render(
+      <CoordinatorDashboard
+        {...makeDashProps({
+          onCheckin,
+          myUserId: 'u1',
+          roster: [
+            {
+              user_id: 'u1', callsign: 'W1AW', name: 'Me', location: 'Home',
+              status: 'checked_in', checkin_time: '2026-08-01T12:00:00Z', called: false,
+            },
+          ],
+        })}
+      />
+    );
+    expect(screen.getByText("You're checked in ✓")).toBeInTheDocument();
+    // No accessible button remains for the checked-in chip — it must not be
+    // focusable or clickable, not merely styled to look disabled. (Exact
+    // match, not a substring: RadioCheckinForm's own submit button is
+    // named "Check in station" and must stay unaffected.)
+    expect(screen.queryByRole('button', { name: 'Check in' })).not.toBeInTheDocument();
+    // MUI applies `pointer-events: none` to the disabled chip (real-user
+    // pointer interaction is blocked, as user-event's assertPointerEvents
+    // check confirms), so a plain fireEvent is enough to prove there is no
+    // click handler wired up at all.
+    fireEvent.click(screen.getByText("You're checked in ✓"));
+    expect(onCheckin).not.toHaveBeenCalled();
   });
 
   it('transmits from the dashboard message input', async () => {

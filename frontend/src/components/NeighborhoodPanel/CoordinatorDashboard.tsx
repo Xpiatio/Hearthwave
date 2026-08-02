@@ -73,9 +73,15 @@ export function CoordinatorDashboard(props: CoordinatorDashboardProps) {
 
   const checkedIn = props.roster.some((r) => r.user_id === props.myUserId);
   const netLabel = nextNetLabel(props.netDay, props.netTime, new Date());
+  // Only the no-alerts case (the default) can drop the alerts row from the
+  // template entirely; when it renders `false` with a static three-row
+  // template, grid auto-placement shoves the main split into the middle
+  // `auto` row and leaves the `1fr` row empty, clipping MessageInput and
+  // RadioCheckinForm below the fold. See task-7 review finding 1.
+  const gridTemplateRows = props.alerts.length > 0 ? 'auto auto 1fr' : 'auto 1fr';
 
   return (
-    <Box sx={{ height: '100vh', display: 'grid', gridTemplateRows: 'auto auto 1fr', gap: 1.5, p: 2, boxSizing: 'border-box', overflow: 'hidden' }}>
+    <Box sx={{ height: '100vh', display: 'grid', gridTemplateRows, gap: 1.5, p: 2, boxSizing: 'border-box', overflow: 'hidden' }}>
       <Box component="header" sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
         <Tooltip title="Back to home">
           <IconButton aria-label="Back to home" onClick={props.onGoHome}>
@@ -111,9 +117,12 @@ export function CoordinatorDashboard(props: CoordinatorDashboardProps) {
         <Typography variant="body2" color="text.secondary">
           {props.roster.length} checked in
         </Typography>
+        {/* No component/clickable override: MUI only renders Chip as a
+            focusable ButtonBase when onClick is present, so once
+            checked in (onClick undefined) it falls back to a plain,
+            non-interactive <div> — genuinely inert, not just visually
+            "disabled". `disabled` is kept only for the dimmed styling. */}
         <Chip
-          component="button"
-          clickable={!checkedIn}
           disabled={checkedIn}
           color={checkedIn ? 'success' : 'primary'}
           label={checkedIn ? "You're checked in ✓" : 'Check in'}
@@ -135,7 +144,7 @@ export function CoordinatorDashboard(props: CoordinatorDashboardProps) {
       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, minHeight: 0 }}>
         {/* Left: transcript over TX over check-in form */}
         <Box sx={{ display: 'grid', gridTemplateRows: '1fr auto auto', gap: 1, minHeight: 0 }}>
-          <Paper variant="outlined" sx={{ minHeight: 0, overflow: 'auto', p: 1 }}>
+          <Paper variant="outlined" sx={{ minHeight: 0, overflow: 'hidden', display: 'flex', p: 1 }}>
             <ChatDisplay entries={props.messages} contacts={props.contacts} showCallsignChips={props.showCallsignChips} />
           </Paper>
           <MessageInput
