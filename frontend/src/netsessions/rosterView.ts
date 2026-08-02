@@ -9,7 +9,13 @@ const ROW_COUNT_FILTER_THRESHOLD = 2;
 /** Rows where at least one of `keys` contains `query` (case-insensitive).
  *  Blank query passes everything. `keys` is explicit — pass only the fields
  *  the table actually renders, so a query never matches a hidden field like
- *  an internal id or a raw timestamp the user can't see. */
+ *  an internal id or a raw timestamp the user can't see.
+ *
+ *  Non-string fields are matched against their rendered text, not their raw
+ *  value: a boolean flag (e.g. `no_answer`) renders as "yes" when true and ""
+ *  when false (see PastNetsTab / csv.ts), so `true` matches "yes" and `false`
+ *  never matches anything — the same rule that keeps a hidden field from
+ *  matching applies to a value whose on-screen text differs from its type. */
 export function filterRoster<T extends object>(
   rows: T[],
   query: string,
@@ -20,7 +26,9 @@ export function filterRoster<T extends object>(
   return rows.filter((row) =>
     keys.some((key) => {
       const value = row[key];
-      return typeof value === 'string' && value.toLowerCase().includes(needle);
+      if (typeof value === 'string') return value.toLowerCase().includes(needle);
+      if (typeof value === 'boolean') return value && 'yes'.includes(needle);
+      return false;
     }),
   );
 }

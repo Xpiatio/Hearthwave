@@ -33,6 +33,22 @@ describe('filterRoster', () => {
     // param exists to prevent.
     expect(filterRoster(ROWS, 'zeeland', ['callsign', 'name'])).toEqual([])
   })
+
+  it('matches "yes", the rendered text of a true boolean field', () => {
+    // A boolean like no_answer renders as "yes"/"" (see PastNetsTab), not as
+    // its raw true/false — the filter has to match what's on screen, not the
+    // type of the underlying value.
+    const rows = [
+      { callsign: 'WRAB123', name: 'Sam', no_answer: true },
+      { callsign: 'KD8ABC', name: 'Maria', no_answer: false },
+    ]
+    expect(filterRoster(rows, 'yes', ['callsign', 'name', 'no_answer'])).toEqual([rows[0]])
+  })
+
+  it('never matches a false boolean field, which renders as empty text', () => {
+    const rows = [{ callsign: 'WRAB123', name: 'Sam', no_answer: false }]
+    expect(filterRoster(rows, 'yes', ['callsign', 'name', 'no_answer'])).toEqual([])
+  })
 })
 
 describe('sortRoster', () => {

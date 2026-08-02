@@ -206,4 +206,34 @@ describe('PastNetsTab', () => {
     expect(screen.getByText('No answer')).toBeInTheDocument()
     expect(screen.getByText('yes')).toBeInTheDocument()
   })
+
+  it('filters on "yes", the no-answer flag the user can actually see', () => {
+    // DETAIL.roster[0] (KD8ABC) and the Alex row below have no `no_answer` at
+    // all, so they render as blank — the filter must not match them, only the
+    // row whose column shows the literal text "yes". A third row is needed
+    // to clear the roster-count threshold that makes the filter box appear.
+    const detailWithNoAnswer: NetSessionDetail = {
+      ...DETAIL,
+      roster: [
+        DETAIL.roster[0],
+        {
+          callsign: 'WRAB123', name: 'Sam', location: 'Zeeland',
+          status: 'CheckedIn', traffic: null,
+          checkin_time: '2026-08-02T19:02:00Z', verified: false, no_answer: true,
+        },
+        {
+          callsign: 'KE8XYZ', name: 'Alex', location: 'Holland',
+          status: 'Standby', traffic: null,
+          checkin_time: '2026-08-02T19:03:00Z', verified: false,
+        },
+      ],
+    }
+    render(<PastNetsTab {...props({ selected: detailWithNoAnswer })} />)
+    const filter = screen.getByLabelText(/filter roster/i)
+    fireEvent.change(filter, { target: { value: 'yes' } })
+
+    expect(screen.getByText('WRAB123')).toBeInTheDocument()
+    expect(screen.queryByText('KD8ABC')).not.toBeInTheDocument()
+    expect(screen.queryByText('KE8XYZ')).not.toBeInTheDocument()
+  })
 })
