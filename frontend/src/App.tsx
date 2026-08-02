@@ -1861,6 +1861,7 @@ export default function App() {
           onCallStation={sendNeighborhoodCallStation}
           onNoAnswer={sendNeighborhoodNoAnswer}
           listenOnly={listenOnly}
+          onTxAbort={handleTxAbort}
           messages={messages}
           transmitting={transmitting}
           showCallsignChips={showCallsignChips}

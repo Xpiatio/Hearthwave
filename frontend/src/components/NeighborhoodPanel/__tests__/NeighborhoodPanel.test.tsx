@@ -513,12 +513,24 @@ describe('NeighborhoodPanel', () => {
     });
 
     it('forwards a coordinator\'s Call click on a non-current row to onCallStation with its user_id', () => {
-      const props = makeProps({ isCoordinator: true, currentCall: 'u3' });
+      const props = makeProps({ isCoordinator: true, currentCall: 'u3', netActive: true });
       render(<NeighborhoodPanel {...props} />);
       const list = screen.getByRole('list', { name: 'Checked-in neighbors' });
 
       fireEvent.click(within(list).getByRole('button', { name: 'Call Alice' }));
       expect(props.onCallStation).toHaveBeenCalledWith('u1');
+    });
+
+    it('hides the per-row Call button when no net is running, even for a coordinator', () => {
+      render(<NeighborhoodPanel {...makeProps({ isCoordinator: true, netActive: false })} />);
+      const list = screen.getByRole('list', { name: 'Checked-in neighbors' });
+      expect(within(list).queryByRole('button', { name: /^Call\b/ })).not.toBeInTheDocument();
+    });
+
+    it('shows the per-row Call button once a net is running', () => {
+      render(<NeighborhoodPanel {...makeProps({ isCoordinator: true, netActive: true, currentCall: 'u3' })} />);
+      const list = screen.getByRole('list', { name: 'Checked-in neighbors' });
+      expect(within(list).getByRole('button', { name: 'Call Alice' })).toBeInTheDocument();
     });
   });
 

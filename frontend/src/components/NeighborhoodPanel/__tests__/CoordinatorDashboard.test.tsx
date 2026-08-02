@@ -110,4 +110,42 @@ describe('CoordinatorDashboard', () => {
     await user.click(screen.getByRole('button', { name: /press to send message/i }));
     expect(onSendMessage).toHaveBeenCalledWith('net control standing by', 'ALL', '');
   });
+
+  it('shows the command-bar abort control only while transmitting, and wires it to onTxAbort', async () => {
+    const user = userEvent.setup();
+    const onTxAbort = vi.fn();
+    const { container, rerender } = render(
+      <CoordinatorDashboard {...makeDashProps({ transmitting: false, onTxAbort })} />
+    );
+    expect(screen.queryByRole('button', { name: 'Abort transmission' })).not.toBeInTheDocument();
+
+    rerender(
+      <ThemeProvider theme={makeTheme(false)}>
+        <CoordinatorDashboard {...makeDashProps({ transmitting: true, onTxAbort })} />
+      </ThemeProvider>
+    );
+    expect(await axe(container)).toHaveNoViolations();
+    await user.click(screen.getByRole('button', { name: 'Abort transmission' }));
+    expect(onTxAbort).toHaveBeenCalledOnce();
+  });
+
+  it('gates the per-row Call button on netActive, same as Call next / New round', () => {
+    const roster = [
+      {
+        user_id: 'u1', callsign: 'W1AW', name: 'Ann', location: 'Elm St',
+        status: 'checked_in' as const, checkin_time: '2026-08-01T12:00:00Z', called: false,
+      },
+    ];
+    const { rerender } = render(<CoordinatorDashboard {...makeDashProps({ roster, netActive: false })} />);
+    // "Call next neighbor" also matches a loose /^Call\b/ pattern, so assert
+    // absence of the specific per-row control by its `Call ${name}` aria-label.
+    expect(screen.queryByRole('button', { name: 'Call Ann' })).not.toBeInTheDocument();
+
+    rerender(
+      <ThemeProvider theme={makeTheme(false)}>
+        <CoordinatorDashboard {...makeDashProps({ roster, netActive: true })} />
+      </ThemeProvider>
+    );
+    expect(screen.getByRole('button', { name: 'Call Ann' })).toBeInTheDocument();
+  });
 });

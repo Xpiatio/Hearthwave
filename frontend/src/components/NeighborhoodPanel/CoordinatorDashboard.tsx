@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Alert, Box, Button, Chip, IconButton, Paper, Tooltip, Typography } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import CancelIcon from '@mui/icons-material/Cancel';
 import type { ChatEntry } from '../ChatDisplay/ChatDisplay';
 import type { TxComposition } from '../../plugins';
 import { ChatDisplay } from '../ChatDisplay/ChatDisplay';
@@ -97,6 +98,13 @@ export function CoordinatorDashboard(props: CoordinatorDashboardProps) {
         <Button variant="outlined" size="small" color="warning" onClick={() => setStreetAlertOpen(true)}>
           Street alert…
         </Button>
+        {props.transmitting && (
+          <Tooltip title="Abort current transmission immediately">
+            <IconButton aria-label="Abort transmission" color="error" onClick={props.onTxAbort}>
+              <CancelIcon />
+            </IconButton>
+          </Tooltip>
+        )}
         <Typography variant="body2" color="text.secondary">
           {props.currentCall
             ? `Current turn: ${currentCallLabel(props.currentCall, props.roster)}`
@@ -163,7 +171,7 @@ export function CoordinatorDashboard(props: CoordinatorDashboardProps) {
               isCoordinator={isRosterCoordinator}
               onStationStatusChange={props.onStationStatusChange}
               onRemoveStation={props.onRemoveStation}
-              onCallStation={props.onCallStation}
+              onCallStation={props.netActive ? props.onCallStation : undefined}
               onNoAnswer={props.onNoAnswer}
             />
           </Paper>

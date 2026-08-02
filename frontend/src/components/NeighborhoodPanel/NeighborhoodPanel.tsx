@@ -47,6 +47,7 @@ export function NeighborhoodPanel(props: NeighborhoodPanelProps) {
         onChat={props.onChat ?? (() => {})}
         onStandaloneId={props.onStandaloneId ?? (() => {})}
         txComposition={props.txComposition ?? null}
+        onTxAbort={props.onTxAbort}
       />
     );
   }
@@ -169,7 +170,7 @@ function StackedNeighborhoodView(props: StackedNeighborhoodViewProps) {
         isCoordinator={showCoordinatorSection}
         onStationStatusChange={props.onStationStatusChange}
         onRemoveStation={props.onRemoveStation}
-        onCallStation={showCoordinatorSection ? props.onCallStation : undefined}
+        onCallStation={showCoordinatorSection && props.netActive ? props.onCallStation : undefined}
         onNoAnswer={showCoordinatorSection ? props.onNoAnswer : undefined}
       />
 

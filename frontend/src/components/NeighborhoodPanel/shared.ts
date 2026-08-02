@@ -53,6 +53,14 @@ export interface NeighborhoodPanelProps {
    *  composer reads it — the stacked view never renders a transmit box. */
   listenOnly?: boolean;
 
+  /** Aborts the in-flight transmission — the same handler App.tsx wires to
+   *  TopBar/MobileTopBar/AACApp's abort control. Optional so the stacked
+   *  view (which never mounts MessageInput) and existing tests keep
+   *  compiling unchanged; only CoordinatorDashboard's command bar reads it,
+   *  since it's the only NeighborhoodPanelProps consumer with a live
+   *  transmit path. */
+  onTxAbort?: () => void;
+
   /** Dashboard-only (present when App mounts the panel for a desktop
    *  session): live RX/chat entries and TX plumbing for the coordinator
    *  ops view. Optional here so the stacked view and every existing test's
