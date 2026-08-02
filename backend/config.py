@@ -47,13 +47,62 @@ class ServerConfig(dict):
 
     # ---- audio / STT -----------------------------------------------------
 
+    # Devices are stored by name, not by PortAudio index: a card that is busy
+    # during a scan drops out of the list and shifts every later index down,
+    # so a stored index silently starts addressing different hardware.  The
+    # properties below resolve the name against the current list on each read.
+
     @property
-    def input_device(self):
+    def input_device_name(self):
+        """The stored device selection (a name, or -1 for system default)."""
         return self.get("input_device", -1)
 
     @property
-    def output_device(self):
+    def output_device_name(self):
+        """The stored device selection (a name, or -1 for system default)."""
         return self.get("output_device", -1)
+
+    @property
+    def input_device(self) -> int:
+        """Current PortAudio index for the selected input, or -1 for default."""
+        from backend.audio import devices
+
+        return devices.resolve(self.input_device_name, "input")
+
+    @property
+    def output_device(self) -> int:
+        """Current PortAudio index for the selected output, or -1 for default."""
+        from backend.audio import devices
+
+        return devices.resolve(self.output_device_name, "output")
+
+    def migrate_device_names(self) -> bool:
+        """Rewrite legacy integer device settings as device names.
+
+        Returns True if anything changed (the caller is expected to save).  An
+        index that cannot be resolved right now is left as-is rather than
+        cleared: a card that is merely busy this boot would otherwise silently
+        lose the user's selection.
+        """
+        from backend.audio import devices
+
+        changed = False
+        for key, kind in (("input_device", "input"), ("output_device", "output")):
+            stored = self.get(key, -1)
+            if not isinstance(stored, int) or stored < 0:
+                continue
+            name = devices.name_at_index(stored, kind)
+            if name is not None:
+                self[key] = name
+                changed = True
+                _log.info("Migrated %s index %d -> %r", key, stored, name)
+            else:
+                _log.warning(
+                    "Cannot migrate %s index %d (not a usable %s device right now) "
+                    "— leaving as-is",
+                    key, stored, kind,
+                )
+        return changed
 
     @property
     def monitor_enabled(self) -> bool:

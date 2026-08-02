@@ -5,6 +5,10 @@
 -r requirements.txt
 
 pytest
+# pyproject.toml sets asyncio_mode = "auto", which is a pytest-asyncio setting.
+# Without the plugin pytest skips that option (warning only) and every async test
+# errors with "async def functions are not natively supported" — 212 of them.
+pytest-asyncio
 # starlette's TestClient (used by tests/unit/test_auth_routes.py and the plugin
 # endpoint tests) is built on httpx. It arrives transitively today, but the tests
 # import TestClient directly, so declare it rather than rely on that.

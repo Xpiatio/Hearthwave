@@ -30,6 +30,7 @@ import numpy as np
 import pytest
 from starlette.testclient import TestClient
 
+from backend.audio import devices as audio_devices
 from backend.config import ServerConfig
 from backend.server import app
 
@@ -286,7 +287,14 @@ class TestPttMaxDurationWatchdog:
     def test_normal_short_tx_completes_without_error(self, tmp_path):
         """Watchdog must not fire for audio shorter than the cap; audio is played
         server-side out the configured output device."""
-        cfg = _cfg(tmp_path, tx_max_duration_seconds=5, output_device=7)
+        # Devices are stored by name and resolved to a PortAudio index at use
+        # time, so stand up a fake device list with the target at index 7.
+        fake_device_list = [
+            {"name": f"Fake Output {i}", "max_input_channels": 0, "max_output_channels": 2}
+            for i in range(8)
+        ]
+        target_name = fake_device_list[7]["name"]
+        cfg = _cfg(tmp_path, tx_max_duration_seconds=5, output_device=target_name)
         mock_stt, mock_tts = _make_base_mocks()
         mock_ptt = _mock_ptt()
         fake_play, stop_event, play_calls = _make_play_mocks()
@@ -307,12 +315,15 @@ class TestPttMaxDurationWatchdog:
                 patch("backend.server._load_voice", return_value=MagicMock()),
                 patch("backend.server._play_voice_blocking", fake_play),
                 patch("backend.server.sd.stop", side_effect=stop_event.set),
+                patch.object(audio_devices, "_query", lambda: list(fake_device_list)),
             ):
+                audio_devices.invalidate_cache()
                 with TestClient(app) as tc:
                     with tc.websocket_connect(WS_URL) as ws:
                         _drain_initial(ws)
                         ws.send_json({"type": "tx_message", "callsign": "W5TST", "text": "hi"})
                         frames = _drain_until_idle(ws)
+            audio_devices.invalidate_cache()
 
         types = [f["type"] for f in frames]
         assert "error" not in types, f"Unexpected error for short TX: {types}"

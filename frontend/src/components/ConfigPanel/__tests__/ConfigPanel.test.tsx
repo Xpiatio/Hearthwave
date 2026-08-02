@@ -50,6 +50,7 @@ function makeDefaultProps() {
     onToggleFuzzyRewrite: vi.fn(),
     onInputDeviceChange: vi.fn(),
     onOutputDeviceChange: vi.fn(),
+    onRefreshDevices: vi.fn(),
     onSpectroColormapChange: vi.fn(),
     onSpectroFreqRangeChange: vi.fn(),
     onSpectroTimeWindowChange: vi.fn(),
@@ -362,5 +363,50 @@ describe('ConfigPanel — callsign auto-correct toggle', () => {
     const props = { ...makeDefaultProps(), fuzzyCallsign: true, fuzzyCallsignRewrite: true }
     render(<ConfigPanel {...props} />)
     expect(screen.getByLabelText(/callsign auto-correct/i)).toBeChecked()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Name-based device ids + hardware rescan
+// ---------------------------------------------------------------------------
+
+const NAMED_OUTPUT_OPTIONS: OutputDeviceOption[] = [
+  { label: 'System Default (speaker)', id: -1 },
+  { label: 'USB Audio: - (hw:0,0)', id: 'USB Audio: - (hw:0,0)' },
+]
+
+describe('ConfigPanel audio device identity', () => {
+  it('passes a name-based output device id through unchanged', async () => {
+    const user = userEvent.setup()
+    const props = { ...makeDefaultProps(), outputDevices: NAMED_OUTPUT_OPTIONS }
+    render(<ConfigPanel {...props} />)
+
+    await user.click(screen.getByLabelText(/audio output \(to radio\)/i))
+    const listbox = await screen.findByRole('listbox')
+    await user.click(within(listbox).getByText('USB Audio: - (hw:0,0)'))
+
+    expect(props.onOutputDeviceChange).toHaveBeenCalledWith('USB Audio: - (hw:0,0)')
+  })
+
+  it('shows the current selection when it is a device name', () => {
+    const props = {
+      ...makeDefaultProps(),
+      outputDevices: NAMED_OUTPUT_OPTIONS,
+      outputDevice: 'USB Audio: - (hw:0,0)',
+    }
+    render(<ConfigPanel {...props} />)
+    expect(screen.getByLabelText(/audio output \(to radio\)/i)).toHaveTextContent(
+      'USB Audio: - (hw:0,0)',
+    )
+  })
+
+  it('offers a rescan control that asks the backend to re-enumerate hardware', async () => {
+    const user = userEvent.setup()
+    const props = { ...makeDefaultProps(), outputDevices: NAMED_OUTPUT_OPTIONS }
+    render(<ConfigPanel {...props} />)
+
+    await user.click(screen.getByRole('button', { name: /rescan audio devices/i }))
+
+    expect(props.onRefreshDevices).toHaveBeenCalledTimes(1)
   })
 })

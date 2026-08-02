@@ -24,7 +24,7 @@ interface Props {
   systemMonitorSink: string;
   inputDevices: InputDeviceOption[];
   monitorSinks: MonitorSinkOption[];
-  outputDevice: number;
+  outputDevice: string | number;
   outputDevices: OutputDeviceOption[];
   spectroColormap: 'viridis' | 'grayscale';
   spectroFreqRange: 'voice' | 'full';
@@ -40,7 +40,8 @@ interface Props {
   onToggleFuzzy: () => void;
   onToggleFuzzyRewrite: () => void;
   onInputDeviceChange: (device: string | number, sink: string) => void;
-  onOutputDeviceChange: (device: number) => void;
+  onOutputDeviceChange: (device: string | number) => void;
+  onRefreshDevices?: () => void;
   onSpectroColormapChange: (cm: 'viridis' | 'grayscale') => void;
   onSpectroFreqRangeChange: (range: 'voice' | 'full') => void;
   onSpectroTimeWindowChange: (s: number) => void;
@@ -88,7 +89,7 @@ interface Props {
 
 interface PrefsDraft {
   filterProfanity: boolean; aacMode: boolean; fuzzyCallsign: boolean; fuzzyCallsignRewrite: boolean; inputDevice: string | number;
-  systemMonitorSink: string; outputDevice: number;
+  systemMonitorSink: string; outputDevice: string | number;
   spectroColormap: 'viridis' | 'grayscale'; spectroFreqRange: 'voice' | 'full'; spectroTimeWindowS: number;
   uiLevel: 'simple' | 'operator'; fontScale: number; highContrast: boolean;
   switchScan: boolean; switchScanIntervalS: number; visualAlerts: boolean;
@@ -211,6 +212,7 @@ export function SettingsDialog(props: Props) {
             monitorSinks={props.monitorSinks}
             outputDevice={draft.outputDevice}
             outputDevices={props.outputDevices}
+            onRefreshDevices={props.onRefreshDevices}
             spectroColormap={draft.spectroColormap}
             spectroFreqRange={draft.spectroFreqRange}
             spectroTimeWindowS={draft.spectroTimeWindowS}

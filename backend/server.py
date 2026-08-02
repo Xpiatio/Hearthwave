@@ -140,6 +140,7 @@ from fastapi.responses import FileResponse, Response
 
 from backend.ai.gemini_client import GeminiError
 from backend.ai.gemini_client import generate_journal as _gemini_generate
+from backend.audio import devices as audio_devices
 from backend.audio.capture import enumerate_monitor_sources
 from backend.audio.spectro_task import SpectroTask
 from backend.audio.vad import load_vad_model, make_vad_iterator
@@ -1340,20 +1341,64 @@ def _play_voice_blocking(audio: "np.ndarray", sample_rate: int, output_device) -
 
 async def _enumerate_devices(kind: str) -> list[dict]:
     """Enumerate sound devices of the given kind ('input' or 'output') as a list
-    of {"label", "id"}.  The blocking PortAudio query runs off the event loop."""
-    channel_key = "max_input_channels" if kind == "input" else "max_output_channels"
+    of {"label", "id"}.  The blocking PortAudio query runs off the event loop.
 
-    def _query() -> list[dict]:
-        out: list[dict] = []
-        try:
-            for i, dev in enumerate(sd.query_devices()):
-                if dev.get(channel_key, 0) > 0:
-                    out.append({"label": dev["name"], "id": i})
-        except Exception:
-            pass
-        return out
+    Devices are keyed by name rather than PortAudio index — see
+    backend.audio.devices for why indices are not stable."""
+    return await asyncio.to_thread(audio_devices.list_devices, kind)
 
-    return await asyncio.to_thread(_query)
+
+async def _build_input_devices_msg() -> dict:
+    """The 'input_devices' payload: device list plus the current selection."""
+    devices = [{"label": "System Default (microphone)", "id": -1}]
+    devices += await _enumerate_devices("input")
+    devices.append({"label": "System Audio Output (loopback)", "id": "system_monitor"})
+    monitor_sinks = [
+        {"label": label, "sink_id": sink_id}
+        for label, sink_id in enumerate_monitor_sources()
+    ]
+    return {
+        "type": "input_devices",
+        "devices": devices,
+        "monitor_sinks": monitor_sinks,
+        "current_input_device": _config.input_device_name if _config else -1,
+        "current_monitor_sink": _config.system_monitor_sink if _config else "",
+    }
+
+
+async def _build_output_devices_msg() -> dict:
+    """The 'output_devices' payload: device list plus the current selection."""
+    devices = [{"label": "System Default (speaker)", "id": -1}]
+    devices += await _enumerate_devices("output")
+    return {
+        "type": "output_devices",
+        "devices": devices,
+        "current_output_device": _config.output_device_name if _config else -1,
+    }
+
+
+async def _refresh_devices() -> None:
+    """Re-scan audio hardware so devices that were busy at startup show up.
+
+    PortAudio only builds its device list at Pa_Initialize(), so this has to
+    tear it down and back up — which is unsafe while a stream is open.  The
+    STT worker holds a long-lived input stream, so it is stopped for the
+    duration and restarted afterwards.
+    """
+    global _stt_worker
+
+    had_worker = _stt_worker is not None
+    if had_worker:
+        _stt_worker.stop()
+        await _stt_worker.join()
+        _stt_worker = None
+
+    try:
+        await asyncio.to_thread(audio_devices.refresh)
+    finally:
+        if had_worker:
+            _stt_worker = _make_stt_worker()
+            _stt_worker.start()
 
 
 def _voice_label(stem: str) -> str:
@@ -1412,8 +1457,8 @@ def _build_status() -> dict:
         "ncs_zone": (_config.ncs_zone if _config else ""),
         "ncs_preamble_text": (_config.ncs_preamble_text if _config else ""),
         "ncs_closing_text": (_config.ncs_closing_text if _config else ""),
-        "input_device": (_config.input_device if _config else -1),
-        "output_device": (_config.output_device if _config else -1),
+        "input_device": (_config.input_device_name if _config else -1),
+        "output_device": (_config.output_device_name if _config else -1),
         "system_monitor_sink": (_config.system_monitor_sink if _config else ""),
         "rx_mode": (_config.rx_mode if _config else "voice"),
         "vad_threshold": float(_config.vad_threshold) if _config else 0.5,
@@ -1663,6 +1708,10 @@ async def _lifespan(app: FastAPI):
         # production; the root logger has no handler, so there's no double-emit.
     _event_loop = asyncio.get_running_loop()
     _config = ServerConfig.load()
+    # Legacy configs stored PortAudio indices, which silently re-point at other
+    # hardware whenever the device list changes.  Upgrade them to names.
+    if _config.migrate_device_names():
+        _config.save()
     _log.info("Config loaded: callsign=%s, port=%d", _config.callsign, _config.port)
 
     compute = detect_compute()
@@ -3391,20 +3440,7 @@ async def websocket_endpoint(
                 await _manager.broadcast(_build_status())
 
             elif msg_type == "list_input_devices":
-                devices = [{"label": "System Default (microphone)", "id": -1}]
-                devices += await _enumerate_devices("input")
-                devices.append({"label": "System Audio Output (loopback)", "id": "system_monitor"})
-                monitor_sinks = [
-                    {"label": label, "sink_id": sink_id}
-                    for label, sink_id in enumerate_monitor_sources()
-                ]
-                await _manager.send_to(ws, {
-                    "type": "input_devices",
-                    "devices": devices,
-                    "monitor_sinks": monitor_sinks,
-                    "current_input_device": _config.input_device if _config else -1,
-                    "current_monitor_sink": _config.system_monitor_sink if _config else "",
-                })
+                await _manager.send_to(ws, await _build_input_devices_msg())
 
             elif msg_type == "set_input_device":
                 if not state.is_admin:
@@ -3427,13 +3463,15 @@ async def websocket_endpoint(
                 await _manager.broadcast(_build_status())
 
             elif msg_type == "list_output_devices":
-                devices = [{"label": "System Default (speaker)", "id": -1}]
-                devices += await _enumerate_devices("output")
-                await _manager.send_to(ws, {
-                    "type": "output_devices",
-                    "devices": devices,
-                    "current_output_device": _config.output_device if _config else -1,
-                })
+                await _manager.send_to(ws, await _build_output_devices_msg())
+
+            elif msg_type == "refresh_devices":
+                # Re-scan hardware, then resend both lists.  Needed because a
+                # card that was busy when the process started is otherwise
+                # invisible for the lifetime of the process.
+                await _refresh_devices()
+                await _manager.send_to(ws, await _build_input_devices_msg())
+                await _manager.send_to(ws, await _build_output_devices_msg())
 
             elif msg_type == "set_output_device":
                 if not state.is_admin:
@@ -3448,7 +3486,10 @@ async def websocket_endpoint(
                 # Keep the synthesizer's cached device in sync (used by its own
                 # internal playback path).  TX playback reads _config at send time.
                 if _synthesizer is not None:
-                    _synthesizer.output_device = new_device if new_device != -1 else None
+                    # The synthesizer wants a PortAudio index, so resolve the
+                    # stored name against the current device list.
+                    resolved = _config.output_device
+                    _synthesizer.output_device = resolved if resolved != -1 else None
                 await _manager.broadcast(_build_status())
 
             elif msg_type == "set_config":
