@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Alert, Box, Button, Chip, IconButton, Paper, Tooltip, Typography } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import type { ChatEntry } from '../ChatDisplay/ChatDisplay';
@@ -13,8 +13,9 @@ import { IncidentDialog } from './IncidentDialog';
 import { RadioCheckinForm } from './RadioCheckinForm';
 import { StreetAlertDialog } from './StreetAlertDialog';
 import { ConfirmDialog } from '../ConfirmDialog';
-import { currentCallLabel } from './NeighborhoodPanel';
-import type { NeighborhoodPanelProps } from './NeighborhoodPanel';
+import { useIncidentDialog } from './useIncidentDialog';
+import { currentCallLabel, formatAlertTime } from './shared';
+import type { NeighborhoodPanelProps } from './shared';
 
 export interface CoordinatorDashboardProps extends NeighborhoodPanelProps {
   messages: ChatEntry[];
@@ -26,10 +27,6 @@ export interface CoordinatorDashboardProps extends NeighborhoodPanelProps {
   txComposition: TxComposition | null;
 }
 
-function formatAlertTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-}
-
 /** Single-viewport net-ops console for a coordinator on a desktop: radio
  *  traffic and check-in entry on the left, roster and incidents on the
  *  right, net controls in a persistent command bar. The stacked
@@ -38,38 +35,17 @@ function formatAlertTime(iso: string): string {
 export function CoordinatorDashboard(props: CoordinatorDashboardProps) {
   useEscapeToHome(props.onGoHome);
 
-  const [incidentOpen, setIncidentOpen] = useState(false);
   const [streetAlertOpen, setStreetAlertOpen] = useState(false);
   const [clearCheckinsConfirmOpen, setClearCheckinsConfirmOpen] = useState(false);
   const [clearIncidentsConfirmOpen, setClearIncidentsConfirmOpen] = useState(false);
 
-  // Tracks the most recent incidentError the user has already seen and
-  // dismissed (via Cancel/backdrop close), so a stale error from a prior
-  // visit never auto-reopens or redisplays. Mirrors NeighborhoodPanel's
-  // dismissed-error ref pattern verbatim (see NeighborhoodPanel.tsx).
-  const dismissedErrorRef = useRef<string | null>(props.incidentError);
-
-  useEffect(() => {
-    if (props.incidentError && props.incidentError !== dismissedErrorRef.current) {
-      setIncidentOpen(true);
-    }
-  }, [props.incidentError]);
-
-  const visibleIncidentError =
-    props.incidentError !== null && props.incidentError !== dismissedErrorRef.current
-      ? props.incidentError
-      : null;
-
-  function handleIncidentSubmit(payload: { category: string; description: string; location: string }) {
-    dismissedErrorRef.current = null;
-    props.onIncidentReport(payload);
-    setIncidentOpen(false);
-  }
-
-  function handleIncidentDialogClose() {
-    dismissedErrorRef.current = props.incidentError;
-    setIncidentOpen(false);
-  }
+  const {
+    incidentOpen,
+    setIncidentOpen,
+    visibleIncidentError,
+    handleIncidentSubmit,
+    handleIncidentDialogClose,
+  } = useIncidentDialog(props.incidentError, props.onIncidentReport);
 
   const checkedIn = props.roster.some((r) => r.user_id === props.myUserId);
   const netLabel = nextNetLabel(props.netDay, props.netTime, new Date());
@@ -79,6 +55,18 @@ export function CoordinatorDashboard(props: CoordinatorDashboardProps) {
   // `auto` row and leaves the `1fr` row empty, clipping MessageInput and
   // RadioCheckinForm below the fold. See task-7 review finding 1.
   const gridTemplateRows = props.alerts.length > 0 ? 'auto auto 1fr' : 'auto 1fr';
+  // A listen-only coordinator session (mirrors DesktopApp's
+  // `!listenOnly && !isKid` gate) drops the transmit box from the left
+  // column — everything else in the dashboard (roster, incidents, radio
+  // check-in) stays, since none of that is a transmit action.
+  const showMessageInput = !props.listenOnly;
+  const leftColumnRows = showMessageInput ? '1fr auto auto' : '1fr auto';
+  // isKid is already excluded by the gate that routes here (NeighborhoodPanel
+  // only ever mounts this component when isCoordinator && !isKid), but this
+  // component doesn't rely on that invariant holding for every caller (e.g.
+  // its own standalone tests) — it re-derives the real value directly, the
+  // same way NeighborhoodPanel's stacked view does.
+  const isRosterCoordinator = props.isCoordinator && !props.isKid;
 
   return (
     <Box sx={{ height: '100vh', display: 'grid', gridTemplateRows, gap: 1.5, p: 2, boxSizing: 'border-box', overflow: 'hidden' }}>
@@ -142,20 +130,22 @@ export function CoordinatorDashboard(props: CoordinatorDashboardProps) {
       )}
 
       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, minHeight: 0 }}>
-        {/* Left: transcript over TX over check-in form */}
-        <Box sx={{ display: 'grid', gridTemplateRows: '1fr auto auto', gap: 1, minHeight: 0 }}>
+        {/* Left: transcript over TX (when not listen-only) over check-in form */}
+        <Box sx={{ display: 'grid', gridTemplateRows: leftColumnRows, gap: 1, minHeight: 0 }}>
           <Paper variant="outlined" sx={{ minHeight: 0, overflow: 'hidden', display: 'flex', p: 1 }}>
             <ChatDisplay entries={props.messages} contacts={props.contacts} showCallsignChips={props.showCallsignChips} />
           </Paper>
-          <MessageInput
-            transmitting={props.transmitting}
-            contacts={props.contacts}
-            onSend={props.onSendMessage}
-            onChat={props.onChat}
-            onStandaloneId={props.onStandaloneId}
-            maxBytes={props.txComposition?.maxBytes}
-            composeHint={props.txComposition?.hint}
-          />
+          {showMessageInput && (
+            <MessageInput
+              transmitting={props.transmitting}
+              contacts={props.contacts}
+              onSend={props.onSendMessage}
+              onChat={props.onChat}
+              onStandaloneId={props.onStandaloneId}
+              maxBytes={props.txComposition?.maxBytes}
+              composeHint={props.txComposition?.hint}
+            />
+          )}
           <Paper variant="outlined" sx={{ p: 1.5 }}>
             <RadioCheckinForm contacts={props.contacts} onCheckin={props.onRadioCheckin} />
           </Paper>
@@ -170,7 +160,7 @@ export function CoordinatorDashboard(props: CoordinatorDashboardProps) {
               myUserId={props.myUserId}
               onStatusChange={props.onStatusChange}
               onClear={props.isAdmin ? () => setClearCheckinsConfirmOpen(true) : undefined}
-              isCoordinator
+              isCoordinator={isRosterCoordinator}
               onStationStatusChange={props.onStationStatusChange}
               onRemoveStation={props.onRemoveStation}
               onCallStation={props.onCallStation}

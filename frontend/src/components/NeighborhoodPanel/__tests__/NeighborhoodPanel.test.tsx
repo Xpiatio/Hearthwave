@@ -2,11 +2,16 @@ import { render as rtlRender, screen, fireEvent, within, waitFor } from '@testin
 import userEvent from '@testing-library/user-event';
 import { ThemeProvider } from '@mui/material/styles';
 import { makeTheme } from '../../../theme';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { axe } from 'jest-axe';
 import { NeighborhoodPanel } from '../NeighborhoodPanel';
 import type { NeighborhoodPanelProps } from '../NeighborhoodPanel';
 import type { Contact, IncidentEntry, NeighborhoodAlertMsg, NeighborhoodRosterRow } from '../../../types/ws';
+
+// jsdom doesn't implement scrollIntoView — ChatDisplay calls it on mount, and
+// the wide-screen coordinator switch below can now mount ChatDisplay via
+// CoordinatorDashboard (see CoordinatorDashboard.test.tsx for the same stub).
+window.HTMLElement.prototype.scrollIntoView = vi.fn();
 
 function render(ui: React.ReactElement) {
   return rtlRender(<ThemeProvider theme={makeTheme(false)}>{ui}</ThemeProvider>);
@@ -69,7 +74,56 @@ function makeProps(overrides: Partial<NeighborhoodPanelProps> = {}): Neighborhoo
   };
 }
 
+function mockMatchMedia(matches: boolean) {
+  vi.stubGlobal('matchMedia', vi.fn().mockImplementation((query: string) => ({
+    matches, media: query, onchange: null,
+    addListener: vi.fn(), removeListener: vi.fn(),
+    addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn(),
+  })));
+}
+
+afterEach(() => vi.unstubAllGlobals());
+
 describe('NeighborhoodPanel', () => {
+  describe('wide-screen coordinator dashboard switch', () => {
+    it('renders the ops dashboard for a wide-screen coordinator', () => {
+      mockMatchMedia(true);
+      render(
+        <NeighborhoodPanel
+          {...makeProps({
+            isCoordinator: true,
+            messages: [], transmitting: false, showCallsignChips: false,
+            onSendMessage: vi.fn(), onChat: vi.fn(), onStandaloneId: vi.fn(),
+            txComposition: null,
+          })}
+        />
+      );
+      // Dashboard marker: the command-bar street-alert button (stacked view has
+      // an inline field, not this button).
+      expect(screen.getByRole('button', { name: 'Street alert…' })).toBeInTheDocument();
+    });
+
+    it('keeps the stacked view for a narrow-screen coordinator', () => {
+      mockMatchMedia(false);
+      render(<NeighborhoodPanel {...makeProps({ isCoordinator: true, messages: [] })} />);
+      expect(screen.queryByRole('button', { name: 'Street alert…' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Check in' })).toBeInTheDocument();
+    });
+
+    it('never shows a kid the dashboard, even wide + coordinator', () => {
+      mockMatchMedia(true);
+      render(<NeighborhoodPanel {...makeProps({ isCoordinator: true, isKid: true, messages: [] })} />);
+      expect(screen.queryByRole('button', { name: 'Street alert…' })).not.toBeInTheDocument();
+    });
+
+    it('keeps the stacked view on a wide screen when the App hasn\'t wired up messages', () => {
+      mockMatchMedia(true);
+      render(<NeighborhoodPanel {...makeProps({ isCoordinator: true })} />);
+      expect(screen.queryByRole('button', { name: 'Street alert…' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Check in' })).toBeInTheDocument();
+    });
+  });
+
   it('renders header with title, net chip, and next-net label when inactive', () => {
     render(<NeighborhoodPanel {...makeProps()} />);
     expect(screen.getByText('Neighborhood')).toBeInTheDocument();

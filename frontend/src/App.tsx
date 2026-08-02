@@ -1860,6 +1860,14 @@ export default function App() {
           onRemoveStation={sendNeighborhoodRemoveStation}
           onCallStation={sendNeighborhoodCallStation}
           onNoAnswer={sendNeighborhoodNoAnswer}
+          listenOnly={listenOnly}
+          messages={messages}
+          transmitting={transmitting}
+          showCallsignChips={showCallsignChips}
+          onSendMessage={handleSend}
+          onChat={handleChat}
+          onStandaloneId={handleStandaloneId}
+          txComposition={txComposition}
         />
       ) : (
         <DesktopApp
