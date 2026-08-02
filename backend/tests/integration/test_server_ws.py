@@ -225,13 +225,21 @@ def _drain_initial(ws, limit: int = 12) -> list[dict]:
     return frames
 
 
-def _drain_until_idle(ws, limit: int = 25) -> list[dict]:
-    """Collect frames until tx_status:idle arrives; return all collected."""
+def _drain_until_idle(ws, limit: int = 25, until: str | None = None) -> list[dict]:
+    """Collect frames until tx_status:idle arrives; return all collected.
+
+    Some flows emit meaningful frames *after* idle — an ack that confirms the
+    transmission finished is sent once the TX pump drains, so stopping at idle
+    misses it. Pass *until* to stop on that frame type instead.
+    """
     collected = []
     for _ in range(limit):
         msg = ws.receive_json()
         collected.append(msg)
-        if msg.get("type") == "tx_status" and msg.get("status") == "idle":
+        if until is not None:
+            if msg.get("type") == until:
+                break
+        elif msg.get("type") == "tx_status" and msg.get("status") == "idle":
             break
     return collected
 
@@ -5027,7 +5035,7 @@ class TestNeighborhoodIncidentReport:
                 with tc.websocket_connect(WS_URL) as ws:
                     _drain_initial(ws)
                     ws.send_json(_valid_incident_payload())
-                    frames = _drain_until_idle(ws)
+                    frames = _drain_until_idle(ws, until="neighborhood_incident_sent")
         tx_echo = next(f for f in frames if f.get("type") == "tx_echo")
         incidents_msgs = [f for f in frames if f.get("type") == "neighborhood_incidents"]
         sent_msg = next(f for f in frames if f.get("type") == "neighborhood_incident_sent")
@@ -5172,7 +5180,7 @@ class TestNeighborhoodStreetAlert:
                 with tc.websocket_connect(WS_URL) as ws:
                     _drain_initial(ws)
                     ws.send_json({"type": "neighborhood_street_alert", "message": "  Water main break on Elm  "})
-                    frames = _drain_until_idle(ws)
+                    frames = _drain_until_idle(ws, until="neighborhood_alert_sent")
         alert_msg = next(f for f in frames if f.get("type") == "neighborhood_alert")
         tx_echo = next(f for f in frames if f.get("type") == "tx_echo")
         assert alert_msg["message"] == "Water main break on Elm"
