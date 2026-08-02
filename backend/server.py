@@ -44,12 +44,16 @@ WebSocket message types (client → server):
     neighborhood_get_state — {"type": "neighborhood_get_state"}
     neighborhood_checkin — {"type": "neighborhood_checkin"}  (identity comes from the
                           connection's own profile, not client-supplied fields)
-    neighborhood_status — {"type": "neighborhood_status", "status": "checked_in"|"standby",
+    neighborhood_status — {"type": "neighborhood_status", "status": "checked_in"|"standby"|"checked_out",
                           "user_id"?: str}  (own user_id only unless coordinator)
+    neighborhood_checkin_radio  (coordinator) check in a station with no account
+    neighborhood_remove_station (coordinator) drop a radio check-in row
     neighborhood_start — {"type": "neighborhood_start"}  (coordinator-only)
     neighborhood_end  — {"type": "neighborhood_end"}  (coordinator-only)
     neighborhood_call_next — {"type": "neighborhood_call_next"}  (coordinator-only)
     neighborhood_call_reset — {"type": "neighborhood_call_reset"}  (coordinator-only)
+    neighborhood_no_answer      (coordinator) flag/unflag a station the round couldn't raise
+    neighborhood_call_station   (coordinator) call a specific station out of order
     neighborhood_clear_checkins — {"type": "neighborhood_clear_checkins"}  (admin-only;
                           empties the roster, leaves an in-progress net running)
     neighborhood_clear_incidents — {"type": "neighborhood_clear_incidents"}  (admin-only;
@@ -157,7 +161,7 @@ from backend.fcc.id_rule import (
 )
 from backend.hw_detect import detect as detect_compute
 from backend.neighborhood.incidents import CATEGORIES, format_incident, validate_incident
-from backend.neighborhood.net import NeighborhoodNet
+from backend.neighborhood.net import RADIO_KEY_PREFIX, NeighborhoodNet
 from backend.net.online import invalidate as _invalidate_online
 from backend.net.online import is_online, is_online_cached
 from backend import __version__
@@ -179,6 +183,14 @@ from backend.family.reminders import is_checkin_missed
 from backend.persistence.family import FamilyStore
 from backend.persistence.incidents import IncidentsStore
 from backend.persistence.journal import delete_journal, load_journals, load_published_manifest, publish_journal, save_journal, unpublish_journal
+from backend.persistence.net_sessions import (
+    NET_TYPE_NEIGHBORHOOD,
+    delete_session as delete_net_session,
+    load_session as load_net_session,
+    load_session_summaries as load_net_session_summaries,
+    save_session as save_net_session,
+)
+from backend.persistence.net_stats import compute_attendance_stats
 from backend.persistence.presence import PresenceStore
 from backend.persistence.tokens import TokenStore
 from backend.persistence.users import (
@@ -3166,6 +3178,59 @@ async def websocket_endpoint(
                 except (ValueError, OSError) as exc:
                     await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
 
+            elif msg_type == "list_net_sessions":
+                if _config is None:
+                    await _manager.send_to(ws, {
+                        "type": "net_sessions", "sessions": [], "stats": [],
+                    })
+                    continue
+                summaries = load_net_session_summaries(_config.net_sessions_dir)
+                contacts = _contacts_store.get_all() if _contacts_store else []
+                await _manager.send_to(ws, {
+                    "type": "net_sessions",
+                    "sessions": summaries,
+                    "stats": compute_attendance_stats(summaries, contacts),
+                })
+
+            elif msg_type == "get_net_session":
+                if _config is None:
+                    await _manager.send_to(ws, {"type": "net_session", "session": None})
+                    continue
+                session_id = (data.get("id") or "").strip()
+                await _manager.send_to(ws, {
+                    "type": "net_session",
+                    "session": load_net_session(session_id, _config.net_sessions_dir),
+                })
+
+            elif msg_type == "delete_net_session":
+                # Admin-gated: net history is the household's record of who was
+                # on the air, so deleting it is a stricter act than reading it.
+                if not state.is_admin:
+                    await _manager.send_to(ws, {
+                        "type": "error", "detail": "Admin access required.",
+                    })
+                    continue
+                if _config is None:
+                    await _manager.send_to(ws, {"type": "error", "detail": "Server not ready."})
+                    continue
+                session_id = (data.get("id") or "").strip()
+                try:
+                    delete_net_session(session_id, _config.net_sessions_dir)
+                    await _manager.send_to(ws, {
+                        "type": "net_session_deleted", "id": session_id,
+                    })
+                    if _audit_log:
+                        _audit_log.log(
+                            "admin_action", user_id=state.user_id, ip=client_ip,
+                            detail=f"delete_net_session {session_id}",
+                        )
+                except (ValueError, OSError):
+                    # Deliberately generic: the store's exceptions carry the
+                    # absolute path on disk, which no client needs to see.
+                    await _manager.send_to(ws, {
+                        "type": "error", "detail": "Session not found.",
+                    })
+
             elif msg_type == "standalone_id":
                 # "This is" button — transmit a NATO-phonetic station ID.
                 if _is_kid(state):
@@ -3866,13 +3931,85 @@ async def websocket_endpoint(
                     _neighborhood.checkin(state.user_id, callsign, name, location)
                 await _manager.broadcast(_build_neighborhood_state_msg())
 
+            elif msg_type == "neighborhood_checkin_radio":
+                # Coordinator-only, and the ONE neighborhood handler where
+                # identity is client-supplied by design: these are neighbors
+                # who called in over the air with no account here. There is no
+                # account behind the row to impersonate — no login, no prefs,
+                # no profile — so the coordinator gate is the whole control,
+                # unlike neighborhood_checkin above where the connection's own
+                # profile is the only trustworthy source.
+                if not _is_coordinator(state):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Coordinator access required"})
+                    continue
+                # str() first: these are raw client fields, and a non-string
+                # value (e.g. {"name": 123}) would raise out of the handler and
+                # take the whole connection down with it.
+                callsign = normalize_callsign(str(data.get("callsign") or ""))[:16]
+                name = str(data.get("name") or "").strip()[:64]
+                location = str(data.get("location") or "").strip()[:64]
+                # Name is required here even though neighborhood_checkin falls
+                # back to "Operator": attendance keys on (callsign, name), and
+                # neighborhood_call_next speaks the name on the air.
+                if not callsign or not name:
+                    await _manager.send_to(
+                        ws, {"type": "error", "detail": "Callsign and name are required."}
+                    )
+                    continue
+                if _neighborhood is not None:
+                    _neighborhood.checkin_radio(callsign, name, location)
+                await _manager.broadcast(_build_neighborhood_state_msg())
+                # Contacts second, and never fatal: a contacts failure must not
+                # cost the coordinator the check-in they just made.
+                if data.get("save_contact"):
+                    if _contacts_store is None:
+                        await _manager.send_to(
+                            ws, {"type": "error", "detail": "Contacts store not initialised."}
+                        )
+                        continue
+                    if callsign in known_callsigns(_contacts_store.get_all()):
+                        # Already in the book: no write, no error (spec). Not
+                        # merely redundant — add_contact dedups last-write-wins,
+                        # so writing the bare three fields over an existing rich
+                        # contact would silently drop its verified/ham_callsign/
+                        # fcc_* data. The frontend hides the checkbox for a known
+                        # callsign; this is the server-side half of that rule.
+                        pass
+                    else:
+                        try:
+                            updated = _contacts_store.add_contact(
+                                {"callsign": callsign, "name": name, "location": location}
+                            )
+                            await _manager.broadcast({"type": "contacts", "contacts": updated})
+                            # Saving the contact also biases Whisper toward this
+                            # neighbor's callsign on the air.
+                            _rebuild_stt_vocabulary()
+                        except (ValueError, OSError) as exc:
+                            # OSError too: a failed disk write must cost the
+                            # coordinator an error message, not the connection.
+                            await _manager.send_to(ws, {"type": "error", "detail": str(exc)})
+
+            elif msg_type == "neighborhood_remove_station":
+                if not _is_coordinator(state):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Coordinator access required"})
+                    continue
+                target_id = str(data.get("user_id") or "")
+                if not target_id.startswith(RADIO_KEY_PREFIX):
+                    await _manager.send_to(
+                        ws, {"type": "error", "detail": "Only radio check-ins can be removed."}
+                    )
+                    continue
+                if _neighborhood is not None:
+                    _neighborhood.remove_station(target_id)
+                await _manager.broadcast(_build_neighborhood_state_msg())
+
             elif msg_type == "neighborhood_status":
                 target_id = data.get("user_id") or state.user_id
                 if target_id != state.user_id and not _is_coordinator(state):
                     await _manager.send_to(ws, {"type": "error", "detail": "Coordinator access required"})
                     continue
                 status = data.get("status")
-                if status not in ("checked_in", "standby"):
+                if status not in ("checked_in", "standby", "checked_out"):
                     await _manager.send_to(ws, {"type": "error", "detail": "Invalid status."})
                     continue
                 if _neighborhood is not None:
@@ -3920,6 +4057,20 @@ async def websocket_endpoint(
                     except Exception as exc:
                         _log.error("Neighborhood net journal save failed: %s", exc)
 
+                    try:
+                        session_path = save_net_session(
+                            net_type=NET_TYPE_NEIGHBORHOOD,
+                            started_at=summary.get("started_at", ""),
+                            ended_at=summary.get("ended_at", ""),
+                            duration_seconds=summary.get("duration_seconds", 0),
+                            roster=roster_snapshot,
+                            transcript=roster_lines,
+                            sessions_dir=_config.net_sessions_dir,
+                        )
+                        _log.info("Neighborhood net session saved: %s", session_path)
+                    except Exception as exc:
+                        _log.error("Neighborhood net session save failed: %s", exc)
+
             elif msg_type == "neighborhood_call_next":
                 if not _is_coordinator(state):
                     await _manager.send_to(ws, {"type": "error", "detail": "Coordinator access required"})
@@ -3939,6 +4090,33 @@ async def websocket_endpoint(
                     continue
                 if _neighborhood is not None:
                     _neighborhood.call_reset()
+                await _manager.broadcast(_build_neighborhood_state_msg())
+
+            elif msg_type == "neighborhood_no_answer":
+                if not _is_coordinator(state):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Coordinator access required"})
+                    continue
+                target_id = str(data.get("user_id") or "")
+                if _neighborhood is not None:
+                    # Unknown ids no-op (row may have been removed mid-click);
+                    # broadcasting anyway keeps every client's state converged.
+                    _neighborhood.set_no_answer(target_id, bool(data.get("no_answer", True)))
+                await _manager.broadcast(_build_neighborhood_state_msg())
+
+            elif msg_type == "neighborhood_call_station":
+                if not _is_coordinator(state):
+                    await _manager.send_to(ws, {"type": "error", "detail": "Coordinator access required"})
+                    continue
+                target_id = str(data.get("user_id") or "")
+                row = _neighborhood.call_station(target_id) if _neighborhood is not None else None
+                if row is not None:
+                    # Same on-air announcement as neighborhood_call_next: an
+                    # out-of-order call is still a call.
+                    station_callsign = _config.callsign if _config else ""
+                    text = f"{row['name']}, you're up. Anything to report? {station_callsign}."
+                    await _tx_enqueue(
+                        {"text": text, "_pre_formatted": True, "_operator_initiated": True}
+                    )
                 await _manager.broadcast(_build_neighborhood_state_msg())
 
             elif msg_type == "neighborhood_clear_checkins":

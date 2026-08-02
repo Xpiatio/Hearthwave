@@ -247,6 +247,73 @@ export interface JournalUnpublishedMsg {
   file_path: string;
 }
 
+export interface NetSessionStation {
+  callsign: string;
+  name: string;
+}
+
+export interface NetSessionSummary {
+  id: string;
+  net_type: string;
+  started_at: string;
+  ended_at: string;
+  duration_seconds: number;
+  checkin_count: number;
+  stations: NetSessionStation[];
+}
+
+export interface NetSessionRosterRow {
+  callsign: string;
+  name: string;
+  location: string;
+  status: string;
+  traffic: string | null;
+  checkin_time: string;
+  verified: boolean;
+  /** "radio" for a coordinator-entered station, "" for a self check-in.
+   *  Optional because records written before this field existed lack it. */
+  via?: string;
+  /** True when the round-table called this station and got no reply.
+   *  Optional because records written before this field existed lack it. */
+  no_answer?: boolean;
+}
+
+export interface NetSessionDetail {
+  id: string;
+  net_type: string;
+  started_at: string;
+  ended_at: string;
+  duration_seconds: number;
+  roster: NetSessionRosterRow[];
+  transcript: string;
+}
+
+export interface AttendanceStatRow {
+  callsign: string;
+  name: string;
+  total_nets: number;
+  attended_of_recent: number;
+  recent_window: number;
+  current_streak: number;
+  last_seen: string;
+}
+
+export interface NetSessionsMsg {
+  type: 'net_sessions';
+  sessions: NetSessionSummary[];
+  stats: AttendanceStatRow[];
+}
+
+export interface NetSessionMsg {
+  type: 'net_session';
+  session: NetSessionDetail | null;
+}
+
+export interface NetSessionDeletedMsg {
+  type: 'net_session_deleted';
+  id: string;
+}
+
 // FCC & callsign features (server → client)
 export interface PendingStationsMsg {
   type: 'pending_stations';
@@ -445,7 +512,7 @@ export interface RxAudioMsg {
 // NCS — Net Control Station plugin messages (server → client)
 export interface NCSEntry {
   callsign: string;
-  status: 'CheckedIn' | 'Standby' | 'LoggedOut';
+  status: 'CheckedIn' | 'Standby' | 'CheckedOut' | 'LoggedOut';
   traffic: 'Routine' | 'Priority' | 'Emergency' | 'General' | 'Short Term' | 'IN-n-Out';
   name: string;
   location: string;
@@ -577,9 +644,14 @@ export interface NeighborhoodRosterRow {
   callsign: string;
   name: string;
   location: string;
-  status: 'checked_in' | 'standby';
+  status: 'checked_in' | 'standby' | 'checked_out';
   checkin_time: string;
   called: boolean;
+  /** Present only on stations a coordinator checked in off the air. */
+  via?: 'radio';
+  /** True when the round-table called this station and got no reply.
+   *  Optional so older server payloads (or NCS-shaped rows) still typecheck. */
+  no_answer?: boolean;
 }
 
 export interface NeighborhoodStateMsg {
@@ -746,6 +818,9 @@ export type WsMessage =
   | VoiceTxErrorMsg
   | { type: 'voice_preview_done' }
   | { type: 'error'; detail?: string }
+  | NetSessionsMsg
+  | NetSessionMsg
+  | NetSessionDeletedMsg
   | VoiceTxAckMsg
   | VoiceTxErrorMsg;
 
@@ -832,7 +907,7 @@ export interface NeighborhoodCheckinPayload {
 
 export interface NeighborhoodStatusPayload {
   type: 'neighborhood_status';
-  status: 'checked_in' | 'standby';
+  status: 'checked_in' | 'standby' | 'checked_out';
   user_id?: string;
 }
 
@@ -852,6 +927,19 @@ export interface NeighborhoodCallResetPayload {
   type: 'neighborhood_call_reset';
 }
 
+/** Coordinator-only: flag/unflag a station the round couldn't raise. */
+export interface NeighborhoodNoAnswerPayload {
+  type: 'neighborhood_no_answer';
+  user_id: string;
+  no_answer: boolean;
+}
+
+/** Coordinator-only: call this station out of order (round-table). */
+export interface NeighborhoodCallStationPayload {
+  type: 'neighborhood_call_station';
+  user_id: string;
+}
+
 /** Admin-only (stricter than the coordinator gate on the other net
  *  controls): empties the roster, leaving an in-progress net running. */
 export interface NeighborhoodClearCheckinsPayload {
@@ -862,6 +950,24 @@ export interface NeighborhoodClearCheckinsPayload {
  *  wipe if that journal save fails. */
 export interface NeighborhoodClearIncidentsPayload {
   type: 'neighborhood_clear_incidents';
+}
+
+/** Coordinator-only: check in a neighbor who called in over the air and has
+ *  no account here. Unlike neighborhood_checkin, the identity is supplied by
+ *  the client — the server gates on the coordinator grant instead. */
+export interface NeighborhoodCheckinRadioPayload {
+  type: 'neighborhood_checkin_radio';
+  callsign: string;
+  name: string;
+  location: string;
+  save_contact?: boolean;
+}
+
+/** Coordinator-only: drop a radio check-in row. The server refuses any
+ *  user_id that isn't a radio station key. */
+export interface NeighborhoodRemoveStationPayload {
+  type: 'neighborhood_remove_station';
+  user_id: string;
 }
 
 export interface NeighborhoodIncidentReportPayload {

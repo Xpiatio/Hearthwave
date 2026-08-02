@@ -1,6 +1,6 @@
 # Hearthwave User Manual
 
-> **Version:** v2.22.0
+> **Version:** v2.23.0
 
 This manual covers day-to-day operation of Hearthwave as a GMRS family hub or neighborhood watch base station — a shared radio operating station where every household member or watch volunteer connects from their own device. For installation and server setup, see [README.md](README.md).
 
@@ -409,6 +409,8 @@ The **Journals** panel lets you generate and save AI-written session summaries. 
 **Deleting a journal:** Click the **delete icon** (🗑) next to a journal in the list. Click once to arm the delete, click again to confirm.
 
 **Publishing to the family journal:** Select a saved journal, then click the **PUBLISH TO FAMILY JOURNAL** button that appears in the detail view. Click once to arm, click again to confirm. A snackbar confirms publication. You can also publish directly from the list using the **publish icon** (⬆) next to each entry. See [Family journal](#12-family-journal-public-page).
+
+**Past Nets:** Every time a net ends, its roster is saved automatically alongside the journal. To review it: open the Journal panel, click the **Past Nets** tab, and pick a date from the list to see that net's roster and (for NCS nets) its transcript. The roster table includes a **Via** column (blank for an account holder, `radio` for a station the coordinator checked in from the radio — see [Neighborhood activity](#31-neighborhood-activity)) and a **No answer** column marking a station the round-table called but that never responded. Click **DOWNLOAD CSV** in the detail view to export just that net, or **EXPORT ALL (CSV)** at the bottom of the list to export the entire history, one row per station per net. The per-session CSV carries the same two columns; its header is now `callsign,name,location,status,traffic,checkin_time,via,no_answer` — one column longer than before this release (`no_answer` is new). **If you have a script parsing the old 7-column header, update it for the new `via` and `no_answer` columns.** NCS-net sessions always render both columns blank — NCS check-in doesn't distinguish radio-only callers or track no-answer, so there's nothing to show, but the columns are still there for consistency with neighborhood-net rows in the same export. The **attendance** list — total nets, recent turnout, and check-in streaks per station — sits below the roster. Deleting a record requires an admin account. These records are private: unlike journals, they are never published to the public `/journal` page. Storage location defaults to `/data/net_sessions` and can be changed with `net_sessions_dir` in `config.json`.
 
 ---
 
@@ -1371,9 +1373,38 @@ Coordinators additionally see:
 
 - **Start net** / **End net** buttons.
 - **Call next neighbor** — advances a simple round-table through the checked-in roster, one at a time.
-- **New round** — clears who's been called so the round-table can start over.
+- **Call** — a button on every roster row that calls that station out of order instead of waiting for its turn in the round-table. It's available whenever a net is running.
+- **No answer** — a button on whichever station is currently up, for when it doesn't respond. Flagging it shows a warning-colored **No answer** chip on that row in place of "Called ✓," and the round-table skips the station for the rest of the round. Click the chip to clear the flag and make the station eligible again — there's no automatic retry; re-raising a no-answer station is always the coordinator calling it again with **Call** or **Call next**.
+- **New round** — clears who's been called, and any **No answer** flags, so the round-table can start over.
+
+None of this is visible to participants — only a coordinator sees the Call and No answer controls, on either the stacked layout above or the coordinator dashboard below.
 
 **Ending a net saves a journal entry** — the checked-in roster and the net's duration are written to a session journal automatically, the same as ending an NCS net. It appears in the Journals panel ([section 11](#11-journals)) and can be published to the public family journal ([section 12](#12-family-journal-public-page)) like any other journal.
+
+### Checking in a station by radio (coordinator only)
+
+Not every neighbor on the net has a Hearthwave account — someone might check in on the air only, with no computer or app of their own. A coordinator can add them to the roster anyway, from a short form (in the coordinator tools on the stacked layout, or docked under the radio traffic pane on the [coordinator dashboard](#coordinator-dashboard-wide-screens) below):
+
+- **Pick a neighbor** — a dropdown of known contacts; choosing one fills in the fields below, which stay editable.
+- **Callsign** and **Name** — required.
+- **Location** — optional.
+- **Save to contacts** — a checkbox, shown only when the typed callsign isn't already in the contact book, that adds the entry to Contacts so next week's net is a pick from the dropdown instead of a retype.
+- **Check in station** — disabled until callsign and name are both filled in; clears the form on submit.
+
+A radio check-in behaves exactly like an account holder's from then on — it takes its turn in the round-table in check-in order, its status can be cycled (Standby / Check out / Check back in), and it's included when the net ends. It's marked wherever a station's identity matters, though: a **By radio** chip appears beside the callsign in the roster, and it carries a `via` column into the Past Nets table and the per-session CSV export (see [Journals](#11-journals)).
+
+A coordinator can remove a mis-entered radio row with the small delete icon on that row — no confirmation, since the row never reached the saved record and re-adding it costs one dropdown click. Only radio rows can be removed this way; an account holder's check-in can't be removed from the roster.
+
+### Coordinator dashboard (wide screens)
+
+On a desktop or a wide browser window (roughly laptop-width or wider — 1200px), a coordinator sees a different layout automatically: a single-viewport ops console instead of the stacked panel described above. There's no setting or toggle for this — it's chosen automatically by role and window width.
+
+- A command bar across the top holds the net status chip, **Start/End net**, **Call next**, **New round**, **Street alert**, the current turn, and the checked-in count.
+- The left half holds the RX transcript and the transmit box — the same ones used everywhere else in Hearthwave — with the radio check-in form docked underneath, so the coordinator can read a callsign off the transcript and enter it without looking away.
+- The right half holds the roster on top and the incident log below.
+- Each zone scrolls on its own; the page itself doesn't scroll.
+
+Everyone else — participants, Kid accounts, and a coordinator on a narrower window or a phone — keeps the stacked layout from the sections above; a coordinator on a phone still gets the full set of coordinator controls there, just stacked rather than split.
 
 ### Coordinator setup (admin)
 

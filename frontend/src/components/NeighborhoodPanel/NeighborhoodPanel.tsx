@@ -1,124 +1,91 @@
-import { useEffect, useRef, useState } from 'react';
-import { Alert, Box, Button, ButtonBase, Chip, IconButton, TextField, Tooltip, Typography } from '@mui/material';
+import { useState } from 'react';
+import { Alert, Box, Button, ButtonBase, Chip, IconButton, TextField, Tooltip, Typography, useMediaQuery } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import type { IncidentEntry, NeighborhoodAlertMsg, NeighborhoodRosterRow } from '../../types/ws';
 import { useEscapeToHome } from '../../hooks/useEscapeToHome';
 import { nextNetLabel } from '../../neighborhood/schedule';
 import { IncidentDialog } from './IncidentDialog';
 import { IncidentLog } from './IncidentLog';
 import { RosterList } from './RosterList';
+import { RadioCheckinForm } from './RadioCheckinForm';
 import { ConfirmDialog } from '../ConfirmDialog';
+import { CoordinatorDashboard } from './CoordinatorDashboard';
+import { useIncidentDialog } from './useIncidentDialog';
+import { currentCallLabel, formatAlertTime } from './shared';
+import type { NeighborhoodPanelProps } from './shared';
 
-export interface NeighborhoodPanelProps {
-  roster: NeighborhoodRosterRow[];
-  netActive: boolean;
-  currentCall: string | null;
-  incidents: IncidentEntry[];
-  alerts: NeighborhoodAlertMsg[];
-  netDay: string;
-  netTime: string;
-  isCoordinator: boolean;
-  /** Admin-only controls (the two board clears). Stricter than isCoordinator
-   *  on purpose: running a net is a coordinator job, wiping the board is an
-   *  admin one. Server re-checks — this only hides the buttons. */
-  isAdmin: boolean;
-  isKid: boolean;
-  myUserId: string;
-  onCheckin: () => void;
-  onClearCheckins: () => void;
-  onClearIncidents: () => void;
-  onStatusChange: (status: 'checked_in' | 'standby') => void;
-  onIncidentReport: (p: { category: string; description: string; location: string }) => void;
-  incidentError: string | null;
-  onStreetAlert: (message: string) => void;
-  onStartNet: () => void;
-  onEndNet: () => void;
-  onCallNext: () => void;
-  onNewRound: () => void;
-  onGoHome: () => void;
-}
+export type { NeighborhoodPanelProps } from './shared';
+export { currentCallLabel } from './shared';
 
 const STREET_ALERT_MAX = 200;
-
-function formatAlertTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-}
-
-/** Resolve a raw current_call user_id (what the backend actually sends —
- *  see backend/neighborhood/net.py's call_next) to something a human can
- *  read: display name, falling back to callsign, falling back to nothing
- *  (never the raw user_id — "Current turn: dana-3f2a" is the bug this
- *  fixes) if the roster row can't be found or is missing both fields. */
-function currentCallLabel(userId: string, roster: NeighborhoodRosterRow[]): string {
-  const row = roster.find((r) => r.user_id === userId);
-  return row?.name || row?.callsign || '';
-}
 
 /** Full-screen neighborhood activity: net status, a giant check-in button,
  *  street alerts, incident reporting/log, and (coordinator-only) net and
  *  round-table controls.
  *
+ *  A pure switch: on a wide screen (≥1200px), a coordinator who isn't a
+ *  kid, and a session the App has wired up for TX (`messages !== undefined`)
+ *  get CoordinatorDashboard's single-viewport ops console instead of the
+ *  stacked view below. Kept as the only hook here (`useMediaQuery`) so the
+ *  two branches can be genuinely different component types — each owns its
+ *  own hooks (including its own Escape-to-home binding) without any risk of
+ *  hook-order mismatches across renders when the viewport crosses the
+ *  breakpoint. */
+export function NeighborhoodPanel(props: NeighborhoodPanelProps) {
+  const wideViewport = useMediaQuery('(min-width:1200px)');
+  // Kids never hold the coordinator grant in practice, but the panel
+  // defends against it directly rather than trusting that invariant.
+  const showCoordinatorSection = props.isCoordinator && !props.isKid;
+
+  if (showCoordinatorSection && wideViewport && props.messages !== undefined) {
+    return (
+      <CoordinatorDashboard
+        {...props}
+        messages={props.messages}
+        transmitting={props.transmitting ?? false}
+        showCallsignChips={props.showCallsignChips ?? false}
+        onSendMessage={props.onSendMessage ?? (() => {})}
+        onChat={props.onChat ?? (() => {})}
+        onStandaloneId={props.onStandaloneId ?? (() => {})}
+        txComposition={props.txComposition ?? null}
+        onTxAbort={props.onTxAbort}
+      />
+    );
+  }
+
+  return <StackedNeighborhoodView {...props} showCoordinatorSection={showCoordinatorSection} />;
+}
+
+interface StackedNeighborhoodViewProps extends NeighborhoodPanelProps {
+  showCoordinatorSection: boolean;
+}
+
+/** The original full-page layout: check-in button, roster, incident log,
+ *  and (coordinator-only) net/round-table controls stacked in a single
+ *  vertical scroll. Serves narrow screens, participants, and kids — anyone
+ *  the wide-screen switch above doesn't route to CoordinatorDashboard.
+ *
  *  Rendered as a sibling of DesktopApp in App.tsx's shell ladder (mirroring
  *  FamilyPanel), so it owns its own Escape-to-home binding rather than
  *  relying on DesktopApp's — the two are never mounted at once. */
-export function NeighborhoodPanel(props: NeighborhoodPanelProps) {
+function StackedNeighborhoodView(props: StackedNeighborhoodViewProps) {
   useEscapeToHome(props.onGoHome);
 
-  const [incidentOpen, setIncidentOpen] = useState(false);
   const [streetAlert, setStreetAlert] = useState('');
   const [alertConfirmOpen, setAlertConfirmOpen] = useState(false);
   const [clearCheckinsConfirmOpen, setClearCheckinsConfirmOpen] = useState(false);
   const [clearIncidentsConfirmOpen, setClearIncidentsConfirmOpen] = useState(false);
 
-  // Tracks the most recent incidentError the user has already seen and
-  // dismissed (via Cancel/backdrop close), so a stale error from a prior
-  // visit never auto-reopens or redisplays. App.tsx only clears
-  // incidentError on neighborhood_incident_sent — handleGoHome and
-  // handleOpenActivity never do — so without this, leaving the panel after
-  // a failed submit and coming back would auto-open a blank dialog showing
-  // the old error again. Initializing to the mount-time value guards
-  // against a stale error already present on first render.
-  const dismissedErrorRef = useRef<string | null>(props.incidentError);
-
-  // No dedicated "incident accepted" ack reaches this component (unlike
-  // NCSPanel's spot-report flow, which closes on ncs_spot_report_sent) —
-  // only incidentError. Submitting closes the dialog optimistically; if the
-  // server rejects it, this reopens the dialog so the report and the error
-  // are visible together. Only a *new*, undismissed error reopens it.
-  useEffect(() => {
-    if (props.incidentError && props.incidentError !== dismissedErrorRef.current) {
-      setIncidentOpen(true);
-    }
-  }, [props.incidentError]);
-
-  // The error is only worth showing while it hasn't been dismissed yet.
-  const visibleIncidentError =
-    props.incidentError !== null && props.incidentError !== dismissedErrorRef.current
-      ? props.incidentError
-      : null;
+  const {
+    incidentOpen,
+    setIncidentOpen,
+    visibleIncidentError,
+    handleIncidentSubmit,
+    handleIncidentDialogClose,
+  } = useIncidentDialog(props.incidentError, props.onIncidentReport);
 
   const checkedIn = props.roster.some((r) => r.user_id === props.myUserId);
   const netLabel = nextNetLabel(props.netDay, props.netTime, new Date());
-  // Kids never hold the coordinator grant in practice, but the panel
-  // defends against it directly rather than trusting that invariant.
-  const showCoordinatorSection = props.isCoordinator && !props.isKid;
-
-  function handleIncidentSubmit(payload: { category: string; description: string; location: string }) {
-    // A new attempt supersedes any dismissed error: App resets incidentError
-    // to null on send, and clearing the ref here lets the rejection reopen
-    // the dialog even when its text matches a previously dismissed error.
-    dismissedErrorRef.current = null;
-    props.onIncidentReport(payload);
-    setIncidentOpen(false);
-  }
-
-  // Cancel/backdrop close (as opposed to the optimistic close on submit):
-  // the user has now seen whatever error is currently showing, so record it
-  // as dismissed until the next submit attempt resets the ref.
-  function handleIncidentDialogClose() {
-    dismissedErrorRef.current = props.incidentError;
-    setIncidentOpen(false);
-  }
+  const showCoordinatorSection = props.showCoordinatorSection;
 
   function requestSendStreetAlert() {
     if (!streetAlert.trim()) return;
@@ -200,6 +167,11 @@ export function NeighborhoodPanel(props: NeighborhoodPanelProps) {
         myUserId={props.myUserId}
         onStatusChange={props.onStatusChange}
         onClear={props.isAdmin ? () => setClearCheckinsConfirmOpen(true) : undefined}
+        isCoordinator={showCoordinatorSection}
+        onStationStatusChange={props.onStationStatusChange}
+        onRemoveStation={props.onRemoveStation}
+        onCallStation={showCoordinatorSection && props.netActive ? props.onCallStation : undefined}
+        onNoAnswer={showCoordinatorSection ? props.onNoAnswer : undefined}
       />
 
       <IncidentLog
@@ -233,6 +205,8 @@ export function NeighborhoodPanel(props: NeighborhoodPanelProps) {
               New round
             </Button>
           </Box>
+
+          <RadioCheckinForm contacts={props.contacts} onCheckin={props.onRadioCheckin} />
 
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             <TextField

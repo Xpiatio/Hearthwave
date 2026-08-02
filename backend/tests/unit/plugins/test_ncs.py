@@ -33,6 +33,7 @@ def make_config(**kwargs) -> SimpleNamespace:
         location="West Michigan",
         name="Test NCS",
         journals_dir="/tmp/journals",
+        net_sessions_dir="/tmp/net_sessions",
     )
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
@@ -758,6 +759,29 @@ class TestHandleStartEnd:
         with patch.object(asyncio, "create_task", side_effect=_close_and_return):
             await ncs._handle_end()
         assert "ncs-journal" in created_tasks
+        # The net-session save must be wired into _handle_end alongside the
+        # journal save — this is the production dispatch path, distinct from
+        # the tests in TestNCSNetSessionSave that call _save_net_session()
+        # directly and never actually exercise this asyncio.create_task line.
+        assert "ncs-net-session" in created_tasks
+
+    async def test_handle_end_creates_no_tasks_when_no_data(self):
+        """An empty net (no roster, no RX lines) should skip both the
+        journal task and the net-session task."""
+        ncs = make_ncs()
+        ncs._active = True
+        assert not ncs._session_rx
+        assert not ncs._roster
+        created_tasks = []
+        def _close_and_return(coro, **kwargs):
+            coro.close()
+            m = MagicMock()
+            created_tasks.append(kwargs.get("name"))
+            return m
+        with patch.object(asyncio, "create_task", side_effect=_close_and_return):
+            await ncs._handle_end()
+        assert "ncs-journal" not in created_tasks
+        assert "ncs-net-session" not in created_tasks
 
 
 # ---------------------------------------------------------------------------
@@ -1335,3 +1359,142 @@ class TestRoundTableCaller:
         ncs = make_ncs()
         msg = ncs._build_state_msg()
         assert "current_call" in msg
+
+
+class TestNCSNetSessionSave:
+    @pytest.mark.asyncio
+    async def test_end_saves_session_with_roster_and_transcript(self, tmp_path):
+        ncs = make_ncs(config=make_config(net_sessions_dir=tmp_path, ncs_zone=""))
+        await ncs._handle_start()
+        ncs._roster["KD8ABC|Maria"] = {
+            "callsign": "KD8ABC", "status": "CheckedIn", "traffic": "Routine",
+            "name": "Maria", "location": "Holland", "checkin_time": 1_700_000_000.0,
+            "verified": True, "called": False,
+        }
+        ncs._session_rx.append("KD8ABC: nothing to report")
+
+        # _handle_end() would spawn real "ncs-journal"/"ncs-net-session" tasks
+        # via asyncio.create_task; left unpatched those tasks (a) race the
+        # explicit _save_net_session() call below for the same-second
+        # filename, making `len(files) == 1` pass only by luck, and (b) are
+        # never awaited, so the event loop reports them as destroyed pending
+        # tasks at teardown. Patching create_task here means the explicit
+        # call below is the only write this test performs.
+        def _close_and_return(coro, **kwargs):
+            coro.close()
+            return MagicMock()
+        with patch.object(asyncio, "create_task", side_effect=_close_and_return):
+            await ncs._handle_end()
+        await ncs._save_net_session()
+
+        files = list(tmp_path.glob("*_ncs.json"))
+        assert len(files) == 1
+        data = json.loads(files[0].read_text(encoding="utf-8"))
+        assert data["net_type"] == "ncs"
+        assert data["roster"][0]["callsign"] == "KD8ABC"
+        assert data["roster"][0]["traffic"] == "Routine"
+        assert "KD8ABC: nothing to report" in data["transcript"]
+        assert data["duration_seconds"] >= 0
+        assert data["started_at"]
+
+    @pytest.mark.asyncio
+    async def test_start_records_started_at(self):
+        ncs = make_ncs(config=make_config(ncs_zone=""))
+        assert ncs._started_at is None
+        await ncs._handle_start()
+        assert ncs._started_at is not None
+
+    @pytest.mark.asyncio
+    async def test_save_failure_does_not_raise(self, tmp_path):
+        # A file where the directory should be makes mkdir fail.
+        blocked = tmp_path / "blocked"
+        blocked.write_text("not a directory", encoding="utf-8")
+        ncs = make_ncs(config=make_config(net_sessions_dir=blocked, ncs_zone=""))
+        await ncs._handle_start()
+        ncs._roster["KD8ABC|"] = {
+            "callsign": "KD8ABC", "status": "CheckedIn", "traffic": "Routine",
+            "name": "", "location": "", "checkin_time": 1_700_000_000.0,
+            "verified": False, "called": False,
+        }
+        # Same reasoning as test_end_saves_session_with_roster_and_transcript:
+        # patch create_task so _handle_end() doesn't leave a real
+        # "ncs-net-session" task pending at teardown.
+        def _close_and_return(coro, **kwargs):
+            coro.close()
+            return MagicMock()
+        with patch.object(asyncio, "create_task", side_effect=_close_and_return):
+            await ncs._handle_end()
+        await ncs._save_net_session()  # must not raise
+
+    @pytest.mark.asyncio
+    async def test_empty_net_saves_nothing(self, tmp_path):
+        ncs = make_ncs(config=make_config(net_sessions_dir=tmp_path, ncs_zone=""))
+        await ncs._handle_start()
+        await ncs._handle_end()
+        assert list(tmp_path.glob("*.json")) == []
+
+
+class TestCheckedOutStatus:
+    @pytest.mark.asyncio
+    async def test_status_update_accepts_checked_out(self):
+        ncs = make_ncs(config=make_config(ncs_zone=""))
+        ncs._roster["KD8ABC|Maria"] = {
+            "callsign": "KD8ABC", "status": "CheckedIn", "traffic": "Routine",
+            "name": "Maria", "location": "", "checkin_time": 0.0,
+            "verified": False, "called": False,
+        }
+        await ncs.on_client_message_received({
+            "type": "ncs_status_update", "callsign": "KD8ABC",
+            "name": "Maria", "status": "CheckedOut",
+        })
+        assert ncs._roster["KD8ABC|Maria"]["status"] == "CheckedOut"
+
+    @pytest.mark.asyncio
+    async def test_call_next_skips_checked_out(self):
+        ncs = make_ncs(config=make_config(ncs_zone=""))
+        await ncs._handle_start()
+        ncs._roster["KD8ABC|Maria"] = {
+            "callsign": "KD8ABC", "status": "CheckedOut", "traffic": "Routine",
+            "name": "Maria", "location": "", "checkin_time": 0.0,
+            "verified": False, "called": False,
+        }
+        ncs._roster["WRAB123|Sam"] = {
+            "callsign": "WRAB123", "status": "CheckedIn", "traffic": "Routine",
+            "name": "Sam", "location": "", "checkin_time": 0.0,
+            "verified": False, "called": False,
+        }
+        await ncs._handle_call_next()
+        assert ncs._roster["KD8ABC|Maria"]["called"] is False
+        assert ncs._roster["WRAB123|Sam"]["called"] is True
+
+    @pytest.mark.asyncio
+    async def test_call_next_skips_station_checked_out_via_message_handler(self):
+        """Regression pin for this task's actual code change: the accepted-statuses
+        tuple in on_client_message_received. Drives the CheckedOut transition through
+        the real ncs_status_update handler (not a direct dict write), then verifies
+        _handle_call_next skips that station and calls a CheckedIn one instead.
+
+        Reverting the accepted-statuses tuple (removing "CheckedOut") makes this
+        test fail: the status update would be rejected, KD8ABC would stay
+        CheckedIn, and it would be the one called instead of WRAB123.
+        """
+        ncs = make_ncs(config=make_config(ncs_zone=""))
+        await ncs._handle_start()
+        ncs._roster["KD8ABC|Maria"] = {
+            "callsign": "KD8ABC", "status": "CheckedIn", "traffic": "Routine",
+            "name": "Maria", "location": "", "checkin_time": 0.0,
+            "verified": False, "called": False,
+        }
+        ncs._roster["WRAB123|Sam"] = {
+            "callsign": "WRAB123", "status": "CheckedIn", "traffic": "Routine",
+            "name": "Sam", "location": "", "checkin_time": 0.0,
+            "verified": False, "called": False,
+        }
+        await ncs.on_client_message_received({
+            "type": "ncs_status_update", "callsign": "KD8ABC",
+            "name": "Maria", "status": "CheckedOut",
+        })
+        await ncs._handle_call_next()
+        assert ncs._roster["KD8ABC|Maria"]["status"] == "CheckedOut"
+        assert ncs._roster["KD8ABC|Maria"]["called"] is False
+        assert ncs._roster["WRAB123|Sam"]["called"] is True

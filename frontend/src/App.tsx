@@ -11,6 +11,9 @@ import type {
   Contact,
   AttendanceStation,
   JournalEntry,
+  NetSessionSummary,
+  AttendanceStatRow,
+  NetSessionDetail,
   FccLookupResultMsg,
   InputDeviceOption,
   MonitorSinkOption,
@@ -33,11 +36,15 @@ import type {
   IncidentEntry,
   NeighborhoodAlertMsg,
   NeighborhoodCheckinPayload,
+  NeighborhoodCheckinRadioPayload,
+  NeighborhoodRemoveStationPayload,
   NeighborhoodStatusPayload,
   NeighborhoodStartPayload,
   NeighborhoodEndPayload,
   NeighborhoodCallNextPayload,
   NeighborhoodCallResetPayload,
+  NeighborhoodNoAnswerPayload,
+  NeighborhoodCallStationPayload,
   NeighborhoodClearCheckinsPayload,
   NeighborhoodClearIncidentsPayload,
   NeighborhoodIncidentReportPayload,
@@ -328,6 +335,11 @@ export default function App() {
   const [journalResult, setJournalResult] = useState<JournalResultDraft | null>(null);
   const [journalGenerating, setJournalGenerating] = useState(false);
   const [journalError, setJournalError] = useState<string | null>(null);
+
+  // Past nets (net session history)
+  const [netSessions, setNetSessions] = useState<NetSessionSummary[]>([]);
+  const [attendanceStats, setAttendanceStats] = useState<AttendanceStatRow[]>([]);
+  const [selectedNetSession, setSelectedNetSession] = useState<NetSessionDetail | null>(null);
 
   // Snackbars
   const [publishSnack, setPublishSnack] = useState<string | null>(null);
@@ -761,6 +773,20 @@ export default function App() {
 
       case 'journal_deleted':
         setJournals((prev) => prev.filter((j) => j._file !== msg.file_path));
+        break;
+
+      case 'net_sessions':
+        setNetSessions(msg.sessions);
+        setAttendanceStats(msg.stats);
+        break;
+
+      case 'net_session':
+        setSelectedNetSession(msg.session);
+        break;
+
+      case 'net_session_deleted':
+        setSelectedNetSession(null);
+        sendRef.current({ type: 'list_net_sessions' });
         break;
 
       case 'spectrogram_row':
@@ -1200,12 +1226,31 @@ export default function App() {
     send({ type: 'neighborhood_checkin' } satisfies NeighborhoodCheckinPayload);
   }
 
-  function sendNeighborhoodStatus(status: 'checked_in' | 'standby', userId?: string) {
+  function sendNeighborhoodStatus(status: 'checked_in' | 'standby' | 'checked_out', userId?: string) {
     send({
       type: 'neighborhood_status',
       status,
       ...(userId ? { user_id: userId } : {}),
     } satisfies NeighborhoodStatusPayload);
+  }
+
+  function sendNeighborhoodRadioCheckin(p: {
+    callsign: string;
+    name: string;
+    location: string;
+    saveContact: boolean;
+  }) {
+    send({
+      type: 'neighborhood_checkin_radio',
+      callsign: p.callsign,
+      name: p.name,
+      location: p.location,
+      ...(p.saveContact ? { save_contact: true } : {}),
+    } satisfies NeighborhoodCheckinRadioPayload);
+  }
+
+  function sendNeighborhoodRemoveStation(userId: string) {
+    send({ type: 'neighborhood_remove_station', user_id: userId } satisfies NeighborhoodRemoveStationPayload);
   }
 
   function sendIncidentReport(category: string, description: string, location: string) {
@@ -1239,6 +1284,14 @@ export default function App() {
 
   function sendNeighborhoodCallReset() {
     send({ type: 'neighborhood_call_reset' } satisfies NeighborhoodCallResetPayload);
+  }
+
+  function sendNeighborhoodNoAnswer(userId: string, noAnswer: boolean) {
+    send({ type: 'neighborhood_no_answer', user_id: userId, no_answer: noAnswer } satisfies NeighborhoodNoAnswerPayload);
+  }
+
+  function sendNeighborhoodCallStation(userId: string) {
+    send({ type: 'neighborhood_call_station', user_id: userId } satisfies NeighborhoodCallStationPayload);
   }
 
   function sendNeighborhoodClearCheckins() {
@@ -1444,6 +1497,18 @@ export default function App() {
     send({ type: 'unpublish_journal', file_path });
   }, [send]);
 
+  const handleListNetSessions = useCallback(() => {
+    send({ type: 'list_net_sessions' });
+  }, [send]);
+
+  const handleSelectNetSession = useCallback((id: string) => {
+    send({ type: 'get_net_session', id });
+  }, [send]);
+
+  const handleDeleteNetSession = useCallback((id: string) => {
+    send({ type: 'delete_net_session', id });
+  }, [send]);
+
   const handleDismissJournalResult = useCallback(() => {
     setJournalResult(null);
   }, []);
@@ -1588,6 +1653,8 @@ export default function App() {
     sendSetUserQuickMessages,
     sendNeighborhoodCheckin,
     sendNeighborhoodStatus,
+    sendNeighborhoodRadioCheckin,
+    sendNeighborhoodRemoveStation,
     sendIncidentReport,
     sendStreetAlert,
     sendNeighborhoodStart,
@@ -1596,6 +1663,8 @@ export default function App() {
     sendNeighborhoodCallReset,
     sendNeighborhoodClearCheckins,
     sendNeighborhoodClearIncidents,
+    sendNeighborhoodCallStation,
+    sendNeighborhoodNoAnswer,
     sendSetNeighborhoodCoordinator,
     profile: profile!,
     connected,
@@ -1622,6 +1691,12 @@ export default function App() {
     onPublishJournal: handlePublishJournal,
     onUnpublishJournal: handleUnpublishJournal,
     onDismissJournalResult: handleDismissJournalResult,
+    netSessions,
+    attendanceStats,
+    selectedNetSession,
+    onListNetSessions: handleListNetSessions,
+    onSelectNetSession: handleSelectNetSession,
+    onDeleteNetSession: handleDeleteNetSession,
     listenOnly,
     onSend: handleSend,
     onChat: handleChat,
@@ -1779,6 +1854,21 @@ export default function App() {
           onCallNext={sendNeighborhoodCallNext}
           onNewRound={sendNeighborhoodCallReset}
           onGoHome={handleGoHome}
+          contacts={contacts}
+          onRadioCheckin={sendNeighborhoodRadioCheckin}
+          onStationStatusChange={(userId, status) => sendNeighborhoodStatus(status, userId)}
+          onRemoveStation={sendNeighborhoodRemoveStation}
+          onCallStation={sendNeighborhoodCallStation}
+          onNoAnswer={sendNeighborhoodNoAnswer}
+          listenOnly={listenOnly}
+          onTxAbort={handleTxAbort}
+          messages={messages}
+          transmitting={transmitting}
+          showCallsignChips={showCallsignChips}
+          onSendMessage={handleSend}
+          onChat={handleChat}
+          onStandaloneId={handleStandaloneId}
+          txComposition={txComposition}
         />
       ) : (
         <DesktopApp

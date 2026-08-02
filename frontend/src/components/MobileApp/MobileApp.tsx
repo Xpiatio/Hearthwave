@@ -38,6 +38,9 @@ import type {
   NeighborhoodStateMsg,
   IncidentEntry,
   NeighborhoodAlertMsg,
+  NetSessionSummary,
+  AttendanceStatRow,
+  NetSessionDetail,
 } from '../../types/ws';
 import type { AdminConfig, JournalResultDraft, PendingStation } from '../../types/appTypes';
 
@@ -69,7 +72,9 @@ export interface MobileAppProps {
   neighborhoodAlerts: NeighborhoodAlertMsg[];
   incidentError: string | null;
   sendNeighborhoodCheckin: () => void;
-  sendNeighborhoodStatus: (status: 'checked_in' | 'standby', userId?: string) => void;
+  sendNeighborhoodStatus: (status: 'checked_in' | 'standby' | 'checked_out', userId?: string) => void;
+  sendNeighborhoodRadioCheckin: (p: { callsign: string; name: string; location: string; saveContact: boolean }) => void;
+  sendNeighborhoodRemoveStation: (userId: string) => void;
   sendIncidentReport: (category: string, description: string, location: string) => void;
   sendStreetAlert: (message: string) => void;
   sendNeighborhoodStart: () => void;
@@ -78,6 +83,8 @@ export interface MobileAppProps {
   sendNeighborhoodCallReset: () => void;
   sendNeighborhoodClearCheckins: () => void;
   sendNeighborhoodClearIncidents: () => void;
+  sendNeighborhoodCallStation: (userId: string) => void;
+  sendNeighborhoodNoAnswer: (userId: string, noAnswer: boolean) => void;
 
   // Core data
   messages: ChatEntry[];
@@ -110,6 +117,12 @@ export interface MobileAppProps {
   onPublishJournal: (file_path: string) => void;
   onUnpublishJournal: (file_path: string) => void;
   onDismissJournalResult: () => void;
+  netSessions: NetSessionSummary[];
+  attendanceStats: AttendanceStatRow[];
+  selectedNetSession: NetSessionDetail | null;
+  onListNetSessions: () => void;
+  onSelectNetSession: (id: string) => void;
+  onDeleteNetSession: (id: string) => void;
 
   // TX / PTT
   listenOnly: boolean;
@@ -199,6 +212,8 @@ export function MobileApp({
   incidentError,
   sendNeighborhoodCheckin,
   sendNeighborhoodStatus,
+  sendNeighborhoodRadioCheckin,
+  sendNeighborhoodRemoveStation,
   sendIncidentReport,
   sendStreetAlert,
   sendNeighborhoodStart,
@@ -207,6 +222,8 @@ export function MobileApp({
   sendNeighborhoodCallReset,
   sendNeighborhoodClearCheckins,
   sendNeighborhoodClearIncidents,
+  sendNeighborhoodCallStation,
+  sendNeighborhoodNoAnswer,
   messages,
   contacts,
   transmitting,
@@ -225,6 +242,12 @@ export function MobileApp({
   onPublishJournal,
   onUnpublishJournal,
   onDismissJournalResult,
+  netSessions,
+  attendanceStats,
+  selectedNetSession,
+  onListNetSessions,
+  onSelectNetSession,
+  onDeleteNetSession,
   listenOnly,
   onSend,
   onChat,
@@ -419,6 +442,12 @@ export function MobileApp({
             onCallNext={sendNeighborhoodCallNext}
             onNewRound={sendNeighborhoodCallReset}
             onGoHome={() => setTab('chat')}
+            contacts={contacts}
+            onRadioCheckin={sendNeighborhoodRadioCheckin}
+            onStationStatusChange={(userId, status) => sendNeighborhoodStatus(status, userId)}
+            onRemoveStation={sendNeighborhoodRemoveStation}
+            onCallStation={sendNeighborhoodCallStation}
+            onNoAnswer={sendNeighborhoodNoAnswer}
           />
         </Box>
       )}
@@ -450,6 +479,13 @@ export function MobileApp({
             onPublish={onPublishJournal}
             onUnpublish={onUnpublishJournal}
             onDismissResult={onDismissJournalResult}
+            netSessions={netSessions}
+            attendanceStats={attendanceStats}
+            selectedNetSession={selectedNetSession}
+            isAdmin={!!profile.is_admin}
+            onListNetSessions={onListNetSessions}
+            onSelectNetSession={onSelectNetSession}
+            onDeleteNetSession={onDeleteNetSession}
           />
         </Box>
       )}

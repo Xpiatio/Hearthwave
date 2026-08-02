@@ -15,6 +15,7 @@ import {
   TableCell,
   TableHead,
   TableRow,
+  TableSortLabel,
   TextField,
   Tooltip,
   Typography,
@@ -29,9 +30,10 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import type { PluginProps } from '../../plugins';
 import type { NCSEntry, NCSAlert, NCSSpotReportPayload } from '../../types/ws';
 import { SpotReportDialog } from './SpotReportDialog';
+import { useRosterSort } from '../../netsessions/rosterView';
 
 type TrafficLevel = 'Routine' | 'Priority' | 'Emergency' | 'General' | 'Short Term' | 'IN-n-Out';
-type StationStatus = 'CheckedIn' | 'Standby' | 'LoggedOut';
+type StationStatus = 'CheckedIn' | 'Standby' | 'CheckedOut' | 'LoggedOut';
 
 const TRAFFIC_COLORS: Record<TrafficLevel, 'default' | 'warning' | 'error'> = {
   Routine: 'default',
@@ -45,8 +47,20 @@ const TRAFFIC_COLORS: Record<TrafficLevel, 'default' | 'warning' | 'error'> = {
 const STATUS_LABELS: Record<StationStatus, string> = {
   CheckedIn: '✓ In',
   Standby: 'Stby',
+  CheckedOut: 'C/O',
   LoggedOut: 'Out',
 };
+
+const STATUS_CYCLE: StationStatus[] = ['CheckedIn', 'Standby', 'CheckedOut'];
+
+/** Fields the roster table actually renders — kept in sync with the columns
+ *  below so a filter query never matches on a field the user can't see. */
+const NCS_SEARCH_FIELDS: (keyof NCSEntry)[] = ['callsign', 'name', 'status', 'traffic'];
+
+function nextStatus(current: string): StationStatus {
+  const at = STATUS_CYCLE.indexOf(current as StationStatus);
+  return STATUS_CYCLE[(at + 1) % STATUS_CYCLE.length];
+}
 
 function playPcmAudio(b64: string, sampleRate: number): void {
   if (!b64) return;
@@ -180,13 +194,29 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
   }, [callsignInput, nameInput, locationInput, trafficInput, send]);
 
   const handleStatusToggle = useCallback((entry: NCSEntry) => {
-    const next: StationStatus = entry.status === 'CheckedIn' ? 'Standby' : 'CheckedIn';
-    send({ type: 'ncs_status_update', callsign: entry.callsign, name: entry.name ?? '', status: next });
+    send({
+      type: 'ncs_status_update',
+      callsign: entry.callsign,
+      name: entry.name ?? '',
+      status: nextStatus(entry.status),
+    });
   }, [send]);
 
   const handleRemove = useCallback((entry: NCSEntry) => {
     send({ type: 'ncs_remove', callsign: entry.callsign, name: entry.name ?? '' });
   }, [send]);
+
+  type RosterColumn = 'callsign' | 'status' | 'traffic';
+
+  const {
+    rosterQuery,
+    setRosterQuery,
+    sortColumn,
+    sortDirection,
+    handleSort,
+    visibleRoster,
+    showFilterInput,
+  } = useRosterSort<NCSEntry, RosterColumn>(roster, NCS_SEARCH_FIELDS);
 
   return (
     <Paper elevation={0} square sx={{ borderBottom: 1, borderColor: 'divider', minWidth: 320 }}>
@@ -346,20 +376,63 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
       </Box>
 
       {/* Roster table */}
+      {showFilterInput && (
+        <Box sx={{ px: 2, pb: 1 }}>
+          <TextField
+            size="small"
+            fullWidth
+            placeholder="Filter roster"
+            value={rosterQuery}
+            onChange={(e) => setRosterQuery(e.target.value)}
+            slotProps={{ htmlInput: { 'aria-label': 'Filter roster' } }}
+          />
+        </Box>
+      )}
       {roster.length > 0 ? (
         <Box sx={{ overflowX: 'auto', maxHeight: 260, overflowY: 'auto' }}>
           <Table size="small" stickyHeader aria-label="NCS roster">
             <TableHead>
               <TableRow>
-                <TableCell sx={{ fontWeight: 700, py: 0.5 }}>Callsign</TableCell>
-                <TableCell sx={{ fontWeight: 700, py: 0.5 }}>Status</TableCell>
-                <TableCell sx={{ fontWeight: 700, py: 0.5 }}>Traffic</TableCell>
+                <TableCell sx={{ fontWeight: 700, py: 0.5 }}>
+                  <TableSortLabel
+                    active={sortColumn === 'callsign'}
+                    direction={sortColumn === 'callsign' ? sortDirection : 'asc'}
+                    onClick={() => handleSort('callsign')}
+                  >
+                    Callsign
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell sx={{ fontWeight: 700, py: 0.5 }}>
+                  <TableSortLabel
+                    active={sortColumn === 'status'}
+                    direction={sortColumn === 'status' ? sortDirection : 'asc'}
+                    onClick={() => handleSort('status')}
+                  >
+                    Status
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell sx={{ fontWeight: 700, py: 0.5 }}>
+                  <TableSortLabel
+                    active={sortColumn === 'traffic'}
+                    direction={sortColumn === 'traffic' ? sortDirection : 'asc'}
+                    onClick={() => handleSort('traffic')}
+                  >
+                    Traffic
+                  </TableSortLabel>
+                </TableCell>
                 <TableCell sx={{ fontWeight: 700, py: 0.5 }}>Time</TableCell>
                 <TableCell sx={{ py: 0.5 }} />
               </TableRow>
             </TableHead>
             <TableBody>
-              {roster.map((entry) => (
+              {visibleRoster.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} sx={{ py: 1.5, color: 'text.secondary' }}>
+                    <Typography variant="caption">No stations match your filter.</Typography>
+                  </TableCell>
+                </TableRow>
+              )}
+              {visibleRoster.map((entry) => (
                 <TableRow
                   key={`${entry.callsign}|${entry.name ?? ''}`}
                   hover
@@ -385,11 +458,11 @@ export function NCSPanel({ send, lastMessage }: PluginProps) {
                     )}
                   </TableCell>
                   <TableCell sx={{ py: 0.5 }}>
-                    <Tooltip title={`Click to toggle ${entry.status === 'CheckedIn' ? 'Standby' : 'CheckedIn'}`}>
+                    <Tooltip title={`Click to set ${nextStatus(entry.status)}`}>
                       <Chip
                         label={STATUS_LABELS[entry.status as StationStatus] ?? entry.status}
                         size="small"
-                        color={entry.status === 'CheckedIn' ? 'success' : entry.status === 'Standby' ? 'warning' : 'default'}
+                        color={entry.status === 'CheckedIn' ? 'success' : entry.status === 'Standby' ? 'warning' : entry.status === 'CheckedOut' ? 'info' : 'default'}
                         onClick={() => handleStatusToggle(entry)}
                         clickable
                         sx={{ fontWeight: 700, minWidth: 48 }}

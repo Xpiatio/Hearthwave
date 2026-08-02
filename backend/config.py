@@ -289,6 +289,11 @@ class ServerConfig(dict):
         raw = self.get("journals_dir")
         return Path(raw) if raw else Path("/data/journals")
 
+    @property
+    def net_sessions_dir(self) -> Path:
+        raw = self.get("net_sessions_dir")
+        return Path(raw) if raw else Path("/data/net_sessions")
+
     # ---- spectrogram -----------------------------------------------------
 
     @property

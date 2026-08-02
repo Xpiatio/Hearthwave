@@ -2,11 +2,16 @@ import { render as rtlRender, screen, fireEvent, within, waitFor } from '@testin
 import userEvent from '@testing-library/user-event';
 import { ThemeProvider } from '@mui/material/styles';
 import { makeTheme } from '../../../theme';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { axe } from 'jest-axe';
 import { NeighborhoodPanel } from '../NeighborhoodPanel';
 import type { NeighborhoodPanelProps } from '../NeighborhoodPanel';
-import type { IncidentEntry, NeighborhoodAlertMsg, NeighborhoodRosterRow } from '../../../types/ws';
+import type { Contact, IncidentEntry, NeighborhoodAlertMsg, NeighborhoodRosterRow } from '../../../types/ws';
+
+// jsdom doesn't implement scrollIntoView — ChatDisplay calls it on mount, and
+// the wide-screen coordinator switch below can now mount ChatDisplay via
+// CoordinatorDashboard (see CoordinatorDashboard.test.tsx for the same stub).
+window.HTMLElement.prototype.scrollIntoView = vi.fn();
 
 function render(ui: React.ReactElement) {
   return rtlRender(<ThemeProvider theme={makeTheme(false)}>{ui}</ThemeProvider>);
@@ -31,6 +36,8 @@ const incidents: IncidentEntry[] = [
 const alerts: NeighborhoodAlertMsg[] = [
   { type: 'neighborhood_alert', id: 'a1', message: 'Boil water advisory', issued_by: 'Coordinator', ts: new Date().toISOString() },
 ];
+
+const contacts: Contact[] = [];
 
 function makeProps(overrides: Partial<NeighborhoodPanelProps> = {}): NeighborhoodPanelProps {
   return {
@@ -57,11 +64,66 @@ function makeProps(overrides: Partial<NeighborhoodPanelProps> = {}): Neighborhoo
     onCallNext: vi.fn(),
     onNewRound: vi.fn(),
     onGoHome: vi.fn(),
+    contacts,
+    onRadioCheckin: vi.fn(),
+    onStationStatusChange: vi.fn(),
+    onRemoveStation: vi.fn(),
+    onCallStation: vi.fn(),
+    onNoAnswer: vi.fn(),
     ...overrides,
   };
 }
 
+function mockMatchMedia(matches: boolean) {
+  vi.stubGlobal('matchMedia', vi.fn().mockImplementation((query: string) => ({
+    matches, media: query, onchange: null,
+    addListener: vi.fn(), removeListener: vi.fn(),
+    addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn(),
+  })));
+}
+
+afterEach(() => vi.unstubAllGlobals());
+
 describe('NeighborhoodPanel', () => {
+  describe('wide-screen coordinator dashboard switch', () => {
+    it('renders the ops dashboard for a wide-screen coordinator', () => {
+      mockMatchMedia(true);
+      render(
+        <NeighborhoodPanel
+          {...makeProps({
+            isCoordinator: true,
+            messages: [], transmitting: false, showCallsignChips: false,
+            onSendMessage: vi.fn(), onChat: vi.fn(), onStandaloneId: vi.fn(),
+            txComposition: null,
+          })}
+        />
+      );
+      // Dashboard marker: the command-bar street-alert button (stacked view has
+      // an inline field, not this button).
+      expect(screen.getByRole('button', { name: 'Street alert…' })).toBeInTheDocument();
+    });
+
+    it('keeps the stacked view for a narrow-screen coordinator', () => {
+      mockMatchMedia(false);
+      render(<NeighborhoodPanel {...makeProps({ isCoordinator: true, messages: [] })} />);
+      expect(screen.queryByRole('button', { name: 'Street alert…' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Check in' })).toBeInTheDocument();
+    });
+
+    it('never shows a kid the dashboard, even wide + coordinator', () => {
+      mockMatchMedia(true);
+      render(<NeighborhoodPanel {...makeProps({ isCoordinator: true, isKid: true, messages: [] })} />);
+      expect(screen.queryByRole('button', { name: 'Street alert…' })).not.toBeInTheDocument();
+    });
+
+    it('keeps the stacked view on a wide screen when the App hasn\'t wired up messages', () => {
+      mockMatchMedia(true);
+      render(<NeighborhoodPanel {...makeProps({ isCoordinator: true })} />);
+      expect(screen.queryByRole('button', { name: 'Street alert…' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Check in' })).toBeInTheDocument();
+    });
+  });
+
   it('renders header with title, net chip, and next-net label when inactive', () => {
     render(<NeighborhoodPanel {...makeProps()} />);
     expect(screen.getByText('Neighborhood')).toBeInTheDocument();
@@ -264,6 +326,40 @@ describe('NeighborhoodPanel', () => {
     expect(screen.queryByText(/unknown-user/)).not.toBeInTheDocument();
   });
 
+  describe('radio check-in', () => {
+    it('offers the radio check-in form to a coordinator', () => {
+      render(<NeighborhoodPanel {...makeProps({ isCoordinator: true })} />);
+      expect(screen.getByRole('button', { name: 'Check in station' })).toBeInTheDocument();
+    });
+
+    it('hides the radio check-in form from a non-coordinator', () => {
+      render(<NeighborhoodPanel {...makeProps({ isCoordinator: false })} />);
+      expect(screen.queryByRole('button', { name: 'Check in station' })).not.toBeInTheDocument();
+    });
+
+    it('hides the radio check-in form from a kid holding the grant', () => {
+      render(<NeighborhoodPanel {...makeProps({ isCoordinator: true, isKid: true })} />);
+      expect(screen.queryByRole('button', { name: 'Check in station' })).not.toBeInTheDocument();
+    });
+
+    it('passes a radio check-in through to onRadioCheckin', async () => {
+      const user = userEvent.setup();
+      const props = makeProps({ isCoordinator: true });
+      render(<NeighborhoodPanel {...props} />);
+
+      await user.type(screen.getByLabelText('Callsign'), 'WRAZ999');
+      await user.type(screen.getByLabelText('Name'), 'Sam');
+      await user.click(screen.getByRole('button', { name: 'Check in station' }));
+
+      expect(props.onRadioCheckin).toHaveBeenCalledWith({
+        callsign: 'WRAZ999',
+        name: 'Sam',
+        location: '',
+        saveContact: false,
+      });
+    });
+  });
+
   describe('street alert', () => {
     it('sends the alert after confirming', () => {
       const props = makeProps({ isCoordinator: true });
@@ -369,16 +465,72 @@ describe('NeighborhoodPanel', () => {
       expect(screen.getByText('Neighbor 17')).toBeInTheDocument();
     });
 
-    it('shows "I\'m back" on the viewer\'s own row when currently on standby', () => {
+    it('shows "Check out" on the viewer\'s own row when currently on standby', () => {
       const props = makeProps({ myUserId: 'u3' });
       render(<NeighborhoodPanel {...props} />);
       const list = screen.getByRole('list', { name: 'Checked-in neighbors' });
       const rows = within(list).getAllByRole('listitem');
 
+      const checkOut = within(rows[1]).getByRole('button', { name: 'Check out' });
+      fireEvent.click(checkOut);
+      expect(props.onStatusChange).toHaveBeenCalledWith('checked_out');
+      expect(within(rows[0]).queryByRole('button')).not.toBeInTheDocument();
+    });
+
+    it('shows "Checked out" status and an "I\'m back" button on the viewer\'s own row when checked out', () => {
+      const checkedOutRoster: NeighborhoodRosterRow[] = [
+        roster[0],
+        { ...roster[1], status: 'checked_out' },
+      ];
+      const props = makeProps({ roster: checkedOutRoster, myUserId: 'u3' });
+      render(<NeighborhoodPanel {...props} />);
+      const list = screen.getByRole('list', { name: 'Checked-in neighbors' });
+      const rows = within(list).getAllByRole('listitem');
+
+      expect(within(rows[1]).getByText('Checked out')).toBeInTheDocument();
       const imBack = within(rows[1]).getByRole('button', { name: "I'm back" });
       fireEvent.click(imBack);
       expect(props.onStatusChange).toHaveBeenCalledWith('checked_in');
-      expect(within(rows[0]).queryByRole('button')).not.toBeInTheDocument();
+    });
+
+    it('hides non-matching rows when a name is typed into the roster filter', () => {
+      const threeRoster: NeighborhoodRosterRow[] = [
+        ...roster,
+        {
+          user_id: 'u4', callsign: 'W3DEF', name: 'Carol', location: 'Pine St',
+          status: 'checked_in', checkin_time: new Date().toISOString(), called: false,
+        },
+      ];
+      render(<NeighborhoodPanel {...makeProps({ roster: threeRoster })} />);
+
+      const filter = screen.getByLabelText(/filter roster/i);
+      fireEvent.change(filter, { target: { value: 'Carol' } });
+
+      const list = screen.getByRole('list', { name: 'Checked-in neighbors' });
+      expect(within(list).getByText('Carol')).toBeInTheDocument();
+      expect(within(list).queryByText('Alice')).not.toBeInTheDocument();
+      expect(within(list).queryByText('Bob')).not.toBeInTheDocument();
+    });
+
+    it('forwards a coordinator\'s Call click on a non-current row to onCallStation with its user_id', () => {
+      const props = makeProps({ isCoordinator: true, currentCall: 'u3', netActive: true });
+      render(<NeighborhoodPanel {...props} />);
+      const list = screen.getByRole('list', { name: 'Checked-in neighbors' });
+
+      fireEvent.click(within(list).getByRole('button', { name: 'Call Alice' }));
+      expect(props.onCallStation).toHaveBeenCalledWith('u1');
+    });
+
+    it('hides the per-row Call button when no net is running, even for a coordinator', () => {
+      render(<NeighborhoodPanel {...makeProps({ isCoordinator: true, netActive: false })} />);
+      const list = screen.getByRole('list', { name: 'Checked-in neighbors' });
+      expect(within(list).queryByRole('button', { name: /^Call\b/ })).not.toBeInTheDocument();
+    });
+
+    it('shows the per-row Call button once a net is running', () => {
+      render(<NeighborhoodPanel {...makeProps({ isCoordinator: true, netActive: true, currentCall: 'u3' })} />);
+      const list = screen.getByRole('list', { name: 'Checked-in neighbors' });
+      expect(within(list).getByRole('button', { name: 'Call Alice' })).toBeInTheDocument();
     });
   });
 

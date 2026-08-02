@@ -20,12 +20,20 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PublishIcon from '@mui/icons-material/Publish';
 import UnpublishedIcon from '@mui/icons-material/Unpublished';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import type { JournalEntry } from '../../types/ws';
+import { PastNetsTab } from './PastNetsTab';
+import type {
+  AttendanceStatRow,
+  NetSessionDetail,
+  NetSessionSummary,
+} from '../../types/ws';
 
 interface JournalResultDraft {
   title: string;
@@ -49,6 +57,13 @@ interface Props {
   onDismissResult: () => void;
   /** When true the panel fills its container's height (e.g. inside a Dialog) instead of capping at 360px. */
   fillHeight?: boolean;
+  netSessions: NetSessionSummary[];
+  attendanceStats: AttendanceStatRow[];
+  selectedNetSession: NetSessionDetail | null;
+  isAdmin: boolean;
+  onListNetSessions: () => void;
+  onSelectNetSession: (id: string) => void;
+  onDeleteNetSession: (id: string) => void;
 }
 
 function CallsignsTable({ rows }: { rows: Array<{ callsign: string; location: string }> }) {
@@ -89,6 +104,13 @@ export function JournalPanel({
   onUnpublish,
   onDismissResult,
   fillHeight = false,
+  netSessions,
+  attendanceStats,
+  selectedNetSession,
+  isAdmin,
+  onListNetSessions,
+  onSelectNetSession,
+  onDeleteNetSession,
 }: Props) {
   const [selected, setSelected] = useState<JournalEntry | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -96,6 +118,7 @@ export function JournalPanel({
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmPublish, setConfirmPublish] = useState<string | null>(null);
   const [confirmUnpublish, setConfirmUnpublish] = useState<string | null>(null);
+  const [tab, setTab] = useState<'journals' | 'nets'>('journals');
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const unpublishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -169,12 +192,36 @@ export function JournalPanel({
       elevation={0}
       sx={{
         display: 'flex',
+        flexDirection: 'column',
         borderBottom: 1,
         borderColor: 'divider',
         ...(fillHeight ? { height: '100%' } : { maxHeight: 360 }),
         overflow: 'hidden',
       }}
     >
+      <Tabs
+        value={tab}
+        onChange={(_, next) => {
+          setTab(next);
+          if (next === 'nets') onListNetSessions();
+        }}
+        sx={{ borderBottom: 1, borderColor: 'divider', minHeight: 40 }}
+      >
+        <Tab value="journals" label="Journal" sx={{ minHeight: 40 }} />
+        <Tab value="nets" label="Past Nets" sx={{ minHeight: 40 }} />
+      </Tabs>
+
+      {tab === 'nets' ? (
+        <PastNetsTab
+          sessions={netSessions}
+          stats={attendanceStats}
+          selected={selectedNetSession}
+          isAdmin={isAdmin}
+          onSelect={onSelectNetSession}
+          onDelete={onDeleteNetSession}
+        />
+      ) : (
+        <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
       {/* Left: journal list + generate button */}
       <Box
         sx={{
@@ -369,6 +416,8 @@ export function JournalPanel({
           </Typography>
         )}
       </Box>
+        </Box>
+      )}
     </Paper>
   );
 }

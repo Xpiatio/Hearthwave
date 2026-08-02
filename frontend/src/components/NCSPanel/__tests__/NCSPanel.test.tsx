@@ -346,6 +346,12 @@ describe('NCSPanel', () => {
       expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'ncs_status_update', callsign: 'W1AAA', status: 'Standby' }))
     })
 
+    it('sends ncs_status_update with CheckedOut when a Standby chip is clicked', () => {
+      const send = renderWithRoster()
+      fireEvent.click(screen.getByText('Stby')) // Standby -> CheckedOut
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'ncs_status_update', callsign: 'KD9ZZZ', status: 'CheckedOut' }))
+    })
+
     it('sends ncs_remove when delete button clicked', () => {
       const send = renderWithRoster()
       fireEvent.click(screen.getByRole('button', { name: /remove w1aaa/i }))
@@ -367,6 +373,15 @@ describe('NCSPanel', () => {
     it('does not show empty message when inactive', () => {
       render(<NCSPanel {...makeProps()} />)
       expect(screen.queryByText(/no stations checked in/i)).not.toBeInTheDocument()
+    })
+
+    it('hides non-matching rows when a callsign is typed into the roster filter', () => {
+      renderWithRoster()
+      const filter = screen.getByLabelText(/filter roster/i)
+      fireEvent.change(filter, { target: { value: 'KD9ZZZ' } })
+      expect(screen.getByText('KD9ZZZ')).toBeInTheDocument()
+      expect(screen.queryByText('W1AAA')).not.toBeInTheDocument()
+      expect(screen.queryByText('N0CALL')).not.toBeInTheDocument()
     })
   })
 
