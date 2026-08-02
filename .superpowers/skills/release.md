@@ -35,7 +35,17 @@ deploy files kept pulling the previous release's images.
 | `docker-compose.portainer.yml` | header comment + `image:` tags (incl. the commented-out `-cuda` example) | Same, for Portainer users |
 | `prereq.sh` | `BACKEND_IMAGE` | Pulls the backend image during setup |
 
-Bump them, then **verify no stale reference survives**:
+Bump them, then run the automated check — it verifies every location above agrees
+with `frontend/package.json`, and CI runs it on every PR and again before publishing:
+
+```bash
+python3 scripts/check_version_sync.py
+```
+
+If you add a new place the version is written, add a check to that script **and** a
+row to the table above.
+
+As a second pass, **verify no stale reference survives**:
 
 ```bash
 # Both must come back empty (CHANGELOG keeps history, so exclude it).

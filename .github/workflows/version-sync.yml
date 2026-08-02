@@ -1,0 +1,22 @@
+# The version is written in nine places across six files. Bumping only some of
+# them ships a release that misreports itself: v2.23.1 left backend/__init__.py
+# at 2.23.0, so the running app displayed the previous version, and the deploy
+# files stayed pinned to the previous release's images.
+#
+# docker-publish.yml runs this same check before publishing, but that is too
+# late to be useful feedback — by then the tag exists. This catches it on the PR.
+name: version-sync
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/check_version_sync.py
