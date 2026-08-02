@@ -5717,3 +5717,97 @@ class TestNetSessionHistoryHandlers:
         assert msg is not None
         assert msg["detail"] == "Session not found."
         assert str(sessions_dir) not in msg["detail"]
+
+
+
+# Audio device listing / refresh — name-based selection
+# ---------------------------------------------------------------------------
+
+def _dev(name: str, *, ins: int = 0, outs: int = 0) -> dict:
+    return {"name": name, "max_input_channels": ins, "max_output_channels": outs}
+
+
+_USB_DEV = _dev("USB Audio: - (hw:0,0)", ins=2, outs=2)
+_HDMI_DEV = _dev("HD-Audio Generic: HDMI 0 (hw:1,3)", outs=8)
+
+
+class TestAudioDeviceListing:
+    def _run(self, tmp_path, present, send, *, cfg_extra=None):
+        """Boot the server with a faked device list and run *send* against it."""
+        from backend.audio import devices as audio_devices
+
+        cfg = _minimal_cfg(tmp_path)
+        cfg.update(cfg_extra or {})
+        mock_stt, mock_tts = _make_mocks()
+        mock_users, mock_tokens = _make_auth_mocks()
+        audio_devices.invalidate_cache()
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch.object(audio_devices, "_query", lambda: list(present)),
+            patch.object(audio_devices, "_reinit", lambda: None),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    result = send(ws)
+        audio_devices.invalidate_cache()
+        return result, cfg
+
+    def test_output_devices_are_identified_by_name(self, tmp_path):
+        def send(ws):
+            ws.send_json({"type": "list_output_devices"})
+            return _next_of_type(ws, "output_devices")
+
+        msg, _ = self._run(tmp_path, [_USB_DEV, _HDMI_DEV], send)
+        ids = [d["id"] for d in msg["devices"]]
+        assert _USB_DEV["name"] in ids
+        assert -1 in ids, "system default must still be offered"
+
+    def test_current_output_device_is_reported_as_a_name(self, tmp_path):
+        def send(ws):
+            ws.send_json({"type": "list_output_devices"})
+            return _next_of_type(ws, "output_devices")
+
+        msg, _ = self._run(
+            tmp_path, [_USB_DEV, _HDMI_DEV], send,
+            cfg_extra={"output_device": _USB_DEV["name"]},
+        )
+        assert msg["current_output_device"] == _USB_DEV["name"]
+
+    def test_refresh_devices_exposes_a_card_that_was_busy_at_startup(self, tmp_path):
+        """The actual bug: USB busy during the boot scan, freed afterwards."""
+        present = [_HDMI_DEV]
+
+        def send(ws):
+            ws.send_json({"type": "list_output_devices"})
+            before = _next_of_type(ws, "output_devices")
+            present.insert(0, _USB_DEV)  # card freed up
+            ws.send_json({"type": "refresh_devices"})
+            after = _next_of_type(ws, "output_devices")
+            return before, after
+
+        (before, after), _ = self._run(tmp_path, present, send)
+        assert _USB_DEV["name"] not in [d["id"] for d in before["devices"]]
+        assert _USB_DEV["name"] in [d["id"] for d in after["devices"]]
+
+    def test_refresh_devices_also_resends_the_input_list(self, tmp_path):
+        def send(ws):
+            ws.send_json({"type": "refresh_devices"})
+            return _next_of_type(ws, "input_devices")
+
+        msg, _ = self._run(tmp_path, [_USB_DEV, _HDMI_DEV], send)
+        assert _USB_DEV["name"] in [d["id"] for d in msg["devices"]]
+
+    def test_set_output_device_stores_the_name(self, tmp_path):
+        def send(ws):
+            ws.send_json({"type": "set_output_device", "output_device": _USB_DEV["name"]})
+            return _next_of_type(ws, "output_devices")
+
+        _, cfg = self._run(tmp_path, [_USB_DEV, _HDMI_DEV], send)
+        assert cfg["output_device"] == _USB_DEV["name"]
+

@@ -55,7 +55,7 @@ export interface StatusMsg {
   spectro_freq_range?: 'voice' | 'full';
   spectro_time_window_s?: number;
   input_device?: string | number;
-  output_device?: number;
+  output_device?: string | number;
   system_monitor_sink?: string;
   // Admin-editable identity fields
   station_callsign?: string;
@@ -431,13 +431,15 @@ export interface InputDevicesMsg {
 
 export interface OutputDeviceOption {
   label: string;
-  id: number;
+  // Device name, or -1 for the system default. Names are used because
+  // PortAudio indices shift when a busy card drops out of the scan.
+  id: string | number;
 }
 
 export interface OutputDevicesMsg {
   type: 'output_devices';
   devices: OutputDeviceOption[];
-  current_output_device: number;
+  current_output_device: string | number;
 }
 
 export interface VoiceOption {

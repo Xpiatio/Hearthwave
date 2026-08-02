@@ -385,7 +385,7 @@ export default function App() {
   const [systemMonitorSink, setSystemMonitorSink] = useState('');
   const [inputDevices, setInputDevices] = useState<InputDeviceOption[]>([]);
   const [monitorSinks, setMonitorSinks] = useState<MonitorSinkOption[]>([]);
-  const [outputDevice, setOutputDevice] = useState<number>(-1);
+  const [outputDevice, setOutputDevice] = useState<string | number>(-1);
   const [outputDevices, setOutputDevices] = useState<OutputDeviceOption[]>([]);
   const [spectroFreqRange, setSpectroFreqRange] = useState<'voice' | 'full'>('full');
 
@@ -1095,9 +1095,15 @@ export default function App() {
     send({ type: 'set_input_device', input_device: device, system_monitor_sink: sink });
   }
 
-  function handleOutputDeviceChange(device: number) {
+  function handleOutputDeviceChange(device: string | number) {
     setOutputDevice(device);
     send({ type: 'set_output_device', output_device: device });
+  }
+
+  /** Ask the backend to re-scan audio hardware. Needed when a card was busy
+   *  at startup: PortAudio never revisits its device list on its own. */
+  function handleRefreshDevices() {
+    send({ type: 'refresh_devices' });
   }
 
   function handlePreviewVoice(voiceId: string) {
@@ -1911,6 +1917,7 @@ export default function App() {
         monitorSinks={monitorSinks}
         outputDevice={outputDevice}
         outputDevices={outputDevices}
+        onRefreshDevices={handleRefreshDevices}
         spectroColormap={spectroColormap}
         spectroFreqRange={spectroFreqRange}
         spectroTimeWindowS={spectroTimeWindowS}

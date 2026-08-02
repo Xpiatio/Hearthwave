@@ -1,7 +1,9 @@
 import {
   Box, Paper, FormControlLabel, Switch, Divider,
   ToggleButtonGroup, ToggleButton, FormControl, InputLabel, Select, MenuItem, Typography,
+  IconButton, Tooltip,
 } from '@mui/material';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { PanelHeader } from '../PanelHeader/PanelHeader';
 import type { InputDeviceOption, MonitorSinkOption, OutputDeviceOption } from '../../types/ws';
 
@@ -14,7 +16,7 @@ interface Props {
   systemMonitorSink: string;
   inputDevices: InputDeviceOption[];
   monitorSinks: MonitorSinkOption[];
-  outputDevice: number;
+  outputDevice: string | number;
   outputDevices: OutputDeviceOption[];
   spectroColormap: 'viridis' | 'grayscale';
   spectroFreqRange: 'voice' | 'full';
@@ -30,7 +32,8 @@ interface Props {
   onToggleFuzzy: () => void;
   onToggleFuzzyRewrite: () => void;
   onInputDeviceChange: (device: string | number, sink: string) => void;
-  onOutputDeviceChange: (device: number) => void;
+  onOutputDeviceChange: (device: string | number) => void;
+  onRefreshDevices?: () => void;
   onSpectroColormapChange: (cm: 'viridis' | 'grayscale') => void;
   onSpectroFreqRangeChange: (range: 'voice' | 'full') => void;
   onSpectroTimeWindowChange: (s: number) => void;
@@ -41,6 +44,12 @@ interface Props {
   onSwitchScanIntervalChange: (v: number) => void;
   onToggleVisualAlerts: () => void;
   hideHeader?: boolean;
+}
+
+/** Device ids are names, except the numeric -1 "system default" sentinel.
+ *  MUI Select round-trips values as strings, so restore the number. */
+function parseDeviceId(raw: string): string | number {
+  return /^-?\d+$/.test(raw) ? Number(raw) : raw
 }
 
 export function ConfigPanel({
@@ -69,6 +78,7 @@ export function ConfigPanel({
   onToggleFuzzyRewrite,
   onInputDeviceChange,
   onOutputDeviceChange,
+  onRefreshDevices,
   onSpectroColormapChange,
   onSpectroFreqRangeChange,
   onSpectroTimeWindowChange,
@@ -235,7 +245,7 @@ export function ConfigPanel({
             labelId="output-device-label"
             label="Audio Output (to radio)"
             value={String(outputDevice)}
-            onChange={(e) => onOutputDeviceChange(Number(e.target.value))}
+            onChange={(e) => onOutputDeviceChange(parseDeviceId(e.target.value))}
           >
             {outputDeviceOptions.map((dev) => (
               <MenuItem key={String(dev.id)} value={String(dev.id)}>
@@ -244,6 +254,17 @@ export function ConfigPanel({
             ))}
           </Select>
         </FormControl>
+        {onRefreshDevices && (
+          <Tooltip title="Rescan audio devices — briefly interrupts receive">
+            <IconButton
+              size="small"
+              aria-label="Rescan audio devices"
+              onClick={onRefreshDevices}
+            >
+              <RefreshIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
 
         <Divider orientation="vertical" flexItem />
 

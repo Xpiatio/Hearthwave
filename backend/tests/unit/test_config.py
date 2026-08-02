@@ -19,6 +19,28 @@ def make_config(**kwargs) -> ServerConfig:
     return cfg
 
 
+def _dev(name: str, *, ins: int = 0, outs: int = 0) -> dict:
+    return {"name": name, "max_input_channels": ins, "max_output_channels": outs}
+
+
+_USB = _dev("USB Audio: - (hw:0,0)", ins=2, outs=2)
+_HDMI = _dev("HD-Audio Generic: HDMI 0 (hw:1,3)", outs=8)
+_ANALOG = _dev("HD-Audio Generic: SN6140 Analog (hw:2,0)", ins=2, outs=2)
+
+
+@pytest.fixture
+def fake_devices(monkeypatch):
+    """Install a fake PortAudio enumeration; yields a setter for the list."""
+    from backend.audio import devices
+
+    def install(device_list):
+        monkeypatch.setattr(devices, "_query", lambda: list(device_list))
+        devices.invalidate_cache()
+
+    yield install
+    devices.invalidate_cache()
+
+
 # ---------------------------------------------------------------------------
 # Station identity
 # ---------------------------------------------------------------------------
@@ -58,6 +80,72 @@ class TestAudioDefaults:
 
     def test_monitor_enabled_default(self):
         assert ServerConfig().monitor_enabled is False
+
+    def test_input_device_resolves_stored_name_to_current_index(self, fake_devices):
+        fake_devices([_HDMI, _USB])
+        assert make_config(input_device=_USB["name"]).input_device == 1
+
+    def test_output_device_resolves_stored_name_to_current_index(self, fake_devices):
+        fake_devices([_HDMI, _USB])
+        assert make_config(output_device=_USB["name"]).output_device == 1
+
+    def test_selection_survives_an_index_shift(self, fake_devices):
+        """A card missing from one scan must not re-point the setting."""
+        cfg = make_config(output_device=_ANALOG["name"])
+        fake_devices([_USB, _HDMI, _ANALOG])
+        assert cfg.output_device == 2
+        fake_devices([_HDMI, _ANALOG])  # USB busy -> dropped -> indices shift
+        assert cfg.output_device == 1
+
+    def test_absent_device_falls_back_to_system_default(self, fake_devices):
+        fake_devices([_HDMI])
+        assert make_config(output_device=_USB["name"]).output_device == -1
+
+    def test_raw_stored_name_is_preserved_while_device_is_absent(self, fake_devices):
+        """Falling back for playback must not erase the user's choice."""
+        cfg = make_config(output_device=_USB["name"])
+        fake_devices([_HDMI])
+        assert cfg.output_device == -1
+        assert cfg.output_device_name == _USB["name"]
+
+
+# ---------------------------------------------------------------------------
+# Legacy index -> name migration
+# ---------------------------------------------------------------------------
+
+class TestDeviceMigration:
+    def test_legacy_index_is_rewritten_as_a_name(self, fake_devices):
+        fake_devices([_USB, _HDMI])
+        cfg = make_config(input_device=0, output_device=1)
+        assert cfg.migrate_device_names() is True
+        assert cfg["input_device"] == _USB["name"]
+        assert cfg["output_device"] == _HDMI["name"]
+
+    def test_default_sentinel_is_left_alone(self, fake_devices):
+        fake_devices([_USB])
+        cfg = make_config(input_device=-1, output_device=-1)
+        assert cfg.migrate_device_names() is False
+        assert cfg["output_device"] == -1
+
+    def test_unresolvable_index_is_kept_for_a_later_attempt(self, fake_devices):
+        """A boot-time race must not silently clear the radio setting."""
+        fake_devices([_HDMI])
+        cfg = make_config(output_device=3)
+        assert cfg.migrate_device_names() is False
+        assert cfg["output_device"] == 3
+
+    def test_already_migrated_config_is_untouched(self, fake_devices):
+        fake_devices([_USB, _HDMI])
+        cfg = make_config(output_device=_USB["name"])
+        assert cfg.migrate_device_names() is False
+        assert cfg["output_device"] == _USB["name"]
+
+    def test_migration_respects_device_kind(self, fake_devices):
+        """Index 1 is output-only, so it cannot migrate as an input."""
+        fake_devices([_USB, _HDMI])
+        cfg = make_config(input_device=1)
+        assert cfg.migrate_device_names() is False
+        assert cfg["input_device"] == 1
 
     def test_monitor_passthrough_default(self):
         assert ServerConfig().monitor_passthrough is False
