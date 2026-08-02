@@ -20,7 +20,7 @@ show how it's done.
 Hearthwave is a fork of GMRS-TTY that replaces the desktop PySide6 UI with a
 browser-based React frontend communicating over WebSocket.
 
-> **Latest release:** v2.22.0
+> **Latest release:** v2.23.0
 
 ## Who uses it
 
@@ -39,6 +39,27 @@ browser-based React frontend communicating over WebSocket.
 
 ## Features
 
+- **Coordinator dashboard** — coordinators on a wide screen (≥1200px) now get a
+  single-viewport ops console in place of the stacked Neighborhood view: RX
+  transcript and transmit box on the left (radio check-in form docked underneath),
+  roster and incident log on the right, with net controls in a persistent command
+  bar — no more scrolling between the roster and the controls at the bottom, or
+  alt-tabbing to read radio traffic. It's automatic by role and screen width, with
+  no toggle to set: phones, Kid accounts, participants, and narrower windows keep
+  the existing stacked view, and a coordinator on a phone still gets full
+  coordinator controls there. The round-table also gains a per-row **Call** button
+  to call any checked-in station out of order (while a net is running), and
+  **No answer**, which flags a station that didn't respond so it's skipped for the
+  rest of the round — the flag clears when the coordinator clicks it or a new round
+  starts. Past Nets and its CSV export both gain a **No answer** column so "checked
+  in, never reached" survives the net
+- **Radio-caller check-in** — a coordinator can check in a neighbor who called in
+  on the air but has no Hearthwave account, from a short callsign/name/location
+  form with a "pick a neighbor" shortcut over known contacts and an optional
+  save-to-contacts so a recurring caller is a pick, not a retype, next week. These
+  rows take their turn in the round-table exactly like an account holder's, and
+  are marked wherever identity matters: a **By radio** chip in the live roster, and
+  a `via` column in the Past Nets table and the per-session CSV export
 - **Net session history** — every net that ends is recorded as a structured roster
   under `/data/net_sessions`. Browse past nets, per-station attendance (totals,
   recent turnout, streaks), and export any net or the whole history as CSV from the
