@@ -83,6 +83,8 @@ export interface MobileAppProps {
   sendNeighborhoodCallReset: () => void;
   sendNeighborhoodClearCheckins: () => void;
   sendNeighborhoodClearIncidents: () => void;
+  sendNeighborhoodCallStation: (userId: string) => void;
+  sendNeighborhoodNoAnswer: (userId: string, noAnswer: boolean) => void;
 
   // Core data
   messages: ChatEntry[];
@@ -220,6 +222,8 @@ export function MobileApp({
   sendNeighborhoodCallReset,
   sendNeighborhoodClearCheckins,
   sendNeighborhoodClearIncidents,
+  sendNeighborhoodCallStation,
+  sendNeighborhoodNoAnswer,
   messages,
   contacts,
   transmitting,
@@ -442,6 +446,8 @@ export function MobileApp({
             onRadioCheckin={sendNeighborhoodRadioCheckin}
             onStationStatusChange={(userId, status) => sendNeighborhoodStatus(status, userId)}
             onRemoveStation={sendNeighborhoodRemoveStation}
+            onCallStation={sendNeighborhoodCallStation}
+            onNoAnswer={sendNeighborhoodNoAnswer}
           />
         </Box>
       )}

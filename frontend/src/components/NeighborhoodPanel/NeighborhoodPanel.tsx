@@ -42,6 +42,10 @@ export interface NeighborhoodPanelProps {
   onRadioCheckin: (p: { callsign: string; name: string; location: string; saveContact: boolean }) => void;
   onStationStatusChange: (userId: string, status: 'checked_in' | 'standby' | 'checked_out') => void;
   onRemoveStation: (userId: string) => void;
+  /** Coordinator-only: call this station out of order (round-table). */
+  onCallStation: (userId: string) => void;
+  /** Coordinator-only: flag/unflag a station the round couldn't raise. */
+  onNoAnswer: (userId: string, noAnswer: boolean) => void;
 }
 
 const STREET_ALERT_MAX = 200;
@@ -209,6 +213,8 @@ export function NeighborhoodPanel(props: NeighborhoodPanelProps) {
         isCoordinator={showCoordinatorSection}
         onStationStatusChange={props.onStationStatusChange}
         onRemoveStation={props.onRemoveStation}
+        onCallStation={showCoordinatorSection ? props.onCallStation : undefined}
+        onNoAnswer={showCoordinatorSection ? props.onNoAnswer : undefined}
       />
 
       <IncidentLog

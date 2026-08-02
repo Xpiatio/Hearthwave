@@ -43,6 +43,8 @@ import type {
   NeighborhoodEndPayload,
   NeighborhoodCallNextPayload,
   NeighborhoodCallResetPayload,
+  NeighborhoodNoAnswerPayload,
+  NeighborhoodCallStationPayload,
   NeighborhoodClearCheckinsPayload,
   NeighborhoodClearIncidentsPayload,
   NeighborhoodIncidentReportPayload,
@@ -1284,6 +1286,14 @@ export default function App() {
     send({ type: 'neighborhood_call_reset' } satisfies NeighborhoodCallResetPayload);
   }
 
+  function sendNeighborhoodNoAnswer(userId: string, noAnswer: boolean) {
+    send({ type: 'neighborhood_no_answer', user_id: userId, no_answer: noAnswer } satisfies NeighborhoodNoAnswerPayload);
+  }
+
+  function sendNeighborhoodCallStation(userId: string) {
+    send({ type: 'neighborhood_call_station', user_id: userId } satisfies NeighborhoodCallStationPayload);
+  }
+
   function sendNeighborhoodClearCheckins() {
     send({ type: 'neighborhood_clear_checkins' } satisfies NeighborhoodClearCheckinsPayload);
   }
@@ -1653,6 +1663,8 @@ export default function App() {
     sendNeighborhoodCallReset,
     sendNeighborhoodClearCheckins,
     sendNeighborhoodClearIncidents,
+    sendNeighborhoodCallStation,
+    sendNeighborhoodNoAnswer,
     sendSetNeighborhoodCoordinator,
     profile: profile!,
     connected,
@@ -1846,6 +1858,8 @@ export default function App() {
           onRadioCheckin={sendNeighborhoodRadioCheckin}
           onStationStatusChange={(userId, status) => sendNeighborhoodStatus(status, userId)}
           onRemoveStation={sendNeighborhoodRemoveStation}
+          onCallStation={sendNeighborhoodCallStation}
+          onNoAnswer={sendNeighborhoodNoAnswer}
         />
       ) : (
         <DesktopApp

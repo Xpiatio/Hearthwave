@@ -63,6 +63,8 @@ function makeProps(overrides: Partial<NeighborhoodPanelProps> = {}): Neighborhoo
     onRadioCheckin: vi.fn(),
     onStationStatusChange: vi.fn(),
     onRemoveStation: vi.fn(),
+    onCallStation: vi.fn(),
+    onNoAnswer: vi.fn(),
     ...overrides,
   };
 }
@@ -454,6 +456,15 @@ describe('NeighborhoodPanel', () => {
       expect(within(list).getByText('Carol')).toBeInTheDocument();
       expect(within(list).queryByText('Alice')).not.toBeInTheDocument();
       expect(within(list).queryByText('Bob')).not.toBeInTheDocument();
+    });
+
+    it('forwards a coordinator\'s Call click on a non-current row to onCallStation with its user_id', () => {
+      const props = makeProps({ isCoordinator: true, currentCall: 'u3' });
+      render(<NeighborhoodPanel {...props} />);
+      const list = screen.getByRole('list', { name: 'Checked-in neighbors' });
+
+      fireEvent.click(within(list).getByRole('button', { name: 'Call Alice' }));
+      expect(props.onCallStation).toHaveBeenCalledWith('u1');
     });
   });
 

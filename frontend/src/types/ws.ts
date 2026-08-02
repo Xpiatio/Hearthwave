@@ -927,6 +927,19 @@ export interface NeighborhoodCallResetPayload {
   type: 'neighborhood_call_reset';
 }
 
+/** Coordinator-only: flag/unflag a station the round couldn't raise. */
+export interface NeighborhoodNoAnswerPayload {
+  type: 'neighborhood_no_answer';
+  user_id: string;
+  no_answer: boolean;
+}
+
+/** Coordinator-only: call this station out of order (round-table). */
+export interface NeighborhoodCallStationPayload {
+  type: 'neighborhood_call_station';
+  user_id: string;
+}
+
 /** Admin-only (stricter than the coordinator gate on the other net
  *  controls): empties the roster, leaving an in-progress net running. */
 export interface NeighborhoodClearCheckinsPayload {
