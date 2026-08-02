@@ -1,6 +1,6 @@
 ---
 name: release
-description: Use when cutting a release — guides updating README and USER_MANUAL with new features, and bumping the version stamp in docs/index.html, before tagging. The landing-page feature grid is curated, not a changelog.
+description: Use when cutting a release — guides bumping every version reference in the tree, updating README and USER_MANUAL with new features, and bumping the version stamp in docs/index.html, before tagging. The landing-page feature grid is curated, not a changelog.
 ---
 
 # Release Docs Update
@@ -18,6 +18,48 @@ git describe --tags --abbrev=0
 Record:
 - **NEW_VERSION** — from `frontend/package.json` (e.g. `2.4.0`; the tag will be `v2.4.0`)
 - **PREV_TAG** — output of `git describe` (e.g. `v2.3.0`)
+
+## Step 1b — Bump every version reference
+
+The version lives in **nine** places across **six** files, not just `frontend/package.json`.
+Missing any of them ships a release that lies about itself. In v2.23.1 the backend
+`__version__` was missed, so the running app kept reporting `2.23.0` in its UI — and the
+deploy files kept pulling the previous release's images.
+
+| File | What | Why it matters |
+|---|---|---|
+| `backend/__init__.py` | `__version__` | **This is what the UI displays.** `useVersion.ts` → `GET /health` → `server.py` returns `backend.__version__`. Bumping only package.json does *not* change what users see. |
+| `frontend/package.json` | `"version"` | Source of truth for NEW_VERSION in Step 1 |
+| `frontend/package-lock.json` | `"version"` ×2 (top level + `packages[""]`) | Must match package.json or `npm ci` warns |
+| `docker-compose.images.yml` | backend + frontend `image:` tags | Pre-built-image stack — a stale pin silently deploys the old release |
+| `docker-compose.portainer.yml` | header comment + `image:` tags (incl. the commented-out `-cuda` example) | Same, for Portainer users |
+| `prereq.sh` | `BACKEND_IMAGE` | Pulls the backend image during setup |
+
+Bump them, then run the automated check — it verifies every location above agrees
+with `frontend/package.json`, and CI runs it on every PR and again before publishing:
+
+```bash
+python3 scripts/check_version_sync.py
+```
+
+If you add a new place the version is written, add a check to that script **and** a
+row to the table above.
+
+As a second pass, **verify no stale reference survives**:
+
+```bash
+# Both must come back empty (CHANGELOG keeps history, so exclude it).
+git grep -n "PREV_VERSION_WITHOUT_V" -- . ':!CHANGELOG*'
+git grep -n "$(git describe --tags --abbrev=0 | tr -d v)" -- . ':!CHANGELOG*'
+```
+
+Two intentional exceptions — do **not** rewrite these:
+- Historical prose in the docs (`Since v2.23.1 Hearthwave stores …`) refers to the release a
+  feature actually landed in.
+- `CHANGELOG*` entries for past versions.
+
+The grep is the real check, not this table. If it turns up a file not listed above, bump it
+**and add a row here** so the next release inherits the fix.
 
 ## Step 2 — Gather changes since last release
 

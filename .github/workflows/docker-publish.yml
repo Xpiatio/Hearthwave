@@ -17,7 +17,19 @@ env:
   FRONTEND_IMAGE: ghcr.io/xpiatio/hearthwave-frontend
 
 jobs:
+  # Runs before anything is published. A tag whose version disagrees with the
+  # tree would ship images that report the wrong version and deploy files pinned
+  # to the previous release — which is exactly what v2.23.1 did.
+  version-sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/check_version_sync.py
+
   build-backend:
+    needs: version-sync
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -73,6 +85,7 @@ jobs:
           cache-to: type=gha,mode=${{ matrix.compute.backend == 'rocm' && 'min' || 'max' }},scope=backend-${{ matrix.compute.backend }}
 
   build-frontend:
+    needs: version-sync
     runs-on: ubuntu-latest
     permissions:
       contents: read
