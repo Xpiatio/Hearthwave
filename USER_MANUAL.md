@@ -1,6 +1,6 @@
 # Hearthwave User Manual
 
-> **Version:** v2.23.0
+> **Version:** v2.23.1
 
 This manual covers day-to-day operation of Hearthwave as a GMRS family hub or neighborhood watch base station — a shared radio operating station where every household member or watch volunteer connects from their own device. For installation and server setup, see [README.md](README.md).
 
@@ -436,7 +436,21 @@ Open your personal settings panel by clicking your **account chip** in the top b
 | Setting | Description |
 |---------|-------------|
 | Input device | Which microphone/audio interface the server listens on |
+| Output Sink | Which device drives the radio; server-side TTS plays out of it |
+| Rescan audio devices | Re-enumerate audio hardware without restarting the server |
 | System audio loopback | Capture from a PulseAudio sink (for radios on virtual cable) |
+
+> **Devices are remembered by name.** Since v2.23.1 Hearthwave stores the device
+> *name* rather than its index, so your selection survives plugging in a new USB
+> sound card or booting with a card that was previously busy — situations that
+> used to silently shift the station onto the wrong device. Existing settings are
+> migrated automatically the first time the server starts. If a saved device is
+> genuinely absent, Hearthwave falls back to the system default and logs the name
+> it could not find.
+>
+> After plugging in hardware, use the **Rescan audio devices** button next to the
+> device pickers. Note that rescanning briefly interrupts receive, so avoid it
+> mid-net.
 
 > **Connecting the radio:** Hearthwave connects to the radio's **combo (speaker/mic) jack** — typically a Kenwood-style **K1** cable — either through the computer's built-in 3.5 mm jack or a USB sound card. A USB connection *to the radio itself* is not required. For a VOX-keyed radio, enable the **VOX primer tone** (see [Settings → System tab](#21-admin-settings-dialog-admin)) so the radio opens before speech begins. Full wiring options are in the [README](README.md#connecting-the-radio).
 

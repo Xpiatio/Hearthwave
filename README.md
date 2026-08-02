@@ -20,7 +20,7 @@ show how it's done.
 Hearthwave is a fork of GMRS-TTY that replaces the desktop PySide6 UI with a
 browser-based React frontend communicating over WebSocket.
 
-> **Latest release:** v2.23.0
+> **Latest release:** v2.23.1
 
 ## Who uses it
 
@@ -39,6 +39,11 @@ browser-based React frontend communicating over WebSocket.
 
 ## Features
 
+- **Audio devices remembered by name** — device selections are stored by name
+  rather than by index, so they survive new hardware being plugged in or a card
+  that was busy at boot instead of silently shifting the station onto the wrong
+  device; existing settings migrate automatically, and a **Rescan audio devices**
+  button picks up hardware added while the server is running.
 - **Coordinator dashboard** — coordinators on a wide screen (≥1200px) now get a
   single-viewport ops console in place of the stacked Neighborhood view: RX
   transcript and transmit box on the left (radio check-in form docked underneath),
@@ -354,7 +359,9 @@ sound card. Two paths both work:
 
 Pick the input/output devices and PTT mode on first run from the Setup screen.
 Audio devices can be changed later on the **Preferences** tab of **Settings**;
-PTT mode lives on the admin-only **System** tab.
+PTT mode lives on the admin-only **System** tab. Devices are remembered by name,
+so a selection survives new hardware being plugged in or a card that was busy at
+boot; use **Rescan audio devices** to pick up hardware added while running.
 
 ## Quick start
 
