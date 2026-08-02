@@ -59,7 +59,7 @@ function formatAlertTime(iso: string): string {
  *  read: display name, falling back to callsign, falling back to nothing
  *  (never the raw user_id — "Current turn: dana-3f2a" is the bug this
  *  fixes) if the roster row can't be found or is missing both fields. */
-function currentCallLabel(userId: string, roster: NeighborhoodRosterRow[]): string {
+export function currentCallLabel(userId: string, roster: NeighborhoodRosterRow[]): string {
   const row = roster.find((r) => r.user_id === userId);
   return row?.name || row?.callsign || '';
 }
