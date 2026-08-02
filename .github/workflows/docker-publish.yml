@@ -29,6 +29,8 @@ jobs:
             suffix: ""
           - backend: cuda
             suffix: "-cuda"
+          - backend: rocm
+            suffix: "-rocm"
 
     steps:
       - name: Checkout
@@ -44,6 +46,16 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
+      # The ROCm torch wheels put this image around 20GB, which does not fit in
+      # the ~14GB free on a stock runner. Drop preinstalled toolchains we never
+      # use to reclaim roughly 30GB. cpu and cuda already fit, so skip it there.
+      - name: Free disk space
+        if: matrix.compute.backend == 'rocm'
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+                      /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+          df -h /
+
       - name: Build and push backend (${{ matrix.compute.backend }})
         uses: docker/build-push-action@v7
         with:
@@ -55,7 +67,10 @@ jobs:
             ${{ env.BACKEND_IMAGE }}:${{ inputs.version || github.ref_name }}${{ matrix.compute.suffix }}
             ${{ env.BACKEND_IMAGE }}:latest${{ matrix.compute.suffix }}
           cache-from: type=gha,scope=backend-${{ matrix.compute.backend }}
-          cache-to: type=gha,mode=max,scope=backend-${{ matrix.compute.backend }}
+          # mode=max on rocm would push well past the 10GB repo-wide GHA cache
+          # limit and LRU-evict the cpu/cuda caches, so cache only the final
+          # layers there.
+          cache-to: type=gha,mode=${{ matrix.compute.backend == 'rocm' && 'min' || 'max' }},scope=backend-${{ matrix.compute.backend }}
 
   build-frontend:
     runs-on: ubuntu-latest
