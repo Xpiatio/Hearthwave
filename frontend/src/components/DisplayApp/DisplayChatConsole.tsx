@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react';
 import { Box, Paper, Typography, useTheme } from '@mui/material';
 import { alpha, type Theme } from '@mui/material/styles';
 import type { ChatEntry } from '../ChatDisplay/ChatDisplay';
+import { formatMessageTime } from '../../utils/datetime';
+import { useDayKey } from '../../hooks/useDayKey';
 
 interface Props {
   messages: ChatEntry[];
@@ -48,6 +50,9 @@ function kindMain(palette: Theme['palette'], kind: ChatEntry['kind']): string {
 
 export function DisplayChatConsole({ messages, eink }: Props) {
   const theme = useTheme();
+  // A wall panel runs for weeks — re-render at midnight so yesterday's traffic
+  // stops reading as today's.
+  useDayKey();
   // E-ink shows finalized text only; partials would fight the slow refresh.
   // Newest first: on a wall panel the eye starts at the top, and it means new
   // traffic never pushes older lines out of view mid-read.
@@ -140,7 +145,10 @@ export function DisplayChatConsole({ messages, eink }: Props) {
             ? { color: 'text.primary', border: `1px solid ${theme.palette.text.primary}` }
             : { color: main, bgcolor: alpha(main, 0.16) };
           const context = captionContext(m);
-          const caption = `${context ? `${context} · ` : ''}${m.timestamp}`;
+          // Formatted here, not at ingest: a line logged before midnight has to
+          // pick up its date once the day rolls over (see useDayKey above).
+          const stamp = m.ts ? formatMessageTime(m.ts) : m.timestamp;
+          const caption = `${context ? `${context} · ` : ''}${stamp}`;
           const prefix = m.sender && m.recipient ? `${m.sender} → ${m.recipient}` : m.sender;
 
           return (

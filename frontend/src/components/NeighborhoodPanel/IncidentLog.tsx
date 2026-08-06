@@ -13,6 +13,7 @@ import {
 import type { IncidentEntry } from '../../types/ws';
 import { incidentDensitySpec } from '../../neighborhood/density';
 import { INCIDENT_CATEGORIES } from './IncidentDialog';
+import { formatAlertTime } from './shared';
 
 interface IncidentLogProps {
   incidents: IncidentEntry[];
@@ -25,9 +26,6 @@ function categoryLabel(category: string): string {
   return INCIDENT_CATEGORIES.find((c) => c.value === category)?.label ?? category;
 }
 
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-}
 
 /** Neighborhood incident feed: a category filter plus a newest-first list.
  *  Incidents already arrive newest-first from the server (see
@@ -101,7 +99,7 @@ export function IncidentLog({ incidents, onClear }: IncidentLogProps) {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: density.gap * 2, flexWrap: 'wrap', minWidth: 0 }}>
                 <Chip size="small" label={categoryLabel(entry.category)} sx={{ maxWidth: '100%' }} />
                 <Typography variant="caption" color="text.secondary">
-                  {formatTime(entry.ts)}
+                  {formatAlertTime(entry.ts)}
                 </Typography>
               </Box>
               {/* overflowWrap keeps an unbroken string — a URL, a plate number —

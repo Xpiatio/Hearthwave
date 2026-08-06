@@ -4,6 +4,7 @@ import type { FamilyPresenceEntry } from '../../types/ws';
 import { deriveStatus } from '../../family/presence';
 import { densitySpec } from '../../family/density';
 import type { DensitySpec } from '../../family/density';
+import { formatMessageTime } from '../../utils/datetime';
 
 interface Props {
   entry: FamilyPresenceEntry;
@@ -11,10 +12,6 @@ interface Props {
   /** Sizing tier from the roster size — see family/density.ts. Defaults to
    *  the roomy (small-household) tier when a caller renders a lone card. */
   density?: DensitySpec;
-}
-
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
 
 function formatRelative(iso: string | null, now: Date): string {
@@ -38,7 +35,7 @@ function statusChip(entry: FamilyPresenceEntry, now: Date): { label: string; col
   const status = deriveStatus(entry, now);
   if (status === 'on_air') return { label: 'On air', color: 'info' };
   if (status === 'ok') {
-    const time = entry.last_ok ? formatTime(entry.last_ok) : '';
+    const time = entry.last_ok ? formatMessageTime(entry.last_ok, { now, padHour: false }) : '';
     return { label: `OK ✓${time ? ` ${time}` : ''}`, color: 'success' };
   }
   return { label: 'No word', color: 'default' };

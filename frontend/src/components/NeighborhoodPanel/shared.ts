@@ -1,6 +1,7 @@
 import type { Contact, IncidentEntry, NeighborhoodAlertMsg, NeighborhoodRosterRow } from '../../types/ws';
 import type { ChatEntry } from '../ChatDisplay/ChatDisplay';
 import type { TxComposition } from '../../plugins';
+import { formatMessageTime } from '../../utils/datetime';
 
 /** Props shared by NeighborhoodPanel (the switch + its stacked view) and
  *  CoordinatorDashboard (the wide-screen ops view NeighborhoodPanel
@@ -85,6 +86,8 @@ export function currentCallLabel(userId: string, roster: NeighborhoodRosterRow[]
   return row?.name || row?.callsign || '';
 }
 
+/** Alert/incident stamp: bare time today, "Aug 5, 9:40 PM" for anything older.
+ *  padHour: false keeps the unpadded hour these panels have always shown. */
 export function formatAlertTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return formatMessageTime(iso, { padHour: false });
 }

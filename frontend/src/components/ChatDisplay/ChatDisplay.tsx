@@ -2,10 +2,18 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Typography, Fab, Chip, Tooltip } from '@mui/material';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import type { CallsignSpan, Contact } from '../../types/ws';
+import { formatMessageTime } from '../../utils/datetime';
+import { useDayKey } from '../../hooks/useDayKey';
 
 export interface ChatEntry {
   id: string;
+  /** Pre-formatted label, kept as the fallback for entries built before `ts`
+   *  existed (and for fixtures that only set this). */
   timestamp: string;
+  /** Raw ISO-8601 instant the message happened. Preferred over `timestamp`:
+   *  formatting at render time is what lets the label gain a date once the
+   *  message is no longer from today. */
+  ts?: string;
   kind: 'rx' | 'tx' | 'system' | 'chat';
   sender?: string;
   recipient?: string;   // e.g. "WSLZ233 — Dave"; absent when broadcast to ALL
@@ -202,6 +210,9 @@ export function ChatDisplay({ entries, contacts, showCallsignChips }: Props) {
   const [showScrollBtn, setShowScrollBtn] = useState(false);
 
   const callsignIdx = useMemo(() => buildCallsignIndex(contacts), [contacts]);
+  // Re-render at midnight so yesterday's lines pick up their date prefix
+  // without a reload on a screen that stays open.
+  useDayKey();
 
   function handleScroll() {
     const el = containerRef.current;
@@ -271,7 +282,7 @@ export function ChatDisplay({ entries, contacts, showCallsignChips }: Props) {
                 flexShrink: 0,
               }}
             >
-              {entry.timestamp}
+              {entry.ts ? formatMessageTime(entry.ts) : entry.timestamp}
             </Typography>
 
             {entry.kind === 'rx' && entry.source !== 'cw' && (

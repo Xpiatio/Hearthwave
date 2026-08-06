@@ -16,6 +16,7 @@ import { StreetAlertDialog } from './StreetAlertDialog';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { useIncidentDialog } from './useIncidentDialog';
 import { currentCallLabel, formatAlertTime } from './shared';
+import { useDayKey } from '../../hooks/useDayKey';
 import type { NeighborhoodPanelProps } from './shared';
 
 export interface CoordinatorDashboardProps extends NeighborhoodPanelProps {
@@ -35,6 +36,9 @@ export interface CoordinatorDashboardProps extends NeighborhoodPanelProps {
  *  ≥1200px switch lives in NeighborhoodPanel. */
 export function CoordinatorDashboard(props: CoordinatorDashboardProps) {
   useEscapeToHome(props.onGoHome);
+  // Alert and incident stamps say "today" by omitting the date — re-render at
+  // midnight so an ops console left running overnight stops claiming that.
+  useDayKey();
 
   const [streetAlertOpen, setStreetAlertOpen] = useState(false);
   const [clearCheckinsConfirmOpen, setClearCheckinsConfirmOpen] = useState(false);
