@@ -5,6 +5,7 @@ import { MemberCard } from './MemberCard';
 import { ReminderEditor } from './ReminderEditor';
 import { densitySpec } from '../../family/density';
 import { useEscapeToHome } from '../../hooks/useEscapeToHome';
+import { useDayKey } from '../../hooks/useDayKey';
 
 export interface FamilyPanelProps {
   entries: FamilyPresenceEntry[];
@@ -27,6 +28,9 @@ export interface FamilyPanelProps {
  *  relying on DesktopApp's — the two are never mounted at once. */
 export function FamilyPanel(props: FamilyPanelProps) {
   useEscapeToHome(props.onGoHome);
+  // "OK ✓ 9:15" hides the date only while it means today — the midnight
+  // re-render is what keeps that true on a board left up overnight.
+  useDayKey();
   const now = new Date();
   const showReminders = props.isAdmin && !props.isKid;
   // Cards get roomier for a small household and tighter for a big one, so a

@@ -71,6 +71,7 @@ import { CalibrationDialog } from './components/CalibrationDialog/CalibrationDia
 import { UsersPanel } from './components/UsersPanel/UsersPanel';
 import { DEFAULTS as QUICK_DEFAULTS } from './components/QuickMessages/QuickMessages';
 import { newlyMissed } from './family/presence';
+import { formatMessageTime } from './utils/datetime';
 import { useDeviceClass } from './hooks/useDeviceClass';
 import { ScreenFlash, VIBRATE_PATTERNS, type FlashKind } from './components/ScreenFlash/ScreenFlash';
 import './App.css';
@@ -81,8 +82,15 @@ function nextId() {
 }
 
 function formatTime(isoOrNow?: string): string {
-  const d = isoOrNow ? new Date(isoOrNow) : new Date();
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return formatMessageTime(isoOrNow);
+}
+
+// Raw instant to hang on a ChatEntry so its label can be re-formatted later
+// (a message from yesterday must grow a date once midnight passes). Live
+// rx_message frames carry no server ts — the broadcast only stamps one when
+// recording to history — so fall back to the arrival time.
+function entryTs(iso?: string): string {
+  return iso ?? new Date().toISOString();
 }
 
 function normalizeForDedup(s: string): string {
@@ -130,6 +138,7 @@ export function streamMsgToEntry(msg: StoredStreamMsg): ChatEntry {
     return {
       id: nextId(),
       timestamp: formatTime(msg.ts),
+      ts: entryTs(msg.ts),
       kind: 'tx',
       sender: msg.display_name || msg.operator || msg.callsign,
       recipient,
@@ -140,6 +149,7 @@ export function streamMsgToEntry(msg: StoredStreamMsg): ChatEntry {
     return {
       id: nextId(),
       timestamp: formatTime(msg.ts),
+      ts: entryTs(msg.ts),
       kind: 'chat',
       sender: msg.display_name || msg.operator || msg.callsign,
       text: msg.text,
@@ -149,6 +159,7 @@ export function streamMsgToEntry(msg: StoredStreamMsg): ChatEntry {
   return {
     id: nextId(),
     timestamp: formatTime(msg.ts),
+    ts: entryTs(msg.ts),
     kind: 'rx',
     sender: msg.from || msg.callsign || undefined,
     text: msg.text,
@@ -443,6 +454,7 @@ export default function App() {
               {
                 id,
                 timestamp: formatTime(msg.ts),
+                ts: entryTs(msg.ts),
                 kind: 'rx',
                 sender: msg.from || msg.callsign || undefined,
                 text: msg.text,
@@ -480,6 +492,7 @@ export default function App() {
               {
                 id,
                 timestamp: formatTime(msg.ts),
+                ts: entryTs(msg.ts),
                 kind: 'rx',
                 sender: msg.from || msg.callsign || undefined,
                 text: msg.text,
@@ -661,6 +674,7 @@ export default function App() {
           {
             id: nextId(),
             timestamp: formatTime(msg.ts),
+            ts: entryTs(msg.ts),
             kind: 'tx',
             sender: msg.display_name || msg.operator || msg.callsign,
             recipient,
@@ -676,6 +690,7 @@ export default function App() {
           {
             id: nextId(),
             timestamp: formatTime(msg.ts),
+            ts: entryTs(msg.ts),
             kind: 'chat',
             sender: msg.display_name || msg.operator || msg.callsign,
             text: msg.text,
@@ -711,6 +726,7 @@ export default function App() {
           {
             id: nextId(),
             timestamp: formatTime(),
+            ts: entryTs(),
             kind: 'system',
             text: msg.text,
           },

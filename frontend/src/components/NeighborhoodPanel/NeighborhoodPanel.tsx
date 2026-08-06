@@ -11,6 +11,7 @@ import { ConfirmDialog } from '../ConfirmDialog';
 import { CoordinatorDashboard } from './CoordinatorDashboard';
 import { useIncidentDialog } from './useIncidentDialog';
 import { currentCallLabel, formatAlertTime } from './shared';
+import { useDayKey } from '../../hooks/useDayKey';
 import type { NeighborhoodPanelProps } from './shared';
 
 export type { NeighborhoodPanelProps } from './shared';
@@ -69,6 +70,9 @@ interface StackedNeighborhoodViewProps extends NeighborhoodPanelProps {
  *  relying on DesktopApp's — the two are never mounted at once. */
 function StackedNeighborhoodView(props: StackedNeighborhoodViewProps) {
   useEscapeToHome(props.onGoHome);
+  // Alert and incident stamps say "today" by omitting the date — re-render at
+  // midnight so a tab left open overnight stops claiming that.
+  useDayKey();
 
   const [streetAlert, setStreetAlert] = useState('');
   const [alertConfirmOpen, setAlertConfirmOpen] = useState(false);

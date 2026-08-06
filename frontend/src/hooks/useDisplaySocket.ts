@@ -8,6 +8,7 @@ import type {
   DisplayAckMsg,
 } from '../types/ws';
 import type { ChatEntry } from '../components/ChatDisplay/ChatDisplay';
+import { formatMessageTime } from '../utils/datetime';
 
 const MIN_BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 30000;
@@ -56,9 +57,11 @@ function nextId(): string {
   return `display-msg-${++entryCounter}`;
 }
 
-function formatTime(iso?: string): string {
-  const d = iso ? new Date(iso) : new Date();
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+// Raw instant kept alongside the pre-formatted label so the wall can grow a
+// date on a message once it is no longer from today. Live rx_message frames
+// carry no server ts (only history is stamped), so fall back to arrival time.
+function entryTs(iso?: string): string {
+  return iso ?? new Date().toISOString();
 }
 
 function capMessages(entries: ChatEntry[]): ChatEntry[] {
@@ -75,7 +78,8 @@ function streamMsgToEntry(msg: StoredStreamMsg): ChatEntry {
         : undefined;
     return {
       id: nextId(),
-      timestamp: formatTime(msg.ts),
+      timestamp: formatMessageTime(msg.ts),
+      ts: entryTs(msg.ts),
       kind: 'tx',
       sender: msg.display_name || msg.operator || msg.callsign,
       recipient,
@@ -85,7 +89,8 @@ function streamMsgToEntry(msg: StoredStreamMsg): ChatEntry {
   if (msg.type === 'chat_echo') {
     return {
       id: nextId(),
-      timestamp: formatTime(msg.ts),
+      timestamp: formatMessageTime(msg.ts),
+      ts: entryTs(msg.ts),
       kind: 'chat',
       sender: msg.display_name || msg.operator || msg.callsign,
       text: msg.text,
@@ -94,7 +99,8 @@ function streamMsgToEntry(msg: StoredStreamMsg): ChatEntry {
   // rx_message
   return {
     id: nextId(),
-    timestamp: formatTime(msg.ts),
+    timestamp: formatMessageTime(msg.ts),
+    ts: entryTs(msg.ts),
     kind: 'rx',
     sender: msg.from || msg.callsign || undefined,
     text: msg.text,
@@ -201,7 +207,8 @@ export function useDisplaySocket(token: string | null): UseDisplaySocketResult {
       case 'system_msg':
         appendMessage({
           id: nextId(),
-          timestamp: formatTime(),
+          timestamp: formatMessageTime(undefined),
+          ts: entryTs(),
           kind: 'system',
           text: msg.text,
         });
