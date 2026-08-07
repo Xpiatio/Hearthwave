@@ -20,7 +20,7 @@ show how it's done.
 Hearthwave is a fork of GMRS-TTY that replaces the desktop PySide6 UI with a
 browser-based React frontend communicating over WebSocket.
 
-> **Latest release:** v2.23.2
+> **Latest release:** v2.24.0
 
 ## Who uses it
 
@@ -52,6 +52,11 @@ browser-based React frontend communicating over WebSocket.
   none of them has a transmit path, and each is off by default (see
   [Position reports](https://xpiatio.github.io/Hearthwave/legality.html#positions)
   for why "APRS on GMRS" is not what it sounds like)
+- **Dated message timestamps** — a message from an earlier day now carries its
+  date next to the time, so a transcript left up overnight, a long net log, or a
+  wall display that has been running for a week no longer reads as though
+  everything arrived in the last few minutes. Timestamps roll over on their own
+  at midnight without a reload.
 - **Audio devices remembered by name** — device selections are stored by name
   rather than by index, so they survive new hardware being plugged in or a card
   that was busy at boot instead of silently shifting the station onto the wrong
