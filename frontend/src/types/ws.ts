@@ -92,6 +92,47 @@ export interface StatusMsg {
   plugins?: PluginManifest[];
   /** Quick-message shortcuts offered on the kiosk display's "I'm OK" screen. */
   display_quick_messages?: string[];
+  /** Own station coordinates; null until an admin sets them. The map centres
+   *  here, and distance/bearing are only computed when both are present. */
+  station_lat?: number | null;
+  station_lon?: number | null;
+  /** Remote XYZ tile template, used only when no offline pack is installed. */
+  map_tiles_url?: string;
+  /** True when /data/tiles exists, so the server is serving /tiles itself. */
+  map_tiles_local?: boolean;
+  /** Positions older than this are dropped rather than plotted stale. */
+  position_ttl_minutes?: number;
+}
+
+/** One station heard by a position source (mesh node, APRS beacon).
+ *
+ * Distance, bearing and age are resolved server-side: a wall kiosk's clock is
+ * not to be trusted, and the e-ink list has no way to compute great-circle
+ * distance itself. All three are null when no own-station position is set.
+ */
+export interface StationPosition {
+  /** Plugin id that heard it — 'meshtastic', 'meshcore', 'aprs_rf'. */
+  source: string;
+  /** Identifier within that source; unique only per source. */
+  node_id: string;
+  /** Human-readable name, may be empty. */
+  label: string;
+  lat: number;
+  lon: number;
+  alt_m: number | null;
+  /** Seconds since the fix was heard. */
+  age_s: number;
+  distance_km: number | null;
+  bearing_deg: number | null;
+  /** 16-point compass abbreviation, e.g. 'NNE'. */
+  compass: string | null;
+  /** Source-specific extras (SNR, APRS comment, symbol...), all strings. */
+  extra: Record<string, string>;
+}
+
+export interface PositionsMsg {
+  type: 'positions';
+  stations: StationPosition[];
 }
 
 /** One declarative setting a plugin exposes; the frontend renders a form field. */
@@ -823,6 +864,7 @@ export type WsMessage =
   | NetSessionsMsg
   | NetSessionMsg
   | NetSessionDeletedMsg
+  | PositionsMsg
   | VoiceTxAckMsg
   | VoiceTxErrorMsg;
 

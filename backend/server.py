@@ -127,6 +127,7 @@ import json
 import logging
 import os
 import re
+import time
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -144,7 +145,7 @@ from backend.audio import devices as audio_devices
 from backend.audio.capture import enumerate_monitor_sources
 from backend.audio.spectro_task import SpectroTask
 from backend.audio.vad import load_vad_model, make_vad_iterator
-from backend.config import ServerConfig
+from backend.config import ServerConfig, coerce_latlon
 from backend.constants import (
     GAIN_MODES,
     VALID_FINAL_MODELS,
@@ -170,6 +171,7 @@ from backend import auth_routes
 from backend.auth_routes import router as _auth_router
 from backend.plugins import loader as plugin_loader
 from backend.plugins import plugin_registry
+from backend.positions.store import InvalidPosition, PositionStore
 from backend.persistence.attendance import AttendanceTracker, build_attendance_rows
 from backend.persistence.contacts import (
     ContactsStore,
@@ -232,6 +234,16 @@ _event_loop: asyncio.AbstractEventLoop | None = None  # set in _lifespan; used f
 _config: ServerConfig | None = None
 # Directory scanned for installable plugins (each subdir with a plugin.py).
 _PLUGINS_DIR = Path(os.environ.get("RADIO_TTY_PLUGINS_DIR", "/data/plugins"))
+# Optional offline XYZ tile pack. Mounted at /tiles only when it exists, so an
+# install without a pack still boots — the map just has no basemap.
+_TILES_DIR = Path(os.environ.get("RADIO_TTY_TILES_DIR", "/data/tiles"))
+# Set when a plugin reports a position; drained by _positions_pump.
+_positions_dirty = False
+_POSITIONS_PUMP_INTERVAL_S = 2.0
+# Rebroadcast on this cadence even when nothing changed. Age is resolved
+# server-side (a wall kiosk's clock is not ours to trust), so on a quiet
+# channel every station would otherwise sit at "Heard now" indefinitely.
+_POSITIONS_REFRESH_S = 30.0
 # PluginContext bound at startup; reused by the install/reload/uninstall endpoints.
 _plugin_ctx = None
 _contacts_store: ContactsStore | None = None
@@ -241,6 +253,7 @@ _device_token_store: DeviceTokenStore | None = None
 _presence_store: PresenceStore | None = None
 _family_store: FamilyStore | None = None
 _incidents_store: IncidentsStore | None = None
+_position_store: PositionStore | None = None
 _neighborhood: NeighborhoodNet | None = None
 _audit_log: AuditLog | None = None
 _stt_worker: STTWorker | None = None
@@ -1450,6 +1463,13 @@ def _build_status() -> dict:
         "station_callsign": (_config.callsign if _config else "N0CALL"),
         "station_name": (_config.name if _config else ""),
         "station_location": (_config.location if _config else ""),
+        # Machine-readable station fix. Null when unset — the map then has no
+        # origin and the list falls back to freshest-first (see PositionStore).
+        "station_lat": (_config.station_lat if _config else None),
+        "station_lon": (_config.station_lon if _config else None),
+        "map_tiles_url": (_config.map_tiles_url if _config else ""),
+        "map_tiles_local": _TILES_DIR.is_dir(),
+        "position_ttl_minutes": (_config.position_ttl_minutes if _config else 1440),
         "station_voice": (_config.voice if _config else ""),
         "station_length_scale": float(_config.tts_length_scale) if _config else 1.0,
         "gemini_api_key_set": bool(_config and _config.gemini_api_key),
@@ -1524,6 +1544,109 @@ def _sync_live_state_for_user(user_id: str, updated_profile: dict) -> None:
         live_state.role = new_role
         live_state.is_admin = bool(updated_profile.get("is_admin", False))
         live_state.prefs = new_prefs
+
+
+def _build_positions_msg() -> dict:
+    """Snapshot of every non-expired heard position, nearest-first."""
+    if _position_store is None:
+        return {"type": "positions", "stations": []}
+    origin = _config.station_origin if _config else None
+    return {"type": "positions", "stations": _position_store.snapshot(origin)}
+
+
+def _resolve_heard_at(raw: object) -> float | None:
+    """When a source says it heard a station, or None for "just now".
+
+    Node databases hand back rows the radio heard days ago, so the moment we
+    read one is not the moment it was heard — without this, a node that went
+    off the air last week would sit on the map reading "now" and would never
+    reach its TTL. Sources with no timestamp (a live APRS feed, where the
+    packet arriving *is* the hearing) pass nothing and get the wall clock.
+
+    A timestamp ahead of us is clamped to now: it's another radio's clock, and
+    a future one would otherwise outlive its TTL. One implausibly far in the
+    past is kept as-is — the store will expire it, which is the honest answer
+    when our own mesh radio's clock is unset.
+    """
+    if raw is None:
+        return None
+    try:
+        heard = float(raw)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    if heard <= 0:
+        return None
+    return min(heard, time.time())
+
+
+async def _report_position(
+    source: str,
+    node_id: str,
+    lat: float,
+    lon: float,
+    label: str = "",
+    **meta,
+) -> bool:
+    """PluginContext.report_position — record a position heard by a plugin.
+
+    Returns False (rather than raising) on a bad fix: a mesh node with a dead
+    GPS should cost the plugin author nothing, and these arrive in bulk.
+    Broadcasting is deferred to _positions_pump so a node-database sweep of
+    fifty nodes produces one message, not fifty.
+    """
+    global _positions_dirty
+    if _position_store is None:
+        return False
+    alt_m = meta.pop("alt_m", None)
+    heard_at = _resolve_heard_at(meta.pop("heard_at", None))
+    try:
+        _position_store.upsert(
+            source, node_id, lat, lon,
+            label=label, alt_m=alt_m, extra=meta or None, now=heard_at,
+        )
+    except InvalidPosition as exc:
+        _log.debug("Rejected position from %s/%s: %s", source, node_id, exc)
+        return False
+    _positions_dirty = True
+    return True
+
+
+async def _positions_pump() -> None:
+    """Debounce position changes into one broadcast, and persist on a timer.
+
+    Positions arrive in bursts (a node-DB poll, a busy APRS band); coalescing
+    them here keeps a hundred kiosks from being woken a hundred times. The TTL
+    purge shares this loop so an expiring station also disappears from the map
+    without needing its own timer. A slow unconditional refresh keeps the age
+    counters honest when nothing is arriving at all.
+    """
+    global _positions_dirty
+    last_sent = 0.0
+    while True:
+        try:
+            await asyncio.sleep(_POSITIONS_PUMP_INTERVAL_S)
+            if _position_store is None:
+                continue
+            if _config is not None:
+                _position_store.set_ttl_minutes(_config.position_ttl_minutes)
+            if _position_store.purge_expired():
+                _positions_dirty = True
+            now = asyncio.get_running_loop().time()
+            due = len(_position_store) > 0 and (now - last_sent) >= _POSITIONS_REFRESH_S
+            if not _positions_dirty and not due:
+                continue
+            _positions_dirty = False
+            last_sent = now
+            await _manager.broadcast(_build_positions_msg())
+            # Snapshot here, write off-thread: the store's dict must not be
+            # iterated in a worker while a plugin is reporting into it.
+            pending = _position_store.take_pending()
+            if pending is not None:
+                await asyncio.to_thread(_position_store.write, pending)
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            _log.error("_positions_pump error: %s", exc)
 
 
 async def _status_pump() -> None:
@@ -1687,7 +1810,7 @@ async def _lifespan(app: FastAPI):
     global _audio_level, _radio_error, _channel_clear, _last_id_time, _has_transmitted, _last_beacon_time, _ncs_plugin
     global _level_window, _attendance, _spectro, _monitor_chunk_cb
     global _pending_stations, _auto_add_tasks, _event_loop, _audit_log
-    global _calibration_capture
+    global _calibration_capture, _position_store, _positions_dirty
 
     # --- startup -----------------------------------------------------------
     # Surface the app's own INFO logs (TX playback, station ID, monitor state,
@@ -1726,6 +1849,10 @@ async def _lifespan(app: FastAPI):
     _presence_store = PresenceStore(_config.presence_file)
     _family_store = FamilyStore(_config.family_file)
     _incidents_store = IncidentsStore(_config.incidents_file)
+    _position_store = PositionStore(ttl_minutes=_config.position_ttl_minutes)
+    _positions_dirty = False
+    if len(_position_store):
+        _log.info("Positions loaded: %d stations", len(_position_store))
     _neighborhood = NeighborhoodNet()
     purged = _token_store.purge_expired()
     if purged:
@@ -1850,6 +1977,7 @@ async def _lifespan(app: FastAPI):
         enqueue_tx=_enqueue_tx,
         get_config=lambda: _config,
         channel_clear=lambda: _channel_clear,
+        report_position=_report_position,
         data_dir=_PLUGINS_DIR.parent,
         logger=logging.getLogger("hearthwave.plugin"),
     )
@@ -1878,6 +2006,7 @@ async def _lifespan(app: FastAPI):
         asyncio.create_task(_online_status_pump(), name="online-status-pump"),
         asyncio.create_task(_voices_watcher_pump(), name="voices-watcher"),
         asyncio.create_task(_family_reminder_pump(), name="family-reminder-pump"),
+        asyncio.create_task(_positions_pump(), name="positions-pump"),
     }
     _log.info("Hearthwave server ready.")
 
@@ -1898,6 +2027,11 @@ async def _lifespan(app: FastAPI):
         _monitor.stop()
         _monitor = None
 
+    # The pump owns the write timer, and it is already cancelled — flush here
+    # so a clean shutdown keeps whatever arrived in the last couple of seconds.
+    if _position_store is not None:
+        _position_store.flush()
+
     _level_window.clear()
     _log.info("Hearthwave server stopped.")
 
@@ -1908,6 +2042,15 @@ async def _lifespan(app: FastAPI):
 
 app = FastAPI(title="Hearthwave", lifespan=_lifespan)
 app.include_router(_auth_router, prefix="/auth")
+
+# Offline basemap. Mounting is conditional and happens at import time: an
+# install with no tile pack must still boot, and StaticFiles refuses a missing
+# directory. Operators who add a pack later restart the container anyway.
+if _TILES_DIR.is_dir():
+    from fastapi.staticfiles import StaticFiles
+
+    app.mount("/tiles", StaticFiles(directory=str(_TILES_DIR)), name="tiles")
+    _log.info("Offline map tiles mounted from %s", _TILES_DIR)
 
 
 # ---------------------------------------------------------------------------
@@ -2104,6 +2247,37 @@ async def _ws_handle_set_admin_config(ws: WebSocket, data: dict, state: "Connect
         _config["name"] = str(data["name"]).strip()
     if "location" in data:
         _config["location"] = str(data["location"]).strip()
+    positions_changed = False
+    for key, limit in (("station_lat", 90.0), ("station_lon", 180.0)):
+        if key not in data:
+            continue
+        raw = data[key]
+        # Empty clears the fix; anything unparseable or out of range is ignored
+        # rather than stored, so a typo can't silently move the map origin.
+        if raw is None or str(raw).strip() == "":
+            if _config.get(key) is not None:
+                _config[key] = None
+                positions_changed = True
+            continue
+        coerced = coerce_latlon(raw, limit)
+        if coerced is None:
+            await _manager.send_to(ws, {"type": "error",
+                "detail": f"{key} must be a number between -{limit:g} and {limit:g}."})
+        elif _config.get(key) != coerced:
+            _config[key] = coerced
+            positions_changed = True
+    if "position_ttl_minutes" in data:
+        try:
+            ttl = int(float(data["position_ttl_minutes"]))
+        except (TypeError, ValueError):
+            ttl = 0
+        if 1 <= ttl <= 43200:  # 30 days
+            _config["position_ttl_minutes"] = ttl
+            if _position_store is not None:
+                _position_store.set_ttl_minutes(ttl)
+            positions_changed = True
+    if "map_tiles_url" in data:
+        _config["map_tiles_url"] = str(data["map_tiles_url"]).strip()[:512]
     if "gemini_api_key" in data:
         key = str(data["gemini_api_key"]).strip()
         if key:
@@ -2156,6 +2330,10 @@ async def _ws_handle_set_admin_config(ws: WebSocket, data: dict, state: "Connect
     await _manager.broadcast(_build_status())
     if "neighborhood_net_day" in data or "neighborhood_net_time" in data:
         await _manager.broadcast(_build_neighborhood_state_msg())
+    if positions_changed:
+        # Distance and bearing are resolved server-side against the origin, so
+        # moving the origin invalidates every row already on the clients.
+        await _manager.broadcast(_build_positions_msg())
     if rx_mode_changed and _stt_worker is not None and _stt_listening:
         _stt_worker.stop()
         await _stt_worker.join()
@@ -2683,6 +2861,7 @@ async def websocket_endpoint(
         })
         await _manager.send_to(ws, _build_family_presence_msg())
         await _manager.send_to(ws, _build_neighborhood_state_msg())
+        await _manager.send_to(ws, _build_positions_msg())
         await _manager.send_to(ws, {"type": "chat_history", "messages": history_msgs})
     else:
         role = profile.get("role") or ("admin" if profile.get("is_admin") else "adult")
@@ -2722,6 +2901,7 @@ async def websocket_endpoint(
             await _manager.send_to(ws, _build_family_reminders_msg())
         await _manager.send_to(ws, _build_neighborhood_state_msg())
         await _manager.send_to(ws, _build_neighborhood_incidents_msg())
+        await _manager.send_to(ws, _build_positions_msg())
         await _manager.send_to(ws, {"type": "voices_list", "voices": _list_voices()})
         # Backfill the shared message stream accumulated since the last clear
         # (snapshotted above, before this socket joined the broadcast set).

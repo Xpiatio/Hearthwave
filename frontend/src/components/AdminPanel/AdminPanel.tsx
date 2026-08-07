@@ -61,6 +61,13 @@ interface AdminConfig {
   netDay: string;
   /** "HH:MM" 24-hour time, or "" when unset. */
   netTime: string;
+  /** Own station coordinates, null when unset. */
+  stationLat: number | null;
+  stationLon: number | null;
+  /** True when the server is serving an offline tile pack at /tiles. */
+  mapTilesLocal: boolean;
+  mapTilesUrl: string;
+  positionTtlMinutes: number;
   /** Quick-message shortcuts offered on the kiosk display's "I'm OK" screen. */
   display_quick_messages: string[];
 }
@@ -85,6 +92,10 @@ interface Props {
     rx_mode: string;
     neighborhood_net_day: string;
     neighborhood_net_time: string;
+    station_lat: number | null;
+    station_lon: number | null;
+    map_tiles_url: string;
+    position_ttl_minutes: number;
     display_quick_messages: string[];
   }) => void;
   onPreviewVoice: (voiceId: string) => void;
@@ -115,6 +126,27 @@ export interface AdminPanelHandle {
   save(): void;
 }
 
+/** A coordinate for the text field: empty when unset, full precision otherwise. */
+function coordText(value: number | null | undefined): string {
+  return typeof value === 'number' ? String(value) : '';
+}
+
+/** Parse a typed coordinate. Empty or unparsable means "unset", not zero. */
+export function parseCoord(text: string): number | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  const value = Number(trimmed);
+  return Number.isFinite(value) ? value : null;
+}
+
+/** Range check for the field's own error state; the server re-checks. */
+export function coordError(text: string, limit: number): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  const value = Number(trimmed);
+  return !Number.isFinite(value) || Math.abs(value) > limit;
+}
+
 /** Build the seed JSON object from a config snapshot, mirroring buildValues(). */
 function seedFromConfig(config: AdminConfig): string {
   return JSON.stringify({
@@ -131,6 +163,12 @@ function seedFromConfig(config: AdminConfig): string {
     rx_mode: config.rxMode || 'voice',
     neighborhood_net_day: config.netDay || '',
     neighborhood_net_time: config.netTime || '',
+    // Normalised the same way the fields are seeded and read back, so a
+    // config that omits these keys does not read as dirty on open.
+    station_lat: parseCoord(coordText(config.stationLat)),
+    station_lon: parseCoord(coordText(config.stationLon)),
+    map_tiles_url: config.mapTilesUrl || '',
+    position_ttl_minutes: Number(config.positionTtlMinutes ?? 1440) || 1440,
     display_quick_messages: config.display_quick_messages || [],
   });
 }
@@ -155,6 +193,12 @@ export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPane
   const [rxMode, setRxMode] = useState('voice');
   const [netDay, setNetDay] = useState('');
   const [netTime, setNetTime] = useState('');
+  // Coordinates are held as text so a half-typed "-85." isn't snapped to a
+  // number mid-keystroke, and so "" can mean "unset" rather than 0.
+  const [stationLat, setStationLat] = useState('');
+  const [stationLon, setStationLon] = useState('');
+  const [mapTilesUrl, setMapTilesUrl] = useState('');
+  const [positionTtl, setPositionTtl] = useState('1440');
   const [showKey, setShowKey] = useState(false);
   const [quickMessagesText, setQuickMessagesText] = useState('');
   const [newDisplayLabel, setNewDisplayLabel] = useState('');
@@ -179,6 +223,10 @@ export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPane
     setRxMode(config.rxMode || 'voice');
     setNetDay(config.netDay || '');
     setNetTime(config.netTime || '');
+    setStationLat(coordText(config.stationLat));
+    setStationLon(coordText(config.stationLon));
+    setMapTilesUrl(config.mapTilesUrl || '');
+    setPositionTtl(String(config.positionTtlMinutes ?? 1440));
     setShowKey(false);
     setQuickMessagesText((config.display_quick_messages || []).join('\n'));
     // Compute seed from config directly (state setters are async), mirroring
@@ -210,6 +258,10 @@ export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPane
       rx_mode: rxMode,
       neighborhood_net_day: netDay,
       neighborhood_net_time: netTime,
+      station_lat: parseCoord(stationLat),
+      station_lon: parseCoord(stationLon),
+      map_tiles_url: mapTilesUrl.trim(),
+      position_ttl_minutes: Number(positionTtl) || 1440,
       display_quick_messages: quickMessagesText
         .split('\n')
         .map((line) => line.trim())
@@ -274,6 +326,62 @@ export const AdminPanel = forwardRef<AdminPanelHandle, Props>(function AdminPane
             value={location}
             onChange={(e) => setLocation(e.target.value)}
             placeholder="e.g. Grand Rapids, MI"
+            fullWidth
+          />
+
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <TextField
+              label="Latitude"
+              size="small"
+              value={stationLat}
+              onChange={(e) => setStationLat(e.target.value)}
+              error={coordError(stationLat, 90)}
+              helperText={
+                coordError(stationLat, 90)
+                  ? 'Must be between -90 and 90'
+                  : 'Decimal degrees. Leave blank if unknown.'
+              }
+              placeholder="e.g. 42.9634"
+              fullWidth
+            />
+            <TextField
+              label="Longitude"
+              size="small"
+              value={stationLon}
+              onChange={(e) => setStationLon(e.target.value)}
+              error={coordError(stationLon, 180)}
+              helperText={
+                coordError(stationLon, 180)
+                  ? 'Must be between -180 and 180'
+                  : 'Negative is west. Used to centre the map.'
+              }
+              placeholder="e.g. -85.6681"
+              fullWidth
+            />
+          </Box>
+
+          <TextField
+            label="Map Tile URL"
+            size="small"
+            value={mapTilesUrl}
+            onChange={(e) => setMapTilesUrl(e.target.value)}
+            placeholder="https://tiles.example.org/{z}/{x}/{y}.png"
+            helperText={
+              config.mapTilesLocal
+                ? 'An offline tile pack is installed in /data/tiles and is used instead.'
+                : 'Optional. Needs internet; leave blank to run map-less until a tile pack is installed.'
+            }
+            fullWidth
+          />
+
+          <TextField
+            label="Position Expiry (minutes)"
+            size="small"
+            type="number"
+            value={positionTtl}
+            onChange={(e) => setPositionTtl(e.target.value)}
+            helperText="Stations stop being plotted once their last fix is this old."
+            slotProps={{ htmlInput: { min: 1, step: 1 } }}
             fullWidth
           />
 

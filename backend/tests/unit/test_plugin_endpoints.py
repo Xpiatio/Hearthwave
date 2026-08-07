@@ -56,7 +56,8 @@ def client(tmp_path, monkeypatch):
 
     srv._plugin_ctx = PluginContext(
         broadcast=_noop, enqueue_tx=_noop, get_config=lambda: srv._config,
-        channel_clear=lambda: True, data_dir=tmp_path, logger=logging.getLogger("t"),
+        channel_clear=lambda: True, report_position=_noop,
+        data_dir=tmp_path, logger=logging.getLogger("t"),
     )
     monkeypatch.setattr(srv, "_build_status", lambda: {"type": "status"})
     monkeypatch.setattr(srv._manager, "broadcast", _noop)

@@ -8,6 +8,7 @@ import { StatusRow } from '../StatusRow/StatusRow';
 import { MessageInput } from '../MessageInput/MessageInput';
 import type { MessageInputHandle } from '../MessageInput/MessageInput';
 import { AttendancePanel } from '../AttendancePanel/AttendancePanel';
+import { PositionsPanel } from '../PositionsPanel/PositionsPanel';
 import { JournalPanel } from '../JournalPanel/JournalPanel';
 import { NCSPanel } from '../NCSPanel/NCSPanel';
 import { Spectrogram } from '../Spectrogram/Spectrogram';
@@ -23,6 +24,7 @@ import type {
   StatusMsg,
   Contact,
   AttendanceStation,
+  StationPosition,
   JournalEntry,
   FccLookupResultMsg,
   UserProfile,
@@ -61,6 +63,8 @@ export interface DesktopAppProps {
 
   // Attendance
   attendanceStations: AttendanceStation[];
+  /** Stations heard by the position plugins, nearest first (server-sorted). */
+  positions: StationPosition[];
   onClearAttendance: () => void;
 
   // Journal
@@ -143,6 +147,8 @@ export interface DesktopAppProps {
   // Panel visibility
   showAttendance: boolean;
   showJournal: boolean;
+  showPositions: boolean;
+  onTogglePositions: () => void;
   showContacts: boolean;
   showNcs: boolean;
   /** Master enable state of the NCS plugin; when false its button + panel hide. */
@@ -203,6 +209,7 @@ export function DesktopApp({
   lastMessage,
   channelClear,
   attendanceStations,
+  positions,
   onClearAttendance,
   journals,
   journalResult,
@@ -261,6 +268,8 @@ export function DesktopApp({
   onClearChat,
   showAttendance,
   showJournal,
+  showPositions,
+  onTogglePositions,
   showContacts,
   showNcs,
   ncsEnabled,
@@ -325,6 +334,9 @@ export function DesktopApp({
         onToggleNotifications={onToggleNotifications}
         showAttendance={showAttendance}
         onToggleAttendance={onToggleAttendance}
+        showPositions={showPositions}
+        onTogglePositions={onTogglePositions}
+        positionsAvailable={positions.length > 0}
         showJournal={showJournal}
         onToggleJournal={onToggleJournal}
         showContacts={showContacts}
@@ -425,6 +437,22 @@ export function DesktopApp({
         slotProps={{ paper: { sx: { height: '80vh' }, 'aria-label': 'Stations heard this session' } }}
       >
         <AttendancePanel stations={attendanceStations} onClear={onClearAttendance} fillHeight />
+      </Dialog>
+
+      <Dialog
+        open={showPositions && isOperatorTier}
+        onClose={onTogglePositions}
+        maxWidth="lg"
+        fullWidth
+        slotProps={{ paper: { 'aria-label': 'Station positions' } }}
+      >
+        <PositionsPanel
+          stations={positions}
+          stationLat={adminConfig.stationLat}
+          stationLon={adminConfig.stationLon}
+          tilesLocal={adminConfig.mapTilesLocal}
+          tilesUrl={adminConfig.mapTilesUrl}
+        />
       </Dialog>
 
       <Dialog

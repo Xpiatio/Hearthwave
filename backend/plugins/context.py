@@ -23,6 +23,18 @@ class PluginContext:
       get_config()       — the live ServerConfig (dict-like). Read tunables here;
                            a plugin's own settings live under config["plugins"][id].
       channel_clear()    — True when the channel is idle (safe to transmit).
+      report_position(...)— hand a heard station position to the core (async).
+                           Signature: (source, node_id, lat, lon, label="", **meta).
+                           Returns False for a fix that failed validation rather
+                           than raising: these arrive in bulk from node databases
+                           and a dead GPS is routine, not exceptional. Extra
+                           keyword arguments are stored as display metadata,
+                           except `alt_m` (altitude in metres) and `heard_at`
+                           (epoch seconds the station was actually heard —
+                           pass it when reading a node database, whose rows
+                           are days old; omit it when the packet arriving is
+                           itself the hearing, and the host uses the clock).
+                           Broadcasting to clients is debounced by the host.
       data_dir           — the writable data directory (e.g. for plugin state files).
       logger             — a logger namespaced to the plugin.
     """
@@ -31,6 +43,7 @@ class PluginContext:
     enqueue_tx: Callable[[dict], Awaitable[None]]
     get_config: Callable[[], object]
     channel_clear: Callable[[], bool]
+    report_position: Callable[..., Awaitable[bool]]
     data_dir: Path
     logger: logging.Logger
 
@@ -41,6 +54,7 @@ class PluginContext:
             enqueue_tx=self.enqueue_tx,
             get_config=self.get_config,
             channel_clear=self.channel_clear,
+            report_position=self.report_position,
             data_dir=self.data_dir,
             logger=logging.getLogger(f"hearthwave.plugin.{plugin_id}"),
         )

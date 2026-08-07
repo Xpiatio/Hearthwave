@@ -23,6 +23,21 @@ _log = logging.getLogger(__name__)
 CONFIG_FILE = Path(os.environ.get("RADIO_TTY_CONFIG", "/data/config.json"))
 
 
+def coerce_latlon(value: object, limit: float) -> float | None:
+    """Return *value* as a float within ±*limit*, or None if unset/unusable.
+
+    Empty string is treated as unset because that is what an admin clearing
+    the field in Settings sends.
+    """
+    if value is None or value == "":
+        return None
+    try:
+        number = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    return number if -limit <= number <= limit else None
+
+
 class ServerConfig(dict):
     """Typed wrapper around the JSON config dict.
 
@@ -44,6 +59,37 @@ class ServerConfig(dict):
     @property
     def location(self) -> str:
         return self.get("location", "")
+
+    # ---- station position / map ------------------------------------------
+
+    # Free-text `location` above is what goes over the air; these are the
+    # machine-readable fix used to centre the map and to work out how far away
+    # everything else is. Unset (None) is a first-class state: without it the
+    # map still renders, it just has no origin to measure from.
+
+    @property
+    def station_lat(self) -> float | None:
+        return coerce_latlon(self.get("station_lat"), 90.0)
+
+    @property
+    def station_lon(self) -> float | None:
+        return coerce_latlon(self.get("station_lon"), 180.0)
+
+    @property
+    def station_origin(self) -> tuple[float, float] | None:
+        """(lat, lon) when both are set and valid, else None."""
+        lat, lon = self.station_lat, self.station_lon
+        return None if lat is None or lon is None else (lat, lon)
+
+    @property
+    def position_ttl_minutes(self) -> int:
+        """How long a heard position stays on the map (default 24 h)."""
+        return max(1, int(self.get("position_ttl_minutes", 1440)))
+
+    @property
+    def map_tiles_url(self) -> str:
+        """Remote XYZ tile template used only when no local pack is installed."""
+        return self.get("map_tiles_url", "")
 
     # ---- audio / STT -----------------------------------------------------
 

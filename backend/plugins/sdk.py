@@ -4,8 +4,9 @@ Third-party plugins should import everything from here:
 
     from backend.plugins.sdk import BasePlugin, PluginManifest, ConfigField
 
-Internal modules (base, context, mesh_forwarder) may be reorganised; this module
-is the contract that stays stable. See docs/plugins.md for the authoring guide.
+Internal modules (base, context, mesh_forwarder, position_source) may be
+reorganised; this module is the contract that stays stable. See docs/plugins.md
+for the authoring guide.
 
 A plugin lives at /data/plugins/<id>/plugin.py and exposes a BasePlugin subclass
 (or a module-level `PLUGIN` instance / `get_plugin()` factory). The loader binds a
@@ -22,6 +23,7 @@ from backend.plugins.mesh_forwarder import (
     MeshForwarderPlugin,
     MeshTransport,
 )
+from backend.plugins.position_source import MIN_POLL_SECONDS, PositionPoller
 
 __all__ = [
     "BasePlugin",
@@ -31,4 +33,6 @@ __all__ = [
     "MeshForwarderPlugin",
     "MeshTransport",
     "MeshForwardConfig",
+    "PositionPoller",
+    "MIN_POLL_SECONDS",
 ]

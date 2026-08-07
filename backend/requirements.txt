@@ -29,3 +29,7 @@ meshcore
 # Optional: enables the Meshtastic plugin (outbound LoRa mesh bridge). Imported
 # lazily and degrades gracefully when absent; mutually exclusive with MeshCore.
 meshtastic
+# Optional: enables the APRS RF plugin (receive-only position ingest from a KISS
+# TNC). Pure Python, imported lazily; the plugin reports a clear error when it is
+# enabled without this installed.
+aprslib

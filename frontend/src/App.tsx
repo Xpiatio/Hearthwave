@@ -10,6 +10,7 @@ import type {
   ChatMessagePayload,
   Contact,
   AttendanceStation,
+  StationPosition,
   JournalEntry,
   NetSessionSummary,
   AttendanceStatRow,
@@ -193,6 +194,7 @@ export default function App() {
 
   // Panel visibility
   const [showAttendance, setShowAttendance] = useState(false);
+  const [showPositions, setShowPositions] = useState(false);
   const [showJournal, setShowJournal] = useState(false);
   const [showContacts, setShowContacts] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -341,6 +343,9 @@ export default function App() {
   // Attendance
   const [attendanceStations, setAttendanceStations] = useState<AttendanceStation[]>([]);
 
+  // Station positions heard by the mesh/APRS plugins (server-sorted, nearest first)
+  const [positions, setPositions] = useState<StationPosition[]>([]);
+
   // Journals
   const [journals, setJournals] = useState<JournalEntry[]>([]);
   const [journalResult, setJournalResult] = useState<JournalResultDraft | null>(null);
@@ -413,6 +418,11 @@ export default function App() {
     ncsPreambleText: '',
     ncsClosingText: '',
     rxMode: 'voice',
+    stationLat: null as number | null,
+    stationLon: null as number | null,
+    mapTilesLocal: false,
+    mapTilesUrl: '',
+    positionTtlMinutes: 1440,
     display_quick_messages: [] as string[],
   });
 
@@ -558,6 +568,13 @@ export default function App() {
           ncsPreambleText: msg.ncs_preamble_text ?? prev.ncsPreambleText,
           ncsClosingText: msg.ncs_closing_text ?? prev.ncsClosingText,
           rxMode: msg.rx_mode ?? prev.rxMode,
+          // Coordinates are nullable, so `??` would keep a stale value after
+          // an admin clears them — take the field whenever the key is present.
+          stationLat: msg.station_lat !== undefined ? msg.station_lat : prev.stationLat,
+          stationLon: msg.station_lon !== undefined ? msg.station_lon : prev.stationLon,
+          mapTilesLocal: msg.map_tiles_local ?? prev.mapTilesLocal,
+          mapTilesUrl: msg.map_tiles_url ?? prev.mapTilesUrl,
+          positionTtlMinutes: msg.position_ttl_minutes ?? prev.positionTtlMinutes,
           display_quick_messages: msg.display_quick_messages ?? prev.display_quick_messages,
         }));
         setServerConfig((prev) => ({
@@ -746,6 +763,10 @@ export default function App() {
           targetCall: msg.target_call,
           targetName: msg.target_name,
         });
+        break;
+
+      case 'positions':
+        setPositions(msg.stations);
         break;
 
       case 'session_attendance':
@@ -1156,6 +1177,10 @@ export default function App() {
     journals_dir: string;
     ncs_zone: string;
     rx_mode: string;
+    station_lat: number | null;
+    station_lon: number | null;
+    map_tiles_url: string;
+    position_ttl_minutes: number;
     display_quick_messages: string[];
   }) {
     send({ type: 'set_admin_config', ...values });
@@ -1544,6 +1569,7 @@ export default function App() {
   const showCallsignChips = serviceMode === 'GMRS';
 
   function handleToggleAttendance() { setShowAttendance((v) => !v); }
+  function handleTogglePositions() { setShowPositions((v) => !v); }
   function handleToggleJournal() { setShowJournal((v) => !v); }
   function handleToggleContacts() {
     if (showContacts) handleContactsClose();
@@ -1700,6 +1726,7 @@ export default function App() {
     channelClear,
     attendanceStations,
     onClearAttendance: handleClearAttendance,
+    positions,
     journals,
     journalResult,
     journalGenerating,
@@ -1904,6 +1931,8 @@ export default function App() {
           showLevelMeter={showLevelMeter}
           onToggleLevelMeter={handleToggleLevelMeter}
           showAttendance={showAttendance}
+          showPositions={showPositions}
+          onTogglePositions={handleTogglePositions}
           showJournal={showJournal}
           showNcs={showNcs}
           ncsEnabled={isPluginEnabled(plugins, 'ncs')}
