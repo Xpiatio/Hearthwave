@@ -148,6 +148,7 @@ Bound before `setup()`. Your only door to core services:
 | `await ctx.enqueue_tx(payload)` | queue a transmission, e.g. `{"text": "...", "_pre_formatted": True}` |
 | `ctx.get_config()` | the live config; your settings are at `ctx.get_config().plugin_config(id)` |
 | `ctx.channel_clear()` | `True` when the channel is idle (safe to transmit) |
+| `await ctx.report_position(source, node_id, lat, lon, label="", **meta)` | hand a heard station position to the core; returns `False` if it was rejected as invalid. `alt_m` and `heard_at` in `**meta` are understood, the rest is display metadata |
 | `ctx.data_dir` | the writable data directory (for plugin state files) |
 | `ctx.logger` | a logger namespaced to your plugin |
 
@@ -195,11 +196,68 @@ tx_composition={"max_len_key": "max_packet_length", "separator_key": "prefix_sep
 ```
 The keys reference fields in your own `config_schema`.
 
+### `PositionPoller` (reporting heard positions)
+For plugins that *receive* where other stations are — a mesh radio's node
+database, an APRS TNC, anything similar. It is a component you own, not a base
+class, so it composes with `MeshForwarderPlugin` instead of fighting it:
+
+```python
+from backend.plugins.sdk import PositionPoller
+
+class MyPlugin(BasePlugin):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._poller = PositionPoller("my_plugin", self._poll, ctx_getter=lambda: self.ctx)
+
+    async def on_config_changed(self, config):
+        cfg = config.plugin_config("my_plugin")
+        await self._poller.configure(
+            enabled=bool(cfg.get("position_rx_enabled")),
+            poll_seconds=float(cfg.get("position_poll_seconds", 60)),
+        )
+
+    async def on_unload(self):
+        await self._poller.stop()
+
+    async def _poll(self):
+        for node in self._read_nodes():
+            await self._poller.report(node.id, node.lat, node.lon, label=node.name, snr=node.snr)
+```
+
+The poller owns the task lifecycle, floors the interval at `MIN_POLL_SECONDS`
+(5 s), and suppresses an unchanged fix for the same node within 10 s — a node
+that actually moved is always reported. One failing poll logs and continues; it
+never ends the loop. Pass `on_start`/`on_stop` callbacks to open and close a
+link. A push-based source can block inside its poll callback for as long as the
+link is up. Keyword `**meta` becomes the `extra` map shown in the map popup and
+list, so keep it short and stringifiable.
+
+**Pass `heard_at` if your source knows it.** A node database is a roster the
+radio keeps for days, so reading it is not the same as hearing the station —
+without a timestamp every row you read looks like it arrived this second, and
+a node that went off the air last week never ages off the map:
+
+```python
+await self._poller.report(node.id, node.lat, node.lon, heard_at=node.last_heard)
+```
+
+It is epoch seconds; a value ahead of the server's clock is clamped to now.
+Omit it when the packet arriving *is* the hearing (an APRS TNC, a live socket)
+— then the 10-second rate limit applies instead, and the host stamps the fix
+on arrival.
+
+Distance, bearing, staleness and the TTL are the core's job — report raw lat/lon
+and nothing else.
+
 ### Dependencies
 Bundling pip dependencies isn't automatic. **Import optional libraries lazily**
 inside the method that needs them and raise a clear error if absent (see the mesh
 examples) — that way your plugin still loads and lists, and the failure is obvious
 only when actually used. Required libraries must be present in the server image.
+Shipped in the image for the example plugins: `pyserial`, `meshcore`,
+`meshtastic`, and `aprslib` (APRS packet parsing). All four are still imported
+lazily, so a slimmed-down image degrades to a clear error rather than a failed
+load.
 
 ---
 
@@ -238,4 +296,7 @@ Plugins**, and toggle "Echo to all clients" — no rebuild, no restart.
 - `examples/plugins/meshcore/plugin.py` — serial transport + `MeshForwarderPlugin` +
   `tx_composition` + a full `config_schema`.
 - `examples/plugins/meshtastic/plugin.py` — same shape, wrapping a blocking library
-  in a thread executor; mutually exclusive with MeshCore via `conflicts_with`.
+  in a thread executor; mutually exclusive with MeshCore via `conflicts_with`. Also
+  shows a `PositionPoller` composed onto a `MeshForwarderPlugin`.
+- `examples/plugins/aprs_rf/` — receive-only position source: KISS deframing, an
+  AX.25 UI-frame decoder, and `aprslib` parsing, with no transmit path at all.

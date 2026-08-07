@@ -4,6 +4,7 @@ import type {
   StatusMsg,
   FamilyPresenceEntry,
   NeighborhoodStateMsg,
+  StationPosition,
   StoredStreamMsg,
   DisplayAckMsg,
 } from '../types/ws';
@@ -46,6 +47,8 @@ export interface UseDisplaySocketResult {
   messages: ChatEntry[];
   alert: DisplayAlert | null;
   lastAck: DisplayAckEvent | null;
+  /** Stations heard by the position plugins, nearest first (server-sorted). */
+  positions: StationPosition[];
   eink: boolean;
   /** Hand-sorted tile order for this panel, as stored on its device token. */
   order: string[];
@@ -123,6 +126,7 @@ export function useDisplaySocket(token: string | null): UseDisplaySocketResult {
   const [messages, setMessages] = useState<ChatEntry[]>([]);
   const [alert, setAlert] = useState<DisplayAlert | null>(null);
   const [lastAck, setLastAck] = useState<DisplayAckEvent | null>(null);
+  const [positions, setPositions] = useState<StationPosition[]>([]);
   const [eink, setEink] = useState(false);
   const [order, setOrder] = useState<string[]>([]);
 
@@ -219,6 +223,9 @@ export function useDisplaySocket(token: string | null): UseDisplaySocketResult {
       case 'neighborhood_alert':
         setAlert({ kind: 'street', message: msg.message, ts: msg.ts });
         break;
+      case 'positions':
+        setPositions(msg.stations);
+        break;
       case 'display_ack':
         ackSeqRef.current += 1;
         setLastAck({ action: msg.action, seq: ackSeqRef.current });
@@ -309,5 +316,8 @@ export function useDisplaySocket(token: string | null): UseDisplaySocketResult {
     }
   }, []);
 
-  return { connected, authFailed, status, presence, neighborhood, messages, alert, lastAck, eink, order, send };
+  return {
+    connected, authFailed, status, presence, neighborhood, messages, alert, lastAck,
+    positions, eink, order, send,
+  };
 }

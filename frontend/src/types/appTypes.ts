@@ -12,6 +12,15 @@ export interface AdminConfig {
   rxMode: string;
   netDay: string;
   netTime: string;
+  /** Own station coordinates; null until an admin sets them. Distance and
+   *  bearing on the positions panel need both. */
+  stationLat: number | null;
+  stationLon: number | null;
+  /** True when the server found an offline tile pack and is serving /tiles. */
+  mapTilesLocal: boolean;
+  /** Remote XYZ tile template; used only when there is no offline pack. */
+  mapTilesUrl: string;
+  positionTtlMinutes: number;
   /** Quick-message shortcuts offered on the kiosk display's "I'm OK" screen. */
   display_quick_messages: string[];
 }

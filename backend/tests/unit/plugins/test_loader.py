@@ -24,6 +24,7 @@ def make_ctx() -> PluginContext:
         enqueue_tx=_noop,
         get_config=dict,
         channel_clear=lambda: True,
+        report_position=_noop,
         data_dir=Path("/tmp"),
         logger=logging.getLogger("test.plugin"),
     )

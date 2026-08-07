@@ -309,6 +309,7 @@ html[data-theme="dusk"] .theme-toggle .i-moon{ display:none; }
       <a href="#map">Rule map</a>
       <a href="#autotx">Automated functions</a>
       <a href="#mesh">Mesh bridge</a>
+      <a href="#positions">Position reports</a>
       <a href="#duties">Responsibilities</a>
     </div>
     <div class="nav-cta">
@@ -515,7 +516,12 @@ html[data-theme="dusk"] .theme-toggle .i-moon{ display:none; }
           <tr>
             <td>§ 95.1733(a)(8)<br>§ 95.1747<br>47 CFR Part 15</td>
             <td><b>Mesh bridge</b> — an optional LoRa copy of outgoing traffic must not become a relay, a control path, or an unauthorized radiator.</td>
-            <td>The MeshCore and Meshtastic plugins implement the <b>transmit hook only</b> — there is no receive hook, so nothing heard on the radio is forwarded, and nothing arriving from the mesh can key the transmitter. The LoRa copy is a second transmission of your own message on unlicensed spectrum, so the licensee's remaining duties are Part 15 hardware duties. Both plugins ship disabled and are mutually exclusive. <a href="#mesh">Full disclosure →</a></td>
+            <td>The MeshCore and Meshtastic plugins put traffic on the mesh through the <b>transmit hook only</b> — nothing heard on the radio is forwarded, and nothing arriving from the mesh can key the transmitter. Their optional position reader is <b>inbound only</b>: it reads the mesh radio's own node list and puts nothing on the air. The LoRa copy is a second transmission of your own message on unlicensed spectrum, so the licensee's remaining duties are Part 15 hardware duties. Both plugins ship disabled and are mutually exclusive. <a href="#mesh">Full disclosure →</a></td>
+          </tr>
+          <tr>
+            <td>§ 95.1731(d)<br>§ 95.1773(c)<br>§ 95.1787</td>
+            <td><b>GMRS digital data is narrow</b> — hand-held portable units only, limited to location data, a request for location data, or a brief text to <i>one specific</i> unit; one second per transmission; no more than one transmission every thirty seconds; 462 MHz channels only.</td>
+            <td>Hearthwave transmits <b>no data of any kind</b> on GMRS — the only thing it puts on the air is analog voice. The position sources (Meshtastic, MeshCore, and APRS through a KISS TNC) are <b>receive-only</b> and run on other services' spectrum; none exposes a transmit path. Part 95E's data rules govern what a station <i>sends</i>, and this station sends none. <a href="#positions">Full disclosure →</a></td>
           </tr>
           <tr>
             <td>Accountability</td>
@@ -616,6 +622,50 @@ html[data-theme="dusk"] .theme-toggle .i-moon{ display:none; }
   </div>
 </section>
 
+<!-- ═══════════ POSITION REPORTS ═══════════ -->
+<section class="band" id="positions">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">Receive-only by construction</span>
+      <h2>Position reports are heard, <span class="ember">never transmitted.</span></h2>
+      <p class="lead">Hearthwave can plot nearby stations on a map: GPS positions read from a Meshtastic or MeshCore mesh radio, and APRS positions decoded from a KISS TNC. All three are <b>optional, off by default, and receive-only</b> — no position source in the codebase has a transmit path, and none of them touches the GMRS radio. That matters, because "APRS on GMRS" is a thing people ask about, and the honest answer is narrower than the rumour.</p>
+    </div>
+    <div class="three">
+      <div class="pill reveal">
+        <span class="cite">Listening is unregulated</span>
+        <h3>Receiving needs no license</h3>
+        <p>Nothing in Part 95E, Part 97, or Part 15 restricts <i>receiving</i> a transmission that someone else chose to broadcast. The APRS plugin drives a TNC in KISS mode and only ever reads frames from it; the mesh plugins poll the mesh radio's own node database. No PTT line, no transmit call, no keying of anything.</p>
+      </div>
+      <div class="pill reveal">
+        <span class="cite">47 U.S.C. § 605</span>
+        <h3>What we hear stays here</h3>
+        <p>Positions land in a local store on your hub with a staleness timer, and are shown on your own screens and wall displays. They are not republished, not uploaded to APRS-IS or any other aggregator, and not forwarded onto the mesh. Same rule the transcript path already follows: received traffic is displayed to the licensee's household, nowhere else.</p>
+      </div>
+      <div class="pill reveal">
+        <span class="cite">47 CFR §§ 95.1731(d) · 95.1787</span>
+        <h3>GMRS data exists, but it is tiny</h3>
+        <p>Part 95E does permit some digital data — and it is <b>not</b> a general packet channel. It is confined to certified hand-held portables with a non-removable antenna, one-second bursts, at most one every thirty seconds, on 462 MHz only, carrying a location or a brief message to one named unit. Hearthwave sends none of it.</p>
+      </div>
+    </div>
+
+    <div class="sec-head reveal" style="margin-top:52px">
+      <h2 style="font-size:clamp(22px,2.6vw,30px)">Why there is no "APRS on GMRS" here</h2>
+      <p class="lead">GMRS data is often described as new. It isn't: the FCC added it in the 2017 Report and Order in <b>WT Docket No. 10-119</b> (FCC 17-57), and its 2021 order on reconsideration expressly <b>declined</b> to relax the duty-cycle limit. What the rule authorizes is a short location or text exchange between handhelds — not amateur-style APRS. Five limits do the work:</p>
+    </div>
+    <ul class="checks reveal">
+      <li><span class="ck">✓</span><div><b>Hand-held portables only</b><span>§ 95.1731(d) limits digital data to hand-held portable units, and § 95.1787(a)(4) requires the antenna to be "a non-removable integral part" of the unit. A base station wired to an outdoor antenna — which is what a Hearthwave station is — is outside the allowance before the first byte is sent.</span></div></li>
+      <li><span class="ck">✓</span><div><b>One second, once every thirty</b><span>§ 95.1787(a)(2) caps each data transmission at one second; (a)(3) permits no more than one transmission in any thirty-second window. Periodic beaconing at APRS rates does not fit, and neither does digipeating someone else's packet.</span></div></li>
+      <li><span class="ck">✓</span><div><b>Directed, not broadcast</b><span>§ 95.1731(d) allows location data, a request for location data, or a brief text message "to another specific GMRS or FRS unit." An APRS position beacon is addressed to everyone listening — the opposite shape.</span></div></li>
+      <li><span class="ck">✓</span><div><b>462 MHz only</b><span>§ 95.1773(c) limits digital data to the 462 MHz main and interstitial channels; § 95.1787(a)(5) separately forbids it on the 467 MHz main channels.</span></div></li>
+      <li><span class="ck">✓</span><div><b>A data burst cannot identify itself</b><span>§ 95.1751(b) requires the call sign by voice in English or by international Morse as an audible tone. A packet carries neither, so an unattended data-only station has no lawful way to meet its identification duty.</span></div></li>
+    </ul>
+
+    <div class="note reveal" style="margin-top:30px">
+      <b>About the Midland waiver.</b> This is the order people are usually thinking of when they say GMRS data rules have loosened. On July 24, 2023 the Mobility Division of the Wireless Telecommunications Bureau granted Midland Radio Corporation a waiver of §§ 95.1731(d), 95.1787(a)(3)–(4) and 95.1767(a) (<b>DA 23-633</b>, WT Docket No. 21-388), so that vehicle-mounted off-road radios with an external antenna could send GPS position at 50 watts. Read the conditions: 462 MHz only; <b>at most one 50-millisecond burst every ten seconds</b>; only while two or more users are actively linked in Midland's app; only when the radio confirms the channel is clear; and Midland had to file a petition for rulemaking within sixty days. That is <i>stricter</i> per burst than the rule it waives, and it runs to one company and its named equipment — a waiver is <b>not a rule change</b>, and no rule change has followed. Anyone citing it as "GMRS APRS is legal now" is over-reading it. If you want to run APRS properly, that is a Part 97 amateur privilege needing an amateur license and an amateur radio — Hearthwave will happily <i>receive</i> those packets and will never transmit one.
+    </div>
+  </div>
+</section>
+
 <!-- ═══════════ OPERATOR DUTIES ═══════════ -->
 <section id="duties">
   <div class="wrap">
@@ -630,6 +680,7 @@ html[data-theme="dusk"] .theme-toggle .i-moon{ display:none; }
       <li><span class="ck">✓</span><div><b>Keep accounts inside the license</b><span>Create transmit-capable accounts only for immediate family covered by your license; give everyone else listen-only. You are responsible for every operator, including minors (§ 95.1743).</span></div></li>
       <li><span class="ck">✓</span><div><b>Treat display devices like household keys</b><span>A wall-display device token can send "I'm OK" and your quick-message list on the air. Issue one per trusted device, and revoke it if the tablet leaves the house or is lost (§ 95.1705).</span></div></li>
       <li><span class="ck">✓</span><div><b>Keep the hub off the public internet</b><span>Hearthwave ships no relay, tunnel, or port-forwarding service on purpose. Away from home, reach it over your own VPN (WireGuard/Tailscale) — the control link stays yours, exactly as § 95.1749 intends.</span></div></li>
+      <li><span class="ck">✓</span><div><b>Keep received positions to yourself</b><span>The map plots stations that happened to be heard — neighbours, passing APRS mobiles, mesh nodes. Show it on your own screens; don't republish it, and don't feed it to an aggregator. If you want to beacon <i>your own</i> position, do it on a service that permits it, from a radio certified for it (<a href="#positions">why →</a>).</span></div></li>
       <li><span class="ck">✓</span><div><b>Stay present for automated functions</b><span>Enable the beacon only when the station is attended; run nets from the chair, not from memory.</span></div></li>
       <li><span class="ck">✓</span><div><b>Transmit permissible content</b><span>Plain-language personal communications (§ 95.1731). No music, ads, coded messages, or false traffic (§ 95.1733(a)) — software can frame your callsign, but what you say is on you.</span></div></li>
     </ul>
@@ -649,6 +700,9 @@ html[data-theme="dusk"] .theme-toggle .i-moon{ display:none; }
       <li><a href="https://www.fcc.gov/wireless/bureau-divisions/mobility-division/general-mobile-radio-service-gmrs" target="_blank" rel="noopener">FCC — General Mobile Radio Service overview</a> (licensing, permitted uses, and the Commission's guidance on network connections and repeater linking)</li>
       <li><a href="https://www.ecfr.gov/current/title-47/chapter-I/subchapter-A/part-15" target="_blank" rel="noopener">47 CFR Part 15 — Radio frequency devices</a> (eCFR) — the unlicensed side of the mesh bridge, in particular <a href="https://www.ecfr.gov/current/title-47/chapter-I/subchapter-A/part-15/subpart-A/section-15.5" target="_blank" rel="noopener">§ 15.5</a> (conditions of operation), <a href="https://www.ecfr.gov/current/title-47/chapter-I/subchapter-A/part-15/subpart-A/section-15.23" target="_blank" rel="noopener">§ 15.23</a> (home-built devices), and <a href="https://www.ecfr.gov/current/title-47/chapter-I/subchapter-A/part-15/subpart-A/section-15.201" target="_blank" rel="noopener">§ 15.201</a> (equipment authorization)</li>
       <li><a href="https://www.law.cornell.edu/uscode/text/47/605" target="_blank" rel="noopener">47 U.S.C. § 605 — Unauthorized publication or use of communications</a> (Cornell LII) — why received traffic is never bridged anywhere</li>
+      <li>The GMRS digital-data rules, in full (Cornell LII): <a href="https://www.law.cornell.edu/cfr/text/47/95.1731" target="_blank" rel="noopener">§ 95.1731</a> (permissible communications, incl. (d) data), <a href="https://www.law.cornell.edu/cfr/text/47/95.1773" target="_blank" rel="noopener">§ 95.1773</a> (channels and bandwidth), <a href="https://www.law.cornell.edu/cfr/text/47/95.1787" target="_blank" rel="noopener">§ 95.1787</a> (hand-held data limits), and <a href="https://www.law.cornell.edu/cfr/text/47/95.1751" target="_blank" rel="noopener">§ 95.1751</a> (identification by voice or Morse)</li>
+      <li><a href="https://docs.fcc.gov/public/attachments/FCC-17-57A1.pdf" target="_blank" rel="noopener">FCC 17-57 — Report and Order, WT Docket No. 10-119</a> (May 2017) — the proceeding that created the limited GMRS data allowance</li>
+      <li><a href="https://docs.fcc.gov/public/attachments/DA-23-633A1.pdf" target="_blank" rel="noopener">DA 23-633 — Midland Radio waiver Order, WT Docket No. 21-388</a> (July 24, 2023) — the party-specific waiver often mis-cited as a rule change</li>
       <li><a href="https://github.com/Xpiatio/Hearthwave" target="_blank" rel="noopener">Hearthwave source code</a> — every claim on this page about behavior is verifiable in the repository</li>
     </ul>
     <div class="note reveal" style="margin-top:30px">
@@ -689,7 +743,7 @@ html[data-theme="dusk"] .theme-toggle .i-moon{ display:none; }
         <p style="font-size:14px;margin:0">The family airwaves, open to everyone. Self-hosted, accessible GMRS — built so no one is left off the channel.</p>
       </div>
       <div class="foot-links">
-        <div><b>Legal</b><a href="#rules">The rules</a><a href="#autotx">Automated functions</a><a href="#mesh">Mesh bridge</a><a href="https://www.fcc.gov/wireless/bureau-divisions/mobility-division/general-mobile-radio-service-gmrs" target="_blank" rel="noopener">Get a license</a></div>
+        <div><b>Legal</b><a href="#rules">The rules</a><a href="#autotx">Automated functions</a><a href="#mesh">Mesh bridge</a><a href="#positions">Position reports</a><a href="https://www.fcc.gov/wireless/bureau-divisions/mobility-division/general-mobile-radio-service-gmrs" target="_blank" rel="noopener">Get a license</a></div>
         <div><b>Project</b><a href="index.html">Hearthwave home</a><a href="https://github.com/Xpiatio/Hearthwave" target="_blank" rel="noopener">GitHub</a><a href="https://github.com/Xpiatio/Hearthwave#readme" target="_blank" rel="noopener">User manual</a></div>
       </div>
     </div>

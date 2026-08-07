@@ -4,7 +4,7 @@ import { ThemeProvider } from '@mui/material/styles'
 import { makeTheme } from '../../../theme'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createRef } from 'react'
-import { AdminPanel } from '../AdminPanel'
+import { AdminPanel, parseCoord, coordError } from '../AdminPanel'
 import type { AdminPanelHandle } from '../AdminPanel'
 import type { VoiceOption, DeviceTokenRecord } from '../../../types/ws'
 
@@ -33,6 +33,11 @@ function makeConfig(overrides: Partial<{
   rxMode: string;
   netDay: string;
   netTime: string;
+  stationLat: number | null;
+  stationLon: number | null;
+  mapTilesLocal: boolean;
+  mapTilesUrl: string;
+  positionTtlMinutes: number;
   display_quick_messages: string[];
 }> = {}) {
   return {
@@ -49,6 +54,11 @@ function makeConfig(overrides: Partial<{
     rxMode: 'voice',
     netDay: '',
     netTime: '',
+    stationLat: null,
+    stationLon: null,
+    mapTilesLocal: false,
+    mapTilesUrl: '',
+    positionTtlMinutes: 1440,
     display_quick_messages: [],
     ...overrides,
   }
@@ -296,6 +306,10 @@ describe('AdminPanel', () => {
       rx_mode: 'voice',
       neighborhood_net_day: '',
       neighborhood_net_time: '',
+      station_lat: null,
+      station_lon: null,
+      map_tiles_url: '',
+      position_ttl_minutes: 1440,
       display_quick_messages: [],
     })
     expect(props.onClose).toHaveBeenCalledTimes(1)
@@ -501,6 +515,142 @@ describe('AdminPanel', () => {
 // -----------------------------------------------------------------------------
 // Wall displays admin section (device tokens + household quick messages)
 // -----------------------------------------------------------------------------
+
+describe('Station coordinates', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('shows the stored coordinates in the fields', () => {
+    render(<AdminPanel {...makeDefaultProps()} config={makeConfig({ stationLat: 42.9634, stationLon: -85.6681 })} />)
+
+    expect(screen.getByLabelText(/latitude/i)).toHaveValue('42.9634')
+    expect(screen.getByLabelText(/longitude/i)).toHaveValue('-85.6681')
+  })
+
+  it('leaves the fields blank rather than showing 0 when unset', () => {
+    render(<AdminPanel {...makeDefaultProps()} />)
+
+    expect(screen.getByLabelText(/latitude/i)).toHaveValue('')
+    expect(screen.getByLabelText(/longitude/i)).toHaveValue('')
+  })
+
+  it('saves typed coordinates as numbers', async () => {
+    const user = userEvent.setup()
+    const props = makeDefaultProps()
+    render(<AdminPanel {...props} />)
+
+    await user.type(screen.getByLabelText(/latitude/i), '42.9634')
+    await user.type(screen.getByLabelText(/longitude/i), '-85.6681')
+    await user.click(screen.getByRole('button', { name: /save/i }))
+
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ station_lat: 42.9634, station_lon: -85.6681 })
+    )
+  })
+
+  it('saves null when an admin clears a coordinate', async () => {
+    const user = userEvent.setup()
+    const props = makeDefaultProps()
+    render(<AdminPanel {...props} config={makeConfig({ stationLat: 42.9634, stationLon: -85.6681 })} />)
+
+    await user.clear(screen.getByLabelText(/latitude/i))
+    await user.click(screen.getByRole('button', { name: /save/i }))
+
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ station_lat: null, station_lon: -85.6681 })
+    )
+  })
+
+  it('flags an out-of-range latitude', async () => {
+    const user = userEvent.setup()
+    render(<AdminPanel {...makeDefaultProps()} />)
+
+    await user.type(screen.getByLabelText(/latitude/i), '91')
+
+    expect(screen.getByText(/between -90 and 90/i)).toBeInTheDocument()
+  })
+
+  it('accepts a longitude past 90, which latitude would reject', async () => {
+    const user = userEvent.setup()
+    render(<AdminPanel {...makeDefaultProps()} />)
+
+    await user.type(screen.getByLabelText(/longitude/i), '-120.5')
+
+    expect(screen.queryByText(/between -180 and 180/i)).not.toBeInTheDocument()
+  })
+
+  it('says an offline tile pack takes precedence over the URL field', () => {
+    render(<AdminPanel {...makeDefaultProps()} config={makeConfig({ mapTilesLocal: true })} />)
+
+    expect(screen.getByText(/offline tile pack is installed/i)).toBeInTheDocument()
+  })
+
+  it('saves the tile URL and position expiry', async () => {
+    const user = userEvent.setup()
+    const props = makeDefaultProps()
+    render(<AdminPanel {...props} />)
+
+    // fireEvent, not user.type: {z} is userEvent's special-key syntax.
+    fireEvent.change(screen.getByLabelText(/map tile url/i), {
+      target: { value: 'https://tiles.example/{z}/{x}/{y}.png' },
+    })
+    await user.clear(screen.getByLabelText(/position expiry/i))
+    await user.type(screen.getByLabelText(/position expiry/i), '120')
+    await user.click(screen.getByRole('button', { name: /save/i }))
+
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        map_tiles_url: 'https://tiles.example/{z}/{x}/{y}.png',
+        position_ttl_minutes: 120,
+      })
+    )
+  })
+
+  it('falls back to the default expiry rather than saving zero', async () => {
+    const user = userEvent.setup()
+    const props = makeDefaultProps()
+    render(<AdminPanel {...props} />)
+
+    await user.clear(screen.getByLabelText(/position expiry/i))
+    await user.click(screen.getByRole('button', { name: /save/i }))
+
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ position_ttl_minutes: 1440 })
+    )
+  })
+})
+
+describe('parseCoord', () => {
+  it('treats blank as unset, not as the equator', () => {
+    expect(parseCoord('')).toBeNull()
+    expect(parseCoord('   ')).toBeNull()
+  })
+
+  it('keeps a real zero', () => {
+    expect(parseCoord('0')).toBe(0)
+  })
+
+  it('rejects text that is not a number', () => {
+    expect(parseCoord('north')).toBeNull()
+  })
+})
+
+describe('coordError', () => {
+  it('does not flag an empty field', () => {
+    expect(coordError('', 90)).toBe(false)
+  })
+
+  it('flags values past the limit in either direction', () => {
+    expect(coordError('90.1', 90)).toBe(true)
+    expect(coordError('-90.1', 90)).toBe(true)
+    expect(coordError('90', 90)).toBe(false)
+  })
+
+  it('flags non-numeric text', () => {
+    expect(coordError('abc', 180)).toBe(true)
+  })
+})
 
 describe('Wall displays admin section', () => {
   beforeEach(() => {

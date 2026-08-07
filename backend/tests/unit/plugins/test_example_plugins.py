@@ -1,5 +1,8 @@
 """Unit tests for the shipped example plugins (examples/plugins/meshcore, meshtastic).
 
+The APRS RF example has its own module (test_aprs_rf) — it is a position source
+rather than a mesh forwarder, so it shares none of the parametrisation here.
+
 These are the reference third-party plugins, so they are exercised the way a real
 install runs them: loaded from disk through the public loader, then poked at their
 own surface — manifest defaults, the namespaced config mapping, the transport
@@ -12,48 +15,13 @@ for the connect path, and its absence is asserted separately.
 """
 from __future__ import annotations
 
-import logging
 import sys
 import types
-from pathlib import Path
 
 import pytest
 
-from backend.config import ServerConfig
-from backend.plugins import loader
-from backend.plugins.context import PluginContext
-from backend.plugins.registry import PluginRegistry
 from backend.plugins.sdk import MeshForwardConfig, MeshForwarderPlugin, MeshTransport
-
-EXAMPLES = Path(__file__).resolve().parents[4] / "examples" / "plugins"
-
-
-def make_ctx(config: ServerConfig | None = None) -> PluginContext:
-    async def _noop(*_a, **_k):
-        return None
-
-    return PluginContext(
-        broadcast=_noop,
-        enqueue_tx=_noop,
-        get_config=(lambda: config) if config is not None else dict,
-        channel_clear=lambda: True,
-        data_dir=Path("/tmp"),
-        logger=logging.getLogger("test.plugin"),
-    )
-
-
-async def load_example(plugin_id: str, config: ServerConfig | None = None):
-    """Load an example plugin from examples/plugins the way a real install does."""
-    inst = await loader.load_plugin(EXAMPLES / plugin_id, make_ctx(config), PluginRegistry())
-    assert inst is not None, f"example plugin {plugin_id} failed to load"
-    return inst
-
-
-def make_config(plugin_id: str, **values) -> ServerConfig:
-    cfg = ServerConfig()
-    if values:
-        cfg.set_plugin_config(plugin_id, values)
-    return cfg
+from backend.tests.unit.plugins._helpers import load_example, make_config
 
 
 # Per-example expectations: id, default packet length, transport class name, and the

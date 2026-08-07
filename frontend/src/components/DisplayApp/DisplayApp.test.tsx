@@ -4,6 +4,22 @@ import { axe } from 'jest-axe';
 import { DisplayApp } from './DisplayApp';
 import type { FamilyPresenceEntry } from '../../types/ws';
 
+// Leaflet needs real layout and a canvas, neither of which jsdom has. What
+// these tests care about is which position view the kiosk picks, not what the
+// map draws — MapPanel.test.tsx covers that.
+vi.mock('leaflet', () => ({
+  map: () => ({ setView: () => undefined, getZoom: () => 11, remove: () => undefined }),
+  tileLayer: () => ({ addTo: () => undefined }),
+  layerGroup: () => {
+    const group = { clearLayers: () => undefined, addTo: () => group };
+    return group;
+  },
+  circleMarker: () => {
+    const marker = { bindPopup: () => marker, addTo: () => marker, setLatLng: () => marker };
+    return marker;
+  },
+}));
+
 // ---------------------------------------------------------------------------
 // Fake WebSocket implementation (mirrors src/hooks/__tests__/useWebSocket.test.ts
 // and src/hooks/useDisplaySocket.test.ts)
@@ -106,6 +122,25 @@ function noWordEntry(name: string): FamilyPresenceEntry {
     last_heard: null,
     last_ok: null,
     missed_checkin: false,
+  };
+}
+
+function positionsMsg(...labels: string[]) {
+  return {
+    type: 'positions',
+    stations: labels.map((label, i) => ({
+      source: 'meshtastic',
+      node_id: `n${i}`,
+      label,
+      lat: 42.9 + i,
+      lon: -85.6,
+      alt_m: null,
+      age_s: 30,
+      distance_km: i + 1,
+      bearing_deg: 30,
+      compass: 'NNE',
+      extra: {},
+    })),
   };
 }
 
@@ -305,11 +340,69 @@ describe('DisplayApp passive layout', () => {
     expect(screen.getByText(/net tue/i)).toBeInTheDocument();
   });
 
+  it('shows the nearest stations as a list on an e-ink panel', () => {
+    render(<DisplayApp />);
+    act(() => {
+      mockServerSend({ type: 'display_config', eink: true, order: [] });
+      mockServerSend(positionsMsg('Grandma mobile', 'Repeater'));
+    });
+    expect(screen.getByRole('table', { name: /station positions/i })).toBeInTheDocument();
+    expect(screen.getByText('Grandma mobile')).toBeInTheDocument();
+    expect(screen.queryByTestId('map-container')).not.toBeInTheDocument();
+  });
+
+  it('caps the e-ink list at the rows that fit on a wall panel', () => {
+    render(<DisplayApp />);
+    const labels = Array.from({ length: 9 }, (_, i) => `Node ${i}`);
+    act(() => {
+      mockServerSend({ type: 'display_config', eink: true, order: [] });
+      mockServerSend(positionsMsg(...labels));
+    });
+    expect(screen.getByText('Node 5')).toBeInTheDocument();
+    expect(screen.queryByText('Node 6')).not.toBeInTheDocument();
+  });
+
+  it('shows the map instead on a normal kiosk', () => {
+    render(<DisplayApp />);
+    act(() => {
+      mockServerSend({ type: 'display_config', eink: false, order: [] });
+      mockServerSend(positionsMsg('Grandma mobile'));
+    });
+    expect(screen.getByTestId('map-container')).toBeInTheDocument();
+    expect(screen.queryByRole('table', { name: /station positions/i })).not.toBeInTheDocument();
+  });
+
+  it('shows no position furniture at all when nothing has been heard', () => {
+    render(<DisplayApp />);
+    act(() => mockServerSend({ type: 'display_config', eink: true, order: [] }));
+    expect(screen.queryByText(/stations heard/i)).not.toBeInTheDocument();
+  });
+
   it('has no axe violations', async () => {
     const { container } = render(<DisplayApp />);
     act(() => mockServerSend({ type: 'family_presence', entries: [okEntry('Grandma')] }));
     // jest-axe's internal async work relies on real timers; fake timers
     // (set up in beforeEach for the clock/drift assertions) would hang it.
+    vi.useRealTimers();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no axe violations with the map showing', async () => {
+    const { container } = render(<DisplayApp />);
+    act(() => {
+      mockServerSend({ type: 'display_config', eink: false, order: [] });
+      mockServerSend(positionsMsg('Grandma mobile'));
+    });
+    vi.useRealTimers();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no axe violations with the e-ink position list showing', async () => {
+    const { container } = render(<DisplayApp />);
+    act(() => {
+      mockServerSend({ type: 'display_config', eink: true, order: [] });
+      mockServerSend(positionsMsg('Grandma mobile', 'Repeater'));
+    });
     vi.useRealTimers();
     expect(await axe(container)).toHaveNoViolations();
   });

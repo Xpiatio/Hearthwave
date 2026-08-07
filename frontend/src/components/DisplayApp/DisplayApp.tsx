@@ -26,6 +26,7 @@ import { PresenceTile } from './PresenceTile';
 import { SortablePresenceTile } from './SortablePresenceTile';
 import { ConfirmOkDialog } from './ConfirmOkDialog';
 import { DisplayChatConsole } from './DisplayChatConsole';
+import { DisplayPositions } from './DisplayPositions';
 import type { DisplayImOkPayload, DisplayQuickMessagePayload, FamilyPresenceEntry } from '../../types/ws';
 
 const DEVICE_TOKEN_KEY = 'radio_tty_device_token';
@@ -261,7 +262,10 @@ function ConnectedDisplay({
   unpaired: boolean;
   onRepair: () => void;
 }) {
-  const { connected, presence, neighborhood, messages, alert, status, lastAck, eink, order, send } = socket;
+  const {
+    connected, presence, neighborhood, messages, alert, status, lastAck, positions,
+    eink, order, send,
+  } = socket;
   const [now, setNow] = useState(() => new Date());
   const [driftIndex, setDriftIndex] = useState(0);
 
@@ -503,6 +507,15 @@ function ConnectedDisplay({
             )}
           </Box>
         </Box>
+
+        <DisplayPositions
+          stations={positions}
+          stationLat={status?.station_lat}
+          stationLon={status?.station_lon}
+          tilesLocal={status?.map_tiles_local}
+          tilesUrl={status?.map_tiles_url}
+          eink={eink}
+        />
 
         {interactive && quickMessages.length > 0 && (
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>

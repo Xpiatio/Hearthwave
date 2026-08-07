@@ -39,6 +39,10 @@ interface Props {
   onToggleNotifications: () => void;
   showAttendance: boolean;
   onToggleAttendance: () => void;
+  showPositions: boolean;
+  onTogglePositions: () => void;
+  /** Hides the MAP toggle until a position source has actually been heard. */
+  positionsAvailable: boolean;
   showJournal: boolean;
   onToggleJournal: () => void;
   showContacts: boolean;
@@ -97,6 +101,9 @@ export function TopBar({
   onToggleNotifications,
   showAttendance,
   onToggleAttendance,
+  showPositions,
+  onTogglePositions,
+  positionsAvailable,
   showJournal,
   onToggleJournal,
   showContacts,
@@ -190,6 +197,19 @@ export function TopBar({
             aria-label="Toggle stations heard panel"
           >
             STATIONS
+          </ToggleButton>
+        )}
+
+        {uiLevel === 'operator' && positionsAvailable && (
+          <ToggleButton
+            value="positions"
+            selected={showPositions}
+            onClick={onTogglePositions}
+            size="small"
+            color="primary"
+            aria-label="Toggle station positions panel"
+          >
+            MAP
           </ToggleButton>
         )}
 
