@@ -869,7 +869,8 @@ html[data-theme="dusk"] .theme-toggle .i-moon{ display:none; }
         <div class="frow"><b>Family check-ins</b><p>A presence board shows who's OK, on air, or overdue; one big "I'm OK" button announces it on air and logs it; admins can set a daily check-in reminder per person. Kid accounts get a locked-down, preset-only interface.</p></div>
         <div class="frow"><b>Wall display</b><p>Point a spare tablet at an admin-issued display link and it becomes an always-on household glance screen — who's OK, weather and street alerts, the last few messages, and the next net. Tap to send a preset household message or Mark-OK; no login, no access to the rest of the app. A per-display <b>e-ink</b> mode renders it in fixed high-contrast grayscale with no animation for real paper-like panels.</p></div>
         <div class="frow"><b>Neighborhood watch net</b><p>One-tap roster check-in that works even before the net starts, standardized incident reports spoken on air and kept in a filterable log, and street alerts that banner and notify every connected device. A per-user coordinator grant runs the net and round-table — including checking in a caller who's radio-only with no account, calling any station out of order, and flagging one that doesn't answer — and on a wide screen it opens as a single-viewport ops console with radio traffic, roster, and the incident log all in view at once. Kids can check in and read the log, but can't file reports or coordinate.</p></div>
-        <div class="frow"><b>Installable plugins</b><p>Extend the radio without touching core code — drop a plugin into the plugins folder or upload a <code>.zip</code> from Settings, and it hot-loads with its own config form. MeshCore and Meshtastic ship as examples. <a href="#modules">See the plugin system →</a></p></div>
+        <div class="frow"><b>Stations on a map</b><p>Plot everyone you hear — Meshtastic nodes, MeshCore contacts, APRS stations on RF — with distance, bearing, and how long ago, worked out from your own station position. Map tiles come from an offline pack on the server, so it still works with the internet down, and a keyboard- and screen-reader-friendly list view carries the same data. Wall displays get the map too; e-ink panels get the nearest-first list. Receive-only — nothing here transmits. <a href="legality.html#positions">Why "APRS on GMRS" isn't a thing →</a></p></div>
+        <div class="frow"><b>Installable plugins</b><p>Extend the radio without touching core code — drop a plugin into the plugins folder or upload a <code>.zip</code> from Settings, and it hot-loads with its own config form. MeshCore, Meshtastic, and APRS ship as examples. <a href="#modules">See the plugin system →</a></p></div>
         <div class="frow"><b>Session journals &amp; FCC callsign lookup</b><p>Every contact logged to a session journal; resolve any callsign against an <a href="https://callsigns.ke8rxnwx.net/" target="_blank" rel="noopener">FCC license lookup</a> without leaving the page.</p></div>
       </div>
       <div class="fgroup reveal">
@@ -920,7 +921,7 @@ html[data-theme="dusk"] .theme-toggle .i-moon{ display:none; }
     <div class="sec-head reveal">
       <span class="eyebrow">Modules</span>
       <h2>Extend it <span>for your net.</span></h2>
-      <p class="lead">Hearthwave has a real, installable plugin system. Net Control is built in; MeshCore and Meshtastic ship as example plugins. Add more by dropping a folder into the plugins directory or uploading a <code>.zip</code> — hot-reloaded, no restart.</p>
+      <p class="lead">Hearthwave has a real, installable plugin system. Net Control is built in; MeshCore, Meshtastic, and APRS ship as example plugins. Add more by dropping a folder into the plugins directory or uploading a <code>.zip</code> — hot-reloaded, no restart.</p>
     </div>
     <div class="mods">
       <div class="mod reveal">
@@ -955,6 +956,7 @@ html[data-theme="dusk"] .theme-toggle .i-moon{ display:none; }
           <li><span class="s">✦</span><span><b>Every spoken surface</b> — chat overs, family check-ins, wall-display messages, street alerts and net scripts all reach the mesh, not just typed chat.</span></li>
           <li><span class="s">✦</span><span><b>Fits one frame</b> — a live byte counter caps the message box to the mesh packet length minus the name prefix, measured in UTF-8 bytes like the radio does.</span></li>
           <li><span class="s">✦</span><span><b>Never blocks the radio</b> — best-effort, non-blocking forward; the over always airs on GMRS normally.</span></li>
+          <li><span class="s">✦</span><span><b>Contacts on the map</b> — optionally plots the positions your Companion radio has already heard. Off by default, and it only reads — it never asks the mesh for a position.</span></li>
         </ul>
       </div>
       <div class="mod reveal">
@@ -966,6 +968,18 @@ html[data-theme="dusk"] .theme-toggle .i-moon{ display:none; }
           <li><span class="s">✦</span><span><b>Every spoken surface</b> — chat overs, family check-ins, wall-display messages, street alerts and net scripts all reach the mesh, not just typed chat.</span></li>
           <li><span class="s">✦</span><span><b>Fits one frame</b> — a live byte counter caps the message box to the mesh packet length minus the name prefix, measured in UTF-8 bytes like the radio does.</span></li>
           <li><span class="s">✦</span><span><b>Never blocks the radio</b> — best-effort, non-blocking forward; the over always airs on GMRS normally.</span></li>
+          <li><span class="s">✦</span><span><b>Nodes on the map</b> — optionally plots the GPS fixes already sitting in your radio's node database. Off by default, read-only, and it ages each node from when the radio last heard it rather than when Hearthwave read the row.</span></li>
+        </ul>
+      </div>
+      <div class="mod reveal">
+        <div class="mod-top"><h3>APRS (RF receive)</h3><span class="badge">EXAMPLE PLUGIN</span></div>
+        <p>Ships as an example plugin. Listens to APRS on the air through a KISS TNC and puts the stations it hears on the map. Receive-only, and it never touches APRS-IS.</p>
+        <ul>
+          <li><span class="s">✦</span><span><b>Off the air, not the internet</b> — decodes AX.25 UI frames straight from a KISS TNC, over TCP to direwolf or over a serial device.</span></li>
+          <li><span class="s">✦</span><span><b>Nothing transmits</b> — there is no TX path in the plugin at all. Receiving is unregulated; <a href="legality.html#positions">sending APRS on GMRS is not legal</a>, whatever you may have read.</span></li>
+          <li><span class="s">✦</span><span><b>Every position format</b> — uncompressed, compressed, and MIC-E, parsed with <code>aprslib</code>.</span></li>
+          <li><span class="s">✦</span><span><b>Callsign filter</b> — allow or deny by call, with or without SSID, so a busy metro channel doesn't bury the stations you care about.</span></li>
+          <li><span class="s">✦</span><span><b>Runs alongside the mesh</b> — a separate receiver, so it conflicts with nothing.</span></li>
         </ul>
       </div>
     </div>

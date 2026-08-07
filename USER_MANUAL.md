@@ -35,7 +35,8 @@ This manual covers day-to-day operation of Hearthwave as a GMRS family hub or ne
     - [22a. Installing and managing plugins](#22a-installing-and-managing-plugins)
     - [22b. MeshCore example plugin](#22b-meshcore-example-plugin)
     - [22c. Meshtastic example plugin](#22c-meshtastic-example-plugin)
-    - [22d. Writing your own plugin](#22d-writing-your-own-plugin)
+    - [22d. APRS (RF receive) example plugin](#22d-aprs-rf-receive-example-plugin)
+    - [22e. Writing your own plugin](#22e-writing-your-own-plugin)
 23. [FCC compliance and remote access](#23-fcc-compliance-and-remote-access)
 24. [Transcription vocabulary biasing](#24-transcription-vocabulary-biasing)
 25. [Deployment profiles and GPU acceleration (admin)](#25-deployment-profiles-and-gpu-acceleration-admin)
@@ -47,6 +48,7 @@ This manual covers day-to-day operation of Hearthwave as a GMRS family hub or ne
 31. [Neighborhood activity](#31-neighborhood-activity)
 32. [Wall display (kiosk)](#32-wall-display-kiosk)
 33. [Accessibility: switch scanning, visual alerts, and shortcuts](#33-accessibility-switch-scanning-visual-alerts-and-shortcuts)
+34. [Station positions on a map](#34-station-positions-on-a-map)
 
 ---
 
@@ -483,6 +485,8 @@ The **callsign**, **name**, **location**, **default TTS voice**, **Gemini API ke
 
 The **Default TTS Voice** dropdown sets which Piper voice the station uses when a user has not chosen a personal voice. Click the **mic icon** next to the dropdown to preview the selected voice without keying the radio.
 
+The Station tab also holds the station's **Latitude** and **Longitude** in decimal degrees (e.g. `42.9634` / `-85.6681`; negative longitude is west). Leave them blank if you'd rather not record where the station is — everything else keeps working, but the map has nothing to centre on and no distances or bearings can be worked out. See [section 34](#34-station-positions-on-a-map) for the rest of the map settings.
+
 The same Station tab has a **Neighborhood** area, below NCS/SKYWARN, where an admin sets the weekly **Net Day** and **Net Time** for the neighborhood watch net. This schedule is shown on the Neighborhood home card and inside the Neighborhood activity, and updates live for every connected user the moment it's saved — see [section 31](#31-neighborhood-activity).
 
 ### Dark / Light mode
@@ -894,7 +898,7 @@ With **Final-pass model** set to `auto` (the default on new installs) the staged
 
 ## 22. Plugins
 
-Hearthwave supports **installable third-party plugins** — self-contained add-ons that attach new capabilities to the radio pipeline without changing the core server. Plugins are installed and managed from the **Plugins** tab of the admin Settings dialog. Several plugins ship with Hearthwave: the **NCS / SKYWARN** net-control feature ([section 16](#16-ncs--net-control-station-mode)) is built in, and **MeshCore** ([section 22b](#22b-meshcore-example-plugin)) and **Meshtastic** ([section 22c](#22c-meshtastic-example-plugin)) are seeded as example plugins you can study, enable, or replace with your own.
+Hearthwave supports **installable third-party plugins** — self-contained add-ons that attach new capabilities to the radio pipeline without changing the core server. Plugins are installed and managed from the **Plugins** tab of the admin Settings dialog. Several plugins ship with Hearthwave: the **NCS / SKYWARN** net-control feature ([section 16](#16-ncs--net-control-station-mode)) is built in, and **MeshCore** ([section 22b](#22b-meshcore-example-plugin)), **Meshtastic** ([section 22c](#22c-meshtastic-example-plugin)), and **APRS (RF receive)** ([section 22d](#22d-aprs-rf-receive-example-plugin)) are seeded as example plugins you can study, enable, or replace with your own.
 
 > **Trust warning:** Plugins run with **full server access** — they can read and transmit on the radio, touch your contacts and configuration, and reach the network. Only install plugins from sources you trust. The Plugins tab is admin-only and shows this warning prominently.
 
@@ -930,7 +934,7 @@ The MeshCore plugin forwards every message you transmit onto a [MeshCore](https:
 
 - Every message that goes over the air is also sent to the mesh, **prefixed with the sender's name** (e.g. `Ben: heading home`), so mesh-only members know who is talking.
 - That covers every spoken surface, not just typed chat: family check-ins ("I'm OK", including from the wall display), wall-display quick messages, neighborhood incident reports and street alerts, and net scripts, round-table prompts and SKYWARN spot reports from Net Control. Two things carry no text to forward, so they are announced on the radio only: live voice transmissions, and the "This is" station ID.
-- It is **outbound only** — messages *received* on the radio are never forwarded to the mesh. Only what your station transmits is bridged.
+- Message bridging is **outbound only** — messages *received* on the radio are never forwarded to the mesh. Only what your station transmits is bridged. (The one thing that travels the other way is position reporting, if you switch it on below: the plugin reads positions your mesh radio has already heard. It never asks the mesh for them and never transmits.)
 - Because it taps the transmit pipeline after all checks, a message blocked by NCS **BREAK BREAK** is never forwarded either.
 - Forwarding is best-effort and never delays or blocks the radio transmission itself; if the mesh link is busy or down, the over still goes out on the radio normally.
 
@@ -949,6 +953,8 @@ Enable the plugin from the Plugins tab and edit its settings there:
 | Max packet length | UTF-8 bytes per mesh packet, **including** the sender-name prefix (default `140`). This drives the message-box byte limit. |
 | Channel index | Which MeshCore channel to transmit on (default `0`). |
 | Name separator | Joins the sender name and the message on the mesh (default `": "` → `Alice: hello`). |
+| Show contact positions on the map | Off by default. When on, MeshCore contacts that have advertised a position are plotted — see [section 34](#34-station-positions-on-a-map). |
+| Position poll interval | Seconds between contact-list reads (default `60`). |
 
 Changes reconnect (or disconnect) the serial link immediately — no server restart needed.
 
@@ -974,14 +980,47 @@ When enabled, it adds the same live byte counter under the message box, showing 
 | Max packet length | UTF-8 bytes per mesh packet, including the sender-name prefix. Drives the message-box byte limit. |
 | Channel index | Which Meshtastic channel to transmit on. |
 | Name separator | Joins the sender name and the message on the mesh. |
+| Show node positions on the map | Off by default. When on, nodes in the radio's node database that have a GPS fix are plotted — see [section 34](#34-station-positions-on-a-map). |
+| Position poll interval | Seconds between node-database reads (default `60`). |
 
 Meshtastic has no baud-rate setting (the device link is configured differently from MeshCore). Changes reconnect the link immediately — no restart.
 
 ---
 
-## 22d. Writing your own plugin
+## 22d. APRS (RF receive) example plugin
 
-The two mesh-bridge plugins above are seeded into `/data/plugins` as references — copy one as a starting point for your own. A plugin is a directory with a `plugin.py` that subclasses `BasePlugin` and hooks into the RX/TX pipeline (receiving messages, queueing transmissions, capping the message box, and reacting to settings changes). It exposes its settings declaratively — the app renders the form, so a plugin ships no browser code. For the full hook reference, the settings-form schema, the TX-composition / character-limit API, and packaging your plugin as an installable `.zip`, see the authoring guide at [`docs/plugins.md`](docs/plugins.md).
+The APRS plugin listens to APRS traffic **on the air** and plots the stations it hears on the map ([section 34](#34-station-positions-on-a-map)). It is **receive-only** — there is no transmit path anywhere in it, and it never touches the internet APRS network (APRS-IS). It ships as an example plugin seeded into `/data/plugins` on first run and is **disabled by default**.
+
+It does not conflict with anything: APRS runs on its own receiver, so it can be enabled alongside MeshCore or Meshtastic.
+
+**What you need**
+
+- A radio tuned to your local APRS frequency, feeding a **TNC** that speaks KISS. The usual arrangement is [direwolf](https://github.com/wb2osz/direwolf) running as a software TNC with its KISS port open on `127.0.0.1:8001`; a hardware KISS TNC on a serial port works too.
+- The optional `aprslib` Python package, which is already listed in `backend/requirements.txt` and so present in the standard Docker images. If it is missing, the plugin still loads and lists, but reports a clear error when you enable it.
+- In a Docker install using a serial TNC, the device has to be passed into the container, the same way MeshCore's is.
+
+**Settings (Plugins tab)**
+
+| Setting | Description |
+|---------|-------------|
+| TNC connection | **KISS over TCP (direwolf)** or **KISS over serial TNC**. |
+| TNC host | Host for the TCP connection (default `127.0.0.1`). |
+| TNC port | Port for the TCP connection (default `8001`). |
+| TNC serial device | Serial device when using a hardware TNC (e.g. `/dev/ttyUSB0`). |
+| Serial baud rate | Serial speed for a hardware TNC. |
+| Reconnect delay | Seconds to wait before retrying a dropped TNC connection. |
+| Callsign filter | Comma-separated call signs. `W8ABC` matches every SSID of that call; `W8ABC-9` matches only that one. Leave empty for no filtering. |
+| Filter mode | **Plot only these callsigns** (allow) or **Plot everything except these** (deny). |
+
+The filter is worth using on a busy band — a metro APRS channel can put dozens of stations on the map within an hour, most of them nothing to do with you.
+
+**A note on GMRS.** APRS here means the amateur (ham) service, or any other service you are licensed for. You cannot run APRS on GMRS: Part 95E allows only very short data bursts, from certified hand-helds with fixed antennas, addressed to one specific unit — and requires a voice or Morse station ID that a data packet cannot give. Receiving, which is all this plugin does, is not regulated at all. The citations are set out in [Position reports](https://xpiatio.github.io/Hearthwave/legality.html#positions).
+
+---
+
+## 22e. Writing your own plugin
+
+The mesh-bridge and APRS plugins above are seeded into `/data/plugins` as references — copy one as a starting point for your own. A plugin is a directory with a `plugin.py` that subclasses `BasePlugin` and hooks into the RX/TX pipeline (receiving messages, queueing transmissions, capping the message box, and reacting to settings changes). It exposes its settings declaratively — the app renders the form, so a plugin ships no browser code. For the full hook reference, the settings-form schema, the TX-composition / character-limit API, and packaging your plugin as an installable `.zip`, see the authoring guide at [`docs/plugins.md`](docs/plugins.md).
 
 ---
 
@@ -1462,6 +1501,7 @@ The screen is in two parts. The **radio log** fills the top left, with the clock
 - A **weather / street alert banner**, when one is active.
 - The **next scheduled net** (or "Net running now" while one is in progress).
 - A large **clock**.
+- **Stations heard** — a small map of nearby stations, if any position source is running (see [section 34](#34-station-positions-on-a-map)). With nothing heard, the block isn't there at all, so an install with no position sources gets no empty furniture on the wall.
 
 The display dims to a dark theme automatically between 7 PM and 7 AM, and the whole layout drifts a few pixels every so often — a standard anti-burn-in measure for a screen that shows the same layout for hours at a stretch. None of this needs any setup; it just runs. (Both of these behaviours change when [E-ink mode](#e-ink-displays) is on.)
 
@@ -1490,6 +1530,7 @@ If the wall panel is a real **e-ink** screen (the low-power, paper-like kind), t
 - **Finalised messages only** — the live, word-by-word partial transcripts are suppressed; a received message appears once, complete, instead of rewriting itself as it decodes.
 - **No layout drift** — e-ink has none of the burn-in that the drift protects against, and the movement would only add ghosting, so the layout stays pinned in place.
 - **No drag-to-sort** — dragging smears an e-ink panel, so tiles stay put. Sort the board on a normal tablet paired to the same household if you want a custom order there.
+- **A list instead of a map** — the **Stations heard** block drops the map (a tile image is a poor match for grayscale e-ink and redraws badly) and shows the six nearest stations as text: name, source, distance, bearing, and age.
 
 The toggle takes effect on that display's next reconnect (reload the `/display` page on the tablet). It's per-device: a normal LCD tablet and an e-ink panel can be paired at the same time, each rendering in its own mode. Turning it back off returns that display to the standard dusk-aware, animated view.
 
@@ -1575,5 +1616,58 @@ Examples include:
 - **Discard unsaved settings** — title **"Discard unsaved changes?"** with buttons **"✅ Yes, discard"** and **"↩️ No, keep editing"**.
 
 These dialogs work with keyboard, mouse, touch, and switch scanning — focus the button you want and press **Enter** or **Space**, or click / tap / press your switch.
+
+---
+
+## 34. Station positions on a map
+
+Hearthwave can plot the stations it hears — Meshtastic nodes, MeshCore contacts, and APRS stations on RF — on a map, with each one's distance and bearing from your station and how long ago it was heard. It is useful during a net or an incident for the same reason a paper map on the wall is: it tells you who is where without anyone having to say it on the air.
+
+> **Receive-only, all of it.** No position source in Hearthwave transmits. Nothing here puts your station's location on the air, on a mesh, or on the internet — the station latitude and longitude you set are used only to work out distances and to centre your own map. See [Position reports](https://xpiatio.github.io/Hearthwave/legality.html#positions) for the FCC side of this, including why "APRS on GMRS" is not something you can do.
+
+### Turning it on
+
+Nothing is plotted until you do two things.
+
+**1. Tell Hearthwave where the station is.** In **Settings → Station** (admin only), set **Latitude** and **Longitude** in decimal degrees — for example `42.9634` and `-85.6681` for Grand Rapids, Michigan. Longitude is negative in the western hemisphere. You can read these off any mapping app by long-pressing your house. Leaving them blank is allowed: stations are still plotted, but there is no "you are here" and no distances or bearings, and the map opens on a view of the whole country.
+
+**2. Switch on a position source.** Each source is a plugin, and each is off by default:
+
+- **Meshtastic** — turn on **Show node positions on the map** in its settings ([section 22c](#22c-meshtastic-example-plugin)). Hearthwave reads the radio's node database every **Position poll interval** seconds (default 60).
+- **MeshCore** — turn on **Show contact positions on the map** ([section 22b](#22b-meshcore-example-plugin)). Same idea, reading the contact list.
+- **APRS (RF receive)** — enable the plugin and point it at your KISS TNC ([section 22d](#22d-aprs-rf-receive-example-plugin)). Positions arrive as packets are heard, rather than on a poll.
+
+Meshtastic and MeshCore can't both run (they want the same serial radio), but either can run alongside APRS.
+
+### Reading the panel
+
+Once at least one station has been heard, a **MAP** button appears in the top bar. (It stays hidden until then — there is no point offering a map of nothing.) The panel has two views, switched with the **Map** / **List** buttons:
+
+- **Map** — every station is a coloured dot: green for Meshtastic, blue for MeshCore, amber for APRS, purple for anything else, and red for your own station. Click a dot for its name, source, distance and bearing, how long ago it was heard, and any extra the source supplied (an APRS comment, a signal-to-noise figure).
+- **List** — the same stations as a table, **nearest first**: **Station**, **Heard on**, **Distance**, **Bearing**, **Age**. This is a proper table with row headers, not a picture, so it works with a screen reader and with keyboard navigation. The map is deliberately skipped by both — a pan-and-zoom canvas has nothing to say to a screen reader, and the list has all the same information.
+
+Distances are in **miles** by default. Bearings are given as compass points (`NNE`, `SW`) and read aloud in words ("north-northeast"). Ages are coarse on purpose — `now`, `14m`, `3h`, `1d+`.
+
+Everything — distance, bearing, age — is worked out on the server and sent ready to display, so a wall tablet with a wrong clock or no geography of its own still shows the right numbers. The panel refreshes at least every 30 seconds even on a dead-quiet channel, so the age counters keep moving rather than freezing at "now".
+
+### On the wall display
+
+Wall displays show a **Stations heard** block too ([section 32](#32-wall-display-kiosk)): a small map on a normal tablet, and on an **e-ink** panel the six nearest stations as a text list instead. If nothing has been heard, the block is absent rather than empty.
+
+### Map tiles (admin)
+
+A map needs tile images, and Hearthwave will not fetch them from the internet unless you tell it to — the whole point of a radio station is that it works when the internet doesn't.
+
+- **Offline tile pack (recommended).** Drop an XYZ tile pack into the server's `/data/tiles` directory, laid out as `/data/tiles/{z}/{x}/{y}.png`. Hearthwave serves it at `/tiles` and uses it automatically; the **Map Tile URL** field's help text changes to say so. A pack covering your county at the zoom levels you actually use is small — tens of megabytes — and needs no connection at all. (The directory is `/data/tiles` inside the container; override it with the `RADIO_TTY_TILES_DIR` environment variable if you keep it elsewhere.)
+- **Remote tile URL (fallback).** With no local pack, set **Map Tile URL** in **Settings → Station** to an XYZ template such as `https://tiles.example.org/{z}/{x}/{y}.png`. Check the tile provider's usage policy before pointing at a public server. This is used only when there is no local pack — a pack always wins.
+- **Neither.** The map area says *"No map tiles configured"* and the List view carries on working normally. Distances and bearings do not depend on tiles.
+
+### How long a station stays on the map
+
+**Position Expiry (minutes)** in **Settings → Station** controls how long a fix survives without being heard again — 24 hours (1440 minutes) by default. Past that, the station drops off the map and the list.
+
+The age shown is the age of the **fix**, not of the moment Hearthwave read it. A mesh radio keeps its node roster for days, so reading a row is not the same as hearing that station; where a source records when it last heard a node, Hearthwave uses that timestamp. This is why a node that has been on the roster for a week shows as a day old and then expires, instead of claiming to have been heard just now. APRS is different — the packet arriving *is* the hearing, so it is stamped on arrival.
+
+To keep a busy band from filling memory, at most 500 stations are held; the oldest are dropped first. Positions survive a restart (they are kept in `/data/positions.json`).
 
 ---

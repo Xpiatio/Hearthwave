@@ -39,6 +39,19 @@ browser-based React frontend communicating over WebSocket.
 
 ## Features
 
+- **Stations on a map** — positions heard over Meshtastic, MeshCore, or APRS on
+  RF (via a KISS TNC such as direwolf) are plotted on a **MAP** panel, with a
+  keyboard- and screen-reader-friendly **List** view giving each station's
+  distance, bearing, and how long ago it was heard. Distance and bearing are
+  measured from a fixed station latitude/longitude set in **Settings → Station**,
+  and are resolved on the server so a kiosk needs neither a trustworthy clock nor
+  any geography of its own. Map tiles come from an offline pack dropped into
+  `/data/tiles`, so the map keeps working with the internet down; a remote tile
+  URL is an optional fallback. Wall displays show the map too, and e-ink panels
+  get the nearest-first list instead. Every position source is **receive-only** —
+  none of them has a transmit path, and each is off by default (see
+  [Position reports](https://xpiatio.github.io/Hearthwave/legality.html#positions)
+  for why "APRS on GMRS" is not what it sounds like)
 - **Audio devices remembered by name** — device selections are stored by name
   rather than by index, so they survive new hardware being plugged in or a card
   that was busy at boot instead of silently shifting the station onto the wrong
@@ -324,6 +337,13 @@ Remote access over the internet is the operator's responsibility. Hearthwave
 provides no port-forwarding, relay, or TURN/STUN infrastructure — use a VPN or
 private tunnel.
 
+Position reporting is **receive-only**. Hearthwave plots what it hears over
+Meshtastic, MeshCore, and APRS on RF; no position source has a transmit path, so
+Part 95E's digital-data limits — which govern what a station *sends* — are not
+engaged. "APRS on GMRS" is not a thing you can lawfully do with this or any other
+software: see [Position reports](https://xpiatio.github.io/Hearthwave/legality.html#positions)
+for the citations.
+
 For the full rule-by-rule breakdown — verbatim Part 95E citations, the
 remote-control vs. repeater-linking distinction, and every automated function
 disclosed — see [Legality & FCC compliance](https://xpiatio.github.io/Hearthwave/legality.html).
@@ -411,13 +431,13 @@ your callsign, audio devices, and PTT interface.
 # Backend (Python 3.13 in the images; 3.11+ works)
 pip install -r backend/requirements.txt -r backend/requirements-dev.txt
 uvicorn backend.server:app --reload --port 8765
-cd backend && python -m pytest        # 2027 tests
+cd backend && python -m pytest        # 2026 tests
 
 # Frontend (Node 22, matching the image builder stage)
 cd frontend
 npm ci
 npm run dev        # dev server on :5173, proxies /ws + /auth to :8765
-npm run test       # vitest, 1035 tests
+npm run test       # vitest, 1221 tests
 npm run build      # production build
 ```
 
@@ -474,8 +494,8 @@ class WordGuard(BasePlugin):
 
 The loader binds a `PluginContext` to `self.ctx`, calls `setup()`, registers the
 plugin, then dispatches `on_config_changed`. Core services are reached through
-`self.ctx` — `broadcast`, `enqueue_tx`, `get_config`, `channel_clear`, `data_dir`,
-and `logger`. The `PluginManifest` fields are `id`, `name`, `description`,
+`self.ctx` — `broadcast`, `enqueue_tx`, `get_config`, `channel_clear`,
+`report_position`, `data_dir`, and `logger`. The `PluginManifest` fields are `id`, `name`, `description`,
 `version`, `default_enabled`, `conflicts_with`, `config_schema`, and
 `tx_composition`.
 
@@ -514,14 +534,29 @@ measure). MeshCore declares one so its packet-length budget is enforced as you t
 
 ### Examples and built-ins
 
-MeshCore and Meshtastic are **example plugins**, shipped under
-`examples/plugins/` and seeded into `/data/plugins` on first run — reference
-implementations for writing your own, not core features. They are mutually
-exclusive (enabling one disables the other via `conflicts_with`). MeshCore bridges
-to a USB Companion radio over serial (with a configurable baud rate); Meshtastic
-is serial too (no baud setting). Both build on a shared `MeshForwarderPlugin` base
-(`backend/plugins/mesh_forwarder.py`, re-exported by the SDK) so a concrete
-forwarder supplies only its config mapping and transport.
+MeshCore, Meshtastic, and APRS (RF receive) are **example plugins**, shipped
+under `examples/plugins/` and seeded into `/data/plugins` on first run — reference
+implementations for writing your own, not core features.
+
+MeshCore and Meshtastic are mutually exclusive (enabling one disables the other
+via `conflicts_with`), because both want the one serial mesh radio. MeshCore
+bridges to a USB Companion radio over serial (with a configurable baud rate);
+Meshtastic is serial too (no baud setting). Both build on a shared
+`MeshForwarderPlugin` base (`backend/plugins/mesh_forwarder.py`, re-exported by
+the SDK) so a concrete forwarder supplies only its config mapping and transport,
+and both can additionally report the positions of nodes they hear — off by
+default, enabled per plugin with **Show node positions on the map**.
+
+APRS (RF receive) is a different radio, so it conflicts with nothing and can run
+alongside either mesh plugin. It reads a KISS TNC over TCP (direwolf, default
+`127.0.0.1:8001`) or over a serial device, decodes AX.25 UI frames, and parses
+the position with `aprslib` — an optional dependency, already in
+`backend/requirements.txt`, that the plugin reports a clear error about if it is
+enabled without it. An optional callsign allow/deny filter keeps a busy band down
+to the stations you care about. It is receive-only and has no transmit path.
+
+All three feed positions through `ctx.report_position(...)`, and each owns a
+`PositionPoller` rather than inheriting one — see [docs/plugins.md](docs/plugins.md).
 
 **NCS / SKYWARN remains built-in** — it is registered by the app rather than
 loaded from `/data/plugins`, because it is deeply integrated (contacts, FCC
