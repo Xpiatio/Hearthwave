@@ -1,6 +1,6 @@
 # Hearthwave User Manual
 
-> **Version:** v2.23.2
+> **Version:** v2.24.0
 
 This manual covers day-to-day operation of Hearthwave as a GMRS family hub or neighborhood watch base station — a shared radio operating station where every household member or watch volunteer connects from their own device. For installation and server setup, see [README.md](README.md).
 
@@ -205,6 +205,8 @@ Each received entry is labelled **[RX]** in the chat (in green). Outgoing entrie
 **Profanity filter:** If your profanity filter is enabled (see [Settings](#13-settings)), profanity is masked in received text with asterisks. Other users with the filter off see the unmasked text. This is a per-account setting.
 
 **Read Aloud:** Enable the **READ ALOUD** button in the top bar to have finalized RX transcripts spoken aloud through your browser. The station's TTS voice is used. Useful for eyes-busy operation or hearing-accommodated operators. This is a per-account preference and does not affect other users.
+
+**Timestamps:** Every entry carries the time it arrived, in your browser's timezone. Anything from today shows the time alone; anything older also shows its date, so scrolling back through a long net — or glancing at a wall display that has been up for a week — never leaves you guessing which day a message belongs to. The change happens by itself at midnight; you do not need to reload.
 
 ---
 
