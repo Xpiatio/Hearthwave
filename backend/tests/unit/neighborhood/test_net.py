@@ -476,3 +476,36 @@ def test_start_and_call_reset_clear_no_answer():
     n.set_no_answer("u1", True)
     n.start()
     assert n.roster()[0]["no_answer"] is False
+
+
+def test_set_fcc_annotates_account_row():
+    n = NeighborhoodNet()
+    n.checkin("u1", "WSLZ233", "Ben", "5th St")
+    assert n.set_fcc("u1", "verified", "Zomberg, Benjamin J") is True
+    row = n.roster()[0]
+    assert row["fcc_status"] == "verified"
+    assert row["fcc_license_name"] == "Zomberg, Benjamin J"
+
+
+def test_set_fcc_annotates_radio_row():
+    n = NeighborhoodNet()
+    row = n.checkin_radio("WRAB123", "Maria", "Maple St")
+    assert n.set_fcc(row["user_id"], "expired", "Lopez, Maria") is True
+    got = n.roster()[0]
+    assert got["fcc_status"] == "expired"
+    assert got["fcc_license_name"] == "Lopez, Maria"
+
+
+def test_set_fcc_unknown_key_returns_false():
+    n = NeighborhoodNet()
+    assert n.set_fcc("nobody", "verified", "X") is False
+
+
+def test_recheckin_preserves_fcc_annotation():
+    # A re-checkin refreshes identity fields; the FCC verdict for the same
+    # callsign is still the latest known truth and must not be wiped.
+    n = NeighborhoodNet()
+    n.checkin("u1", "WSLZ233", "Ben", "5th St")
+    n.set_fcc("u1", "verified", "Zomberg, Benjamin J")
+    n.checkin("u1", "WSLZ233", "Ben", "5th St")
+    assert n.roster()[0]["fcc_status"] == "verified"

@@ -201,3 +201,31 @@ describe('RosterList', () => {
     expect(screen.queryByRole('button', { name: 'No answer' })).not.toBeInTheDocument();
   });
 });
+
+describe('RosterList FCC badges', () => {
+  it('flags an expired license in red', () => {
+    const expired = { ...radioRow, fcc_status: 'expired' as const, fcc_license_name: 'Lopez, Maria' };
+    render(<RosterList {...makeProps({ roster: [expired] })} />);
+    expect(screen.getByText('License expired')).toBeInTheDocument();
+  });
+
+  it('marks a callsign the FCC has no record of', () => {
+    const missing = { ...radioRow, fcc_status: 'not_found' as const };
+    render(<RosterList {...makeProps({ roster: [missing] })} />);
+    expect(screen.getByText('Not in FCC')).toBeInTheDocument();
+  });
+
+  it('shows the FCC check on verified and active rows alike', () => {
+    const verified = { ...accountRow, fcc_status: 'verified' as const, fcc_license_name: 'Ann A' };
+    const active = { ...radioRow, fcc_status: 'active' as const, fcc_license_name: 'Lopez, Maria' };
+    render(<RosterList {...makeProps({ roster: [verified, active] })} />);
+    expect(screen.getAllByText('FCC ✓')).toHaveLength(2);
+  });
+
+  it('renders no FCC badge while the verdict is unknown', () => {
+    render(<RosterList {...makeProps({ roster: [accountRow, radioRow] })} />);
+    expect(screen.queryByText('FCC ✓')).toBeNull();
+    expect(screen.queryByText('License expired')).toBeNull();
+    expect(screen.queryByText('Not in FCC')).toBeNull();
+  });
+});

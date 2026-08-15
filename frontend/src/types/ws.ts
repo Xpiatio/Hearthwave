@@ -695,6 +695,12 @@ export interface NeighborhoodRosterRow {
   /** True when the round-table called this station and got no reply.
    *  Optional so older server payloads (or NCS-shaped rows) still typecheck. */
   no_answer?: boolean;
+  /** FCC crossref verdict for the row's callsign, filled in asynchronously
+   *  after check-in: verified (active license, name matches), active
+   *  (active license, other name), expired (found but not active),
+   *  not_found. Absent until the lookup lands, or forever when offline. */
+  fcc_status?: 'verified' | 'active' | 'expired' | 'not_found';
+  fcc_license_name?: string;
 }
 
 export interface NeighborhoodStateMsg {

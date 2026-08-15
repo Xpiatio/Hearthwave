@@ -190,6 +190,23 @@ class NeighborhoodNet:
             row["checkin_time"] = now
         return row
 
+    def set_fcc(self, key: str, fcc_status: str, license_name: str) -> bool:
+        """Annotate a roster row with its FCC lookup verdict.
+
+        `fcc_status` is the roster_status() alphabet (verified / active /
+        expired / not_found). The fields ride on the row, so they reach
+        clients through `roster()` and survive into the saved session
+        snapshot for free. Returns False for an unknown key — the row may
+        have been removed (or the net ended) while the lookup was in flight,
+        and that's a silent no-op, not an error.
+        """
+        row = self._find(key)
+        if row is None:
+            return False
+        row["fcc_status"] = fcc_status
+        row["fcc_license_name"] = license_name
+        return True
+
     def set_status(self, user_id: str, status: str) -> None:
         """Set a roster row's status ('checked_in', 'standby', or 'checked_out'); no-op if unknown user."""
         row = self._find(user_id)

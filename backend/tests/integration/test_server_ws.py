@@ -5819,3 +5819,119 @@ class TestAudioDeviceListing:
         _, cfg = self._run(tmp_path, [_USB_DEV, _HDMI_DEV], send)
         assert cfg["output_device"] == _USB_DEV["name"]
 
+
+
+# ---------------------------------------------------------------------------
+# FCC validation at check-in: both check-in paths schedule a background
+# crossref lookup and annotate the roster row (fcc_status / fcc_license_name),
+# rebroadcasting neighborhood_state when the verdict lands.
+# ---------------------------------------------------------------------------
+
+def _next_state_with_fcc(ws, tries: int = 5):
+    """Read neighborhood_state frames until one carries an FCC annotation."""
+    state = None
+    for _ in range(tries):
+        state = _next_of_type(ws, "neighborhood_state")
+        if any(r.get("fcc_status") for r in state["roster"]):
+            return state
+    return state
+
+
+class TestCheckinFccValidation:
+    def test_radio_checkin_flags_expired_license(self, tmp_path):
+        from backend.fcc.crossref import VerificationResult
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, coordinator=True)
+        expired = VerificationResult(
+            status="callsign_only", license_name="Lopez, Maria",
+            license_active=False)
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch.dict("backend.server._checkin_fcc_cache", clear=True),
+            patch("backend.server.is_online_cached", return_value=True),
+            patch("backend.server.verify_callsign", return_value=expired),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_checkin_radio",
+                                  "callsign": "WRAB123", "name": "Maria",
+                                  "location": "Maple St"})
+                    state = _next_state_with_fcc(ws)
+        row = state["roster"][0]
+        assert row["fcc_status"] == "expired"
+        assert row["fcc_license_name"] == "Lopez, Maria"
+
+    def test_account_checkin_gets_verified_badge(self, tmp_path):
+        from backend.fcc.crossref import VerificationResult
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path,
+            profile={"callsign": "WSLZ233", "operator_name": "Ben",
+                     "display_name": "Ben", "location": "5th St"})
+        active = VerificationResult(
+            status="verified", license_name="Zomberg, Benjamin J",
+            license_active=True)
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch.dict("backend.server._checkin_fcc_cache", clear=True),
+            patch("backend.server.is_online_cached", return_value=True),
+            patch("backend.server.verify_callsign", return_value=active),
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_checkin"})
+                    state = _next_state_with_fcc(ws)
+        row = state["roster"][0]
+        assert row["fcc_status"] == "verified"
+        assert row["fcc_license_name"] == "Zomberg, Benjamin J"
+
+    def test_second_row_on_same_callsign_reuses_cached_lookup(self, tmp_path):
+        # One HTTP lookup per callsign: a second station sharing the call
+        # (family GMRS license) is annotated from the cache, with the status
+        # re-derived from that row's own name.
+        from backend.fcc.crossref import VerificationResult
+        cfg, mock_stt, mock_tts, mock_users, mock_tokens = _neighborhood_server(
+            tmp_path, coordinator=True)
+        active = VerificationResult(
+            status="callsign_only", license_name="Lopez, Maria",
+            license_active=True)
+        with (
+            patch("backend.server.ServerConfig.load", return_value=cfg),
+            patch("backend.server.STTWorker", return_value=mock_stt),
+            patch("backend.server.TTSSynthesizer", return_value=mock_tts),
+            patch("backend.server.UsersStore", return_value=mock_users),
+            patch("backend.server.TokenStore", return_value=mock_tokens),
+            patch("backend.auth_routes.init"),
+            patch.dict("backend.server._checkin_fcc_cache", clear=True),
+            patch("backend.server.is_online_cached", return_value=True),
+            patch("backend.server.verify_callsign", return_value=active) as mock_verify,
+        ):
+            with TestClient(app) as tc:
+                with tc.websocket_connect(WS_URL) as ws:
+                    _drain_initial(ws)
+                    ws.send_json({"type": "neighborhood_checkin_radio",
+                                  "callsign": "WRAB123", "name": "Maria",
+                                  "location": "Maple St"})
+                    _next_state_with_fcc(ws)
+                    ws.send_json({"type": "neighborhood_checkin_radio",
+                                  "callsign": "WRAB123", "name": "Jose",
+                                  "location": "Maple St"})
+                    state = None
+                    for _ in range(5):
+                        state = _next_of_type(ws, "neighborhood_state")
+                        jose = next((r for r in state["roster"] if r["name"] == "Jose"), None)
+                        if jose and jose.get("fcc_status"):
+                            break
+        assert jose["fcc_status"] == "active"  # "Jose" vs "Lopez, Maria" — no name match
+        assert mock_verify.call_count == 1
