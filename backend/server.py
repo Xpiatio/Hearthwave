@@ -265,7 +265,10 @@ _neighborhood: NeighborhoodNet | None = None
 # an HTTP round-trip each time. Keyed by normalized callsign; only definitive
 # verdicts are cached (offline/error results are retried on the next check-in).
 _checkin_fcc_cache: dict[str, VerificationResult] = {}
-_checkin_fcc_tasks: dict[str, "asyncio.Task"] = {}
+# In-flight lookups keyed by roster key, holding (callsign, task) so a
+# re-check-in that CHANGES the callsign can cancel the superseded lookup
+# instead of letting the old callsign's verdict land on the row.
+_checkin_fcc_tasks: dict[str, tuple[str, "asyncio.Task"]] = {}
 _audit_log: AuditLog | None = None
 _stt_worker: STTWorker | None = None
 _synthesizer: TTSSynthesizer | None = None
@@ -743,15 +746,24 @@ def _schedule_checkin_fcc(key: str, callsign: str, name: str) -> None:
     already in flight, or we're offline with no cached verdict — a check-in
     must never wait on (or fail because of) the FCC API.
     """
+    # Normalize before every cache/task-key use: the radio form arrives
+    # pre-normalized, but an account profile can hold "wslz233" — both
+    # spellings are one license and must share one cache entry.
+    callsign = normalize_callsign(callsign)
     if not callsign:
         return
     prior = _checkin_fcc_tasks.get(key)
-    if prior is not None and not prior.done():
-        return
+    if prior is not None:
+        prior_callsign, prior_task = prior
+        if not prior_task.done():
+            if prior_callsign == callsign:
+                return
+            prior_task.cancel()
     if callsign not in _checkin_fcc_cache and not is_online_cached():
         return
-    _checkin_fcc_tasks[key] = asyncio.create_task(
-        _checkin_fcc_lookup(key, callsign, name)
+    _checkin_fcc_tasks[key] = (
+        callsign,
+        asyncio.create_task(_checkin_fcc_lookup(key, callsign, name)),
     )
 
 
@@ -782,7 +794,12 @@ async def _checkin_fcc_lookup(key: str, callsign: str, name: str) -> None:
     except Exception as exc:
         _log.error("checkin FCC lookup failed for %s: %s", callsign, exc)
     finally:
-        _checkin_fcc_tasks.pop(key, None)
+        # Pop only our own entry: a superseding lookup for the same key may
+        # already have replaced it, and a cancelled task's cleanup must not
+        # evict its successor.
+        entry = _checkin_fcc_tasks.get(key)
+        if entry is not None and entry[1] is asyncio.current_task():
+            _checkin_fcc_tasks.pop(key, None)
 
 
 def _build_neighborhood_incidents_msg() -> dict:
