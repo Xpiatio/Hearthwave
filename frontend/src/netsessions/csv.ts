@@ -1,8 +1,24 @@
 import type { NetSessionDetail, NetSessionSummary } from '../types/ws';
 import { netDate } from './dates';
 
-function quote(value: string | number | null): string {
-  return `"${String(value ?? '').replace(/"/g, '""')}"`;
+/** Leading characters that make Excel (and Sheets, and LibreOffice) read a
+ *  cell as a formula rather than text. */
+const FORMULA_LEAD = /^[=+\-@\t\r]/;
+
+/** One CSV cell: always quoted, embedded quotes doubled. Shared with the
+ *  ICS-214 export so both writers escape a field the same way.
+ *
+ *  A cell whose first character could start a formula gets a leading
+ *  apostrophe — the spreadsheet's own "this is text" marker, which it hides
+ *  on display. Quoting alone does not save us here: Excel strips the quotes
+ *  and *then* evaluates the cell, so a check-in name of `=WEBSERVICE(...)`
+ *  would run when whoever we handed the export to opened it. Names,
+ *  locations and traffic notes are free text from a check-in, so that input
+ *  is not ours to trust. */
+export function quote(value: string | number | null): string {
+  const raw = String(value ?? '');
+  const safe = FORMULA_LEAD.test(raw) ? `'${raw}` : raw;
+  return `"${safe.replace(/"/g, '""')}"`;
 }
 
 /** One session's roster: header plus one row per check-in. */

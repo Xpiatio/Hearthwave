@@ -82,6 +82,44 @@ describe('sessionToCsv', () => {
   })
 })
 
+describe('formula-injection hardening', () => {
+  /** A one-row session whose name field is `name`, rendered as CSV. */
+  function withName(name: string): string {
+    return sessionToCsv({
+      ...SESSION,
+      roster: [{ ...SESSION.roster[0], name }],
+    }).split('\n')[1]
+  }
+
+  // Excel strips the surrounding quotes and then evaluates the cell, so
+  // quoting alone does not stop a formula. Each of these leads must be
+  // defused before an ARES section opens the file.
+  it.each(['=', '+', '-', '@', '\t', '\r'])(
+    'prefixes a cell starting with %j so Excel treats it as text',
+    (lead) => {
+      expect(withName(`${lead}HYPERLINK("http://evil")`)).toContain(
+        `"'${lead}HYPERLINK(""http://evil"")"`
+      )
+    }
+  )
+
+  it('leaves an ordinary value untouched', () => {
+    expect(withName('Maria')).toContain('"Maria"')
+  })
+
+  it('does not defuse a formula character that is not the first one', () => {
+    expect(withName('Maria=Sam')).toContain('"Maria=Sam"')
+  })
+
+  it('still doubles embedded quotes in a defused cell', () => {
+    expect(withName('="a"')).toContain('"\'=""a"""')
+  })
+
+  it('leaves an empty cell empty rather than prefixing it', () => {
+    expect(withName('')).toContain('"KD8ABC","",')
+  })
+})
+
 describe('allSessionsToCsv', () => {
   const SUMMARIES: NetSessionSummary[] = [
     {
