@@ -211,3 +211,30 @@ describe('popupHtml', () => {
     expect(html).toContain('snr: 6.2 dB');
   });
 });
+
+describe('approximate license pins', () => {
+  const approx = {
+    source: 'fcc',
+    node_id: 'WSLZ233',
+    extra: { approx: 'license', city: 'Jenison, MI' },
+  };
+
+  it('draws the pin hollow so it does not read as a heard fix', async () => {
+    render(<MapPanel stations={[station(approx)]} tilesLocal />);
+    await waitFor(() => expect(calls.circleMarkers).toHaveLength(1));
+    const options = calls.circleMarkers[0].options;
+    expect(options.fillOpacity).toBe(0);
+    expect(options.dashArray).toBeTruthy();
+  });
+
+  it('says approximate in the popup, with the city it came from', () => {
+    const html = popupHtml(station(approx) as StationPosition, 'mi');
+    expect(html).toMatch(/Approximate/);
+    expect(html).toMatch(/Jenison, MI/);
+  });
+
+  it('does not dump the raw marker key into the popup', () => {
+    const html = popupHtml(station(approx) as StationPosition, 'mi');
+    expect(html).not.toMatch(/approx:/);
+  });
+});

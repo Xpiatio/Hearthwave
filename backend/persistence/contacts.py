@@ -40,6 +40,9 @@ class ContactDict(TypedDict, total=False):
     verified_at: str   # ISO-8601 timestamp string
     fcc_name: str
     fcc_location: str
+    # Opt-in: plot this contact at their FCC-licensed city when they check in
+    # with no real position. Absent/false means no pin.
+    map_pin: bool
 
 
 # ---------------------------------------------------------------------------

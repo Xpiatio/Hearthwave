@@ -93,6 +93,12 @@ def _clamp(text: object, limit: int) -> str:
     return str(text or "").strip()[:limit]
 
 
+def _callsign_candidates(rec: "PositionRecord") -> set[str]:
+    """Every token of a record that might be the station's callsign."""
+    words = [rec.node_id, *rec.label.split()]
+    return {word.strip().upper().split("-", 1)[0] for word in words}
+
+
 def validate_coords(lat: object, lon: object) -> tuple[float, float]:
     """Coerce and range-check a coordinate pair.
 
@@ -312,6 +318,31 @@ class PositionStore:
         live = [rec for rec in self._records.values() if rec.heard_at >= cutoff]
         live.sort(key=lambda rec: rec.heard_at, reverse=True)
         return live
+
+    def has_station(
+        self,
+        callsign: str,
+        *,
+        exclude_source: str = "",
+        now: float | None = None,
+    ) -> bool:
+        """Whether any live record looks like it belongs to `callsign`.
+
+        Sources name stations however they please — APRS uses the callsign
+        with an SSID suffix, a mesh uses an opaque node id and puts the
+        callsign in the label — so both fields are searched and the suffix is
+        ignored. Approximate enough for its one caller: deciding whether a
+        station already has a real fix, and so needs no license-city pin.
+        """
+        wanted = (callsign or "").strip().upper()
+        if not wanted:
+            return False
+        for rec in self.active(now):
+            if exclude_source and rec.source == exclude_source:
+                continue
+            if wanted in _callsign_candidates(rec):
+                return True
+        return False
 
     def snapshot(
         self,

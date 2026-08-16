@@ -10,7 +10,14 @@ import {
 } from '@mui/material';
 import type { StationPosition } from '../../types/ws';
 import { visuallyHidden } from '../../ui/a11y';
-import { COMPASS_WORDS, formatAge, formatDistance, sourceLabel } from './format';
+import {
+  COMPASS_WORDS,
+  approximateNote,
+  formatAge,
+  formatDistance,
+  isApproximate,
+  sourceLabel,
+} from './format';
 
 interface Props {
   stations: StationPosition[];
@@ -70,6 +77,15 @@ export function PositionList({
                 sx={{ fontWeight: 700, color: eink ? '#000' : undefined }}
               >
                 {s.label || s.node_id}
+                {isApproximate(s.extra) && (
+                  <Typography
+                    variant="caption"
+                    component="div"
+                    sx={{ fontWeight: 400, color: eink ? '#000' : 'text.secondary' }}
+                  >
+                    {approximateNote(s.extra)}
+                  </Typography>
+                )}
               </TableCell>
               <TableCell>{sourceLabel(s.source)}</TableCell>
               <TableCell align="right">{formatDistance(s.distance_km, units)}</TableCell>

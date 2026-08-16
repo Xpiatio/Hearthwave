@@ -81,3 +81,27 @@ describe('PositionList', () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 });
+
+describe('PositionList — approximate license pins', () => {
+  const approx = station({
+    source: 'fcc',
+    node_id: 'WSLZ233',
+    label: 'Ben',
+    extra: { approx: 'license', city: 'Jenison, MI' },
+  });
+
+  it('marks the row approximate so it is not read as a heard fix', () => {
+    render(<PositionList stations={[approx]} />);
+    expect(screen.getByText(/approximate/i)).toBeInTheDocument();
+  });
+
+  it('names the licensed city the pin came from', () => {
+    render(<PositionList stations={[approx]} />);
+    expect(screen.getByText(/Jenison, MI/)).toBeInTheDocument();
+  });
+
+  it('leaves an ordinary heard station unmarked', () => {
+    render(<PositionList stations={[station()]} />);
+    expect(screen.queryByText(/approximate/i)).not.toBeInTheDocument();
+  });
+});

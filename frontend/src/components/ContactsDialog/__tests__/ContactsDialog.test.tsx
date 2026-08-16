@@ -318,6 +318,41 @@ describe('ContactsDialog', () => {
     })
   })
 
+  describe('Map pin opt-in', () => {
+    async function openEditDialog(props = makeProps()) {
+      render(<ContactsDialog {...props} />)
+      fireEvent.click(screen.getByRole('button', { name: /edit w1aaa/i }))
+      await waitFor(() => screen.getByText('Edit Contact', { selector: '[class*="MuiDialogTitle"]' }))
+    }
+
+    it('is unchecked for a contact that has not opted in', async () => {
+      await openEditDialog()
+      expect(screen.getByRole('checkbox', { name: /show on map/i })).not.toBeChecked()
+    })
+
+    it('is checked for a contact that has opted in', async () => {
+      const contacts = [{ ...CONTACTS[0], map_pin: true }, CONTACTS[1]]
+      await openEditDialog(makeProps({ contacts }))
+      expect(screen.getByRole('checkbox', { name: /show on map/i })).toBeChecked()
+    })
+
+    it('sends map_pin true when the operator opts a contact in', async () => {
+      const onSend = vi.fn()
+      await openEditDialog(makeProps({ onSend }))
+      fireEvent.click(screen.getByRole('checkbox', { name: /show on map/i }))
+      fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+      expect(onSend).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'update_contact',
+        map_pin: true,
+      }))
+    })
+
+    it('says the pin is only as precise as the licensed city', async () => {
+      await openEditDialog()
+      expect(screen.getByText(/approximate/i)).toBeInTheDocument()
+    })
+  })
+
   describe('Edit Contact dialog', () => {
     async function openEditDialog(props = makeProps()) {
       render(<ContactsDialog {...props} />)
