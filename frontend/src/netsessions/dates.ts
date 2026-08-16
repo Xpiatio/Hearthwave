@@ -18,6 +18,26 @@ export function netDate(iso: string): string {
 }
 
 /**
+ * Local 24-hour clock time (`19:01`) for a net session timestamp.
+ *
+ * Used where the date is already established by a heading and only the time
+ * of day distinguishes one row from the next. 24-hour is deliberate — these
+ * end up on printed rosters and activity logs, where a written time is read
+ * back without an AM/PM to lose.
+ */
+export function netClock(iso: string): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
+/** A net's length in whole minutes, e.g. `52 min`. */
+export function formatDuration(seconds: number): string {
+  return `${Math.round(seconds / 60)} min`;
+}
+
+/**
  * Local date *and* clock time for a net session timestamp.
  *
  * The start→end caption is the one place the time of day carries the
