@@ -424,6 +424,10 @@ Both CSV exports defuse spreadsheet formulas: a field that begins with `=`, `+`,
 
 Two things to know: the export covers **one net** — an ICS-214 documents a single operational period, so there is no all-nets version — and its timestamps are local wall-clock time in the browser's timezone, which is what an activity log is supposed to record. Incident reports from the neighborhood incident log are *not* included; they aren't part of a net's record.
 
+**Printable roster:** With a net selected, click **PRINT ROSTER** to open your browser's print dialog on a paper version of that net: a heading with the net type and date, a line giving the start and end times, the length in minutes and the check-in count, then a numbered table of stations — `#`, callsign, name, location, check-in time, traffic and notes. The notes column carries what has no column of its own: a status other than *CheckedIn*, `by radio` for a caller the coordinator logged from the radio, and `no answer when called`. The sheet ends with a blank *Prepared by / Date* line to sign and the date and time you printed it.
+
+The printed sheet always shows the **whole** roster in check-in order — filtering or sorting the on-screen table doesn't change what comes out of the printer, matching how CSV export and delete already work. To print a subset, export the CSV instead. Print to PDF from the same dialog if you want a file rather than paper.
+
 ---
 
 ## 12. Family journal (public page)

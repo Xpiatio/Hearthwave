@@ -100,6 +100,10 @@ browser-based React frontend communicating over WebSocket.
   built from the net opening, each check-in, and the net closing. A short dialog
   collects the four boxes a net record has no answer for (incident name, preparer,
   ICS position, home agency) and remembers them for the next export
+- **Printable roster** — **PRINT ROSTER** puts a past net on paper as a plain
+  numbered sheet: heading, operational period, one row per station, and a
+  prepared-by/date sign-off line. Prints the whole roster in check-in order
+  regardless of how the on-screen table is filtered or sorted
 - **Net session history** — every net that ends is recorded as a structured roster
   under `/data/net_sessions`. Browse past nets, per-station attendance (totals,
   recent turnout, streaks), and export any net or the whole history as CSV from the

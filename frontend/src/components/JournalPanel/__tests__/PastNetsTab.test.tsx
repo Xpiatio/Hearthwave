@@ -1,4 +1,4 @@
-import { render as rtlRender, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render as rtlRender, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { ThemeProvider } from '@mui/material/styles'
 import { makeTheme } from '../../../theme'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -105,21 +105,26 @@ describe('PastNetsTab', () => {
     expect(onSelect).toHaveBeenCalledWith('20260802_190000_ncs')
   })
 
+  // The print sheet is portalled to <body> and repeats every roster value, so
+  // queries about the on-screen table scope themselves to the tab's own
+  // container rather than the whole document.
   it('renders the selected session roster', () => {
-    render(<PastNetsTab {...props({ selected: DETAIL })} />)
-    expect(screen.getByText('KD8ABC')).toBeInTheDocument()
-    expect(screen.getByText('Holland')).toBeInTheDocument()
-    expect(screen.getByText('Routine')).toBeInTheDocument()
+    const { container } = render(<PastNetsTab {...props({ selected: DETAIL })} />)
+    const table = within(container)
+    expect(table.getByText('KD8ABC')).toBeInTheDocument()
+    expect(table.getByText('Holland')).toBeInTheDocument()
+    expect(table.getByText('Routine')).toBeInTheDocument()
   })
 
   it('hides non-matching rows when a callsign is typed into the roster filter', () => {
-    render(<PastNetsTab {...props({ selected: DETAIL_MULTI_ROW })} />)
+    const { container } = render(<PastNetsTab {...props({ selected: DETAIL_MULTI_ROW })} />)
     const filter = screen.getByLabelText(/filter roster/i)
     fireEvent.change(filter, { target: { value: 'KE8XYZ' } })
 
-    expect(screen.getByText('KE8XYZ')).toBeInTheDocument()
-    expect(screen.queryByText('KD8ABC')).not.toBeInTheDocument()
-    expect(screen.queryByText('WRAB123')).not.toBeInTheDocument()
+    const table = within(container)
+    expect(table.getByText('KE8XYZ')).toBeInTheDocument()
+    expect(table.queryByText('KD8ABC')).not.toBeInTheDocument()
+    expect(table.queryByText('WRAB123')).not.toBeInTheDocument()
   })
 
   it('shows attendance stats', () => {
@@ -260,6 +265,29 @@ describe('PastNetsTab', () => {
     expect(screen.queryByText('ICS-214 (CSV)')).not.toBeInTheDocument()
   })
 
+  it('prints the roster sheet when PRINT ROSTER is clicked', () => {
+    const print = vi.fn()
+    vi.stubGlobal('print', print)
+    render(<PastNetsTab {...props({ selected: DETAIL })} />)
+    fireEvent.click(screen.getByText('PRINT ROSTER'))
+    expect(print).toHaveBeenCalledTimes(1)
+    vi.unstubAllGlobals()
+  })
+
+  it('keeps a print sheet for the selected net in the document', () => {
+    render(<PastNetsTab {...props({ selected: DETAIL })} />)
+    // Portalled to <body>, so it is outside the container the tab renders into.
+    const sheet = document.querySelector('.net-roster-sheet')
+    expect(sheet).not.toBeNull()
+    expect(sheet).toHaveTextContent('KD8ABC')
+  })
+
+  it('offers no print sheet until a session is selected', () => {
+    render(<PastNetsTab {...props()} />)
+    expect(screen.queryByText('PRINT ROSTER')).not.toBeInTheDocument()
+    expect(document.querySelector('.net-roster-sheet')).toBeNull()
+  })
+
   it("shows how each station reached the roster", () => {
     const detailWithVia: NetSessionDetail = {
       ...DETAIL,
@@ -315,12 +343,13 @@ describe('PastNetsTab', () => {
         },
       ],
     }
-    render(<PastNetsTab {...props({ selected: detailWithNoAnswer })} />)
+    const { container } = render(<PastNetsTab {...props({ selected: detailWithNoAnswer })} />)
     const filter = screen.getByLabelText(/filter roster/i)
     fireEvent.change(filter, { target: { value: 'yes' } })
 
-    expect(screen.getByText('WRAB123')).toBeInTheDocument()
-    expect(screen.queryByText('KD8ABC')).not.toBeInTheDocument()
-    expect(screen.queryByText('KE8XYZ')).not.toBeInTheDocument()
+    const table = within(container)
+    expect(table.getByText('WRAB123')).toBeInTheDocument()
+    expect(table.queryByText('KD8ABC')).not.toBeInTheDocument()
+    expect(table.queryByText('KE8XYZ')).not.toBeInTheDocument()
   })
 })

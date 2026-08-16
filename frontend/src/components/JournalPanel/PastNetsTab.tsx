@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Box,
   Paper,
@@ -22,6 +23,7 @@ import {
   AccordionDetails,
 } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
+import PrintIcon from '@mui/icons-material/Print';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import type {
@@ -37,6 +39,7 @@ import { useRosterSort } from '../../netsessions/rosterView';
 import { netDate, netDateTime } from '../../netsessions/dates';
 import { netTypeLabel } from '../../netsessions/netTypes';
 import { Ics214Dialog } from './Ics214Dialog';
+import { NetRosterSheet } from './NetRosterSheet';
 
 type RosterColumn = 'callsign' | 'name' | 'location' | 'status' | 'traffic' | 'via' | 'no_answer';
 
@@ -332,6 +335,14 @@ export function PastNetsTab({
               >
                 ICS-214 (CSV)
               </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<PrintIcon />}
+                onClick={() => window.print()}
+              >
+                PRINT ROSTER
+              </Button>
               {isAdmin && (
                 <Button
                   variant="outlined"
@@ -385,6 +396,11 @@ export function PastNetsTab({
         onExport={handleIcs214Export}
         onCancel={() => setIcs214Open(false)}
       />
+
+      {/* Portalled out of the panel: this tab sits inside full-height flex
+          containers with `overflow: hidden`, which clip a printed page to
+          about one screen of rows. */}
+      {selected && createPortal(<NetRosterSheet session={selected} />, document.body)}
     </Box>
   );
 }

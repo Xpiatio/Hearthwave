@@ -1,0 +1,79 @@
+/* The printed roster sheet.
+ *
+ * The sheet is always in the DOM but never on screen — it exists only so the
+ * browser has something clean to put on paper. It is portalled to <body> and
+ * printing hides #root entirely, rather than restyling the app shell: the
+ * Journal panel sits inside full-height flex containers with `overflow:
+ * hidden`, which clip a printed page to roughly one screen's worth of rows.
+ */
+.net-roster-sheet {
+  display: none;
+}
+
+@media print {
+  #root {
+    display: none !important;
+  }
+
+  .net-roster-sheet {
+    display: block;
+    color: #000;
+    background: #fff;
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 11pt;
+  }
+
+  @page {
+    margin: 0.5in;
+  }
+
+  .net-roster-sheet h1 {
+    font-size: 16pt;
+    margin: 0 0 0.15in;
+  }
+
+  .net-roster-sheet .sheet-meta {
+    font-size: 10pt;
+    margin: 0 0 0.25in;
+  }
+
+  .net-roster-sheet table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .net-roster-sheet th,
+  .net-roster-sheet td {
+    border: 1px solid #000;
+    padding: 4pt 6pt;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .net-roster-sheet th {
+    font-size: 10pt;
+    /* Repeat the column headings when a long roster runs onto a second page. */
+    background: #eee;
+  }
+
+  .net-roster-sheet thead {
+    display: table-header-group;
+  }
+
+  /* Never split a station's row across a page break. */
+  .net-roster-sheet tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .net-roster-sheet .sheet-signoff {
+    margin-top: 0.4in;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .net-roster-sheet .sheet-printed {
+    margin-top: 0.15in;
+    font-size: 9pt;
+  }
+}
