@@ -762,6 +762,72 @@ class TestAddContact:
             assert any(c["callsign"] == "W9BAR" for c in msg2["contacts"])
 
 
+class TestMapPinIsAdminOnly:
+    """map_pin plots where a licensee lives, so only an admin may set it.
+
+    Everything else on a contact stays editable by any signed-in operator —
+    it is this one field, not contact editing, that needs the gate.
+    """
+
+    def _contact(self, msg, callsign):
+        return next(c for c in msg["contacts"] if c["callsign"] == callsign)
+
+    def test_admin_can_opt_a_contact_in(self, client):
+        with client.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({
+                "type": "add_contact",
+                "callsign": "W9PIN",
+                "name": "Pinned",
+                "map_pin": True,
+            })
+            msg = _next_of_type(ws, "contacts")
+        assert self._contact(msg, "W9PIN").get("map_pin") is True
+
+    def test_non_admin_add_cannot_opt_a_contact_in(self, non_admin_client):
+        tc, _cfg = non_admin_client
+        with tc.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({
+                "type": "add_contact",
+                "callsign": "W9PIN",
+                "name": "Pinned",
+                "map_pin": True,
+            })
+            msg = _next_of_type(ws, "contacts")
+        assert not self._contact(msg, "W9PIN").get("map_pin")
+
+    def test_non_admin_update_cannot_opt_a_contact_in(self, non_admin_client):
+        tc, _cfg = non_admin_client
+        with tc.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "add_contact", "callsign": "W9PIN", "name": "Pinned"})
+            _next_of_type(ws, "contacts")
+            ws.send_json({
+                "type": "update_contact",
+                "callsign": "W9PIN",
+                "name": "Pinned",
+                "map_pin": True,
+            })
+            msg = _next_of_type(ws, "contacts")
+        assert not self._contact(msg, "W9PIN").get("map_pin")
+
+    def test_non_admin_can_still_edit_the_rest_of_a_contact(self, non_admin_client):
+        tc, _cfg = non_admin_client
+        with tc.websocket_connect(WS_URL) as ws:
+            _drain_initial(ws)
+            ws.send_json({"type": "add_contact", "callsign": "W9PIN", "name": "Pinned"})
+            _next_of_type(ws, "contacts")
+            ws.send_json({
+                "type": "update_contact",
+                "callsign": "W9PIN",
+                "name": "Pinned",
+                "location": "Jenison, MI",
+            })
+            msg = _next_of_type(ws, "contacts")
+        assert self._contact(msg, "W9PIN")["location"] == "Jenison, MI"
+
+
 # ---------------------------------------------------------------------------
 # set_server_config — saved_phrases
 # ---------------------------------------------------------------------------

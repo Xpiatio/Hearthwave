@@ -39,6 +39,8 @@ interface Props {
   verifyAllComplete: boolean;
   onSend: (payload: unknown) => void;
   onVerifyAllDismiss: () => void;
+  /** Only an admin may plot a contact at their licensed city. */
+  isAdmin?: boolean;
 }
 
 interface FormData {
@@ -95,6 +97,8 @@ function parseCsv(text: string): FormData[] {
       location: cols[idx('location')] ?? '',
       gmrs_callsign: cols[idx('gmrs_callsign')] ?? '',
       ham_callsign: cols[idx('ham_callsign')] ?? '',
+      // An imported contact is never opted into map pins by the import.
+      map_pin: false,
     };
   }).filter((r) => r.callsign.trim());
 }
@@ -110,6 +114,7 @@ export function ContactsDialog({
   verifyAllComplete,
   onSend,
   onVerifyAllDismiss,
+  isAdmin = false,
 }: Props) {
   const [sortBySuffix, setSortBySuffix] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -195,7 +200,7 @@ export function ContactsDialog({
         location: form.location.trim(),
         gmrs_callsign: form.gmrs_callsign.trim().toUpperCase(),
         ham_callsign: form.ham_callsign.trim().toUpperCase(),
-        map_pin: form.map_pin,
+        ...(isAdmin ? { map_pin: form.map_pin } : {}),
       });
     } else {
       onSend({
@@ -205,7 +210,7 @@ export function ContactsDialog({
         location: form.location.trim(),
         gmrs_callsign: form.gmrs_callsign.trim().toUpperCase(),
         ham_callsign: form.ham_callsign.trim().toUpperCase(),
-        map_pin: form.map_pin,
+        ...(isAdmin ? { map_pin: form.map_pin } : {}),
       });
     }
     setEditOpen(false);
@@ -441,6 +446,7 @@ export function ContactsDialog({
             >
               FCC Look Up
             </Button>
+            {isAdmin && (
             <FormControlLabel
               control={
                 <Checkbox
@@ -458,6 +464,7 @@ export function ContactsDialog({
                 </>
               }
             />
+            )}
           </Stack>
         </DialogContent>
         <DialogActions>

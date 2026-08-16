@@ -139,6 +139,8 @@ def _run_checkin(patches, key="u1", callsign="WSLZ233", name="Ben"):
         for patch_ctx in patches:
             stack.enter_context(patch_ctx)
         asyncio.run(scenario())
+        # Handed back so a caller can assert on it after the patches unwind.
+        return srv.geocode_city
 
 
 def test_license_city_pin_is_created_for_an_opted_in_contact(tmp_path):
@@ -156,14 +158,52 @@ def test_license_city_pin_is_created_for_an_opted_in_contact(tmp_path):
 
 def test_no_pin_when_the_contact_has_not_opted_in(tmp_path):
     store = PositionStore(tmp_path / "p.json", ttl_minutes=60)
-    _run_checkin(_pin_patched([{"callsign": "WSLZ233"}], store))
+    patches = _pin_patched([{"callsign": "WSLZ233"}], store)
+    geocode = _run_checkin(patches)
     assert store.active() == []
+    # Nothing may reach the geocoder either: the opt-in guards the lookup, not
+    # just the pin, so a station that never opted in stays off the network.
+    assert not geocode.called
 
 
 def test_no_pin_when_the_callsign_has_no_contact(tmp_path):
     store = PositionStore(tmp_path / "p.json", ttl_minutes=60)
-    _run_checkin(_pin_patched([{"callsign": "WRZM714", "map_pin": True}], store))
+    patches = _pin_patched([{"callsign": "WRZM714", "map_pin": True}], store)
+    geocode = _run_checkin(patches)
     assert store.active() == []
+    assert not geocode.called
+
+
+def test_no_geocode_when_a_real_fix_already_exists(tmp_path):
+    store = PositionStore(tmp_path / "p.json", ttl_minutes=60)
+    store.upsert("aprs_rf", "WSLZ233-9", 42.5, -85.5)
+    patches = _pin_patched([{"callsign": "WSLZ233", "map_pin": True}], store)
+    geocode = _run_checkin(patches)
+    assert not geocode.called
+
+
+def test_no_pin_when_the_contacts_store_is_missing(tmp_path):
+    store = PositionStore(tmp_path / "p.json", ttl_minutes=60)
+    patches = (
+        *_patched(lambda cs, name: _located_result()),
+        patch.object(srv, "_contacts_store", None),
+        patch.object(srv, "_position_store", store),
+        patch.object(srv, "geocode_city", return_value=(42.9, -85.8)),
+    )
+    _run_checkin(patches)
+    assert store.active() == []
+
+
+def test_no_pin_when_the_position_store_is_missing():
+    patches = (
+        *_patched(lambda cs, name: _located_result()),
+        patch.object(srv, "_contacts_store",
+                     FakeContacts([{"callsign": "WSLZ233", "map_pin": True}])),
+        patch.object(srv, "_position_store", None),
+        patch.object(srv, "geocode_city", return_value=(42.9, -85.8)),
+    )
+    geocode = _run_checkin(patches)  # must not raise
+    assert not geocode.called
 
 
 def test_no_pin_when_the_station_already_has_a_real_fix(tmp_path):

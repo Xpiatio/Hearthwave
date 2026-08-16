@@ -771,12 +771,29 @@ def _schedule_checkin_fcc(key: str, callsign: str, name: str) -> None:
     )
 
 
+#: Contact fields a non-admin may not set. map_pin plots where a licensee
+#: lives; contacts are otherwise editable by any signed-in operator, so the
+#: gate is on the field rather than on the whole handler.
+_ADMIN_ONLY_CONTACT_FIELDS = ("map_pin",)
+
+
+def _strip_admin_only_contact_fields(payload: dict, state) -> None:
+    """Drop admin-only keys from a contact payload sent by a non-admin."""
+    if getattr(state, "is_admin", False):
+        return
+    for field in _ADMIN_ONLY_CONTACT_FIELDS:
+        payload.pop(field, None)
+
+
 def _wants_map_pin(callsign: str) -> bool:
     """Whether the contact behind `callsign` opted into license-city pins.
 
     Opt-in, never inferred: a licensee's city is public record, but plotting
     where someone lives because they said hello on a net is not something to
     switch on for them.
+
+    `callsign` must already be normalized — _schedule_checkin_fcc does that
+    before the task is created, and an un-normalized one would silently miss.
     """
     if _contacts_store is None:
         return False
@@ -3365,6 +3382,7 @@ async def websocket_endpoint(
                     continue
                 try:
                     contact = {k: v for k, v in data.items() if k != "type"}
+                    _strip_admin_only_contact_fields(contact, state)
                     updated = _contacts_store.add_contact(contact)
                     await _manager.broadcast({"type": "contacts", "contacts": updated})
                     _rebuild_stt_vocabulary()
@@ -3384,6 +3402,7 @@ async def websocket_endpoint(
                     continue
                 original_name = (data.get("original_name") or "").strip() or None
                 updates = {k: v for k, v in data.items() if k not in ("type", "callsign", "original_name")}
+                _strip_admin_only_contact_fields(updates, state)
                 try:
                     updated = _contacts_store.update_contact(cs, updates, original_name=original_name)
                     await _manager.broadcast({"type": "contacts", "contacts": updated})

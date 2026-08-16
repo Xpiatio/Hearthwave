@@ -49,6 +49,7 @@ function makeProps(overrides: Partial<Parameters<typeof ContactsDialog>[0]> = {}
     verifyAllComplete: false,
     onSend: vi.fn(),
     onVerifyAllDismiss: vi.fn(),
+    isAdmin: true,
     ...overrides,
   }
 }
@@ -350,6 +351,20 @@ describe('ContactsDialog', () => {
     it('says the pin is only as precise as the licensed city', async () => {
       await openEditDialog()
       expect(screen.getByText(/approximate/i)).toBeInTheDocument()
+    })
+
+    it('is hidden from a non-admin, who may not plot where someone lives', async () => {
+      await openEditDialog(makeProps({ isAdmin: false }))
+      expect(screen.queryByRole('checkbox', { name: /show on map/i })).not.toBeInTheDocument()
+    })
+
+    it('does not send map_pin when a non-admin saves a contact', async () => {
+      const onSend = vi.fn()
+      await openEditDialog(makeProps({ isAdmin: false, onSend }))
+      fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+      expect(onSend).toHaveBeenCalledWith(
+        expect.not.objectContaining({ map_pin: expect.anything() }),
+      )
     })
   })
 

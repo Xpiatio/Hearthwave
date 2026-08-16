@@ -8,6 +8,10 @@ because town centres do not move, and a pin is scattered a few hundred
 metres off the centroid so several stations in one city stay separately
 clickable.
 
+Requests are serialized and spaced about a second apart to stay inside
+Nominatim's usage policy; the wait happens on a worker thread, never on
+the event loop.
+
 A miss is cached alongside a hit — a town Nominatim cannot resolve will
 not resolve on the next check-in either. Transient failures are not
 cached, so a flaky network re-tries.
@@ -17,9 +21,13 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
+
+from collections import OrderedDict
 
 from backend.net.online import is_online
 
@@ -36,22 +44,40 @@ USER_AGENT = "Hearthwave/1.0 (+https://xpiatio.github.io/Hearthwave/)"
 #: far narrower than the city the centroid already generalises to.
 SCATTER_DEG = 0.0027
 
+#: Nominatim's usage policy allows roughly one request a second per client.
+#: A roll-call can start a dozen check-ins at once, so requests are serialized
+#: and spaced; this runs on a worker thread, never on the event loop.
+MIN_REQUEST_INTERVAL_SECONDS = 1.0
+
+_throttle_lock = threading.Lock()
+_last_request_at = 0.0
+
 #: US cities number in the tens of thousands; a net sees a handful. The cap
 #: is only there so a malformed run of location strings can't grow the cache
-#: for the life of the process.
+#: for the life of the process. Oldest entry out first.
 MAX_CACHE_ENTRIES = 2048
 
 _MISS = object()
-_cache: dict[str, object] = {}
+_cache: "OrderedDict[str, object]" = OrderedDict()
 
 
 def clear_cache() -> None:
     _cache.clear()
 
 
+def _wait_turn() -> None:
+    """Block until enough time has passed since the last request went out."""
+    global _last_request_at
+    gap = time.monotonic() - _last_request_at
+    if gap < MIN_REQUEST_INTERVAL_SECONDS:
+        time.sleep(MIN_REQUEST_INTERVAL_SECONDS - gap)
+    _last_request_at = time.monotonic()
+
+
 def _remember(key: str, value: object) -> None:
-    if len(_cache) >= MAX_CACHE_ENTRIES:
-        _cache.clear()
+    """Cache an answer, dropping the oldest one when the cap is reached."""
+    while len(_cache) >= MAX_CACHE_ENTRIES:
+        _cache.popitem(last=False)
     _cache[key] = value
 
 
@@ -79,8 +105,12 @@ def geocode_city(location: str) -> tuple[float, float] | None:
         f"{API_BASE}?{query}", headers={"User-Agent": USER_AGENT}
     )
     try:
-        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as resp:
-            body = resp.read(256 * 1024)
+        with _throttle_lock:
+            _wait_turn()
+            with urllib.request.urlopen(
+                request, timeout=REQUEST_TIMEOUT_SECONDS
+            ) as resp:
+                body = resp.read(256 * 1024)
     except (urllib.error.URLError, OSError, TimeoutError) as exc:
         _log.debug("geocode failed for %r: %s", location, exc)
         return None

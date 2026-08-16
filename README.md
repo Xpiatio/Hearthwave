@@ -88,11 +88,12 @@ browser-based React frontend communicating over WebSocket.
   **FCC ✓** for an active license, a red **License expired** flag, or **Not in FCC**.
   Lookups never block the check-in, are skipped offline, and are cached per
   callsign; the verdict rides into the saved session record
-- **Approximate map pins from a license** — opt a contact in (**Show on map when
-  checked in**) and a check-in with no GPS position anywhere plots them at their
-  FCC-licensed *city*, drawn as a hollow dashed ring and labelled *Approximate* so
-  it never reads as a real fix. Off by default, per contact, and skipped entirely
-  when a mesh or APRS position for that callsign is already on the map
+- **Approximate map pins from a license** — an admin opts a contact in (**Show on
+  map when checked in**) and a check-in with no GPS position anywhere plots them at
+  their FCC-licensed *city*, drawn as a hollow dashed ring and labelled *Approximate*
+  so it never reads as a real fix. Off by default, per contact, admin-only to turn
+  on, and skipped entirely when a mesh or APRS position for that callsign is already
+  on the map
 - **Net session history** — every net that ends is recorded as a structured roster
   under `/data/net_sessions`. Browse past nets, per-station attendance (totals,
   recent turnout, streaks), and export any net or the whole history as CSV from the

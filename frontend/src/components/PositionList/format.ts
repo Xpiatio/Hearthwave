@@ -25,12 +25,12 @@ export function sourceLabel(source: string): string {
  * have to say so — a dot that looks like every other dot is a claim we can't
  * support.
  */
-export function isApproximate(extra: Record<string, string>): boolean {
+export function isApproximate(extra?: Record<string, string>): boolean {
   return Boolean(extra?.approx);
 }
 
 /** The caveat shown beside an approximate pin, city included when known. */
-export function approximateNote(extra: Record<string, string>): string {
+export function approximateNote(extra?: Record<string, string>): string {
   const city = extra?.city;
   return city ? `Approximate — licensed in ${city}` : 'Approximate location';
 }
