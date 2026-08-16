@@ -1448,6 +1448,8 @@ Not every neighbor on the net has a Hearthwave account — someone might check i
 
 A radio check-in behaves exactly like an account holder's from then on — it takes its turn in the round-table in check-in order, its status can be cycled (Standby / Check out / Check back in), and it's included when the net ends. It's marked wherever a station's identity matters, though: a **By radio** chip appears beside the callsign in the roster, and it carries a `via` column into the Past Nets table and the per-session CSV export (see [Journals](#11-journals)).
 
+**FCC license badges.** Every check-in — account holder and radio caller alike — quietly looks the callsign up in the FCC database in the background (the same lookup Contacts verification uses), and the roster card gains a badge when the answer comes back: **FCC ✓** for an active license (hover to see who it's licensed to), a red **License expired** for a callsign the FCC lists but whose license is no longer active, and **Not in FCC** for a callsign with no record at all. A badge never blocks or delays the check-in itself, and when Hearthwave is offline no badge appears — a network problem is never presented as a license problem. Each callsign is looked up at most once per server run, so a busy net doesn't hammer the FCC mirror. The verdict is saved with the session roster, so Past Nets records carry it too.
+
 A coordinator can remove a mis-entered radio row with the small delete icon on that row — no confirmation, since the row never reached the saved record and re-adding it costs one dropdown click. Only radio rows can be removed this way; an account holder's check-in can't be removed from the roster.
 
 ### Coordinator dashboard (wide screens)

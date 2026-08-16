@@ -183,6 +183,32 @@ def verify_callsign(callsign, expected_name):
     )
 
 
+def roster_status(result, expected_name):
+    """Collapse a VerificationResult into the net-roster FCC badge alphabet.
+
+    Returns one of ``verified`` (active license, name matches), ``active``
+    (active license, name doesn't match — common for nicknames the licensee
+    never filed), ``expired`` (callsign found but the license is not active;
+    covers cancelled/terminated too), ``not_found``, or ``''`` when the
+    lookup couldn't run (offline/error) — a transient network problem must
+    not paint a flag on a neighbor's row.
+
+    Name matching is re-evaluated here rather than trusting
+    ``result.status``, so one cached result per callsign serves every roster
+    row sharing that callsign (family members on one GMRS license) with a
+    status computed from that row's own name.
+    """
+    if result.status == "not_found":
+        return "not_found"
+    if result.status in ("offline", "error"):
+        return ""
+    if not result.license_active:
+        return "expired"
+    if name_matches(expected_name, result.license_name):
+        return "verified"
+    return "active"
+
+
 # Status values whose information we trust to overwrite cached verification on
 # the contact dict. ``offline`` and ``error`` are deliberately omitted: a
 # transient network blip shouldn't wipe a previously-earned green check.

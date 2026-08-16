@@ -496,3 +496,55 @@ class TestLocationBackfill:
                    return_value=FakeResponse(_ok_payload(city="JENISON"))):
             result = crossref.verify_callsign("WSLZ233", "Benjamin")
         assert result.license_city == "JENISON"
+
+
+class TestRosterStatus:
+    """roster_status maps a VerificationResult + the roster row's name to the
+    small alphabet the net roster renders: verified / active / expired /
+    not_found / '' (unknown)."""
+
+    def test_active_license_with_matching_name_is_verified(self):
+        result = crossref.VerificationResult(
+            status="verified",
+            license_name="Zomberg, Benjamin J",
+            license_active=True,
+        )
+        assert crossref.roster_status(result, "Benjamin") == "verified"
+
+    def test_active_license_with_mismatched_name_is_active(self):
+        result = crossref.VerificationResult(
+            status="callsign_only",
+            license_name="Zomberg, Benjamin J",
+            license_active=True,
+        )
+        assert crossref.roster_status(result, "Maria") == "active"
+
+    def test_inactive_license_is_expired_even_when_name_matches(self):
+        result = crossref.VerificationResult(
+            status="callsign_only",
+            license_name="Zomberg, Benjamin J",
+            license_active=False,
+        )
+        assert crossref.roster_status(result, "Benjamin") == "expired"
+
+    def test_not_found_passes_through(self):
+        result = crossref.VerificationResult(status="not_found")
+        assert crossref.roster_status(result, "Maria") == "not_found"
+
+    def test_offline_and_error_yield_unknown(self):
+        # A transient network problem must not paint a red flag on a
+        # neighbor's roster row.
+        assert crossref.roster_status(crossref.VerificationResult(status="offline"), "M") == ""
+        assert crossref.roster_status(crossref.VerificationResult(status="error"), "M") == ""
+
+    def test_cached_result_re_evaluates_name_per_row(self):
+        # The server caches one VerificationResult per callsign; two roster
+        # rows sharing that callsign (a family GMRS license) must each get a
+        # status computed from their OWN name, not the name of whoever's
+        # lookup filled the cache.
+        result = crossref.VerificationResult(
+            status="callsign_only",  # produced by a lookup for "Maria"
+            license_name="Zomberg, Benjamin J",
+            license_active=True,
+        )
+        assert crossref.roster_status(result, "Benjamin") == "verified"

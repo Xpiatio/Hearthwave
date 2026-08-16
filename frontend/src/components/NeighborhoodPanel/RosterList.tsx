@@ -245,6 +245,21 @@ export function RosterList({
                     {row.callsign}
                   </Typography>
                   {isRadio && <Chip size="small" variant="outlined" label="By radio" sx={{ maxWidth: '100%' }} />}
+                  {(row.fcc_status === 'verified' || row.fcc_status === 'active') && (
+                    <Tooltip title={row.fcc_license_name ? `Licensed to ${row.fcc_license_name}` : 'Active FCC license'}>
+                      <Chip size="small" variant="outlined" color="success" label="FCC ✓" sx={{ maxWidth: '100%' }} />
+                    </Tooltip>
+                  )}
+                  {row.fcc_status === 'expired' && (
+                    <Tooltip title={row.fcc_license_name ? `License for ${row.fcc_license_name} is no longer active` : 'License is no longer active'}>
+                      <Chip size="small" color="error" label="License expired" sx={{ maxWidth: '100%' }} />
+                    </Tooltip>
+                  )}
+                  {row.fcc_status === 'not_found' && (
+                    <Tooltip title="Callsign not found in the FCC database">
+                      <Chip size="small" variant="outlined" label="Not in FCC" sx={{ maxWidth: '100%' }} />
+                    </Tooltip>
+                  )}
                   {isCurrent && <Chip size="small" color="primary" label="Current turn" sx={{ maxWidth: '100%' }} />}
                   {row.no_answer ? (
                     <Chip

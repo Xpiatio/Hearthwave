@@ -83,6 +83,11 @@ browser-based React frontend communicating over WebSocket.
   rows take their turn in the round-table exactly like an account holder's, and
   are marked wherever identity matters: a **By radio** chip in the live roster, and
   a `via` column in the Past Nets table and the per-session CSV export
+- **FCC license badges at check-in** — every check-in (account or radio caller)
+  triggers a background FCC lookup on the callsign; the roster card then shows
+  **FCC ✓** for an active license, a red **License expired** flag, or **Not in FCC**.
+  Lookups never block the check-in, are skipped offline, and are cached per
+  callsign; the verdict rides into the saved session record
 - **Net session history** — every net that ends is recorded as a structured roster
   under `/data/net_sessions`. Browse past nets, per-station attendance (totals,
   recent turnout, streaks), and export any net or the whole history as CSV from the

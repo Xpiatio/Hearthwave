@@ -154,7 +154,12 @@ from backend.constants import (
     utc_now_iso,
 )
 from backend.fcc.auto_add import CallsignLookupWorker
-from backend.fcc.crossref import apply_verification, verify_callsign
+from backend.fcc.crossref import (
+    VerificationResult,
+    apply_verification,
+    roster_status,
+    verify_callsign,
+)
 from backend.fcc.id_rule import (
     ID_INTERVAL_SECONDS,
     format_outgoing_message,
@@ -255,6 +260,15 @@ _family_store: FamilyStore | None = None
 _incidents_store: IncidentsStore | None = None
 _position_store: PositionStore | None = None
 _neighborhood: NeighborhoodNet | None = None
+# One crossref lookup per callsign per server lifetime: license state changes
+# on FCC timescales, and a neighbor re-checking in every week shouldn't cost
+# an HTTP round-trip each time. Keyed by normalized callsign; only definitive
+# verdicts are cached (offline/error results are retried on the next check-in).
+_checkin_fcc_cache: dict[str, VerificationResult] = {}
+# In-flight lookups keyed by roster key, holding (callsign, task) so a
+# re-check-in that CHANGES the callsign can cancel the superseded lookup
+# instead of letting the old callsign's verdict land on the row.
+_checkin_fcc_tasks: dict[str, tuple[str, "asyncio.Task"]] = {}
 _audit_log: AuditLog | None = None
 _stt_worker: STTWorker | None = None
 _synthesizer: TTSSynthesizer | None = None
@@ -723,6 +737,69 @@ def _build_neighborhood_state_msg() -> dict:
         "net_day": _config.neighborhood_net_day if _config else "",
         "net_time": _config.neighborhood_net_time if _config else "",
     }
+
+
+def _schedule_checkin_fcc(key: str, callsign: str, name: str) -> None:
+    """Kick off a background FCC lookup for a freshly checked-in roster row.
+
+    Silent no-op when the row has no callsign, a lookup for this row is
+    already in flight, or we're offline with no cached verdict — a check-in
+    must never wait on (or fail because of) the FCC API.
+    """
+    # Normalize before every cache/task-key use: the radio form arrives
+    # pre-normalized, but an account profile can hold "wslz233" — both
+    # spellings are one license and must share one cache entry.
+    callsign = normalize_callsign(callsign)
+    if not callsign:
+        return
+    prior = _checkin_fcc_tasks.get(key)
+    if prior is not None:
+        prior_callsign, prior_task = prior
+        if not prior_task.done():
+            if prior_callsign == callsign:
+                return
+            prior_task.cancel()
+    if callsign not in _checkin_fcc_cache and not is_online_cached():
+        return
+    _checkin_fcc_tasks[key] = (
+        callsign,
+        asyncio.create_task(_checkin_fcc_lookup(key, callsign, name)),
+    )
+
+
+async def _checkin_fcc_lookup(key: str, callsign: str, name: str) -> None:
+    """Resolve one roster row's FCC verdict and rebroadcast the net state.
+
+    The name-match half of the verdict is recomputed per row (see
+    roster_status), so the cache entry is name-agnostic and safe to share
+    across family members on one GMRS callsign. A row that vanished while
+    the lookup was in flight (net ended, coordinator removed the station)
+    makes set_fcc return False and nothing is broadcast.
+    """
+    try:
+        result = _checkin_fcc_cache.get(callsign)
+        if result is None:
+            result = await asyncio.to_thread(verify_callsign, callsign, name)
+            # Same trust rule as contact verification: only definitive
+            # verdicts stick; offline/error must not poison the cache.
+            if result.status in ("verified", "callsign_only", "not_found"):
+                _checkin_fcc_cache[callsign] = result
+        status = roster_status(result, name)
+        if not status:
+            return
+        if _neighborhood is not None and _neighborhood.set_fcc(
+            key, status, result.license_name
+        ):
+            await _manager.broadcast(_build_neighborhood_state_msg())
+    except Exception as exc:
+        _log.error("checkin FCC lookup failed for %s: %s", callsign, exc)
+    finally:
+        # Pop only our own entry: a superseding lookup for the same key may
+        # already have replaced it, and a cancelled task's cleanup must not
+        # evict its successor.
+        entry = _checkin_fcc_tasks.get(key)
+        if entry is not None and entry[1] is asyncio.current_task():
+            _checkin_fcc_tasks.pop(key, None)
 
 
 def _build_neighborhood_incidents_msg() -> dict:
@@ -4150,6 +4227,7 @@ async def websocket_endpoint(
                 location = (profile_rec.get("location") or "").strip()
                 if _neighborhood is not None:
                     _neighborhood.checkin(state.user_id, callsign, name, location)
+                    _schedule_checkin_fcc(state.user_id, callsign, name)
                 await _manager.broadcast(_build_neighborhood_state_msg())
 
             elif msg_type == "neighborhood_checkin_radio":
@@ -4178,7 +4256,8 @@ async def websocket_endpoint(
                     )
                     continue
                 if _neighborhood is not None:
-                    _neighborhood.checkin_radio(callsign, name, location)
+                    row = _neighborhood.checkin_radio(callsign, name, location)
+                    _schedule_checkin_fcc(row["user_id"], callsign, name)
                 await _manager.broadcast(_build_neighborhood_state_msg())
                 # Contacts second, and never fatal: a contacts failure must not
                 # cost the coordinator the check-in they just made.
