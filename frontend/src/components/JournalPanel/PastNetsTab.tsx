@@ -58,6 +58,20 @@ interface Props {
   onDelete: (id: string) => void;
 }
 
+/** Arm the print stylesheet, print, disarm it. The stylesheet blanks the app
+ *  shell so the roster sheet has the page to itself, and it is global — left
+ *  armed, a plain Ctrl+P anywhere in the app would print a blank page.
+ *  `window.print()` blocks until the print dialog closes in every browser we
+ *  target, so the class is off again by the time the operator sees anything. */
+function printRoster(): void {
+  document.body.classList.add('printing-roster');
+  try {
+    window.print();
+  } finally {
+    document.body.classList.remove('printing-roster');
+  }
+}
+
 function formatDuration(seconds: number): string {
   const minutes = Math.round(seconds / 60);
   return `${minutes} min`;
@@ -339,7 +353,7 @@ export function PastNetsTab({
                 variant="outlined"
                 size="small"
                 startIcon={<PrintIcon />}
-                onClick={() => window.print()}
+                onClick={printRoster}
               >
                 PRINT ROSTER
               </Button>

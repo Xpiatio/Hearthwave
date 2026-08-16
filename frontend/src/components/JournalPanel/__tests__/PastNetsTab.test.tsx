@@ -274,6 +274,24 @@ describe('PastNetsTab', () => {
     vi.unstubAllGlobals()
   })
 
+  it('marks the body only for the duration of the print call', () => {
+    // The print stylesheet blanks #root, so it must be armed around
+    // window.print() and disarmed after — otherwise a plain Ctrl+P anywhere in
+    // the app prints a blank page.
+    let classNameDuringPrint = ''
+    vi.stubGlobal('print', () => {
+      classNameDuringPrint = document.body.className
+    })
+    render(<PastNetsTab {...props({ selected: DETAIL })} />)
+
+    expect(document.body).not.toHaveClass('printing-roster')
+    fireEvent.click(screen.getByText('PRINT ROSTER'))
+
+    expect(classNameDuringPrint).toContain('printing-roster')
+    expect(document.body).not.toHaveClass('printing-roster')
+    vi.unstubAllGlobals()
+  })
+
   it('keeps a print sheet for the selected net in the document', () => {
     render(<PastNetsTab {...props({ selected: DETAIL })} />)
     // Portalled to <body>, so it is outside the container the tab renders into.

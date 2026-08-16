@@ -5,17 +5,22 @@
  * printing hides #root entirely, rather than restyling the app shell: the
  * Journal panel sits inside full-height flex containers with `overflow:
  * hidden`, which clip a printed page to roughly one screen's worth of rows.
+ *
+ * Everything below is gated on `body.printing-roster`, which PRINT ROSTER sets
+ * for the duration of the print call. This stylesheet is global, so an
+ * ungated `@media print` rule would blank the app for *any* print — a plain
+ * Ctrl+P on the Home screen or the kiosk display included.
  */
 .net-roster-sheet {
   display: none;
 }
 
 @media print {
-  #root {
+  body.printing-roster #root {
     display: none !important;
   }
 
-  .net-roster-sheet {
+  body.printing-roster .net-roster-sheet {
     display: block;
     color: #000;
     background: #fff;
@@ -23,6 +28,9 @@
     font-size: 11pt;
   }
 
+  /* `@page` takes no selector, so this margin is unavoidably global to every
+     print in the app. It's a plain paper margin, harmless where the roster
+     sheet isn't involved. */
   @page {
     margin: 0.5in;
   }
