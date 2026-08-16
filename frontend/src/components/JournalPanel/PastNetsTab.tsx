@@ -32,8 +32,11 @@ import type {
 } from '../../types/ws';
 import { downloadText } from '../../utils/download';
 import { sessionToCsv, allSessionsToCsv } from '../../netsessions/csv';
+import { sessionToIcs214Csv, type Ics214Header } from '../../netsessions/ics214';
 import { useRosterSort } from '../../netsessions/rosterView';
 import { netDate, netDateTime } from '../../netsessions/dates';
+import { netTypeLabel } from '../../netsessions/netTypes';
+import { Ics214Dialog } from './Ics214Dialog';
 
 type RosterColumn = 'callsign' | 'name' | 'location' | 'status' | 'traffic' | 'via' | 'no_answer';
 
@@ -52,11 +55,6 @@ interface Props {
   onDelete: (id: string) => void;
 }
 
-const NET_TYPE_LABELS: Record<string, string> = {
-  ncs: 'Net Control',
-  neighborhood: 'Neighborhood',
-};
-
 function formatDuration(seconds: number): string {
   const minutes = Math.round(seconds / 60);
   return `${minutes} min`;
@@ -71,6 +69,7 @@ export function PastNetsTab({
   onDelete,
 }: Props) {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [ics214Open, setIcs214Open] = useState(false);
 
   // Filtering/sorting only ever changes what's displayed here — CSV export
   // and delete both operate on `selected` (the full session), never on this
@@ -90,6 +89,19 @@ export function PastNetsTab({
     PAST_NETS_SEARCH_FIELDS,
     selected?.id ?? null,
   );
+
+  function handleIcs214Export(header: Ics214Header) {
+    if (!selected) return;
+    // Leading BOM: this export is written to be opened in Excel, which reads a
+    // BOM-less CSV as the system codepage and turns the form's em dashes (and
+    // any accented name) into mojibake on Windows.
+    downloadText(
+      '\ufeff' + sessionToIcs214Csv(selected, header),
+      `ICS-214-${selected.id}.csv`,
+      'text/csv',
+    );
+    setIcs214Open(false);
+  }
 
   function handleDelete(id: string) {
     if (confirmDelete === id) {
@@ -132,7 +144,7 @@ export function PastNetsTab({
                   >
                     <ListItemText
                       primary={netDate(s.started_at)}
-                      secondary={`${NET_TYPE_LABELS[s.net_type] ?? s.net_type} · ${s.checkin_count} check-ins · ${formatDuration(s.duration_seconds)}`}
+                      secondary={`${netTypeLabel(s.net_type)} · ${s.checkin_count} check-ins · ${formatDuration(s.duration_seconds)}`}
                       slotProps={{
                         primary: {
                           variant: 'body2',
@@ -173,7 +185,7 @@ export function PastNetsTab({
               {netDateTime(selected.started_at)} → {netDateTime(selected.ended_at)}
             </Typography>
             <Typography variant="h5" sx={{ mt: 0.5, mb: 2 }}>
-              {NET_TYPE_LABELS[selected.net_type] ?? selected.net_type} net —{' '}
+              {netTypeLabel(selected.net_type)} net —{' '}
               {netDate(selected.started_at)}
             </Typography>
 
@@ -310,6 +322,16 @@ export function PastNetsTab({
               >
                 DOWNLOAD CSV
               </Button>
+              {/* Per-session only: an ICS-214 covers one operational period,
+                  so there is no all-nets equivalent of this export. */}
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<DownloadIcon />}
+                onClick={() => setIcs214Open(true)}
+              >
+                ICS-214 (CSV)
+              </Button>
               {isAdmin && (
                 <Button
                   variant="outlined"
@@ -357,6 +379,12 @@ export function PastNetsTab({
           </Box>
         )}
       </Box>
+
+      <Ics214Dialog
+        open={ics214Open}
+        onExport={handleIcs214Export}
+        onCancel={() => setIcs214Open(false)}
+      />
     </Box>
   );
 }

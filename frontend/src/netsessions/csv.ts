@@ -1,7 +1,9 @@
 import type { NetSessionDetail, NetSessionSummary } from '../types/ws';
 import { netDate } from './dates';
 
-function quote(value: string | number | null): string {
+/** One CSV cell: always quoted, embedded quotes doubled. Shared with the
+ *  ICS-214 export so both writers escape a field the same way. */
+export function quote(value: string | number | null): string {
   return `"${String(value ?? '').replace(/"/g, '""')}"`;
 }
 

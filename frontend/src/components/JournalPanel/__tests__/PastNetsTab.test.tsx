@@ -82,6 +82,8 @@ function props(overrides = {}) {
 describe('PastNetsTab', () => {
   beforeEach(() => {
     vi.mocked(downloadText).mockClear()
+    // The ICS-214 dialog remembers its header fields across exports.
+    localStorage.clear()
   })
 
   it('lists every session with its date and check-in count', () => {
@@ -171,6 +173,72 @@ describe('PastNetsTab', () => {
     expect(lines[1]).toBe(
       '"KD8ABC","Maria","Holland","CheckedIn","Routine","2026-08-02T19:01:00Z","",""'
     )
+  })
+
+  /** Open the ICS-214 dialog and fill in the two required boxes. */
+  function openIcs214(incidentName = 'Ottawa County Windstorm') {
+    fireEvent.click(screen.getByText('ICS-214 (CSV)'))
+    fireEvent.change(screen.getByLabelText(/incident name/i), {
+      target: { value: incidentName },
+    })
+    fireEvent.change(screen.getByLabelText(/prepared by/i), {
+      target: { value: 'Maria, KD8ABC' },
+    })
+  }
+
+  it('exports an ICS-214 for the selected session once the dialog is filled in', () => {
+    render(<PastNetsTab {...props({ selected: DETAIL })} />)
+    openIcs214()
+    fireEvent.click(screen.getByRole('button', { name: /^export$/i }))
+
+    expect(downloadText).toHaveBeenCalledTimes(1)
+    const [content, filename, mime] = vi.mocked(downloadText).mock.calls[0]
+    expect(filename).toBe(`ICS-214-${DETAIL.id}.csv`)
+    expect(mime).toBe('text/csv')
+
+    const lines = content.split('\n')
+    // BOM first, so Excel reads the em dashes as UTF-8 instead of the codepage.
+    expect(lines[0]).toBe('\ufeffICS 214,ACTIVITY LOG')
+    expect(lines[1]).toBe('1. Incident Name,"Ottawa County Windstorm"')
+    expect(content).toContain('"KD8ABC — Maria","Net Participant",""')
+    expect(content).toContain('"Net opened (Net Control)"')
+  })
+
+  it('will not export an ICS-214 until the incident name and preparer are given', () => {
+    render(<PastNetsTab {...props({ selected: DETAIL })} />)
+    fireEvent.click(screen.getByText('ICS-214 (CSV)'))
+    const exportButton = screen.getByRole('button', { name: /^export$/i })
+    expect(exportButton).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText(/incident name/i), {
+      target: { value: 'Ottawa County Windstorm' },
+    })
+    expect(exportButton).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText(/prepared by/i), {
+      target: { value: 'Maria, KD8ABC' },
+    })
+    expect(exportButton).toBeEnabled()
+  })
+
+  it('remembers the ICS-214 header fields for the next export', () => {
+    const { unmount } = render(<PastNetsTab {...props({ selected: DETAIL })} />)
+    openIcs214()
+    fireEvent.change(screen.getByLabelText(/home agency/i), {
+      target: { value: 'Ottawa County ARES' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /^export$/i }))
+    unmount()
+
+    render(<PastNetsTab {...props({ selected: DETAIL })} />)
+    fireEvent.click(screen.getByText('ICS-214 (CSV)'))
+    expect(screen.getByLabelText(/home agency/i)).toHaveValue('Ottawa County ARES')
+    expect(screen.getByLabelText(/incident name/i)).toHaveValue('Ottawa County Windstorm')
+  })
+
+  it('offers no ICS-214 export until a session is selected', () => {
+    render(<PastNetsTab {...props()} />)
+    expect(screen.queryByText('ICS-214 (CSV)')).not.toBeInTheDocument()
   })
 
   it("shows how each station reached the roster", () => {

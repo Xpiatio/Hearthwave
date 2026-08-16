@@ -94,6 +94,12 @@ browser-based React frontend communicating over WebSocket.
   so it never reads as a real fix. Off by default, per contact, admin-only to turn
   on, and skipped entirely when a mesh or APRS position for that callsign is already
   on the map
+- **ICS-214 export** — any past net exports as an ICS-214 Activity Log for an
+  ARES/RACES section: the numbered boxes of the paper form, with the operational
+  period, the checked-in stations as resources assigned, and a timed activity log
+  built from the net opening, each check-in, and the net closing. A short dialog
+  collects the four boxes a net record has no answer for (incident name, preparer,
+  ICS position, home agency) and remembers them for the next export
 - **Net session history** — every net that ends is recorded as a structured roster
   under `/data/net_sessions`. Browse past nets, per-station attendance (totals,
   recent turnout, streaks), and export any net or the whole history as CSV from the
