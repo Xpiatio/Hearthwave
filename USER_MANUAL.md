@@ -1647,12 +1647,27 @@ Meshtastic and MeshCore can't both run (they want the same serial radio), but ei
 
 Once at least one station has been heard, a **MAP** button appears in the top bar. (It stays hidden until then — there is no point offering a map of nothing.) The panel has two views, switched with the **Map** / **List** buttons:
 
-- **Map** — every station is a coloured dot: green for Meshtastic, blue for MeshCore, amber for APRS, purple for anything else, and red for your own station. Click a dot for its name, source, distance and bearing, how long ago it was heard, and any extra the source supplied (an APRS comment, a signal-to-noise figure).
+- **Map** — every station is a coloured dot: green for Meshtastic, blue for MeshCore, amber for APRS, purple for anything else, and red for your own station. Click a dot for its name, source, distance and bearing, how long ago it was heard, and any extra the source supplied (an APRS comment, a signal-to-noise figure). A hollow dashed ring is not a heard fix — see [Approximate pins from an FCC license](#approximate-pins-from-an-fcc-license) below.
 - **List** — the same stations as a table, **nearest first**: **Station**, **Heard on**, **Distance**, **Bearing**, **Age**. This is a proper table with row headers, not a picture, so it works with a screen reader and with keyboard navigation. The map is deliberately skipped by both — a pan-and-zoom canvas has nothing to say to a screen reader, and the list has all the same information.
 
 Distances are in **miles** by default. Bearings are given as compass points (`NNE`, `SW`) and read aloud in words ("north-northeast"). Ages are coarse on purpose — `now`, `14m`, `3h`, `1d+`.
 
 Everything — distance, bearing, age — is worked out on the server and sent ready to display, so a wall tablet with a wrong clock or no geography of its own still shows the right numbers. The panel refreshes at least every 30 seconds even on a dead-quiet channel, so the age counters keep moving rather than freezing at "now".
+
+### Approximate pins from an FCC license
+
+Most neighbours have no GPS at all — a handheld GMRS radio does not report where it is. For those stations Hearthwave can fall back to the one location that is already a matter of public record: the **city** on their FCC license.
+
+This is off for everyone until an admin turns it on, one contact at a time. Open **Contacts**, edit the contact, and tick **Show on map when checked in** — the tick box is only shown to, and only accepted from, an admin. From then on, when that person checks into a net, Hearthwave looks up their license (the same background lookup that produces the FCC badges on the roster), geocodes the licensed city, and drops a pin there.
+
+Four things keep the pin honest:
+
+- **It is a city, not an address.** The FCC record Hearthwave reads gives a city and state and nothing finer, so the pin lands on the middle of the town. It is drawn as a **hollow dashed ring** rather than a solid dot, and both the map popup and the List view say *Approximate — licensed in \<city\>*.
+- **A real position always wins.** If a mesh node or an APRS packet has already put that callsign on the map, no license pin is created. The pin exists only to fill a hole.
+- **It is opt-in per contact, and only an admin can opt someone in.** A licensed city is public information, but that is not a reason to plot where someone lives because they said hello on a net. Any signed-in operator can edit a contact, but only an admin can tick the map box. Nothing is plotted for a contact who has not been ticked, and nothing is plotted for a caller who is not in Contacts at all.
+- **It needs the internet.** The city lookup goes out to a public geocoding service. Offline, no pin appears — and, as everywhere else in Hearthwave, no position is ever transmitted.
+
+To stop plotting someone, untick the box; the existing pin ages out with the normal **Position Expiry**, or disappears at the next restart.
 
 ### On the wall display
 

@@ -280,3 +280,45 @@ def test_a_failed_write_re_arms_the_dirty_flag(tmp_path):
     assert pending is not None
     assert store.write(pending) is False
     assert store.take_pending() is not None  # retried on the next pass
+
+
+# ---------------------------------------------------------------------------
+# has_station — "do we already know where this callsign is?"
+# ---------------------------------------------------------------------------
+
+def test_has_station_matches_a_node_id(store):
+    store.upsert("aprs", "WSLZ233", 42.9, -85.8, now=T0)
+    assert store.has_station("wslz233", now=T0) is True
+
+
+def test_has_station_matches_a_label(store):
+    store.upsert("meshcore", "!a4f21c", 42.9, -85.8, label="WSLZ233 Ben", now=T0)
+    assert store.has_station("WSLZ233", now=T0) is True
+
+
+def test_has_station_ignores_an_aprs_ssid_suffix(store):
+    store.upsert("aprs", "WSLZ233-9", 42.9, -85.8, now=T0)
+    assert store.has_station("WSLZ233", now=T0) is True
+
+
+def test_has_station_is_false_for_an_unheard_callsign(store):
+    store.upsert("aprs", "WRZM714", 42.9, -85.8, now=T0)
+    assert store.has_station("WSLZ233", now=T0) is False
+
+
+def test_has_station_can_exclude_a_source(store):
+    # The license-centroid fallback must not see its own pin as evidence that
+    # the station has a real fix, or it would never refresh.
+    store.upsert("fcc", "WSLZ233", 42.9, -85.8, now=T0)
+    assert store.has_station("WSLZ233", now=T0) is True
+    assert store.has_station("WSLZ233", exclude_source="fcc", now=T0) is False
+
+
+def test_has_station_ignores_expired_records(store):
+    store.upsert("aprs", "WSLZ233", 42.9, -85.8, now=T0)
+    assert store.has_station("WSLZ233", now=T0 + 3601) is False
+
+
+def test_has_station_is_false_for_a_blank_callsign(store):
+    store.upsert("aprs", "WSLZ233", 42.9, -85.8, now=T0)
+    assert store.has_station("  ", now=T0) is False

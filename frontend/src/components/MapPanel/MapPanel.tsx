@@ -4,7 +4,13 @@ import type * as Leaflet from 'leaflet';
 import type { Map as LeafletMap, CircleMarker, LayerGroup } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { StationPosition } from '../../types/ws';
-import { formatAge, formatDistance, sourceLabel } from '../PositionList/format';
+import {
+  approximateNote,
+  formatAge,
+  formatDistance,
+  isApproximate,
+  sourceLabel,
+} from '../PositionList/format';
 
 /** Marker colour per source, so a station heard two ways is visibly two dots. */
 const SOURCE_COLORS: Record<string, string> = {
@@ -145,12 +151,16 @@ export function MapPanel({
     layer.clearLayers();
     for (const s of stations) {
       const color = SOURCE_COLORS[s.source] ?? OTHER_COLOR;
+      // A derived pin is drawn as a hollow dashed ring: it covers a whole town,
+      // and a solid dot the same size as a GPS fix would overstate it.
+      const approximate = isApproximate(s.extra);
       L.circleMarker([s.lat, s.lon], {
-        radius: 6,
+        radius: approximate ? 9 : 6,
         color,
         fillColor: color,
-        fillOpacity: 0.8,
+        fillOpacity: approximate ? 0 : 0.8,
         weight: 2,
+        dashArray: approximate ? '4 3' : undefined,
       })
         .bindPopup(popupHtml(s, units))
         .addTo(layer);
@@ -193,7 +203,12 @@ export function popupHtml(s: StationPosition, units: 'mi' | 'km'): string {
     );
   }
   rows.push(escapeHtml(`Heard ${formatAge(s.age_s)}`));
+  if (isApproximate(s.extra)) {
+    rows.push(escapeHtml(approximateNote(s.extra)));
+  }
   for (const [key, value] of Object.entries(s.extra ?? {})) {
+    // The approximate keys are already spoken for by the note above.
+    if (key === 'approx' || key === 'city') continue;
     rows.push(escapeHtml(`${key}: ${value}`));
   }
   return rows.join('<br>');

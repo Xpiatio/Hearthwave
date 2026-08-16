@@ -49,6 +49,7 @@ function makeProps(overrides: Partial<Parameters<typeof ContactsDialog>[0]> = {}
     verifyAllComplete: false,
     onSend: vi.fn(),
     onVerifyAllDismiss: vi.fn(),
+    isAdmin: true,
     ...overrides,
   }
 }
@@ -315,6 +316,55 @@ describe('ContactsDialog', () => {
       fireEvent.change(getCallsignField(), { target: { value: 'W1AAA' } })
       fireEvent.click(screen.getByRole('button', { name: /fcc look up/i }))
       expect(onSend).toHaveBeenCalledWith({ type: 'fcc_lookup', callsign: 'W1AAA', name: '' })
+    })
+  })
+
+  describe('Map pin opt-in', () => {
+    async function openEditDialog(props = makeProps()) {
+      render(<ContactsDialog {...props} />)
+      fireEvent.click(screen.getByRole('button', { name: /edit w1aaa/i }))
+      await waitFor(() => screen.getByText('Edit Contact', { selector: '[class*="MuiDialogTitle"]' }))
+    }
+
+    it('is unchecked for a contact that has not opted in', async () => {
+      await openEditDialog()
+      expect(screen.getByRole('checkbox', { name: /show on map/i })).not.toBeChecked()
+    })
+
+    it('is checked for a contact that has opted in', async () => {
+      const contacts = [{ ...CONTACTS[0], map_pin: true }, CONTACTS[1]]
+      await openEditDialog(makeProps({ contacts }))
+      expect(screen.getByRole('checkbox', { name: /show on map/i })).toBeChecked()
+    })
+
+    it('sends map_pin true when the operator opts a contact in', async () => {
+      const onSend = vi.fn()
+      await openEditDialog(makeProps({ onSend }))
+      fireEvent.click(screen.getByRole('checkbox', { name: /show on map/i }))
+      fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+      expect(onSend).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'update_contact',
+        map_pin: true,
+      }))
+    })
+
+    it('says the pin is only as precise as the licensed city', async () => {
+      await openEditDialog()
+      expect(screen.getByText(/approximate/i)).toBeInTheDocument()
+    })
+
+    it('is hidden from a non-admin, who may not plot where someone lives', async () => {
+      await openEditDialog(makeProps({ isAdmin: false }))
+      expect(screen.queryByRole('checkbox', { name: /show on map/i })).not.toBeInTheDocument()
+    })
+
+    it('does not send map_pin when a non-admin saves a contact', async () => {
+      const onSend = vi.fn()
+      await openEditDialog(makeProps({ isAdmin: false, onSend }))
+      fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+      expect(onSend).toHaveBeenCalledWith(
+        expect.not.objectContaining({ map_pin: expect.anything() }),
+      )
     })
   })
 

@@ -39,3 +39,9 @@ describe('sourceLabel', () => {
     expect(sourceLabel('some_other_plugin')).toBe('some_other_plugin');
   });
 });
+
+describe('sourceLabel — license fallback', () => {
+  it('names the license-city fallback rather than showing a bare id', () => {
+    expect(sourceLabel('fcc')).toBe('FCC license');
+  });
+});

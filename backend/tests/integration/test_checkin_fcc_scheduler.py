@@ -7,11 +7,13 @@ which need a controllable-in-flight lookup that a TestClient can't provide.
 """
 import asyncio
 import threading
+from contextlib import ExitStack
 from unittest.mock import AsyncMock, patch
 
 import backend.server as srv
 from backend.fcc.crossref import VerificationResult
 from backend.neighborhood.net import NeighborhoodNet
+from backend.positions.store import PositionStore
 
 
 def _result(license_name, active=True):
@@ -93,3 +95,181 @@ def test_cache_key_is_normalized_callsign():
     with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5]:
         asyncio.run(scenario())
     assert len(calls) == 1
+
+
+# ---------------------------------------------------------------------------
+# License-city fallback pins
+# ---------------------------------------------------------------------------
+
+class FakeContacts:
+    def __init__(self, contacts):
+        self._contacts = contacts
+
+    def get_all(self):
+        return list(self._contacts)
+
+
+def _located_result(city="Jenison, MI"):
+    return VerificationResult(
+        status="callsign_only",
+        license_name="Zomberg, Benjamin J",
+        license_active=True,
+        license_location=city,
+    )
+
+
+def _pin_patched(contacts, store, result=None, coords=(42.9053, -85.7936)):
+    verdict = result if result is not None else _located_result()
+    return (
+        *_patched(lambda cs, name: verdict),
+        patch.object(srv, "_contacts_store", FakeContacts(contacts)),
+        patch.object(srv, "_position_store", store),
+        patch.object(srv, "geocode_city", return_value=coords),
+    )
+
+
+def _run_checkin(patches, key="u1", callsign="WSLZ233", name="Ben"):
+    async def scenario():
+        srv._neighborhood.checkin(key, callsign, name, "")
+        srv._schedule_checkin_fcc(key, callsign, name)
+        await _wait_for_fcc(key)
+        await asyncio.sleep(0.05)  # let the pin hop settle after the verdict
+
+    with ExitStack() as stack:
+        for patch_ctx in patches:
+            stack.enter_context(patch_ctx)
+        asyncio.run(scenario())
+        # Handed back so a caller can assert on it after the patches unwind.
+        return srv.geocode_city
+
+
+def test_license_city_pin_is_created_for_an_opted_in_contact(tmp_path):
+    store = PositionStore(tmp_path / "p.json", ttl_minutes=60)
+    _run_checkin(_pin_patched([{"callsign": "WSLZ233", "map_pin": True}], store))
+
+    pins = [rec for rec in store.active() if rec.source == "fcc"]
+    assert len(pins) == 1
+    assert pins[0].node_id == "WSLZ233"
+    assert pins[0].extra["approx"] == "license"
+    # Scattered off the raw centroid so two stations in one city stay distinct.
+    assert (pins[0].lat, pins[0].lon) != (42.9053, -85.7936)
+    assert abs(pins[0].lat - 42.9053) < 0.01
+
+
+def test_no_pin_when_the_contact_has_not_opted_in(tmp_path):
+    store = PositionStore(tmp_path / "p.json", ttl_minutes=60)
+    patches = _pin_patched([{"callsign": "WSLZ233"}], store)
+    geocode = _run_checkin(patches)
+    assert store.active() == []
+    # Nothing may reach the geocoder either: the opt-in guards the lookup, not
+    # just the pin, so a station that never opted in stays off the network.
+    assert not geocode.called
+
+
+def test_no_pin_when_the_callsign_has_no_contact(tmp_path):
+    store = PositionStore(tmp_path / "p.json", ttl_minutes=60)
+    patches = _pin_patched([{"callsign": "WRZM714", "map_pin": True}], store)
+    geocode = _run_checkin(patches)
+    assert store.active() == []
+    assert not geocode.called
+
+
+def test_no_geocode_when_a_real_fix_already_exists(tmp_path):
+    store = PositionStore(tmp_path / "p.json", ttl_minutes=60)
+    store.upsert("aprs_rf", "WSLZ233-9", 42.5, -85.5)
+    patches = _pin_patched([{"callsign": "WSLZ233", "map_pin": True}], store)
+    geocode = _run_checkin(patches)
+    assert not geocode.called
+
+
+def test_no_pin_when_the_contacts_store_is_missing(tmp_path):
+    store = PositionStore(tmp_path / "p.json", ttl_minutes=60)
+    patches = (
+        *_patched(lambda cs, name: _located_result()),
+        patch.object(srv, "_contacts_store", None),
+        patch.object(srv, "_position_store", store),
+        patch.object(srv, "geocode_city", return_value=(42.9, -85.8)),
+    )
+    _run_checkin(patches)
+    assert store.active() == []
+
+
+def test_no_pin_when_the_position_store_is_missing():
+    patches = (
+        *_patched(lambda cs, name: _located_result()),
+        patch.object(srv, "_contacts_store",
+                     FakeContacts([{"callsign": "WSLZ233", "map_pin": True}])),
+        patch.object(srv, "_position_store", None),
+        patch.object(srv, "geocode_city", return_value=(42.9, -85.8)),
+    )
+    geocode = _run_checkin(patches)  # must not raise
+    assert not geocode.called
+
+
+def test_no_pin_when_the_station_already_has_a_real_fix(tmp_path):
+    store = PositionStore(tmp_path / "p.json", ttl_minutes=60)
+    store.upsert("aprs_rf", "WSLZ233-9", 42.5, -85.5)
+    _run_checkin(_pin_patched([{"callsign": "WSLZ233", "map_pin": True}], store))
+    assert [rec.source for rec in store.active()] == ["aprs_rf"]
+
+
+def test_no_pin_when_the_license_has_no_city(tmp_path):
+    store = PositionStore(tmp_path / "p.json", ttl_minutes=60)
+    _run_checkin(
+        _pin_patched(
+            [{"callsign": "WSLZ233", "map_pin": True}], store, result=_located_result("")
+        )
+    )
+    assert store.active() == []
+
+
+def test_no_pin_when_a_real_fix_arrives_during_the_geocode(tmp_path):
+    # The geocode is a network round-trip, so a station can start the check-in
+    # with no position and be heard over the air before the pin is written.
+    # The real fix still has to win.
+    store = PositionStore(tmp_path / "p.json", ttl_minutes=60)
+    entered = threading.Event()
+    release = threading.Event()
+
+    def slow_geocode(location):
+        entered.set()
+        release.wait(timeout=5)
+        return (42.9053, -85.7936)
+
+    patches = (
+        *_patched(lambda cs, name: _located_result()),
+        patch.object(srv, "_contacts_store",
+                     FakeContacts([{"callsign": "WSLZ233", "map_pin": True}])),
+        patch.object(srv, "_position_store", store),
+        patch.object(srv, "geocode_city", side_effect=slow_geocode),
+    )
+
+    async def scenario():
+        srv._neighborhood.checkin("u1", "WSLZ233", "Ben", "")
+        srv._schedule_checkin_fcc("u1", "WSLZ233", "Ben")
+        for _ in range(200):
+            await asyncio.sleep(0.01)
+            if entered.is_set():
+                break
+        assert entered.is_set(), "geocode never started"
+        store.upsert("aprs_rf", "WSLZ233-9", 42.5, -85.5)
+        release.set()
+        await _wait_for_fcc("u1")
+        await asyncio.sleep(0.05)
+
+    with ExitStack() as stack:
+        for patch_ctx in patches:
+            stack.enter_context(patch_ctx)
+        asyncio.run(scenario())
+
+    assert [rec.source for rec in store.active()] == ["aprs_rf"]
+
+
+def test_pin_honours_the_opt_in_on_either_callsign_field(tmp_path):
+    # A contact can carry a GMRS and a ham callsign in separate fields; the
+    # one they checked in with is the one that has to match.
+    for field in ("gmrs_callsign", "ham_callsign"):
+        store = PositionStore(tmp_path / f"p-{field}.json", ttl_minutes=60)
+        _run_checkin(_pin_patched([{"name": "Ben", field: "WSLZ233", "map_pin": True}],
+                                  store))
+        assert [rec.source for rec in store.active()] == ["fcc"], field

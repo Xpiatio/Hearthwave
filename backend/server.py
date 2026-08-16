@@ -160,6 +160,7 @@ from backend.fcc.crossref import (
     roster_status,
     verify_callsign,
 )
+from backend.fcc.geocode import geocode_city, scatter
 from backend.fcc.id_rule import (
     ID_INTERVAL_SECONDS,
     format_outgoing_message,
@@ -269,6 +270,9 @@ _checkin_fcc_cache: dict[str, VerificationResult] = {}
 # re-check-in that CHANGES the callsign can cancel the superseded lookup
 # instead of letting the old callsign's verdict land on the row.
 _checkin_fcc_tasks: dict[str, tuple[str, "asyncio.Task"]] = {}
+# Position-store source id for license-city fallback pins. Not a plugin — it
+# is the one "position" we derive rather than hear, and the map dims it.
+_FCC_PIN_SOURCE = "fcc"
 _audit_log: AuditLog | None = None
 _stt_worker: STTWorker | None = None
 _synthesizer: TTSSynthesizer | None = None
@@ -767,6 +771,75 @@ def _schedule_checkin_fcc(key: str, callsign: str, name: str) -> None:
     )
 
 
+#: Contact fields a non-admin may not set. map_pin plots where a licensee
+#: lives; contacts are otherwise editable by any signed-in operator, so the
+#: gate is on the field rather than on the whole handler.
+_ADMIN_ONLY_CONTACT_FIELDS = ("map_pin",)
+
+
+def _strip_admin_only_contact_fields(payload: dict, state) -> None:
+    """Drop admin-only keys from a contact payload sent by a non-admin."""
+    if getattr(state, "is_admin", False):
+        return
+    for field in _ADMIN_ONLY_CONTACT_FIELDS:
+        payload.pop(field, None)
+
+
+def _wants_map_pin(callsign: str) -> bool:
+    """Whether the contact behind `callsign` opted into license-city pins.
+
+    Opt-in, never inferred: a licensee's city is public record, but plotting
+    where someone lives because they said hello on a net is not something to
+    switch on for them.
+
+    `callsign` must already be normalized — _schedule_checkin_fcc does that
+    before the task is created, and an un-normalized one would silently miss.
+    """
+    if _contacts_store is None:
+        return False
+    for contact in _contacts_store.get_all():
+        if not contact.get("map_pin"):
+            continue
+        if any(
+            normalize_callsign(contact.get(field, "")) == callsign
+            for field in ("callsign", "gmrs_callsign", "ham_callsign")
+        ):
+            return True
+    return False
+
+
+async def _pin_license_city(callsign: str, name: str, result: VerificationResult) -> None:
+    """Drop an approximate pin at a checked-in station's licensed city.
+
+    A last resort for stations with no GPS at all: the FCC record gives a
+    city, never a street, so the pin says "somewhere in this town" and is
+    labelled that way. Skipped entirely when a real fix for the callsign is
+    already on the map, which is always the better answer.
+    """
+    if _position_store is None or not result.license_location:
+        return
+    if not _wants_map_pin(callsign):
+        return
+    if _position_store.has_station(callsign, exclude_source=_FCC_PIN_SOURCE):
+        return
+    coords = await asyncio.to_thread(geocode_city, result.license_location)
+    if coords is None:
+        return
+    # The geocode is a network round-trip; a real fix can land while it runs.
+    if _position_store.has_station(callsign, exclude_source=_FCC_PIN_SOURCE):
+        return
+    lat, lon = scatter(coords[0], coords[1], callsign)
+    await _report_position(
+        _FCC_PIN_SOURCE,
+        callsign,
+        lat,
+        lon,
+        label=name or result.license_name,
+        approx="license",
+        city=result.license_location,
+    )
+
+
 async def _checkin_fcc_lookup(key: str, callsign: str, name: str) -> None:
     """Resolve one roster row's FCC verdict and rebroadcast the net state.
 
@@ -791,6 +864,7 @@ async def _checkin_fcc_lookup(key: str, callsign: str, name: str) -> None:
             key, status, result.license_name
         ):
             await _manager.broadcast(_build_neighborhood_state_msg())
+        await _pin_license_city(callsign, name, result)
     except Exception as exc:
         _log.error("checkin FCC lookup failed for %s: %s", callsign, exc)
     finally:
@@ -3308,6 +3382,7 @@ async def websocket_endpoint(
                     continue
                 try:
                     contact = {k: v for k, v in data.items() if k != "type"}
+                    _strip_admin_only_contact_fields(contact, state)
                     updated = _contacts_store.add_contact(contact)
                     await _manager.broadcast({"type": "contacts", "contacts": updated})
                     _rebuild_stt_vocabulary()
@@ -3327,6 +3402,7 @@ async def websocket_endpoint(
                     continue
                 original_name = (data.get("original_name") or "").strip() or None
                 updates = {k: v for k, v in data.items() if k not in ("type", "callsign", "original_name")}
+                _strip_admin_only_contact_fields(updates, state)
                 try:
                     updated = _contacts_store.update_contact(cs, updates, original_name=original_name)
                     await _manager.broadcast({"type": "contacts", "contacts": updated})

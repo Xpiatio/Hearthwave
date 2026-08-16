@@ -14,7 +14,9 @@ import {
   TableContainer,
   TextField,
   Box,
+  Checkbox,
   Chip,
+  FormControlLabel,
   Tooltip,
   CircularProgress,
   Typography,
@@ -37,6 +39,8 @@ interface Props {
   verifyAllComplete: boolean;
   onSend: (payload: unknown) => void;
   onVerifyAllDismiss: () => void;
+  /** Only an admin may plot a contact at their licensed city. */
+  isAdmin?: boolean;
 }
 
 interface FormData {
@@ -45,6 +49,7 @@ interface FormData {
   location: string;
   gmrs_callsign: string;
   ham_callsign: string;
+  map_pin: boolean;
 }
 
 const EMPTY_FORM: FormData = {
@@ -53,6 +58,7 @@ const EMPTY_FORM: FormData = {
   location: '',
   gmrs_callsign: '',
   ham_callsign: '',
+  map_pin: false,
 };
 
 function suffixKey(callsign: string): string {
@@ -91,6 +97,8 @@ function parseCsv(text: string): FormData[] {
       location: cols[idx('location')] ?? '',
       gmrs_callsign: cols[idx('gmrs_callsign')] ?? '',
       ham_callsign: cols[idx('ham_callsign')] ?? '',
+      // An imported contact is never opted into map pins by the import.
+      map_pin: false,
     };
   }).filter((r) => r.callsign.trim());
 }
@@ -106,6 +114,7 @@ export function ContactsDialog({
   verifyAllComplete,
   onSend,
   onVerifyAllDismiss,
+  isAdmin = false,
 }: Props) {
   const [sortBySuffix, setSortBySuffix] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -171,6 +180,7 @@ export function ContactsDialog({
       location: c.location ?? '',
       gmrs_callsign: c.gmrs_callsign ?? '',
       ham_callsign: c.ham_callsign ?? '',
+      map_pin: c.map_pin ?? false,
     });
     setEditingCallsign(c.callsign);
     setEditingName(c.name ?? '');
@@ -190,6 +200,7 @@ export function ContactsDialog({
         location: form.location.trim(),
         gmrs_callsign: form.gmrs_callsign.trim().toUpperCase(),
         ham_callsign: form.ham_callsign.trim().toUpperCase(),
+        ...(isAdmin ? { map_pin: form.map_pin } : {}),
       });
     } else {
       onSend({
@@ -199,6 +210,7 @@ export function ContactsDialog({
         location: form.location.trim(),
         gmrs_callsign: form.gmrs_callsign.trim().toUpperCase(),
         ham_callsign: form.ham_callsign.trim().toUpperCase(),
+        ...(isAdmin ? { map_pin: form.map_pin } : {}),
       });
     }
     setEditOpen(false);
@@ -434,6 +446,25 @@ export function ContactsDialog({
             >
               FCC Look Up
             </Button>
+            {isAdmin && (
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={form.map_pin}
+                  onChange={(e) => setForm((p) => ({ ...p, map_pin: e.target.checked }))}
+                />
+              }
+              label={
+                <>
+                  <Typography variant="body2">Show on map when checked in</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Approximate — the FCC record gives their licensed city, not an address.
+                    Only used when no GPS position is heard.
+                  </Typography>
+                </>
+              }
+            />
+            )}
           </Stack>
         </DialogContent>
         <DialogActions>

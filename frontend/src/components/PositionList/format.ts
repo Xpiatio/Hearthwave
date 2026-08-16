@@ -11,10 +11,28 @@ const SOURCE_LABELS: Record<string, string> = {
   meshtastic: 'Meshtastic',
   meshcore: 'MeshCore',
   aprs_rf: 'APRS',
+  fcc: 'FCC license',
 };
 
 export function sourceLabel(source: string): string {
   return SOURCE_LABELS[source] ?? source;
+}
+
+/**
+ * Whether a position was derived rather than heard.
+ *
+ * A license-city pin is the middle of a town, not a fix, and both renderers
+ * have to say so — a dot that looks like every other dot is a claim we can't
+ * support.
+ */
+export function isApproximate(extra?: Record<string, string>): boolean {
+  return Boolean(extra?.approx);
+}
+
+/** The caveat shown beside an approximate pin, city included when known. */
+export function approximateNote(extra?: Record<string, string>): string {
+  const city = extra?.city;
+  return city ? `Approximate — licensed in ${city}` : 'Approximate location';
 }
 
 /** Distance in the unit the operator reads on the air. */

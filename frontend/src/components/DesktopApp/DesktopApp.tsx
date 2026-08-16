@@ -488,6 +488,7 @@ export function DesktopApp({
         verifyAllComplete={verifyAllComplete}
         onSend={send}
         onVerifyAllDismiss={onVerifyAllDismiss}
+        isAdmin={!!profile.is_admin}
       />
 
       <Snackbar

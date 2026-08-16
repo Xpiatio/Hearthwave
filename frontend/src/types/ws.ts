@@ -16,6 +16,8 @@ export interface Contact {
   verified_at?: string;
   fcc_name?: string;
   fcc_location?: string;
+  /** Opt-in: plot them at their licensed city when they check in without GPS. */
+  map_pin?: boolean;
 }
 
 export interface RxMessageMsg {
