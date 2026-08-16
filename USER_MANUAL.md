@@ -420,6 +420,8 @@ The **Journals** panel lets you generate and save AI-written session summaries. 
 
 The file is laid out in the paper form's numbered boxes rather than as a flat table, so it prints or pastes into the real ICS-214: box 2 is the net's start and end, box 6 lists every checked-in station as a resource assigned, and box 7 is a timed activity log — the net opening, one entry per check-in at its check-in time, and the net closing with the check-in count. Traffic, a non-default status, a `radio` check-in, and a no-answer flag are all folded into the check-in's activity text, since the form has no columns for them. Box 8 is signed off with your name, position, and the time you ran the export.
 
+Both CSV exports defuse spreadsheet formulas: a field that begins with `=`, `+`, `-`, `@`, a tab or a carriage return is written with a leading apostrophe, so a check-in name like `=WEBSERVICE(...)` lands in Excel as text instead of running. Excel hides that apostrophe; a script or plain-text editor will see it, so strip a leading `'` if you parse these files.
+
 Two things to know: the export covers **one net** — an ICS-214 documents a single operational period, so there is no all-nets version — and its timestamps are local wall-clock time in the browser's timezone, which is what an activity log is supposed to record. Incident reports from the neighborhood incident log are *not* included; they aren't part of a net's record.
 
 ---

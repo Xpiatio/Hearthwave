@@ -131,6 +131,48 @@ describe('sessionToIcs214Csv', () => {
     expect(rows[5]).toBe('5. Home Agency (and Unit),""')
   })
 
+  it('writes the singular when exactly one station checked in', () => {
+    const rows = lines({ ...SESSION, roster: [SESSION.roster[0]] })
+    expect(rows[rowIndex(rows, '7. Activity Log') + 4]).toBe(
+      '"2026-08-01 19:52","Net closed — 1 check-in"'
+    )
+  })
+
+  it('lists a nameless station under box 6 by callsign alone', () => {
+    const rows = lines({
+      ...SESSION,
+      roster: [{ ...SESSION.roster[0], name: '' }],
+    })
+    const start = rowIndex(rows, '6. Resources Assigned')
+    expect(rows[start + 2]).toBe('"KD8ABC","Net Participant",""')
+  })
+
+  it('passes an unparseable timestamp through rather than writing Invalid Date', () => {
+    const rows = lines({
+      ...SESSION,
+      roster: [{ ...SESSION.roster[0], checkin_time: 'not-a-timestamp' }],
+    })
+    expect(rows[rowIndex(rows, '7. Activity Log') + 3]).toContain('"not-a-timestamp"')
+  })
+
+  it('defuses a formula smuggled in through a check-in name', () => {
+    const rows = lines({
+      ...SESSION,
+      roster: [{ ...SESSION.roster[0], name: '=WEBSERVICE("http://evil")' }],
+    })
+    // The activity text starts with "Check-in:", so the dangerous cell is the
+    // box 6 resource name, where the operator-supplied value leads.
+    const start = rowIndex(rows, '6. Resources Assigned')
+    expect(rows[start + 2]).toBe(
+      '"KD8ABC — =WEBSERVICE(""http://evil"")","Net Participant",""'
+    )
+  })
+
+  it('defuses a formula typed into the incident name box', () => {
+    const rows = lines(SESSION, { ...HEADER, incidentName: '=1+1' })
+    expect(rows[1]).toBe('1. Incident Name,"\'=1+1"')
+  })
+
   it('falls back to the raw net type when it has no label', () => {
     const rows = lines({ ...SESSION, net_type: 'skywarn' })
     const start = rowIndex(rows, '7. Activity Log')

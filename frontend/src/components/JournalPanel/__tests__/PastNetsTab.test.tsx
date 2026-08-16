@@ -1,4 +1,4 @@
-import { render as rtlRender, screen, fireEvent } from '@testing-library/react'
+import { render as rtlRender, screen, fireEvent, waitFor } from '@testing-library/react'
 import { ThemeProvider } from '@mui/material/styles'
 import { makeTheme } from '../../../theme'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -234,6 +234,25 @@ describe('PastNetsTab', () => {
     fireEvent.click(screen.getByText('ICS-214 (CSV)'))
     expect(screen.getByLabelText(/home agency/i)).toHaveValue('Ottawa County ARES')
     expect(screen.getByLabelText(/incident name/i)).toHaveValue('Ottawa County Windstorm')
+  })
+
+  it('closes the ICS-214 dialog once the export is handed off', async () => {
+    render(<PastNetsTab {...props({ selected: DETAIL })} />)
+    openIcs214()
+    fireEvent.click(screen.getByRole('button', { name: /^export$/i }))
+    // The dialog leaves on a transition, so it outlives the click by a frame.
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /^export$/i })).not.toBeInTheDocument()
+    )
+  })
+
+  it('opens the ICS-214 dialog with defaults when the saved header is corrupt', () => {
+    localStorage.setItem('radio_tty_ics214_header', '{{{ not json')
+    render(<PastNetsTab {...props({ selected: DETAIL })} />)
+    fireEvent.click(screen.getByText('ICS-214 (CSV)'))
+
+    expect(screen.getByLabelText(/incident name/i)).toHaveValue('')
+    expect(screen.getByLabelText(/ics position/i)).toHaveValue('Net Control Station')
   })
 
   it('offers no ICS-214 export until a session is selected', () => {
