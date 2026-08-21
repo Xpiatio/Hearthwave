@@ -20,7 +20,7 @@ show how it's done.
 Hearthwave is a fork of GMRS-TTY that replaces the desktop PySide6 UI with a
 browser-based React frontend communicating over WebSocket.
 
-> **Latest release:** v2.24.0
+> **Latest release:** v2.25.0
 
 ## Who uses it
 
@@ -39,6 +39,27 @@ browser-based React frontend communicating over WebSocket.
 
 ## Features
 
+- **FCC license badges at check-in** — every check-in (account or radio caller)
+  triggers a background FCC lookup on the callsign; the roster card then shows
+  **FCC ✓** for an active license, a red **License expired** flag, or **Not in FCC**.
+  Lookups never block the check-in, are skipped offline, and are cached per
+  callsign; the verdict rides into the saved session record
+- **Approximate map pins from a license** — an admin opts a contact in (**Show on
+  map when checked in**) and a check-in with no GPS position anywhere plots them at
+  their FCC-licensed *city*, drawn as a hollow dashed ring and labelled *Approximate*
+  so it never reads as a real fix. Off by default, per contact, admin-only to turn
+  on, and skipped entirely when a mesh or APRS position for that callsign is already
+  on the map
+- **ICS-214 export** — any past net exports as an ICS-214 Activity Log for an
+  ARES/RACES section: the numbered boxes of the paper form, with the operational
+  period, the checked-in stations as resources assigned, and a timed activity log
+  built from the net opening, each check-in, and the net closing. A short dialog
+  collects the four boxes a net record has no answer for (incident name, preparer,
+  ICS position, home agency) and remembers them for the next export
+- **Printable roster** — **PRINT ROSTER** puts a past net on paper as a plain
+  numbered sheet: heading, operational period, one row per station, and a
+  prepared-by/date sign-off line. Prints the whole roster in check-in order
+  regardless of how the on-screen table is filtered or sorted
 - **Stations on a map** — positions heard over Meshtastic, MeshCore, or APRS on
   RF (via a KISS TNC such as direwolf) are plotted on a **MAP** panel, with a
   keyboard- and screen-reader-friendly **List** view giving each station's
@@ -83,27 +104,6 @@ browser-based React frontend communicating over WebSocket.
   rows take their turn in the round-table exactly like an account holder's, and
   are marked wherever identity matters: a **By radio** chip in the live roster, and
   a `via` column in the Past Nets table and the per-session CSV export
-- **FCC license badges at check-in** — every check-in (account or radio caller)
-  triggers a background FCC lookup on the callsign; the roster card then shows
-  **FCC ✓** for an active license, a red **License expired** flag, or **Not in FCC**.
-  Lookups never block the check-in, are skipped offline, and are cached per
-  callsign; the verdict rides into the saved session record
-- **Approximate map pins from a license** — an admin opts a contact in (**Show on
-  map when checked in**) and a check-in with no GPS position anywhere plots them at
-  their FCC-licensed *city*, drawn as a hollow dashed ring and labelled *Approximate*
-  so it never reads as a real fix. Off by default, per contact, admin-only to turn
-  on, and skipped entirely when a mesh or APRS position for that callsign is already
-  on the map
-- **ICS-214 export** — any past net exports as an ICS-214 Activity Log for an
-  ARES/RACES section: the numbered boxes of the paper form, with the operational
-  period, the checked-in stations as resources assigned, and a timed activity log
-  built from the net opening, each check-in, and the net closing. A short dialog
-  collects the four boxes a net record has no answer for (incident name, preparer,
-  ICS position, home agency) and remembers them for the next export
-- **Printable roster** — **PRINT ROSTER** puts a past net on paper as a plain
-  numbered sheet: heading, operational period, one row per station, and a
-  prepared-by/date sign-off line. Prints the whole roster in check-in order
-  regardless of how the on-screen table is filtered or sorted
 - **Net session history** — every net that ends is recorded as a structured roster
   under `/data/net_sessions`. Browse past nets, per-station attendance (totals,
   recent turnout, streaks), and export any net or the whole history as CSV from the
