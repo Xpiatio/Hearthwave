@@ -13,7 +13,7 @@ COPY public/ ./public/
 RUN npm run build
 
 # ── Stage 2: runtime ────────────────────────────────────────────────────────
-FROM nginxinc/nginx-unprivileged:1.27-alpine AS runtime
+FROM nginxinc/nginx-unprivileged:1.30-alpine AS runtime
 
 # Override main config (caps worker_processes; base image uses 'auto' which
 # can hang on high-core-count hosts) and replace the default server block.
