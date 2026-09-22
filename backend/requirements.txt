@@ -2,7 +2,7 @@ fastapi
 uvicorn[standard]
 # Required by the plugin-install endpoint (multipart .zip upload).
 python-multipart
-sounddevice==0.5.5
+sounddevice==0.5.6
 piper-tts
 # >=1.0 for hotwords decode-option support (used by the eval CLI).
 faster-whisper>=1.0
